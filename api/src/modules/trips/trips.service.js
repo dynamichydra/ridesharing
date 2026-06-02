@@ -1,5 +1,6 @@
 const TripsRepository = require("./trips.repository");
 const DriversRepository = require("../drivers/drivers.repository");
+const DriversService = require("../drivers/drivers.service");
 const TripsFareService = require("./trips.fare.service");
 const { haversineDistance } = require("../../utils/haversine");
 const {
@@ -146,6 +147,7 @@ class TripsService {
         return TripsRepository.runTransaction(async (tx) => {
             const driver = await TripsRepository.findDriverProfileByUserId(driverUserId, tx);
             if (!driver) throw new UnauthorizedError("Driver profile not found");
+            DriversService.assertCanAcceptTrip(driver);
 
             const offer = await TripsRepository.findOfferForDriver(tripId, driver.id, tx);
             if (!offer) throw new BusinessRuleError("No active offer for this trip");
@@ -166,6 +168,12 @@ class TripsService {
             if (!updatedTrip) {
                 throw new BusinessRuleError("Trip state changed while accepting");
             }
+
+            await DriversService.transitionDriverStatus(
+                driver,
+                DriversService.DRIVER_STATUS.ON_TRIP,
+                tx
+            );
 
             await TripsRepository.updateOfferStatus(offer.id, "ACCEPTED", tx);
             await TripsRepository.expireOtherOffers(tripId, offer.id, tx);
@@ -215,7 +223,10 @@ class TripsService {
             driverUserId,
             tripId,
             TRIP_STATUS.STARTED,
-            TRIP_STATUS.COMPLETED
+            TRIP_STATUS.COMPLETED,
+            {
+                driverNextStatus: DriversService.DRIVER_STATUS.ONLINE,
+            }
         );
     }
 
@@ -293,6 +304,17 @@ class TripsService {
                 throw new BusinessRuleError("Trip state changed while cancelling");
             }
 
+            if (trip.driverId) {
+                const driver = await DriversRepository.findById(trip.driverId, tx);
+                if (driver?.status === DriversService.DRIVER_STATUS.ON_TRIP) {
+                    await DriversService.transitionDriverStatus(
+                        driver,
+                        DriversService.DRIVER_STATUS.ONLINE,
+                        tx
+                    );
+                }
+            }
+
             await TripsRepository.createStatusHistory(
                 tripId,
                 TRIP_STATUS.CANCELLED,
@@ -319,7 +341,7 @@ class TripsService {
      * @param {string} expectedFrom  - status the trip MUST currently be in
      * @param {string} toStatus      - status to transition into
      */
-    static async _driverTransition(driverUserId, tripId, expectedFrom, toStatus) {
+    static async _driverTransition(driverUserId, tripId, expectedFrom, toStatus, options = {}) {
         return TripsRepository.runTransaction(async (tx) => {
             const driver = await TripsRepository.findDriverProfileByUserId(driverUserId, tx);
             if (!driver) throw new UnauthorizedError("Driver profile not found");
@@ -342,6 +364,14 @@ class TripsService {
             );
             if (!updatedTrip) {
                 throw new BusinessRuleError("Trip state changed during transition");
+            }
+
+            if (options.driverNextStatus) {
+                await DriversService.transitionDriverStatus(
+                    driver,
+                    options.driverNextStatus,
+                    tx
+                );
             }
 
             await TripsRepository.createStatusHistory(

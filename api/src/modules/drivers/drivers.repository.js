@@ -15,6 +15,14 @@ class DriversRepository {
         return driver;
     }
 
+    static async findById(driverId, tx = db) {
+        const [driver] = await tx
+            .select()
+            .from(driverProfiles)
+            .where(eq(driverProfiles.id, driverId));
+        return driver;
+    }
+
     static async createDriverProfile(driverData, tx = db) {
         const [driver] = await tx
             .insert(driverProfiles)
@@ -35,14 +43,20 @@ class DriversRepository {
             .where(eq(users.id, userId));
     }
 
-    static async updateDriverStatus(userId, status, tx = db) {
+    static async updateDriverStatusByIdWhenStatus(driverId, currentStatus, nextStatus, tx = db) {
         const [driver] = await tx
             .update(driverProfiles)
             .set({
-                status,
+                status: nextStatus,
                 lastActiveAt: new Date(),
+                updatedAt: new Date(),
             })
-            .where(eq(driverProfiles.userId, userId))
+            .where(
+                and(
+                    eq(driverProfiles.id, driverId),
+                    eq(driverProfiles.status, currentStatus)
+                )
+            )
             .returning();
         return driver;
     }

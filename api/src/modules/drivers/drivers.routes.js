@@ -2,7 +2,6 @@ const DriversController = require("./drivers.controller");
 const { validateBody } = require("../common/validation.middleware");
 const {
     becomeDriverSchema,
-    updateStatusSchema,
     updateLocationSchema,
 } = require("./drivers.validation");
 
@@ -18,7 +17,7 @@ async function driversRoutes(app) {
         DriversController.becomeDriver
     );
 
-    app.patch(
+    app.post(
         "/online",
         {
             preHandler: app.authenticate("DRIVER"),
@@ -26,7 +25,7 @@ async function driversRoutes(app) {
         DriversController.goOnline
     );
 
-    app.patch(
+    app.post(
         "/offline",
         {
             preHandler: app.authenticate("DRIVER"),
@@ -34,15 +33,12 @@ async function driversRoutes(app) {
         DriversController.goOffline
     );
 
-    app.patch(
-        "/status",
+    app.get(
+        "/me/status",
         {
-            preHandler: [
-                app.authenticate("DRIVER"),
-                validateBody(updateStatusSchema),
-            ],
+            preHandler: app.authenticate("DRIVER"),
         },
-        DriversController.updateStatus
+        DriversController.getMyStatus
     );
 
     app.patch(
