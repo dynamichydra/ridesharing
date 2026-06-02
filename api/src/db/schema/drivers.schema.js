@@ -74,6 +74,11 @@ const driverProfiles = pgTable(
             timestamp("created_at")
                 .defaultNow()
                 .notNull(),
+
+        updatedAt:
+            timestamp("updated_at")
+                .defaultNow()
+                .notNull(),
     }
 );
 

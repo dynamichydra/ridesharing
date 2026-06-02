@@ -163,6 +163,13 @@ const trips = pgTable(
             )
                 .defaultNow()
                 .notNull(),
+
+        updatedAt:
+            timestamp(
+                "updated_at"
+            )
+                .defaultNow()
+                .notNull(),
     }
 );
 

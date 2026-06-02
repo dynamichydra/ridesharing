@@ -45,6 +45,11 @@ const users = pgTable("users", {
         timestamp("created_at")
             .defaultNow()
             .notNull(),
+
+    updatedAt:
+        timestamp("updated_at")
+            .defaultNow()
+            .notNull(),
 });
 
 module.exports = {
