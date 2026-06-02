@@ -11,7 +11,8 @@ async function socketRoutes(app) {
         (connection, request) => {
             try {
                 const token = request.query.token;
-
+                console.log("token",token);
+                
                 if (!token) {
                     connection.socket.close();
                     return;
@@ -25,9 +26,25 @@ async function socketRoutes(app) {
 
                 console.log(`WS Connected: ${userId}`);
 
+                connection.socket.on("message", (messageStr) => {
+                    try {
+                        const data = JSON.parse(messageStr);
+                        if (data.type === "ping") {
+                            connection.socket.send(JSON.stringify({ type: "pong" }));
+                        }
+                    } catch (parseErr) {
+                        // Ignore malformed messages
+                    }
+                });
+
                 connection.socket.on("close", () => {
                     removeClient(userId);
                     console.log(`WS Disconnected: ${userId}`);
+                });
+
+                connection.socket.on("error", (err) => {
+                    console.error(`WS Error for user ${userId}:`, err.message);
+                    removeClient(userId);
                 });
             } catch (err) {
                 connection.socket.close();

@@ -9,25 +9,44 @@ async function redisPlugin(fastify, opts) {
         url: redisUrl,
     });
 
+    const subscriber = client.duplicate();
+
     client.on("error", (err) => {
         fastify.log.error({ err }, "Redis Client Error");
+    });
+
+    subscriber.on("error", (err) => {
+        fastify.log.error({ err }, "Redis Subscriber Client Error");
     });
 
     client.on("connect", () => {
         fastify.log.info("Redis client connected");
     });
 
+    subscriber.on("connect", () => {
+        fastify.log.info("Redis subscriber connected");
+    });
+
     client.on("ready", () => {
         fastify.log.info("Redis client ready");
     });
 
+    subscriber.on("ready", () => {
+        fastify.log.info("Redis subscriber ready");
+    });
+
     await client.connect();
+    await subscriber.connect();
 
     fastify.decorate("redis", client);
+    fastify.decorate("redisSubscriber", subscriber);
 
     fastify.addHook("onClose", async (instance) => {
         fastify.log.info("Disconnecting from Redis...");
-        await client.quit();
+        await Promise.all([
+            client.quit(),
+            subscriber.quit()
+        ]);
     });
 }
 

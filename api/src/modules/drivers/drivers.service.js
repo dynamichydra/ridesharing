@@ -1,5 +1,5 @@
 const DriversRepository = require("./drivers.repository");
-const { sendToUser } = require("../common/socket.manager");
+const { broadcastToUser } = require("../common/socket.manager");
 const TRIP_STATUS = require("../../constants/trip-status");
 const {
     DRIVER_STATUS,
@@ -192,7 +192,7 @@ class DriversService {
 
         // Push real-time driver coordinates to matched rider
         if (activeTrip) {
-            sendToUser(activeTrip.riderId, {
+            broadcastToUser(redis, activeTrip.riderId, {
                 type: "DRIVER_LOCATION",
                 payload: {
                     tripId: activeTrip.id,
