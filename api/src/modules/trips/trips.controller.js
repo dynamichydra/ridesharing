@@ -57,7 +57,7 @@ class TripsController {
 
     static async requestRide(req, reply) {
         try {
-            const result = await TripsService.requestRide(req.user.userId, req.body);
+            const result = await TripsService.requestRide(req.user.userId, req.body, req.server.redis);
             return reply.code(201).send(result);
         } catch (error) {
             return sendError(reply, error);
@@ -85,7 +85,8 @@ class TripsController {
         try {
             const result = await TripsService.acceptTrip(
                 req.user.userId,
-                req.params.id
+                req.params.id,
+                req.server.redis
             );
             return reply.send(result);
         } catch (error) {
@@ -101,7 +102,8 @@ class TripsController {
         try {
             const result = await TripsService.driverArrived(
                 req.user.userId,
-                req.params.id
+                req.params.id,
+                req.server.redis
             );
             return reply.send(result);
         } catch (error) {
@@ -117,7 +119,8 @@ class TripsController {
         try {
             const result = await TripsService.startTrip(
                 req.user.userId,
-                req.params.id
+                req.params.id,
+                req.server.redis
             );
             return reply.send(result);
         } catch (error) {
@@ -133,7 +136,8 @@ class TripsController {
         try {
             const result = await TripsService.completeTrip(
                 req.user.userId,
-                req.params.id
+                req.params.id,
+                req.server.redis
             );
             return reply.send(result);
         } catch (error) {
@@ -154,7 +158,8 @@ class TripsController {
                 req.user.userId,
                 req.params.id,
                 req.user.role,
-                req.body?.reason ?? null
+                req.body?.reason ?? null,
+                req.server.redis
             );
             return reply.send(result);
         } catch (error) {

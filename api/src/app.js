@@ -5,6 +5,8 @@ const helmet = require("@fastify/helmet");
 // Import Plugins
 const jwtPlugin = require("./plugins/jwt");
 const authPlugin = require("./plugins/auth");
+const redisPlugin = require("./plugins/redis");
+const rateLimitPlugin = require("./plugins/rate-limit");
 const swaggerPlugin = require("./plugins/swagger");
 
 // Import Feature Routes
@@ -26,9 +28,13 @@ async function buildApp() {
     // 2. Register real-time communication support
     await app.register(require("@fastify/websocket"));
 
-    // 3. Register core utilities & auth decorators (order matters!)
+    // 3. Register Redis client (needed for rate limit and services)
+    await app.register(redisPlugin);
+
+    // 4. Register core utilities & auth decorators (order matters!)
     await app.register(jwtPlugin);
     await app.register(authPlugin);
+    await app.register(rateLimitPlugin);
     await app.register(swaggerPlugin);
 
     // 4. Register WebSocket endpoint

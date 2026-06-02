@@ -34,7 +34,7 @@ class DriversController {
 
     static async goOnline(req, reply) {
         try {
-            const result = await DriversService.goOnline(req.user.userId);
+            const result = await DriversService.goOnline(req.user.userId, req.server.redis);
             return reply.send(result);
         } catch (error) {
             return sendError(reply, error);
@@ -43,7 +43,7 @@ class DriversController {
 
     static async goOffline(req, reply) {
         try {
-            const result = await DriversService.goOffline(req.user.userId);
+            const result = await DriversService.goOffline(req.user.userId, req.server.redis);
             return reply.send(result);
         } catch (error) {
             return sendError(reply, error);
@@ -62,7 +62,12 @@ class DriversController {
     static async updateLocation(req, reply) {
         try {
             const { latitude, longitude } = req.body;
-            const result = await DriversService.updateDriverLocation(req.user.userId, latitude, longitude);
+            const result = await DriversService.updateDriverLocation(
+                req.user.userId,
+                latitude,
+                longitude,
+                req.server.redis
+            );
             return reply.send(result);
         } catch (error) {
             return sendError(reply, error);

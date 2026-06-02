@@ -5,6 +5,7 @@ async function socketRoutes(app) {
     app.get(
         "/ws",
         {
+            config: { rateLimit: false },
             websocket: true,
         },
         (connection, request) => {

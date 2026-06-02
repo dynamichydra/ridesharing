@@ -66,24 +66,24 @@ class DriversService {
         };
     }
 
-    static async goOnline(userId) {
-        return this.transitionDriverStatusByUserId(userId, DRIVER_STATUS.ONLINE);
+    static async goOnline(userId, redis = undefined) {
+        return this.transitionDriverStatusByUserId(userId, DRIVER_STATUS.ONLINE, undefined, redis);
     }
 
-    static async goOffline(userId) {
-        return this.transitionDriverStatusByUserId(userId, DRIVER_STATUS.OFFLINE);
+    static async goOffline(userId, redis = undefined) {
+        return this.transitionDriverStatusByUserId(userId, DRIVER_STATUS.OFFLINE, undefined, redis);
     }
 
-    static async transitionDriverStatusByUserId(userId, nextStatus, tx = undefined) {
+    static async transitionDriverStatusByUserId(userId, nextStatus, tx = undefined, redis = undefined) {
         const driver = await DriversRepository.findByUserId(userId, tx);
         if (!driver) {
             throw new DriverNotFoundError();
         }
 
-        return this.transitionDriverStatus(driver, nextStatus, tx);
+        return this.transitionDriverStatus(driver, nextStatus, tx, redis);
     }
 
-    static async transitionDriverStatus(driver, nextStatus, tx = undefined) {
+    static async transitionDriverStatus(driver, nextStatus, tx = undefined, redis = undefined) {
         assertDriverStatusTransition(driver.status, nextStatus);
 
         if (driver.status === nextStatus) {
@@ -100,6 +100,40 @@ class DriversService {
             throw new DriverAvailabilityError("Driver status changed during transition");
         }
 
+        if (redis) {
+            try {
+                const { driverCacheService, driverLocationService } = require("../../services/redis");
+                if (nextStatus === DRIVER_STATUS.ONLINE) {
+                    await driverCacheService.setOnline(redis, updatedDriver.id, {
+                        id: updatedDriver.id,
+                        userId: updatedDriver.userId,
+                        licenseNumber: updatedDriver.licenseNumber,
+                        vehicleType: updatedDriver.vehicleType,
+                        vehicleNumber: updatedDriver.vehicleNumber,
+                        status: DRIVER_STATUS.ONLINE,
+                        rating: updatedDriver.rating,
+                    });
+                } else if (nextStatus === DRIVER_STATUS.ON_TRIP) {
+                    await driverCacheService.setOnline(redis, updatedDriver.id, {
+                        id: updatedDriver.id,
+                        userId: updatedDriver.userId,
+                        licenseNumber: updatedDriver.licenseNumber,
+                        vehicleType: updatedDriver.vehicleType,
+                        vehicleNumber: updatedDriver.vehicleNumber,
+                        status: DRIVER_STATUS.ON_TRIP,
+                        rating: updatedDriver.rating,
+                    });
+                } else {
+                    // OFFLINE or BUSY
+                    await driverCacheService.setOffline(redis, updatedDriver.id);
+                    await driverLocationService.removeLocation(redis, updatedDriver.id);
+                }
+            } catch (err) {
+                // Log and continue to not block DB transition
+                console.error("Failed to sync driver status with Redis:", err);
+            }
+        }
+
         return updatedDriver;
     }
 
@@ -109,7 +143,7 @@ class DriversService {
         }
     }
 
-    static async updateDriverLocation(userId, latitude, longitude) {
+    static async updateDriverLocation(userId, latitude, longitude, redis = undefined) {
         const driver = await DriversRepository.findByUserId(userId);
 
         if (!driver) {
@@ -120,8 +154,34 @@ class DriversService {
             throw new DriverAvailabilityError("Driver must be ONLINE or ON_TRIP to update location");
         }
 
-        // Upsert location coordinates
+        // Upsert location coordinates in DB
         await DriversRepository.upsertDriverLocation(driver.id, latitude, longitude);
+
+        // Sync with Redis
+        if (redis) {
+            try {
+                const { driverLocationService, driverCacheService } = require("../../services/redis");
+                await driverLocationService.updateLocation(redis, driver.id, longitude, latitude);
+
+                // Refresh online cache TTL
+                const cachedDriver = await driverCacheService.getOnlineDriver(redis, driver.id);
+                if (cachedDriver) {
+                    await driverCacheService.setOnline(redis, driver.id, cachedDriver);
+                } else {
+                    await driverCacheService.setOnline(redis, driver.id, {
+                        id: driver.id,
+                        userId: driver.userId,
+                        licenseNumber: driver.licenseNumber,
+                        vehicleType: driver.vehicleType,
+                        vehicleNumber: driver.vehicleNumber,
+                        status: driver.status,
+                        rating: driver.rating,
+                    });
+                }
+            } catch (err) {
+                console.error("Failed to sync driver location with Redis:", err);
+            }
+        }
 
         // Find active trip using repository
         const activeTrip = await DriversRepository.findActiveTrip(driver.id, [

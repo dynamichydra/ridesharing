@@ -59,26 +59,69 @@ class TripsService {
         return TripsRepository.findPendingTrips();
     }
 
-    static async findNearbyDrivers(latitude, longitude, radiusKm = 15) {
-        const drivers = await DriversRepository.findOnlineDriversWithLocations();
+    static async findNearbyDrivers(redis, latitude, longitude, radiusKm = 15) {
+        if (!redis) {
+            // Fallback to database search if Redis is not available
+            const drivers = await DriversRepository.findOnlineDriversWithLocations();
 
-        return drivers
-            .map((driver) => {
-                const distance = haversineDistance(
-                    latitude,
-                    longitude,
-                    Number(driver.latitude),
-                    Number(driver.longitude)
-                );
-                return { ...driver, distanceKm: Number(distance.toFixed(2)) };
-            })
-            .filter((d) => d.distanceKm <= radiusKm)
-            .sort((a, b) => a.distanceKm - b.distanceKm);
+            return drivers
+                .map((driver) => {
+                    const distance = haversineDistance(
+                        latitude,
+                        longitude,
+                        Number(driver.latitude),
+                        Number(driver.longitude)
+                    );
+                    return { ...driver, distanceKm: Number(distance.toFixed(2)) };
+                })
+                .filter((d) => d.distanceKm <= radiusKm)
+                .sort((a, b) => a.distanceKm - b.distanceKm);
+        }
+
+        try {
+            const { driverLocationService, driverCacheService } = require("../../services/redis");
+
+            // Search nearby in Redis geo index
+            const nearby = await driverLocationService.findNearby(redis, longitude, latitude, radiusKm);
+
+            const enriched = [];
+            for (const item of nearby) {
+                const cachedDriver = await driverCacheService.getOnlineDriver(redis, item.driverId);
+                // Ensure driver exists in cache and status is ONLINE
+                if (cachedDriver && cachedDriver.status === "ONLINE") {
+                    enriched.push({
+                        driverId: item.driverId,
+                        userId: cachedDriver.userId,
+                        latitude: item.latitude.toString(),
+                        longitude: item.longitude.toString(),
+                        distanceKm: Number(item.distanceKm.toFixed(2)),
+                        rating: cachedDriver.rating,
+                    });
+                }
+            }
+            return enriched;
+        } catch (error) {
+            console.error("Failed to find nearby drivers in Redis:", error);
+            // Fallback to database search
+            const drivers = await DriversRepository.findOnlineDriversWithLocations();
+            return drivers
+                .map((driver) => {
+                    const distance = haversineDistance(
+                        latitude,
+                        longitude,
+                        Number(driver.latitude),
+                        Number(driver.longitude)
+                    );
+                    return { ...driver, distanceKm: Number(distance.toFixed(2)) };
+                })
+                .filter((d) => d.distanceKm <= radiusKm)
+                .sort((a, b) => a.distanceKm - b.distanceKm);
+        }
     }
 
     // Trip creation
 
-    static async requestRide(riderId, payload) {
+    static async requestRide(riderId, payload, redis = undefined) {
         const fareInfo = await TripsFareService.estimateFare(
             payload.pickupLat,
             payload.pickupLng,
@@ -94,6 +137,7 @@ class TripsService {
         }
 
         const nearbyDrivers = await this.findNearbyDrivers(
+            redis,
             payload.pickupLat,
             payload.pickupLng
         );
@@ -134,6 +178,16 @@ class TripsService {
             return createdTrip;
         });
 
+        // Write through cache
+        if (redis) {
+            try {
+                const { tripCacheService } = require("../../services/redis");
+                await tripCacheService.cacheTrip(redis, trip.id, trip);
+            } catch (err) {
+                console.error("Failed to cache created trip in Redis:", err);
+            }
+        }
+
         return { trip, matchedDrivers: nearbyDrivers.length };
     }
 
@@ -143,8 +197,8 @@ class TripsService {
      * DRIVER accepts a trip: SEARCHING -> DRIVER_ASSIGNED.
      * Validates the driver has an active offer for this trip.
      */
-    static async acceptTrip(driverUserId, tripId) {
-        return TripsRepository.runTransaction(async (tx) => {
+    static async acceptTrip(driverUserId, tripId, redis = undefined) {
+        const result = await TripsRepository.runTransaction(async (tx) => {
             const driver = await TripsRepository.findDriverProfileByUserId(driverUserId, tx);
             if (!driver) throw new UnauthorizedError("Driver profile not found");
             DriversService.assertCanAcceptTrip(driver);
@@ -172,7 +226,8 @@ class TripsService {
             await DriversService.transitionDriverStatus(
                 driver,
                 DriversService.DRIVER_STATUS.ON_TRIP,
-                tx
+                tx,
+                redis
             );
 
             await TripsRepository.updateOfferStatus(offer.id, "ACCEPTED", tx);
@@ -189,36 +244,51 @@ class TripsService {
 
             return updatedTrip;
         });
+
+        if (redis) {
+            try {
+                const { tripCacheService } = require("../../services/redis");
+                await tripCacheService.cacheTrip(redis, result.id, result);
+            } catch (err) {
+                console.error("Failed to cache accepted trip in Redis:", err);
+            }
+        }
+
+        return result;
     }
 
     /**
      * DRIVER marks themselves as arrived: DRIVER_ASSIGNED -> DRIVER_ARRIVING.
      */
-    static async driverArrived(driverUserId, tripId) {
+    static async driverArrived(driverUserId, tripId, redis = undefined) {
         return this._driverTransition(
             driverUserId,
             tripId,
             TRIP_STATUS.DRIVER_ASSIGNED,
-            TRIP_STATUS.DRIVER_ARRIVING
+            TRIP_STATUS.DRIVER_ARRIVING,
+            {},
+            redis
         );
     }
 
     /**
      * DRIVER starts the trip: DRIVER_ARRIVING -> STARTED.
      */
-    static async startTrip(driverUserId, tripId) {
+    static async startTrip(driverUserId, tripId, redis = undefined) {
         return this._driverTransition(
             driverUserId,
             tripId,
             TRIP_STATUS.DRIVER_ARRIVING,
-            TRIP_STATUS.STARTED
+            TRIP_STATUS.STARTED,
+            {},
+            redis
         );
     }
 
     /**
      * DRIVER completes the trip: STARTED -> COMPLETED.
      */
-    static async completeTrip(driverUserId, tripId) {
+    static async completeTrip(driverUserId, tripId, redis = undefined) {
         return this._driverTransition(
             driverUserId,
             tripId,
@@ -226,12 +296,13 @@ class TripsService {
             TRIP_STATUS.COMPLETED,
             {
                 driverNextStatus: DriversService.DRIVER_STATUS.ONLINE,
-            }
+            },
+            redis
         );
     }
 
-    static async markNoDriverFound(tripId, changedByUserId = null) {
-        return TripsRepository.runTransaction(async (tx) => {
+    static async markNoDriverFound(tripId, changedByUserId = null, redis = undefined) {
+        const result = await TripsRepository.runTransaction(async (tx) => {
             const trip = await TripsRepository.findTripById(tripId, tx);
             if (!trip) throw new TripNotFoundError();
 
@@ -258,14 +329,25 @@ class TripsService {
 
             return updatedTrip;
         });
+
+        if (redis) {
+            try {
+                const { tripCacheService } = require("../../services/redis");
+                await tripCacheService.cacheTrip(redis, result.id, result);
+            } catch (err) {
+                console.error("Failed to cache no-driver-found trip in Redis:", err);
+            }
+        }
+
+        return result;
     }
 
     /**
      * DRIVER or RIDER cancels a trip.
      * Each role has a restricted set of statuses from which they may cancel.
      */
-    static async cancelTrip(userId, tripId, role, reason = null) {
-        return TripsRepository.runTransaction(async (tx) => {
+    static async cancelTrip(userId, tripId, role, reason = null, redis = undefined) {
+        const result = await TripsRepository.runTransaction(async (tx) => {
             const trip = await TripsRepository.findTripById(tripId, tx);
             if (!trip) throw new TripNotFoundError();
 
@@ -310,7 +392,8 @@ class TripsService {
                     await DriversService.transitionDriverStatus(
                         driver,
                         DriversService.DRIVER_STATUS.ONLINE,
-                        tx
+                        tx,
+                        redis
                     );
                 }
             }
@@ -326,6 +409,17 @@ class TripsService {
 
             return updatedTrip;
         });
+
+        if (redis) {
+            try {
+                const { tripCacheService } = require("../../services/redis");
+                await tripCacheService.cacheTrip(redis, result.id, result);
+            } catch (err) {
+                console.error("Failed to cache cancelled trip in Redis:", err);
+            }
+        }
+
+        return result;
     }
 
     // Private helpers
@@ -341,8 +435,8 @@ class TripsService {
      * @param {string} expectedFrom  - status the trip MUST currently be in
      * @param {string} toStatus      - status to transition into
      */
-    static async _driverTransition(driverUserId, tripId, expectedFrom, toStatus, options = {}) {
-        return TripsRepository.runTransaction(async (tx) => {
+    static async _driverTransition(driverUserId, tripId, expectedFrom, toStatus, options = {}, redis = undefined) {
+        const result = await TripsRepository.runTransaction(async (tx) => {
             const driver = await TripsRepository.findDriverProfileByUserId(driverUserId, tx);
             if (!driver) throw new UnauthorizedError("Driver profile not found");
 
@@ -370,7 +464,8 @@ class TripsService {
                 await DriversService.transitionDriverStatus(
                     driver,
                     options.driverNextStatus,
-                    tx
+                    tx,
+                    redis
                 );
             }
 
@@ -385,6 +480,17 @@ class TripsService {
 
             return updatedTrip;
         });
+
+        if (redis) {
+            try {
+                const { tripCacheService } = require("../../services/redis");
+                await tripCacheService.cacheTrip(redis, result.id, result);
+            } catch (err) {
+                console.error(`Failed to cache trip state for status ${toStatus} in Redis:`, err);
+            }
+        }
+
+        return result;
     }
 }
 

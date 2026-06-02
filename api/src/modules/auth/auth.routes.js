@@ -6,6 +6,9 @@ async function authRoutes(app) {
     app.post(
         "/register",
         {
+            config: {
+                rateLimit: { max: 30, window: 60 }
+            },
             preHandler: validateBody(registerSchema),
         },
         AuthController.register
@@ -14,6 +17,9 @@ async function authRoutes(app) {
     app.post(
         "/login",
         {
+            config: {
+                rateLimit: { max: 30, window: 60 }
+            },
             preHandler: validateBody(loginSchema),
         },
         AuthController.login
