@@ -3,7 +3,7 @@ const validateBody = (schema) => async (req, reply) => {
     if (!result.success) {
         return reply.code(400).send({
             message: "Validation failed",
-            errors: result.error.errors,
+            errors: result.error.issues,
         });
     }
     req.body = result.data;

@@ -1,5 +1,13 @@
 const { z } = require("zod");
 
+// Route param schemas
+
+const tripIdParamSchema = z.object({
+    id: z.string().uuid("Trip ID must be a valid UUID"),
+});
+
+// Request body schemas
+
 const requestRideSchema = z.object({
     pickupAddress: z.string().min(3),
     pickupLat: z.coerce.number(),
@@ -17,13 +25,15 @@ const estimateFareSchema = z.object({
     destinationLng: z.coerce.number(),
 });
 
-const updateTripStatusSchema = z.object({
-    tripId: z.string().uuid(),
-    status: z.enum(["SEARCHING", "ACCEPTED", "ARRIVED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED"]),
-});
+const cancelTripBodySchema = z
+    .object({
+        reason: z.string().trim().min(1).max(500).optional(),
+    })
+    .default({});
 
 module.exports = {
+    tripIdParamSchema,
     requestRideSchema,
     estimateFareSchema,
-    updateTripStatusSchema,
+    cancelTripBodySchema,
 };

@@ -142,6 +142,11 @@ const trips = pgTable(
                 "accepted_at"
             ),
 
+        arrivedAt:
+            timestamp(
+                "arrived_at"
+            ),
+
         startedAt:
             timestamp(
                 "started_at"

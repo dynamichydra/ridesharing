@@ -6,6 +6,8 @@ const { driverProfiles } = require("../../db/schema/drivers.schema");
 const { eq, and, ne, desc } = require("drizzle-orm");
 
 class TripsRepository {
+    // Read
+
     static async findByRiderId(riderId, tx = db) {
         return tx
             .select()
@@ -22,14 +24,10 @@ class TripsRepository {
             .orderBy(desc(trips.createdAt));
     }
 
-    static async findDriverProfileByUserId(userId, tx = db) {
-        const [driver] = await tx
-            .select()
-            .from(driverProfiles)
-            .where(eq(driverProfiles.userId, userId));
-        return driver;
-    }
-
+    /**
+     * Load a trip by primary key.
+     * Returns undefined if not found.
+     */
     static async findTripById(tripId, tx = db) {
         const [trip] = await tx
             .select()
@@ -38,6 +36,54 @@ class TripsRepository {
         return trip;
     }
 
+    /**
+     * Load a trip only when it matches both id AND status.
+     * Used for optimistic-lock style checks (e.g. ensure still SEARCHING).
+     */
+    static async findTripByIdAndStatus(tripId, status, tx = db) {
+        const [trip] = await tx
+            .select()
+            .from(trips)
+            .where(
+                and(
+                    eq(trips.id, tripId),
+                    eq(trips.status, status)
+                )
+            );
+        return trip;
+    }
+
+    /**
+     * Load a trip and verify it belongs to the given driverId.
+     * Returns undefined when trip is not found or driver mismatch.
+     */
+    static async findTripByDriver(tripId, driverId, tx = db) {
+        const [trip] = await tx
+            .select()
+            .from(trips)
+            .where(
+                and(
+                    eq(trips.id, tripId),
+                    eq(trips.driverId, driverId)
+                )
+            );
+        return trip;
+    }
+
+    /**
+     * Resolve the internal driver profile row for a given auth user id.
+     */
+    static async findDriverProfileByUserId(userId, tx = db) {
+        const [driver] = await tx
+            .select()
+            .from(driverProfiles)
+            .where(eq(driverProfiles.userId, userId));
+        return driver;
+    }
+
+    /**
+     * Find an active (PENDING) offer assigned to this driver for this trip.
+     */
     static async findOfferForDriver(tripId, driverId, tx = db) {
         const [offer] = await tx
             .select()
@@ -52,18 +98,7 @@ class TripsRepository {
         return offer;
     }
 
-    static async findTripByIdAndStatus(tripId, status, tx = db) {
-        const [trip] = await tx
-            .select()
-            .from(trips)
-            .where(
-                and(
-                    eq(trips.id, tripId),
-                    eq(trips.status, status)
-                )
-            );
-        return trip;
-    }
+    // Write
 
     static async createTrip(tripData, tx = db) {
         const [trip] = await tx
@@ -82,8 +117,28 @@ class TripsRepository {
     static async updateTrip(tripId, updateData, tx = db) {
         const [updatedTrip] = await tx
             .update(trips)
-            .set(updateData)
+            .set({
+                ...updateData,
+                updatedAt: new Date(),
+            })
             .where(eq(trips.id, tripId))
+            .returning();
+        return updatedTrip;
+    }
+
+    static async updateTripWhenStatus(tripId, currentStatus, updateData, tx = db) {
+        const [updatedTrip] = await tx
+            .update(trips)
+            .set({
+                ...updateData,
+                updatedAt: new Date(),
+            })
+            .where(
+                and(
+                    eq(trips.id, tripId),
+                    eq(trips.status, currentStatus)
+                )
+            )
             .returning();
         return updatedTrip;
     }
@@ -107,16 +162,37 @@ class TripsRepository {
             );
     }
 
-    static async createStatusHistory(tripId, status, tx = db) {
+    /**
+     * Append an immutable row to the audit ledger.
+     *
+     * @param {string} tripId
+     * @param {string} toStatus   - status being entered
+     * @param {string|null} fromStatus - status being left (null for initial row)
+     * @param {string|null} changedByUserId - auth user who triggered the transition
+     * @param {object|null} metadata - arbitrary JSON payload (e.g. cancellation reason)
+     * @param {object} tx - drizzle transaction context
+     */
+    static async createStatusHistory(
+        tripId,
+        toStatus,
+        fromStatus = null,
+        changedByUserId = null,
+        metadata = null,
+        tx = db
+    ) {
         return tx
             .insert(tripStatusHistory)
             .values({
                 tripId,
-                status,
+                status: toStatus,
+                fromStatus,
+                changedByUserId,
+                metadata,
             });
     }
 
-    // Wrap transactional operations inside standard Drizzle transaction block
+    // Transaction wrapper
+
     static async runTransaction(fn) {
         return db.transaction(fn);
     }
