@@ -1,89 +1,70 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const db = require("../../db");
-const { users } = require("../../db/schema/users.schema");
+const AuthRepository = require("./auth.repository");
 
-const { eq } = require("drizzle-orm");
+class AuthService {
+    static async registerUser(payload) {
+        const existingUsers = await AuthRepository.findByEmail(payload.email);
 
-const registerUser = async (payload) => {
-    const existingUser = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, payload.email));
+        if (existingUsers.length) {
+            throw new Error("User already exists");
+        }
 
-    if (existingUser.length) {
-        throw new Error("User already exists");
-    }
+        const hashedPassword = await bcrypt.hash(payload.password, 10);
 
-    const hashedPassword = await bcrypt.hash(
-        payload.password,
-        10
-    );
-
-    const [newUser] = await db
-        .insert(users)
-        .values({
+        const newUser = await AuthRepository.createUser({
             fullName: payload.fullName,
             email: payload.email,
             password: hashedPassword,
-        })
-        .returning();
+        });
 
-    const token = jwt.sign(
-        {
-            userId: newUser.id,
-            role: newUser.role,
-        },
-        process.env.JWT_SECRET,
-        {
-            expiresIn: process.env.JWT_EXPIRES_IN,
-        }
-    );
-
-    return {
-        user: newUser,
-        token,
-    };
-};
-
-const loginUser = async (payload) => {
-    const user = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, payload.email));
-
-    if (!user.length) {
-        throw new Error("Invalid credentials");
-    }
-
-    const isPasswordCorrect =
-        await bcrypt.compare(
-            payload.password,
-            user[0].password
+        const token = jwt.sign(
+            {
+                userId: newUser.id,
+                role: newUser.role,
+            },
+            process.env.JWT_SECRET,
+            {
+                expiresIn: process.env.JWT_EXPIRES_IN || "1d",
+            }
         );
 
-    if (!isPasswordCorrect) {
-        throw new Error("Invalid credentials");
+        return {
+            user: newUser,
+            token,
+        };
     }
 
-    const token = jwt.sign(
-        {
-            userId: user[0].id,
-            role: user[0].role,
-        },
-        process.env.JWT_SECRET,
-        {
-            expiresIn: process.env.JWT_EXPIRES_IN,
+    static async loginUser(payload) {
+        const users = await AuthRepository.findByEmail(payload.email);
+
+        if (!users.length) {
+            throw new Error("Invalid credentials");
         }
-    );
 
-    return {
-        user: user[0],
-        token,
-    };
-};
+        const user = users[0];
+        const isPasswordCorrect = await bcrypt.compare(payload.password, user.password);
 
-module.exports = {
-    registerUser,
-    loginUser,
-};
+        if (!isPasswordCorrect) {
+            throw new Error("Invalid credentials");
+        }
+
+        const token = jwt.sign(
+            {
+                userId: user.id,
+                role: user.role,
+            },
+            process.env.JWT_SECRET,
+            {
+                expiresIn: process.env.JWT_EXPIRES_IN || "1d",
+            }
+        );
+
+        return {
+            user,
+            token,
+        };
+    }
+}
+
+module.exports = AuthService;

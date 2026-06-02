@@ -1,36 +1,27 @@
-const authService = require("./auth.service");
+const AuthService = require("./auth.service");
 
-const register = async (req, reply) => {
-    try {
-        const result =
-            await authService.registerUser(
-                req.body
-            );
-
-        reply.code(201).send(result);
-    } catch (error) {
-        reply.code(400).send({
-            message: error.message,
-        });
+class AuthController {
+    static async register(req, reply) {
+        try {
+            const result = await AuthService.registerUser(req.body);
+            return reply.code(201).send(result);
+        } catch (error) {
+            return reply.code(400).send({
+                message: error.message,
+            });
+        }
     }
-};
 
-const login = async (req, reply) => {
-    try {
-        const result =
-            await authService.loginUser(
-                req.body
-            );
-
-        reply.send(result);
-    } catch (error) {
-        reply.code(400).send({
-            message: error.message,
-        });
+    static async login(req, reply) {
+        try {
+            const result = await AuthService.loginUser(req.body);
+            return reply.send(result);
+        } catch (error) {
+            return reply.code(400).send({
+                message: error.message,
+            });
+        }
     }
-};
+}
 
-module.exports = {
-    register,
-    login,
-};
+module.exports = AuthController;
