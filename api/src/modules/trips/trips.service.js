@@ -10,6 +10,8 @@ const {
     DRIVER_CANCELLABLE_STATUSES,
     RIDER_CANCELLABLE_STATUSES,
 } = require("./trips.constants");
+const kafkaProducer = require("../../infrastructure/kafka/kafka.producer");
+const TOPICS = require("../../infrastructure/kafka/topics");
 
 // Errors
 
@@ -177,6 +179,14 @@ class TripsService {
             }
         }
 
+        // Fire async event
+        kafkaProducer.publish(TOPICS.TRIP_CREATED, {
+            tripId: trip.id,
+            riderId: trip.riderId,
+            pickupLat: trip.pickupLat,
+            pickupLng: trip.pickupLng
+        }, trip.id).catch(console.error);
+
         // Enqueue trip for async matching
         const matchingQueue = require("../matching/matching.queue");
         matchingQueue.enqueueTrip(trip.id);
@@ -247,6 +257,13 @@ class TripsService {
             }
         }
 
+        // Fire async event
+        kafkaProducer.publish(TOPICS.TRIP_ACCEPTED, {
+            tripId: result.id,
+            driverId: result.driverId,
+            riderId: result.riderId
+        }, result.id).catch(console.error);
+
         return result;
     }
 
@@ -282,7 +299,7 @@ class TripsService {
      * DRIVER completes the trip: STARTED -> COMPLETED.
      */
     static async completeTrip(driverUserId, tripId, redis = undefined) {
-        return this._driverTransition(
+        const result = await this._driverTransition(
             driverUserId,
             tripId,
             TRIP_STATUS.STARTED,
@@ -292,6 +309,16 @@ class TripsService {
             },
             redis
         );
+        
+        // Fire async event
+        kafkaProducer.publish(TOPICS.TRIP_COMPLETED, {
+            tripId: result.id,
+            driverId: result.driverId,
+            riderId: result.riderId,
+            finalFare: result.finalFare || result.estimatedFare
+        }, result.id).catch(console.error);
+        
+        return result;
     }
 
     static async markNoDriverFound(tripId, changedByUserId = null, redis = undefined) {
