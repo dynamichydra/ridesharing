@@ -16,6 +16,8 @@ const usersRoutes = require("./modules/users/users.routes");
 const driversRoutes = require("./modules/drivers/drivers.routes");
 const tripsRoutes = require("./modules/trips/trips.routes");
 const pricingRoutes = require("./modules/pricing/pricing.routes");
+const matchingRoutes = require("./modules/matching/matching.routes");
+const MatchingWorker = require("./modules/matching/matching.worker");
 
 async function buildApp() {
     const app = Fastify({
@@ -31,6 +33,13 @@ async function buildApp() {
 
     // 3. Register Redis client (needed for rate limit and services)
     await app.register(redisPlugin);
+
+    // Start Matching Worker (after Redis is initialized)
+    app.ready(err => {
+        if (err) throw err;
+        const matchingWorker = new MatchingWorker(app.redis);
+        matchingWorker.start();
+    });
 
     // 4. Register core utilities & auth decorators (order matters!)
     await app.register(jwtPlugin);
@@ -56,6 +65,9 @@ async function buildApp() {
     });
     await app.register(pricingRoutes, {
         prefix: "/api/v1/pricing",
+    });
+    await app.register(matchingRoutes, {
+        prefix: "/api/v1/matching",
     });
 
     // Root status probe

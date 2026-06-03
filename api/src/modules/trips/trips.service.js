@@ -136,11 +136,7 @@ class TripsService {
             throw new BusinessRuleError("Invalid vehicle type");
         }
 
-        const nearbyDrivers = await this.findNearbyDrivers(
-            redis,
-            payload.pickupLat,
-            payload.pickupLng
-        );
+        // Matching Engine will discover drivers asynchronously
 
         const trip = await TripsRepository.runTransaction(async (tx) => {
             const createdTrip = await TripsRepository.createTrip({
@@ -166,14 +162,7 @@ class TripsService {
                 tx
             );
 
-            if (nearbyDrivers.length) {
-                const offers = nearbyDrivers.map((driver) => ({
-                    tripId: createdTrip.id,
-                    driverId: driver.driverId,
-                    status: "PENDING",
-                }));
-                await TripsRepository.createOffers(offers, tx);
-            }
+            // Driver matching is now deferred to the async MatchingQueue
 
             return createdTrip;
         });
@@ -188,7 +177,11 @@ class TripsService {
             }
         }
 
-        return { trip, matchedDrivers: nearbyDrivers.length };
+        // Enqueue trip for async matching
+        const matchingQueue = require("../matching/matching.queue");
+        matchingQueue.enqueueTrip(trip.id);
+
+        return { trip, status: "MATCHING_STARTED" };
     }
 
     // Lifecycle actions
