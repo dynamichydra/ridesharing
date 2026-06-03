@@ -15,6 +15,7 @@ const authRoutes = require("./modules/auth/auth.routes");
 const usersRoutes = require("./modules/users/users.routes");
 const driversRoutes = require("./modules/drivers/drivers.routes");
 const tripsRoutes = require("./modules/trips/trips.routes");
+const pricingRoutes = require("./modules/pricing/pricing.routes");
 
 async function buildApp() {
     const app = Fastify({
@@ -52,6 +53,9 @@ async function buildApp() {
     });
     await app.register(tripsRoutes, {
         prefix: "/api/v1/trips",
+    });
+    await app.register(pricingRoutes, {
+        prefix: "/api/v1/pricing",
     });
 
     // Root status probe
