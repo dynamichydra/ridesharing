@@ -3,6 +3,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
 import '../../../../core/theme/theme_bloc.dart';
+import '../../../../core/services/storage_service.dart';
+import '../../../../injection_container.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../wallet/presentation/bloc/wallet_bloc.dart';
+import '../bloc/profile_bloc.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -14,6 +19,14 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool _pushNotifications = true;
   bool _emailReceipts = true;
+
+  @override
+  void initState() {
+    super.initState();
+    final storage = sl<StorageService>();
+    _pushNotifications = storage.getCachedData('settings_push_alerts') as bool? ?? true;
+    _emailReceipts = storage.getCachedData('settings_email_receipts') as bool? ?? true;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +84,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       setState(() {
                         _pushNotifications = val;
                       });
+                      sl<StorageService>().cacheData('settings_push_alerts', val);
                     },
                   ),
                   const Divider(height: 1),
@@ -82,7 +96,37 @@ class _SettingsPageState extends State<SettingsPage> {
                       setState(() {
                         _emailReceipts = val;
                       });
+                      sl<StorageService>().cacheData('settings_email_receipts', val);
                     },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+
+            Text(
+              'System Actions',
+              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: AppSpacing.m),
+            Card(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.cleaning_services_rounded, color: AppColors.primaryBlue),
+                    title: const Text('Clear App Cache'),
+                    subtitle: const Text('Resets local database and mock cache'),
+                    onTap: () => _confirmClearCache(context),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: Icon(Icons.delete_forever_rounded, color: theme.colorScheme.error),
+                    title: Text(
+                      'Delete Account',
+                      style: TextStyle(color: theme.colorScheme.error, fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: const Text('Permanently remove profile data'),
+                    onTap: () => _confirmDeleteAccount(context),
                   ),
                 ],
               ),
@@ -116,6 +160,70 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _confirmClearCache(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear Cache?'),
+        content: const Text('This will reset your local profile, transactions, wallet balance, and ride history mock data. The app will restart.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              final storage = sl<StorageService>();
+              await storage.clearCache();
+              await storage.clearAuth();
+              
+              if (context.mounted) {
+                context.read<AuthBloc>().add(LoggedOut());
+                context.read<ProfileBloc>().add(LoadProfile());
+                context.read<WalletBloc>().add(LoadWalletDetails());
+                context.go('/login');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('App cache cleared. Mock data re-initialized.')),
+                );
+              }
+            },
+            child: const Text('Clear', style: TextStyle(color: AppColors.errorRed)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteAccount(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Account?'),
+        content: const Text('Are you sure you want to permanently delete your account? This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              final storage = sl<StorageService>();
+              await storage.clearCache();
+              await storage.clearAuth();
+              
+              if (context.mounted) {
+                context.read<AuthBloc>().add(LoggedOut());
+                context.read<ProfileBloc>().add(LoadProfile());
+                context.read<WalletBloc>().add(LoadWalletDetails());
+                context.go('/login');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Account deleted successfully.')),
+                );
+              }
+            },
+            child: const Text('Delete', style: TextStyle(color: AppColors.errorRed)),
+          ),
+        ],
       ),
     );
   }

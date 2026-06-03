@@ -7,6 +7,8 @@ import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../bloc/ride_tracking_bloc.dart';
 import '../../../booking/presentation/bloc/booking_bloc.dart';
+import '../../../wallet/presentation/bloc/wallet_bloc.dart';
+import '../../../profile/presentation/bloc/profile_bloc.dart';
 
 class RideTrackingPage extends StatelessWidget {
   const RideTrackingPage({super.key});
@@ -22,6 +24,10 @@ class RideTrackingPage extends StatelessWidget {
           if (state is RideTrackingCancelled) {
             context.read<BookingBloc>().add(ClearBooking());
             context.go('/home');
+          } else if (state is RideTrackingActive && state.trackingState == 'rideCompleted') {
+            // Trigger state reload to reflect fare deduction and new history item
+            context.read<WalletBloc>().add(LoadWalletDetails());
+            context.read<ProfileBloc>().add(LoadProfile());
           }
         },
         builder: (context, state) {

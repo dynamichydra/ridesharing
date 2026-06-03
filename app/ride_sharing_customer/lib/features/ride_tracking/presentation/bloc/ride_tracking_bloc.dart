@@ -4,6 +4,8 @@ import 'package:equatable/equatable.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/utils/location_helper.dart';
 import '../../domain/repositories/ride_tracking_repository.dart';
+import '../../../../core/services/storage_service.dart';
+import '../../../../injection_container.dart';
 
 // ==========================================
 // Ride Tracking Events
@@ -251,12 +253,71 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         } else {
           // Reached destination! Completed state
           _stopTimer();
+          _completeRideInCache(currentState);
           emit(currentState.copyWith(
             trackingState: 'rideCompleted',
             driverPosition: currentState.destination,
           ));
         }
       }
+    }
+  }
+
+  Future<void> _completeRideInCache(RideTrackingActive activeRide) async {
+    try {
+      final storage = sl<StorageService>();
+      
+      // 1. Deduct fare from Wallet
+      final walletCached = storage.getCachedData('cached_wallet_data');
+      if (walletCached != null) {
+        final walletMap = Map<String, dynamic>.from(walletCached as Map);
+        final double balance = (walletMap['balance'] as num).toDouble();
+        final double nextBalance = balance - activeRide.fare;
+        
+        final transactions = (walletMap['transactions'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        transactions.insert(0, {
+          'id': 'tx_trip_${DateTime.now().millisecondsSinceEpoch}',
+          'amount': activeRide.fare,
+          'type': 'trip',
+          'status': 'completed',
+          'date': DateTime.now().toIso8601String(),
+          'description': 'Ride to ${activeRide.destinationName}'
+        });
+        
+        final updatedWallet = {
+          ...walletMap,
+          'balance': nextBalance,
+          'transactions': transactions,
+        };
+        await storage.cacheData('cached_wallet_data', updatedWallet);
+      }
+      
+      // 2. Add to Ride History
+      final historyCached = storage.getCachedData('cached_ride_history_data');
+      final List<Map<String, dynamic>> historyList = [];
+      if (historyCached != null) {
+        historyList.addAll((historyCached as List).map((e) => Map<String, dynamic>.from(e as Map)));
+      }
+      
+      final newHistoryItem = {
+        'id': 'ride_${DateTime.now().millisecondsSinceEpoch}',
+        'pickup_name': activeRide.pickupName,
+        'destination_name': activeRide.destinationName,
+        'fare': activeRide.fare,
+        'status': 'completed',
+        'date': DateTime.now().toIso8601String(),
+        'driver': {
+          'name': activeRide.driverName,
+          'rating': activeRide.driverRating,
+          'avatar': activeRide.driverAvatar,
+          'vehicle': activeRide.driverVehicle,
+        }
+      };
+      
+      historyList.insert(0, newHistoryItem);
+      await storage.cacheData('cached_ride_history_data', historyList);
+    } catch (_) {
+      // Fail silently in case of mock issue
     }
   }
 

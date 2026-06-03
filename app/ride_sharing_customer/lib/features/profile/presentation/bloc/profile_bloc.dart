@@ -149,24 +149,52 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   }
 
   Future<void> _onUpdatePlaces(UpdatePlaces event, Emitter<ProfileState> emit) async {
-    emit(ProfileLoading());
-    try {
-      await _profileRepository.updateSavedPlaces(event.places);
-      emit(ProfileUpdateSuccess());
-      add(LoadProfile());
-    } catch (e) {
-      emit(ProfileError(e.toString()));
+    final currentState = state;
+    if (currentState is ProfileLoaded) {
+      final updatedProfile = Map<String, dynamic>.from(currentState.userProfile);
+      updatedProfile['saved_places'] = event.places;
+      emit(currentState.copyWith(userProfile: updatedProfile));
+      try {
+        await _profileRepository.updateSavedPlaces(event.places);
+        final profile = await _profileRepository.getUserProfile();
+        emit(currentState.copyWith(userProfile: profile));
+      } catch (e) {
+        emit(ProfileError(e.toString()));
+      }
+    } else {
+      emit(ProfileLoading());
+      try {
+        await _profileRepository.updateSavedPlaces(event.places);
+        final profile = await _profileRepository.getUserProfile();
+        emit(ProfileLoaded(userProfile: profile));
+      } catch (e) {
+        emit(ProfileError(e.toString()));
+      }
     }
   }
 
   Future<void> _onUpdatePaymentMethods(UpdatePaymentMethods event, Emitter<ProfileState> emit) async {
-    emit(ProfileLoading());
-    try {
-      await _profileRepository.updatePaymentMethods(event.methods);
-      emit(ProfileUpdateSuccess());
-      add(LoadProfile());
-    } catch (e) {
-      emit(ProfileError(e.toString()));
+    final currentState = state;
+    if (currentState is ProfileLoaded) {
+      final updatedProfile = Map<String, dynamic>.from(currentState.userProfile);
+      updatedProfile['payment_methods'] = event.methods;
+      emit(currentState.copyWith(userProfile: updatedProfile));
+      try {
+        await _profileRepository.updatePaymentMethods(event.methods);
+        final profile = await _profileRepository.getUserProfile();
+        emit(currentState.copyWith(userProfile: profile));
+      } catch (e) {
+        emit(ProfileError(e.toString()));
+      }
+    } else {
+      emit(ProfileLoading());
+      try {
+        await _profileRepository.updatePaymentMethods(event.methods);
+        final profile = await _profileRepository.getUserProfile();
+        emit(ProfileLoaded(userProfile: profile));
+      } catch (e) {
+        emit(ProfileError(e.toString()));
+      }
     }
   }
 }

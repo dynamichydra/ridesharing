@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../profile/presentation/bloc/profile_bloc.dart';
 
 class AppNavigationDrawer extends StatelessWidget {
   const AppNavigationDrawer({super.key});
@@ -31,41 +32,58 @@ class AppNavigationDrawer extends StatelessWidget {
                 bottomRight: Radius.circular(AppRadius.xl),
               ),
             ),
-            child: Row(
-              children: [
-                // Avatar with white boundary
-                Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white24,
-                  ),
-                  child: const CircleAvatar(
-                    radius: 28,
-                    backgroundImage: NetworkImage(
-                      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.m),
-                // Details
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Alex Morgan',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 18,
-                          color: Colors.white,
-                        ),
+            child: BlocBuilder<ProfileBloc, ProfileState>(
+              builder: (context, state) {
+                String userName = 'Guest';
+                String? userImage;
+
+                if (state is ProfileInitial) {
+                  // Trigger loading details automatically
+                  context.read<ProfileBloc>().add(LoadProfile());
+                } else if (state is ProfileLoaded) {
+                  userName = state.userProfile['name'] as String? ?? 'User';
+                  userImage = state.userProfile['profile_picture'] as String?;
+                }
+
+                return Row(
+                  children: [
+                    // Avatar with white boundary
+                    Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white24,
                       ),
-                    ],
-                  ),
-                ),
-              ],
+                      child: CircleAvatar(
+                        radius: 28,
+                        backgroundImage: userImage != null
+                            ? NetworkImage(userImage)
+                            : const NetworkImage(
+                                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+                              ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.m),
+                    // Details
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            userName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 18,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           const SizedBox(height: AppSpacing.m),

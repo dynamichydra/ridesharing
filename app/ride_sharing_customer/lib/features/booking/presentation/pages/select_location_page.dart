@@ -63,7 +63,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: theme.colorScheme.background,
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text('Choose Destination'),
         leading: IconButton(
@@ -141,7 +141,6 @@ class _SelectLocationPageState extends State<SelectLocationPage> {
                       separatorBuilder: (context, index) => const Divider(),
                       itemBuilder: (context, index) {
                         final place = showList[index];
-                        final isSaved = place['type'] != null;
                         
                         IconData icon = Icons.location_on_outlined;
                         if (place['type'] == 'home') icon = Icons.home_rounded;
