@@ -1,4 +1,4 @@
-const { db } = require("../../db/drizzle");
+const db = require("../../db/drizzle");
 const { eq, inArray, and } = require("drizzle-orm");
 const { trips } = require("../../db/schema/trips.schema");
 const { tripOffers } = require("../../db/schema/trip-offer.schema");
