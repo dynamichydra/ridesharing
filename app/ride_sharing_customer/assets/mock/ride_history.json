@@ -1,0 +1,62 @@
+[
+  {
+    "id": "ride_901",
+    "date": "2026-06-01T18:32:00Z",
+    "pickup_name": "UB City Mall",
+    "pickup_address": "24, Vittal Mallya Rd, Bengaluru, Karnataka 560001",
+    "destination_name": "Home",
+    "destination_address": "Indiranagar Double Rd, Bengaluru, KA 560038",
+    "fare": 180.00,
+    "status": "completed",
+    "vehicle_type": "economy",
+    "driver_name": "Ramesh Kumar",
+    "driver_rating": 4.8,
+    "vehicle_info": "Bajaj RE Auto Green",
+    "vehicle_plate": "KA-03-EX-1234"
+  },
+  {
+    "id": "ride_902",
+    "date": "2026-05-28T09:15:00Z",
+    "pickup_name": "BLR Airport Terminal 1",
+    "pickup_address": "KIAL Rd, Devanahalli, Bengaluru, Karnataka 560300",
+    "destination_name": "Work (HQ)",
+    "destination_address": "Koramangala 5th Block, Bengaluru, KA 560095",
+    "fare": 850.00,
+    "status": "completed",
+    "vehicle_type": "premium",
+    "driver_name": "Suresh Raina",
+    "driver_rating": 4.95,
+    "vehicle_info": "Maruti Dzire White",
+    "vehicle_plate": "KA-51-AB-5678"
+  },
+  {
+    "id": "ride_903",
+    "date": "2026-05-20T14:10:00Z",
+    "pickup_name": "Bangalore Palace",
+    "pickup_address": "Vasanth Nagar, Bengaluru, Karnataka 560052",
+    "destination_name": "Home",
+    "destination_address": "Indiranagar Double Rd, Bengaluru, KA 560038",
+    "fare": 240.00,
+    "status": "completed",
+    "vehicle_type": "xl",
+    "driver_name": "Anil Kumble",
+    "driver_rating": 4.75,
+    "vehicle_info": "Toyota Innova Gold",
+    "vehicle_plate": "KA-04-MK-9999"
+  },
+  {
+    "id": "ride_904",
+    "date": "2026-05-15T21:40:00Z",
+    "pickup_name": "Lalbagh Botanical Garden",
+    "pickup_address": "Mavalli, Bengaluru, Karnataka 560004",
+    "destination_name": "Home",
+    "destination_address": "Indiranagar Double Rd, Bengaluru, KA 560038",
+    "fare": 150.00,
+    "status": "cancelled",
+    "vehicle_type": "economy",
+    "driver_name": "None",
+    "driver_rating": 0.0,
+    "vehicle_info": "None",
+    "vehicle_plate": "None"
+  }
+]

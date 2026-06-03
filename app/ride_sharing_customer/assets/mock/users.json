@@ -1,0 +1,58 @@
+{
+  "id": "usr_123456",
+  "name": "Alex Morgan",
+  "email": "alex.morgan@hovr.com",
+  "phone": "+91 98765 43210",
+  "rating": 4.92,
+  "profile_picture": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200",
+  "token": "mock_jwt_token_alex_morgan",
+  "saved_places": [
+    {
+      "id": "place_home",
+      "type": "home",
+      "name": "Home",
+      "address": "Indiranagar Double Rd, Bengaluru, KA 560038",
+      "latitude": 12.9719,
+      "longitude": 77.6412
+    },
+    {
+      "id": "place_work",
+      "type": "work",
+      "name": "Work (HQ)",
+      "address": "Koramangala 5th Block, Bengaluru, KA 560095",
+      "latitude": 12.9348,
+      "longitude": 77.6189
+    },
+    {
+      "id": "place_fav_1",
+      "type": "favorite",
+      "name": "Gym (Gold's)",
+      "address": "MG Road, Bengaluru, KA 560001",
+      "latitude": 12.9754,
+      "longitude": 77.6068
+    }
+  ],
+  "payment_methods": [
+    {
+      "id": "pm_visa",
+      "type": "card",
+      "brand": "Visa",
+      "last_4": "4242",
+      "is_default": true
+    },
+    {
+      "id": "pm_apple_pay",
+      "type": "apple_pay",
+      "brand": "Apple Pay",
+      "last_4": "",
+      "is_default": false
+    },
+    {
+      "id": "pm_cash",
+      "type": "cash",
+      "brand": "Cash",
+      "last_4": "",
+      "is_default": false
+    }
+  ]
+}

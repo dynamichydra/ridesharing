@@ -1,0 +1,51 @@
+[
+  {
+    "id": "loc_1",
+    "name": "Kempegowda International Airport (BLR)",
+    "address": "KIAL Rd, Devanahalli, Bengaluru, Karnataka 560300",
+    "latitude": 13.1986,
+    "longitude": 77.7066
+  },
+  {
+    "id": "loc_2",
+    "name": "UB City Mall",
+    "address": "24, Vittal Mallya Rd, Bengaluru, Karnataka 560001",
+    "latitude": 12.9716,
+    "longitude": 77.5958
+  },
+  {
+    "id": "loc_3",
+    "name": "Bangalore Palace",
+    "address": "Vasanth Nagar, Bengaluru, Karnataka 560052",
+    "latitude": 12.9980,
+    "longitude": 77.5921
+  },
+  {
+    "id": "loc_4",
+    "name": "Lalbagh Botanical Garden",
+    "address": "Mavalli, Bengaluru, Karnataka 560004",
+    "latitude": 12.9507,
+    "longitude": 77.5844
+  },
+  {
+    "id": "loc_5",
+    "name": "Cubbon Park",
+    "address": "Kasturba Rd, Bengaluru, Karnataka 560001",
+    "latitude": 12.9779,
+    "longitude": 77.5952
+  },
+  {
+    "id": "loc_6",
+    "name": "Phoenix Marketcity",
+    "address": "Whitefield Rd, Mahadevapura, Bengaluru, Karnataka 560048",
+    "latitude": 12.9958,
+    "longitude": 77.6964
+  },
+  {
+    "id": "loc_7",
+    "name": "Forum Mall Koramangala",
+    "address": "Hosur Rd, Koramangala, Bengaluru, Karnataka 560095",
+    "latitude": 12.9344,
+    "longitude": 77.6113
+  }
+]

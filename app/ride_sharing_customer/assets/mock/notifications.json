@@ -1,0 +1,26 @@
+[
+  {
+    "id": "notif_1",
+    "title": "Welcome to HOVR!",
+    "message": "Thank you for choosing HOVR. Enjoy your first ride with 20% off using code FIRSTHOVR.",
+    "timestamp": "2026-06-03T08:00:00Z",
+    "is_read": false,
+    "type": "promotion"
+  },
+  {
+    "id": "notif_2",
+    "title": "Your receipt for Ride #901",
+    "message": "You spent ₹180.00 on your ride to Home. The receipt has been sent to your email alex.morgan@hovr.com.",
+    "timestamp": "2026-06-01T18:50:00Z",
+    "is_read": true,
+    "type": "receipt"
+  },
+  {
+    "id": "notif_3",
+    "title": "Security Update",
+    "message": "Your password was successfully updated. If you did not perform this change, please contact support immediately.",
+    "timestamp": "2026-05-25T11:20:00Z",
+    "is_read": true,
+    "type": "security"
+  }
+]

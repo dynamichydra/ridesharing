@@ -1,0 +1,44 @@
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../../../core/network/dio_client.dart';
+import '../../../../core/constants/constants.dart';
+
+abstract class HomeDataSource {
+  Future<LatLng> getCurrentLocation();
+  Future<List<Map<String, dynamic>>> searchPlaces(String query);
+  Future<List<Map<String, dynamic>>> getSavedPlaces();
+}
+
+class HomeDataSourceImpl implements HomeDataSource {
+  final DioClient _dioClient;
+
+  HomeDataSourceImpl(this._dioClient);
+
+  @override
+  Future<LatLng> getCurrentLocation() async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    // Defaults to Bengaluru, India (UB City center)
+    return const LatLng(12.9716, 77.5946);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> searchPlaces(String query) async {
+    final list = await _dioClient.getMockData(AppMockAssets.rides) as List<dynamic>;
+    if (query.isEmpty) {
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return list
+        .where((e) =>
+            e['name'].toString().toLowerCase().contains(query.toLowerCase()) ||
+            e['address'].toString().toLowerCase().contains(query.toLowerCase()))
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getSavedPlaces() async {
+    final response = await _dioClient.getMockData(AppMockAssets.users);
+    final user = Map<String, dynamic>.from(response as Map);
+    final saved = user['saved_places'] as List? ?? [];
+    return saved.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+}

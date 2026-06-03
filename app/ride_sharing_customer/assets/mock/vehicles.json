@@ -1,0 +1,50 @@
+[
+  {
+    "id": "veh_economy",
+    "name": "Auto",
+    "description": "Affordable auto rickshaw rides",
+    "base_fare": 30.00,
+    "per_mile": 10.00,
+    "per_minute": 1.00,
+    "capacity": 3,
+    "multiplier": 1.0,
+    "eta_minutes": 3,
+    "type": "economy"
+  },
+  {
+    "id": "veh_standard",
+    "name": "Mini",
+    "description": "Hatchbacks for quick everyday travel",
+    "base_fare": 50.00,
+    "per_mile": 14.00,
+    "per_minute": 1.50,
+    "capacity": 4,
+    "multiplier": 1.2,
+    "eta_minutes": 2,
+    "type": "standard"
+  },
+  {
+    "id": "veh_premium",
+    "name": "Sedan",
+    "description": "Sedans with professional drivers",
+    "base_fare": 80.00,
+    "per_mile": 18.00,
+    "per_minute": 2.00,
+    "capacity": 4,
+    "multiplier": 1.6,
+    "eta_minutes": 5,
+    "type": "premium"
+  },
+  {
+    "id": "veh_xl",
+    "name": "SUV",
+    "description": "Spacious SUVs for families and groups",
+    "base_fare": 120.00,
+    "per_mile": 24.00,
+    "per_minute": 3.00,
+    "capacity": 6,
+    "multiplier": 2.0,
+    "eta_minutes": 4,
+    "type": "xl"
+  }
+]
