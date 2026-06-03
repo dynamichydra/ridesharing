@@ -18,6 +18,7 @@ const tripsRoutes = require("./modules/trips/trips.routes");
 const pricingRoutes = require("./modules/pricing/pricing.routes");
 const matchingRoutes = require("./modules/matching/matching.routes");
 const MatchingWorker = require("./modules/matching/matching.worker");
+const kafkaAdmin = require("./infrastructure/kafka/kafka.admin");
 const kafkaProducer = require("./infrastructure/kafka/kafka.producer");
 const KafkaConsumer = require("./infrastructure/kafka/kafka.consumer");
 const handlers = require("./infrastructure/kafka/handlers");
@@ -26,6 +27,8 @@ async function buildApp() {
     const app = Fastify({
         logger: true,
     });
+    let matchingWorker;
+    let consumer;
 
     // 1. Register base security and sharing middlewares
     await app.register(cors);
@@ -37,29 +40,37 @@ async function buildApp() {
     // 3. Register Redis client (needed for rate limit and services)
     await app.register(redisPlugin);
 
+    // Graceful shutdown hooks must be registered before the app starts listening.
+    app.addHook("onClose", async () => {
+        await kafkaProducer.disconnect();
+        if (consumer) {
+            await consumer.disconnect();
+        }
+        await kafkaAdmin.disconnect();
+        if (matchingWorker) {
+            matchingWorker.stop();
+        }
+    });
+
     // Start Matching Worker (after Redis is initialized)
     app.ready(async err => {
         if (err) throw err;
-        const matchingWorker = new MatchingWorker(app.redis);
+        matchingWorker = new MatchingWorker(app.redis);
         matchingWorker.start();
+
+        const kafkaTopics = Object.keys(handlers);
+        const kafkaDlqTopics = kafkaTopics.map(topic => `${topic}.dlq`);
+        await kafkaAdmin.ensureTopics([...kafkaTopics, ...kafkaDlqTopics]).catch(console.error);
         
         // Connect Kafka Producer
         await kafkaProducer.connect().catch(console.error);
         
         // Initialize Kafka Consumer
-        const consumer = new KafkaConsumer("uber-backend-group", app.redis);
+        consumer = new KafkaConsumer("uber-backend-group", app.redis);
         for (const [topic, handler] of Object.entries(handlers)) {
             consumer.registerHandler(topic, handler);
         }
         await consumer.start().catch(console.error);
-        
-        // Graceful shutdown hooks
-        app.addHook('onClose', async (instance, done) => {
-            await kafkaProducer.disconnect();
-            await consumer.disconnect();
-            matchingWorker.stop();
-            done();
-        });
     });
 
     // 4. Register core utilities & auth decorators (order matters!)

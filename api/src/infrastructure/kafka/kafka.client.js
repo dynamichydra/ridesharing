@@ -11,8 +11,10 @@ const customLogger = () => ({ namespace, level, label, log }) => {
         console.log(`[Kafka:${label}] ${message}`, extra);
     }
 };
+console.log(process.env.KAFKA_BROKERS);
 
 const brokers = (process.env.KAFKA_BROKERS || "localhost:9092").split(",");
+console.log(brokers);
 
 const kafka = new Kafka({
     clientId: "uber-backend",
