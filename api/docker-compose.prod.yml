@@ -1,12 +1,12 @@
 services:
   api:
     build:
-      context: ./api
+      context: .
       target: production
     container_name: uber-api-prod
     restart: unless-stopped
     env_file:
-      - ./api/.env
+      - ./.env
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
