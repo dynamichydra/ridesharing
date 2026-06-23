@@ -1,0 +1,73 @@
+import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
+import { authenticateAdmin, authenticateRider } from '../../middleware/authenticate.js';
+import { calculateFare, estimateAllTypes } from './fare.service.js';
+import { listAll } from '../vehicle-type/vehicle-type.service.js';
+import * as fareRulesService from './fare-rules.service.js';
+
+export async function fareRoutes(app) {
+
+  // ── Estimation (public / rider) ───────────────────────────────────────────
+
+  // POST /api/v1/fare/estimate
+  // Returns fare for a specific vehicle type
+  app.post('/estimate', async (request, reply) => {
+    const { pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId } = request.body;
+    if (!pickupLat || !pickupLng || !dropLat || !dropLng || !vehicleTypeId) {
+      return sendError(reply, 'pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId are required');
+    }
+    const data = await calculateFare({
+      pickupLat: parseFloat(pickupLat), pickupLng: parseFloat(pickupLng),
+      dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
+      vehicleTypeId,
+    });
+    return sendSuccess(reply, data);
+  });
+
+  // POST /api/v1/fare/estimate-all
+  // Returns fare for all active vehicle types (booking screen)
+  app.post('/estimate-all', async (request, reply) => {
+    const { pickupLat, pickupLng, dropLat, dropLng } = request.body;
+    if (!pickupLat || !pickupLng || !dropLat || !dropLng) {
+      return sendError(reply, 'pickupLat, pickupLng, dropLat, dropLng are required');
+    }
+    const activeTypes = await listAll(true);
+    const data = await estimateAllTypes({
+      pickupLat: parseFloat(pickupLat), pickupLng: parseFloat(pickupLng),
+      dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
+      activeVehicleTypes: activeTypes,
+    });
+    return sendSuccess(reply, data);
+  });
+
+  // ── Fare Rules CRUD (admin) ───────────────────────────────────────────────
+
+  app.get('/rules', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const { rows, pagination } = await fareRulesService.listRules(page, limit, offset);
+    return sendList(reply, rows, pagination);
+  });
+
+  app.get('/rules/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await fareRulesService.getById(request.params.id);
+    return sendSuccess(reply, data);
+  });
+
+  app.post('/rules', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { name, ruleType, multiplier } = request.body;
+    if (!name || !ruleType || !multiplier) {
+      return sendError(reply, 'name, ruleType and multiplier are required');
+    }
+    const data = await fareRulesService.create(request.body);
+    return sendSuccess(reply, data, 201);
+  });
+
+  app.patch('/rules/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await fareRulesService.update(request.params.id, request.body);
+    return sendSuccess(reply, data);
+  });
+
+  app.delete('/rules/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await fareRulesService.remove(request.params.id);
+    return sendSuccess(reply, data);
+  });
+}
