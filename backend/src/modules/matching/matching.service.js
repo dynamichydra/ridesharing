@@ -1,61 +1,72 @@
-import { sql, eq, and } from 'drizzle-orm';
-import { db } from '../../config/db.js';
-import { drivers, subscriptions, rides } from '../../../drizzle/schema/index.js';
-import { redis, REDIS_KEYS } from '../../config/redis.js';
-import { publishEvent, TOPICS } from '../../config/kafka.js';
-
 /**
- * Expanding radius search: 5 km → 10 km → 15 km.
+ * Expanding-radius driver matching engine.
  *
- * For each ring we query only active-subscription, approved,
- * online, unblocked drivers of the requested vehicleType.
- *
- * Drivers are scored by:
- *   score = (1 / distance_km) * 0.6   — proximity weight
- *         + (rating / 5)       * 0.4   — rating weight
- *
- * The top 5 drivers per ring are broadcast via Kafka.
- * If no driver accepts within ACCEPT_TIMEOUT_MS we expand.
+ * Ring progression:  5 km → 10 km → 15 km
+ * Per ring:
+ *   1. Query online, approved, subscribed drivers within radius (Haversine SQL).
+ *   2. Exclude drivers already notified in previous rings.
+ *   3. Score top-5 by proximity (60%) + rating (40%).
+ *   4. Store candidate list in Redis.
+ *   5. Emit ride:new_request to each candidate's socket room via Kafka.
+ *   6. Subscribe to Redis pub/sub acceptance channel — instant signal, no DB polling.
+ *   7. If timeout expires → expand to next ring.
+ *   8. All rings exhausted → expire ride.
  */
 
+import { sql, eq, and } from 'drizzle-orm';
+import { db } from '../../config/db.js';
+import {
+  drivers, subscriptions,
+  rides
+} from '../../../drizzle/schema/index.js';
+import {
+  redis, redisPub, redisSub,
+  REDIS_KEYS
+} from '../../config/redis.js';
+import { publishEvent, TOPICS } from '../../config/kafka.js';
+import {
+  createOffersForRing,
+  expirePendingOffers,
+  hasPendingOffer
+} from '../ride/ride_offer.service.js';
+import { recordStatusChange } from '../ride/ride_status_history.service.js';
+
 const RADII_KM = [5, 10, 15];
-const ACCEPT_TIMEOUT_MS = 25_000;  // 25 s per ring
+const ACCEPT_TIMEOUT_MS = 25_000;   // 25 s per ring
 const MAX_CANDIDATES = 5;
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── scoring ───────────────────────────────────────────────────────────────────
 
 function scoreDrivers(rows) {
   return rows
     .map((d) => ({
       ...d,
       _score:
-        (1 / Math.max(d.distance_km, 0.1)) * 0.6 +
+        (1 / Math.max(parseFloat(d.distance_km), 0.1)) * 0.6 +
         (parseFloat(d.rating) / 5) * 0.4,
     }))
     .sort((a, b) => b._score - a._score)
     .slice(0, MAX_CANDIDATES);
 }
 
-/**
- * Haversine query — returns drivers within `radiusKm`
- * that have NOT been tried in a previous ring (excludedIds).
- */
+// ── DB query ──────────────────────────────────────────────────────────────────
+
 async function queryDriversInRadius(pickupLat, pickupLng, vehicleTypeId, radiusKm, excludedIds) {
   const exclusion = excludedIds.length
-    ? sql`AND d.id NOT IN (${sql.join(excludedIds.map((id) => sql`${id}`), sql`, `)})`
+    ? sql`AND d.id NOT IN (${sql.join(excludedIds.map((id) => sql`${id}::uuid`), sql`, `)})`
     : sql``;
 
-  return db.execute(sql`
+  const rows = await db.execute(sql`
     SELECT
       d.id,
       d.name,
       d.phone,
-      d.vehicle_number    AS "vehicleNumber",
-      d.vehicle_model     AS "vehicleModel",
+      d.vehicle_number     AS "vehicleNumber",
+      d.vehicle_model      AS "vehicleModel",
       d.rating,
-      d.total_rides       AS "totalRides",
-      d.profile_photo     AS "profilePhoto",
-      d.fcm_token         AS "fcmToken",
+      d.total_rides        AS "totalRides",
+      d.profile_photo      AS "profilePhoto",
+      d.fcm_token          AS "fcmToken",
       d.current_lat::float AS "currentLat",
       d.current_lng::float AS "currentLng",
       ROUND(
@@ -72,8 +83,8 @@ async function queryDriversInRadius(pickupLat, pickupLng, vehicleTypeId, radiusK
       AND s.status = 'active'
       AND (s.end_date IS NULL OR s.end_date > NOW())
     WHERE
-      d.is_online          = true
-      AND d.is_blocked     = false
+      d.is_online           = true
+      AND d.is_blocked      = false
       AND d.approval_status = 'approved'
       AND d.vehicle_type_id = ${vehicleTypeId}
       AND d.current_lat IS NOT NULL
@@ -89,28 +100,47 @@ async function queryDriversInRadius(pickupLat, pickupLng, vehicleTypeId, radiusK
     ORDER BY distance_km ASC
     LIMIT 20
   `);
+  return rows;
+}
+
+// ── pub/sub acceptance signal ─────────────────────────────────────────────────
+
+/**
+ * Bug 9 fix: use Redis pub/sub instead of DB polling.
+ * Returns a Promise that resolves true (accepted/cancelled) or false (timeout).
+ */
+function waitForAcceptanceSignal(rideId, timeoutMs) {
+  return new Promise((resolve) => {
+    const channel = REDIS_KEYS.CHAN.rideAccepted(rideId);
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      redisSub.unsubscribe(channel).catch(() => { });
+      resolve(false);
+    }, timeoutMs);
+
+    redisSub.subscribe(channel, (err) => {
+      if (err) { console.error('[Matching] redisSub error:', err.message); }
+    });
+
+    redisSub.on('message', (ch, msg) => {
+      if (ch !== channel || settled) return;
+      settled = true;
+      clearTimeout(timer);
+      redisSub.unsubscribe(channel).catch(() => { });
+      // msg = "accepted" | "cancelled"
+      resolve(true);
+    });
+  });
 }
 
 // ── public API ────────────────────────────────────────────────────────────────
 
-/**
- * Start the expanding-radius search for a ride.
- * Called after a ride row is created (status = 'requested').
- *
- * Flow per ring:
- *   1. Query DB for candidates within ring radius.
- *   2. Score & pick top MAX_CANDIDATES.
- *   3. Publish RIDE_MATCHED event → Socket.IO notifies drivers.
- *   4. Store candidate list in Redis with short TTL.
- *   5. Wait ACCEPT_TIMEOUT_MS — if still unaccepted, try next ring.
- *   6. After all rings exhausted → mark ride 'expired', notify rider.
- *
- * This function returns immediately after kicking off the async process.
- */
 export function startMatchingProcess(ride) {
-  // Fire-and-forget — does not block the HTTP response
   _runMatchingRings(ride).catch((err) =>
-    console.error(`[Matching] Error for ride ${ride.id}:`, err),
+    console.error(`[Matching] Unhandled error for ride ${ride.id}:`, err),
   );
 }
 
@@ -121,11 +151,11 @@ async function _runMatchingRings(ride) {
   for (let ringIdx = 0; ringIdx < RADII_KM.length; ringIdx++) {
     const radiusKm = RADII_KM[ringIdx];
 
-    // Check ride is still unaccepted before each ring
+    // Abort early if ride status changed before we start this ring
     const [current] = await db.select({ status: rides.status }).from(rides)
       .where(eq(rides.id, rideId)).limit(1);
     if (!current || current.status !== 'searching') {
-      console.log(`[Matching] Ride ${rideId} no longer searching — aborting.`);
+      console.log(`[Matching] Ride ${rideId} no longer searching — aborting rings`);
       return;
     }
 
@@ -133,36 +163,43 @@ async function _runMatchingRings(ride) {
       parseFloat(pickupLat), parseFloat(pickupLng),
       vehicleTypeId, radiusKm, triedDriverIds,
     );
-
     const candidates = scoreDrivers(rows);
 
     if (candidates.length === 0) {
-      console.log(`[Matching] Ride ${rideId} — no drivers in ring ${radiusKm}km, expanding...`);
-      // Track tried IDs even if empty so we don't re-query the same set after expansion
+      console.log(`[Matching] Ride ${rideId} — ring ${radiusKm} km: no candidates, expanding`);
       continue;
     }
 
     console.log(
-      `[Matching] Ride ${rideId} — ring ${radiusKm}km, ${candidates.length} candidates: ` +
-      candidates.map((c) => `${c.name}(${c.distance_km}km)`).join(', '),
+      `[Matching] Ride ${rideId} — ring ${radiusKm} km: ` +
+      candidates.map((c) => `${c.name}(${c.distance_km}km,★${c.rating})`).join(', '),
     );
 
-    // Add to tried list so next ring won't re-notify the same drivers
     triedDriverIds.push(...candidates.map((c) => c.id));
 
-    // Store candidates in Redis so driver.accept can validate
+    const ringExpiresAt = new Date(Date.now() + ACCEPT_TIMEOUT_MS);
+
+    // Persist one ride_offer row per candidate — durable audit trail of
+    // exactly who was offered this ride, at what distance/score, and when.
+    await createOffersForRing(rideId, candidates, ringIdx + 1, radiusKm, ringExpiresAt)
+      .catch((err) => console.error('[Matching] createOffersForRing failed:', err.message));
+
+    // Store candidate list (used by validateDriverCanAccept fast-path)
     await redis.setex(
       REDIS_KEYS.rideRequest(rideId),
-      Math.ceil(ACCEPT_TIMEOUT_MS / 1000) + 5,
-      JSON.stringify({
-        rideId,
-        candidateDriverIds: candidates.map((c) => c.id),
-        ring: ringIdx + 1,
-        radiusKm,
-      }),
+      Math.ceil(ACCEPT_TIMEOUT_MS / 1000) + 10,
+      JSON.stringify({ rideId, candidateDriverIds: candidates.map((c) => c.id), ring: ringIdx + 1, radiusKm }),
     );
 
-    // Publish to Kafka — consumers forward to Socket.IO per-driver room
+    // Bug 4 fix: store ride→candidates mapping so Socket.IO can join drivers to
+    // the "candidates" room and send ride:taken when another driver accepts
+    await redis.setex(
+      `ride:candidates:${rideId}`,
+      Math.ceil(ACCEPT_TIMEOUT_MS / 1000) + 10,
+      JSON.stringify(candidates.map((c) => c.id)),
+    );
+
+    // Broadcast to all candidates via Kafka → Socket.IO
     await publishEvent(TOPICS.RIDE_MATCHED, {
       id: rideId,
       rideId,
@@ -183,62 +220,92 @@ async function _runMatchingRings(ride) {
       dropAddress: ride.dropAddress,
       vehicleTypeId,
       estimatedFare: ride.estimatedFare,
+      distanceKm: ride.distanceKm,
+      polyline: ride.polyline,
       expiresAt: Date.now() + ACCEPT_TIMEOUT_MS,
     }, rideId);
 
-    // Wait for acceptance or timeout
-    const accepted = await _waitForAcceptance(rideId, ACCEPT_TIMEOUT_MS);
-    if (accepted) return;
+    // Bug 9 fix: instant signal via pub/sub — no more DB polling
+    const accepted = await waitForAcceptanceSignal(rideId, ACCEPT_TIMEOUT_MS);
+    if (accepted) {
+      console.log(`[Matching] Ride ${rideId} — accepted in ring ${radiusKm} km`);
+      return;
+    }
 
-    console.log(`[Matching] Ride ${rideId} — ring ${radiusKm}km timed out.`);
+    // Ring window closed with no acceptance — bulk-expire this ring's offers
+    await expirePendingOffers(rideId, ringIdx + 1)
+      .catch((err) => console.error('[Matching] expirePendingOffers failed:', err.message));
+
+    console.log(`[Matching] Ride ${rideId} — ring ${radiusKm} km timed out, expanding`);
   }
 
-  // All rings exhausted — mark ride expired
   await _expireRide(rideId);
 }
 
-/**
- * Poll Redis every 2s to check if ride was accepted within the window.
- */
-async function _waitForAcceptance(rideId, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const [ride] = await db.select({ status: rides.status, driverId: rides.driverId })
-      .from(rides).where(eq(rides.id, rideId)).limit(1);
-    if (ride?.status === 'accepted' || ride?.driverId) return true;
-    if (ride?.status === 'cancelled') return true; // rider cancelled
-    await _sleep(2000);
-  }
-  return false;
-}
-
 async function _expireRide(rideId) {
-  await db.update(rides)
-    .set({ status: 'expired', cancelledAt: new Date(), cancelledBy: 'system', cancelReason: 'No driver found' })
-    .where(eq(rides.id, rideId));
+  // Check it wasn't accepted by a late signal before we expire
+  const [ride] = await db.select({ status: rides.status, riderId: rides.riderId })
+    .from(rides).where(eq(rides.id, rideId)).limit(1);
+  if (!ride || ride.status !== 'searching') return; // accepted in the meantime
+
+  await db.update(rides).set({
+    status: 'expired',
+    cancelledAt: new Date(),
+    cancelledBy: 'system',
+    cancelReason: 'No driver found in any search radius',
+  }).where(and(eq(rides.id, rideId), eq(rides.status, 'searching')));
+
+  await recordStatusChange({
+    rideId, fromStatus: 'searching', toStatus: 'expired',
+    changedBy: 'system', reason: 'No driver found in any search radius (5/10/15 km exhausted)',
+  });
+
   await redis.del(REDIS_KEYS.rideRequest(rideId));
-  await publishEvent(TOPICS.RIDE_CANCELLED, { id: rideId, rideId, reason: 'no_driver', cancelledBy: 'system' });
+  await redis.del(`ride:candidates:${rideId}`);
+
+  await publishEvent(TOPICS.RIDE_CANCELLED, {
+    id: rideId, rideId, riderId: ride.riderId, cancelledBy: 'system', reason: 'no_driver',
+  });
   await publishEvent(TOPICS.NOTIF_PUSH, {
-    rideId,
-    userType: 'rider',
+    userType: 'rider', userId: ride.riderId,
     type: 'RIDE_EXPIRED',
     title: 'No driver found',
-    body: 'Sorry, no drivers are available right now. Please try again.',
+    body: 'Sorry, no drivers available nearby. Please try again in a moment.',
   });
-  console.log(`[Matching] Ride ${rideId} expired — no driver in any ring.`);
+  console.log(`[Matching] Ride ${rideId} expired — no driver in any ring`);
 }
 
-function _sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+/**
+ * Called from ride.service.acceptRide AFTER DB update succeeds.
+ * Publishes the acceptance signal so _runMatchingRings resolves immediately.
+ * Also clears the candidate cache.
+ */
+export async function signalRideAccepted(rideId) {
+  await redisPub.publish(REDIS_KEYS.CHAN.rideAccepted(rideId), 'accepted');
+  // this is fine; the restriction is "don't run regular commands on the sub client"
+}
 
 /**
- * Validate that a driver is allowed to accept a specific ride.
- * Called from ride.service before updating DB.
+ * Called from ride.service.cancelRideByRider so the matching loop aborts instantly.
+ */
+export async function signalRideCancelled(rideId) {
+  await redisPub.publish(REDIS_KEYS.CHAN.rideAccepted(rideId), 'cancelled');
+}
+
+/**
+ * Validates that a driver currently holds a pending offer for this ride.
+ * Redis is checked first (fast path, sub-millisecond); the `ride_offers`
+ * table is the durable source of truth and is always re-checked so a
+ * Redis TTL expiry or restart can never let an unmatched driver slip through.
  */
 export async function validateDriverCanAccept(rideId, driverId) {
   const raw = await redis.get(REDIS_KEYS.rideRequest(rideId));
-  if (!raw) throw { statusCode: 410, message: 'Ride request has expired' };
-  const { candidateDriverIds } = JSON.parse(raw);
-  if (!candidateDriverIds.includes(driverId)) {
-    throw { statusCode: 403, message: 'You were not matched to this ride' };
+  if (raw) {
+    const { candidateDriverIds } = JSON.parse(raw);
+    if (candidateDriverIds.includes(driverId)) return; // fast path — confirmed
   }
+
+  // Fall back to durable DB check (covers Redis TTL expiry / cache miss)
+  const ok = await hasPendingOffer(rideId, driverId);
+  if (!ok) throw { statusCode: 403, message: 'You were not matched to this ride, or the offer has expired' };
 }

@@ -30,10 +30,10 @@ export async function createPlan(data) {
 
   // If recurring (not lifetime), create a Razorpay plan for subscription billing
   if (razorpay && data.type !== 'lifetime' && data.durationDays) {
-    const period = data.type === 'monthly' ? 'monthly'
-      : data.type === 'quarterly' ? 'monthly'   // Razorpay: use monthly × 3
-        : data.type === 'yearly' ? 'yearly'
-          : 'monthly'; // custom → monthly as base
+    const period   = data.type === 'monthly'    ? 'monthly'
+                   : data.type === 'quarterly'  ? 'monthly'   // Razorpay: use monthly × 3
+                   : data.type === 'yearly'     ? 'yearly'
+                   : 'monthly'; // custom → monthly as base
     const interval = data.type === 'quarterly' ? 3 : 1;
     try {
       const rzPlan = await razorpay.plans.create({
@@ -81,16 +81,16 @@ export async function initiateSubscription(driverId, planId) {
 
   // Create Razorpay order
   const order = await razorpay.orders.create({
-    amount: Math.round(parseFloat(plan.price) * 100),
+    amount:   Math.round(parseFloat(plan.price) * 100),
     currency: 'INR',
-    notes: { driverId, planId },
+    notes:    { driverId, planId },
   });
 
   return {
-    orderId: order.id,
-    amount: plan.price,
-    currency: 'INR',
-    keyId: env.RAZORPAY_KEY_ID,
+    orderId:   order.id,
+    amount:    plan.price,
+    currency:  'INR',
+    keyId:     env.RAZORPAY_KEY_ID,
     plan: { id: plan.id, name: plan.name, type: plan.type, durationDays: plan.durationDays },
   };
 }
@@ -121,11 +121,11 @@ async function _activateSubscription(driverId, planId, plan, paymentId, orderId)
 
   const [sub] = await db.insert(subscriptions).values({
     driverId, planId,
-    status: 'active',
+    status:    'active',
     endDate,
     paymentId,
     orderId,
-    amount: String(plan.price),
+    amount:    String(plan.price),
   }).returning();
 
   await db.update(drivers).set({ subscriptionStatus: 'active' }).where(eq(drivers.id, driverId));
@@ -135,7 +135,7 @@ async function _activateSubscription(driverId, planId, plan, paymentId, orderId)
     userType: 'driver', userId: driverId,
     type: 'SUBSCRIPTION_ACTIVATED',
     title: '🎉 Subscription Active!',
-    body: `Your ${plan.name} plan is now active. ${endDate ? `Valid until ${endDate.toDateString()}.` : 'Lifetime access!'}`,
+    body:  `Your ${plan.name} plan is now active. ${endDate ? `Valid until ${endDate.toDateString()}.` : 'Lifetime access!'}`,
   });
   return sub;
 }
@@ -143,7 +143,7 @@ async function _activateSubscription(driverId, planId, plan, paymentId, orderId)
 export async function getMySubscription(driverId) {
   const [sub] = await db.select({
     subscription: subscriptions,
-    plan: subscriptionPlans,
+    plan:         subscriptionPlans,
   }).from(subscriptions)
     .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
     .where(and(eq(subscriptions.driverId, driverId), eq(subscriptions.status, 'active')))
@@ -170,11 +170,11 @@ export async function handleRazorpayWebhook(rawBody, signature) {
 
   const event = JSON.parse(rawBody);
   if (event.event === 'payment.captured') {
-    const notes = event.payload.payment.entity.notes;
+    const notes    = event.payload.payment.entity.notes;
     const driverId = notes.driverId;
-    const planId = notes.planId;
+    const planId   = notes.planId;
     const paymentId = event.payload.payment.entity.id;
-    const orderId = event.payload.payment.entity.order_id;
+    const orderId   = event.payload.payment.entity.order_id;
 
     if (driverId && planId) {
       const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, planId)).limit(1);
@@ -201,7 +201,7 @@ export async function expireOverdueSubscriptions() {
       userType: 'driver', userId: driverId,
       type: 'SUBSCRIPTION_EXPIRED',
       title: 'Subscription Expired',
-      body: 'Your subscription has expired. Renew now to continue accepting rides.',
+      body:  'Your subscription has expired. Renew now to continue accepting rides.',
     });
   }
   return { expiredCount: expired.length };

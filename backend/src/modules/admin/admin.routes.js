@@ -1,6 +1,7 @@
 import { sendSuccess, sendList, parsePagination } from '../../utils/response.js';
 import { authenticateAdmin } from '../../middleware/authenticate.js';
 import * as adminService from './admin.service.js';
+import { listHistoryPaginated } from '../ride/ride_status_history.service.js';
 
 export async function adminRoutes(app) {
 
@@ -27,6 +28,14 @@ export async function adminRoutes(app) {
     const { page, limit, offset } = parsePagination(request.query);
     const filters = { actorType: request.query.actorType, action: request.query.action };
     const { rows, pagination } = await adminService.listAuditLogs(page, limit, offset, filters);
+    return sendList(reply, rows, pagination);
+  });
+
+  // GET /api/v1/admin/ride-history?rideId=...  — global status-change log across all rides
+  app.get('/ride-history', async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const filters = { rideId: request.query.rideId };
+    const { rows, pagination } = await listHistoryPaginated(filters, page, limit, offset);
     return sendList(reply, rows, pagination);
   });
 }

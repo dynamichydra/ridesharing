@@ -29,6 +29,6 @@ export async function sendOtpSms(phone, otp) {
   await client.messages.create({
     body: `Your RideShare OTP is: ${otp}. Valid for 5 minutes.`,
     from: env.TWILIO_PHONE_NUMBER,
-    to: phone,
+    to:   phone,
   });
 }

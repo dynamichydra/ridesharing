@@ -12,9 +12,9 @@ async function getMessaging() {
   if (!admin.apps.length) {
     admin.initializeApp({
       credential: admin.credential.cert({
-        projectId: env.FIREBASE_PROJECT_ID,
-        privateKey: env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        clientEmail: env.FIREBASE_CLIENT_EMAIL,
+        projectId:    env.FIREBASE_PROJECT_ID,
+        privateKey:   env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        clientEmail:  env.FIREBASE_CLIENT_EMAIL,
       }),
     });
   }
@@ -38,7 +38,7 @@ export async function sendPush({ fcmToken, title, body, data = {} }) {
       notification: { title, body },
       data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
       android: { priority: 'high' },
-      apns: { payload: { aps: { sound: 'default' } } },
+      apns:    { payload: { aps: { sound: 'default' } } },
     });
   } catch (err) {
     console.error(`[FCM] Failed to send to ${fcmToken.slice(-8)}:`, err.message);

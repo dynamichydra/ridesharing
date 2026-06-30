@@ -3,13 +3,22 @@ import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import multipart from '@fastify/multipart';
+
 import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
 import { env } from '../config/env.js';
 import { redis } from '../config/redis.js';
+import fastifyRawBody from 'fastify-raw-body';
 
 export async function registerPlugins(app) {
-  // Security
+  // Raw body — must be registered before JSON parser (needed for Razorpay webhook HMAC)
+  await app.register(fastifyRawBody, {
+    field: 'rawBody',
+    global: false,   // only on routes that opt in via config: { rawBody: true }
+    encoding: 'utf8',
+    runFirst: true,
+  });
+
   await app.register(helmet, { contentSecurityPolicy: false });
 
   await app.register(cors, {
@@ -17,7 +26,6 @@ export async function registerPlugins(app) {
     credentials: true,
   });
 
-  // Rate limiting (uses Redis store)
   await app.register(rateLimit, {
     max: 100,
     timeWindow: '1 minute',
@@ -29,16 +37,13 @@ export async function registerPlugins(app) {
     }),
   });
 
-  // JWT
   await app.register(jwt, {
     secret: env.JWT_SECRET,
     sign: { expiresIn: env.JWT_EXPIRES_IN },
   });
 
-  // File uploads
-  await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB
+  await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } });
 
-  // Swagger docs
   await app.register(swagger, {
     openapi: {
       info: { title: 'RideShare API', version: '1.0.0', description: 'Industrial Rideshare Platform' },
@@ -52,7 +57,6 @@ export async function registerPlugins(app) {
   });
   await app.register(swaggerUI, { routePrefix: '/docs' });
 
-  // Global error handler
   app.setErrorHandler((error, request, reply) => {
     app.log.error(error);
     const statusCode = error.statusCode || 500;

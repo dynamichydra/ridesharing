@@ -6,5 +6,7 @@ export * from './fare-rules.js';
 export * from './subscription-plans.js';
 export * from './subscriptions.js';
 export * from './rides.js';
+export * from './ride_offers.js';
+export * from './ride_status_history.js';
 export * from './admins.js';
 export * from './audit-logs.js';

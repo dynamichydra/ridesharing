@@ -1,5 +1,5 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin, authenticateRider } from '../../middleware/authenticate.js';
+import { authenticateAdmin } from '../../middleware/authenticate.js';
 import { calculateFare, estimateAllTypes } from './fare.service.js';
 import { listAll } from '../vehicle-type/vehicle-type.service.js';
 import * as fareRulesService from './fare-rules.service.js';
@@ -17,7 +17,7 @@ export async function fareRoutes(app) {
     }
     const data = await calculateFare({
       pickupLat: parseFloat(pickupLat), pickupLng: parseFloat(pickupLng),
-      dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
+      dropLat:   parseFloat(dropLat),   dropLng:   parseFloat(dropLng),
       vehicleTypeId,
     });
     return sendSuccess(reply, data);
@@ -33,7 +33,7 @@ export async function fareRoutes(app) {
     const activeTypes = await listAll(true);
     const data = await estimateAllTypes({
       pickupLat: parseFloat(pickupLat), pickupLng: parseFloat(pickupLng),
-      dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
+      dropLat:   parseFloat(dropLat),   dropLng:   parseFloat(dropLng),
       activeVehicleTypes: activeTypes,
     });
     return sendSuccess(reply, data);

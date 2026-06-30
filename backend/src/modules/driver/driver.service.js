@@ -22,16 +22,16 @@ export async function updateProfile(driverId, data) {
 
 export async function submitDocuments(driverId, docs) {
   const [updated] = await db.update(drivers).set({
-    licenseNumber: docs.licenseNumber,
-    licenseDoc: docs.licenseDoc,
-    aadharNumber: docs.aadharNumber,
-    aadharDoc: docs.aadharDoc,
-    vehicleTypeId: docs.vehicleTypeId,
-    vehicleNumber: docs.vehicleNumber,
-    vehicleModel: docs.vehicleModel,
-    vehiclePhoto: docs.vehiclePhoto,
+    licenseNumber:  docs.licenseNumber,
+    licenseDoc:     docs.licenseDoc,
+    aadharNumber:   docs.aadharNumber,
+    aadharDoc:      docs.aadharDoc,
+    vehicleTypeId:  docs.vehicleTypeId,
+    vehicleNumber:  docs.vehicleNumber,
+    vehicleModel:   docs.vehicleModel,
+    vehiclePhoto:   docs.vehiclePhoto,
     approvalStatus: 'pending',
-    updatedAt: new Date(),
+    updatedAt:      new Date(),
   }).where(eq(drivers.id, driverId)).returning();
 
   await publishEvent(TOPICS.AUDIT_LOG, {
@@ -44,12 +44,12 @@ export async function submitDocuments(driverId, docs) {
 export async function goOnline(driverId, lat, lng) {
   const [driver] = await db.select({
     subscriptionStatus: drivers.subscriptionStatus,
-    approvalStatus: drivers.approvalStatus,
-    isBlocked: drivers.isBlocked,
+    approvalStatus:     drivers.approvalStatus,
+    isBlocked:          drivers.isBlocked,
   }).from(drivers).where(eq(drivers.id, driverId)).limit(1);
 
-  if (!driver) throw { statusCode: 404, message: 'Driver not found' };
-  if (driver.isBlocked) throw { statusCode: 403, message: 'Account is blocked' };
+  if (!driver)                              throw { statusCode: 404, message: 'Driver not found' };
+  if (driver.isBlocked)                     throw { statusCode: 403, message: 'Account is blocked' };
   if (driver.approvalStatus !== 'approved') throw { statusCode: 403, message: 'Account not approved yet' };
   if (driver.subscriptionStatus !== 'active') throw { statusCode: 403, message: 'No active subscription' };
 

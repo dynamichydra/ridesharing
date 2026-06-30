@@ -1,7 +1,6 @@
 import { eq, count, desc, and, gte, sql } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { drivers, users, rides, subscriptions, auditLogs } from '../../../drizzle/schema/index.js';
-import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
 
 export async function getDashboardStats() {

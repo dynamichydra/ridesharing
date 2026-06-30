@@ -7,9 +7,9 @@ export async function listRules(page, limit, offset) {
   const [{ total }] = await db.select({ total: count() }).from(fareRules);
   const rows = await db
     .select({
-      rule: fareRules,
+      rule:        fareRules,
       vehicleType: vehicleTypes,
-      zone: zones,
+      zone:        zones,
     })
     .from(fareRules)
     .leftJoin(vehicleTypes, eq(fareRules.vehicleTypeId, vehicleTypes.id))

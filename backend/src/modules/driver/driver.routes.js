@@ -52,9 +52,9 @@ export async function driverRoutes(app) {
   app.get('/', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);
     const filters = {
-      approvalStatus: request.query.approvalStatus,
+      approvalStatus:     request.query.approvalStatus,
       subscriptionStatus: request.query.subscriptionStatus,
-      isBlocked: request.query.isBlocked !== undefined ? request.query.isBlocked === 'true' : undefined,
+      isBlocked:          request.query.isBlocked !== undefined ? request.query.isBlocked === 'true' : undefined,
     };
     const { rows, pagination } = await driverService.listDrivers(filters, page, limit, offset);
     return sendList(reply, rows, pagination);
