@@ -1,6 +1,5 @@
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/services/storage_service.dart';
-import '../../../../core/constants/constants.dart';
 
 abstract class ProfileDataSource {
   Future<Map<String, dynamic>> getUserProfile();
@@ -21,41 +20,71 @@ class ProfileDataSourceImpl implements ProfileDataSource {
 
   @override
   Future<Map<String, dynamic>> getUserProfile() async {
-    final cached = _storageService.getCachedData(_profileCacheKey);
-    if (cached != null) {
-      return Map<String, dynamic>.from(cached as Map);
+    try {
+      final response = await _dioClient.dio.get('/api/v1/riders/profile');
+      if (response.data['SUCCESS'] == true) {
+        final profile = Map<String, dynamic>.from(response.data['MESSAGE'] as Map);
+        await _storageService.cacheData(_profileCacheKey, profile);
+        return profile;
+      }
+    } catch (_) {
+      // Fallback to cache if request fails
+      final cached = _storageService.getCachedData(_profileCacheKey);
+      if (cached != null) {
+        return Map<String, dynamic>.from(cached as Map);
+      }
     }
-    
-    final response = await _dioClient.getMockData(AppMockAssets.users);
-    final userMap = Map<String, dynamic>.from(response as Map);
-    await _storageService.cacheData(_profileCacheKey, userMap);
-    return userMap;
+
+    // Default basic structure if everything is missing
+    return {
+      'id': 'unknown',
+      'name': 'Rider User',
+      'email': '',
+      'phone': '',
+      'rating': 5.0,
+      'saved_places': [],
+      'payment_methods': []
+    };
   }
 
   @override
   Future<void> updateUserProfile(String name, String email, String phone) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    final current = await getUserProfile();
-    final updated = {
-      ...current,
-      'name': name,
-      'email': email,
-      'phone': phone,
-    };
-    await _storageService.cacheData(_profileCacheKey, updated);
+    try {
+      await _dioClient.dio.patch('/api/v1/riders/profile', data: {
+        'name': name,
+        'email': email,
+        'phone': phone,
+      });
+      final current = await getUserProfile();
+      final updated = {
+        ...current,
+        'name': name,
+        'email': email,
+        'phone': phone,
+      };
+      await _storageService.cacheData(_profileCacheKey, updated);
+    } catch (e) {
+      throw Exception('Failed to update profile: $e');
+    }
   }
 
   @override
   Future<List<Map<String, dynamic>>> getRideHistory() async {
-    final cached = _storageService.getCachedData(_rideHistoryCacheKey);
-    if (cached != null) {
-      return (cached as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    try {
+      final response = await _dioClient.dio.get('/api/v1/riders/rides');
+      if (response.data['SUCCESS'] == true) {
+        final List<dynamic> list = response.data['MESSAGE'] ?? [];
+        final mappedList = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        await _storageService.cacheData(_rideHistoryCacheKey, mappedList);
+        return mappedList;
+      }
+    } catch (_) {
+      final cached = _storageService.getCachedData(_rideHistoryCacheKey);
+      if (cached != null) {
+        return (cached as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
     }
-    
-    final response = await _dioClient.getMockData(AppMockAssets.rideHistory) as List<dynamic>;
-    final list = response.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-    await _storageService.cacheData(_rideHistoryCacheKey, list);
-    return list;
+    return [];
   }
 
   @override
@@ -80,3 +109,4 @@ class ProfileDataSourceImpl implements ProfileDataSource {
     await _storageService.cacheData(_profileCacheKey, updated);
   }
 }
+

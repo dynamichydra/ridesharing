@@ -47,8 +47,12 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> logout() async {
+    try {
+      await _authDataSource.logout();
+    } catch (_) {}
     final storage = sl<StorageService>();
     await storage.clearAuth();
+    await storage.clearCache(); // Clean local profile cache upon logout
   }
 
   @override

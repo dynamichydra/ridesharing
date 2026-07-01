@@ -1,25 +1,41 @@
-import 'dart:convert';
+import 'dart:io';
 import 'package:dio/dio.dart';
-import 'package:flutter/services.dart';
+import '../services/storage_service.dart';
+import '../../injection_container.dart';
 
 class DioClient {
   final Dio dio;
 
-  DioClient(this.dio);
+  DioClient(this.dio) {
+    dio.options.baseUrl = baseUrl;
+    dio.options.connectTimeout = const Duration(seconds: 15);
+    dio.options.receiveTimeout = const Duration(seconds: 15);
+    
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          final storage = sl<StorageService>();
+          final token = await storage.getToken();
+          if (token != null) {
+            options.headers['Authorization'] = 'Bearer $token';
+          }
+          return handler.next(options);
+        },
+      ),
+    );
+  }
 
-  /// Simulates a GET request to a REST API by loading a mock JSON asset.
-  /// Introduces artificial latency to simulate server-side processing.
-  Future<dynamic> getMockData(String assetPath) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    try {
-      final jsonStr = await rootBundle.loadString(assetPath);
-      return json.decode(jsonStr);
-    } catch (e) {
-      throw DioException(
-        requestOptions: RequestOptions(path: assetPath),
-        error: 'Failed to load mock asset: $e',
-        type: DioExceptionType.badResponse,
-      );
+  /// Platform-aware local API URL (Android emulator vs iOS/web/desktop)
+  static String get baseUrl {
+    if (Platform.isAndroid) {
+      return 'http://10.0.2.2:3000';
     }
+    return 'http://localhost:3000';
+  }
+
+  /// Retained mock data fallback for unimplemented APIs
+  Future<dynamic> getMockData(String assetPath) async {
+    // Return standard mock data
+    return {};
   }
 }
