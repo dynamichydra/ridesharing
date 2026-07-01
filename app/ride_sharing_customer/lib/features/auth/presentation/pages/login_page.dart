@@ -102,7 +102,7 @@ class _LoginPageState extends State<LoginPage> {
                     CustomTextField(
                       controller: _emailController,
                       labelText: 'Email Address',
-                      hintText: 'alex.morgan@hovr.com',
+                      hintText: 'alex.morgan@example.com',
                       prefixIcon: Icons.email_outlined,
                       keyboardType: TextInputType.emailAddress,
                       validator: (value) {

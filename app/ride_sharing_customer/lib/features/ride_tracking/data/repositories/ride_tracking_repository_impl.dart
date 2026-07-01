@@ -11,7 +11,7 @@ class RideTrackingRepositoryImpl implements RideTrackingRepository {
       'rating': 4.95,
       'avatar': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200',
       'vehicle': 'Tesla Model Y White',
-      'plate_number': '5HOVR42',
+      'plate_number': '5RIDE42',
       'phone': '+1 555-901-2940'
     };
   }

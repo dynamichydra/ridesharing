@@ -1,6 +1,6 @@
-# HOVR Customer Ride-Booking MVP App
+# Customer Ride-Booking MVP App
 
-A production-ready Flutter customer ride-booking MVP prototype inspired by HOVR/Uber/Lyft. It is built using **Clean Architecture**, **BLoC State Management**, and **feature-first** patterns.
+A production-ready Flutter customer ride-booking MVP prototype inspired by modern ride-sharing apps like Lyft. It is built using **Clean Architecture**, **BLoC State Management**, and **feature-first** patterns.
 
 ---
 
@@ -85,6 +85,6 @@ flutter test
 ---
 
 ## 🔑 Demo Credentials
-*   **Email**: `alex.morgan@hovr.com`
+*   **Email**: `alex.morgan@example.com`
 *   **Password**: `password123`
 *   **Verification OTP Code**: `123456`

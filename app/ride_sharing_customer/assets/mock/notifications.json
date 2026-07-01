@@ -1,8 +1,8 @@
 [
   {
     "id": "notif_1",
-    "title": "Welcome to HOVR!",
-    "message": "Thank you for choosing HOVR. Enjoy your first ride with 20% off using code FIRSTHOVR.",
+    "title": "Welcome to RideShare!",
+    "message": "Thank you for choosing RideShare. Enjoy your first ride with 20% off using code FIRSTRIDE.",
     "timestamp": "2026-06-03T08:00:00Z",
     "is_read": false,
     "type": "promotion"
@@ -10,7 +10,7 @@
   {
     "id": "notif_2",
     "title": "Your receipt for Ride #901",
-    "message": "You spent ₹180.00 on your ride to Home. The receipt has been sent to your email alex.morgan@hovr.com.",
+    "message": "You spent ₹180.00 on your ride to Home. The receipt has been sent to your email alex.morgan@example.com.",
     "timestamp": "2026-06-01T18:50:00Z",
     "is_read": true,
     "type": "receipt"

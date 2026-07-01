@@ -72,7 +72,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            profile['email'] as String? ?? 'alex.morgan@hovr.com',
+                            profile['email'] as String? ?? 'alex.morgan@example.com',
                             style: theme.textTheme.bodyMedium,
                           ),
                           const SizedBox(height: 8),
