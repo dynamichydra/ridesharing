@@ -1,3 +1,4 @@
+import * as React from "react";
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -9,7 +10,7 @@ export function TeamSwitcher({
 }: {
   teams: {
     name: string;
-    logo: React.ComponentType<{ className?: string }>;
+    logo: React.ComponentType<{ className?: string }> | string;
     plan: string;
   };
 }) {
@@ -21,8 +22,12 @@ export function TeamSwitcher({
           size="lg"
           className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
         >
-          <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Logo className="size-4" />
+          <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-background text-primary-foreground overflow-hidden border border-border/50 p-1">
+            {typeof Logo === "string" ? (
+              <img src={Logo} alt={teams.name} className="size-full object-contain" />
+            ) : (
+              React.createElement(Logo, { className: "size-4" })
+            )}
           </div>
           <div className="grid flex-1 text-left text-sm leading-tight">
             <span className="truncate font-bold text-primary">

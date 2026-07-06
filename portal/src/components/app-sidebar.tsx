@@ -1,5 +1,5 @@
 import * as React from "react";
-import { LogOut, Car } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { NavProjects } from "@/components/nav-projects";
 import {
   Sidebar,
@@ -27,8 +27,8 @@ export function AppSidebar({ userType, ...props }: AppSidebarProps) {
       <SidebarHeader>
         <TeamSwitcher
           teams={{
-            name: "RIDESHARE",
-            logo: Car, // Using Lucide Car component as logo
+            name: "Ryva Ride",
+            logo: "/logo.png",
             plan: "Admin Panel",
           }}
         />

@@ -168,8 +168,8 @@ export default function Dashboard() {
                 >
                   <defs>
                     <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#800080" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#800080" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#0b9f53" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#0b9f53" stopOpacity={0}/>
                     </linearGradient>
                     <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
@@ -187,7 +187,7 @@ export default function Dashboard() {
                     }} 
                   />
                   <Legend verticalAlign="top" height={36} iconType="circle" />
-                  <Area name="Total Requests" type="monotone" dataKey="total" stroke="#800080" strokeWidth={2} fillOpacity={1} fill="url(#colorTotal)" />
+                  <Area name="Total Requests" type="monotone" dataKey="total" stroke="#0b9f53" strokeWidth={2} fillOpacity={1} fill="url(#colorTotal)" />
                   <Area name="Completed Rides" type="monotone" dataKey="completed" stroke="#22c55e" strokeWidth={2} fillOpacity={1} fill="url(#colorCompleted)" />
                 </AreaChart>
               </ResponsiveContainer>
