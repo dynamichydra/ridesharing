@@ -20,6 +20,17 @@
 
 import 'dotenv/config';
 import { drizzle } from 'drizzle-orm/node-postgres';
+import pg from 'pg';
 
-export const db = drizzle(process.env.DATABASE_URL);
+const dbUrl = new URL(process.env.DATABASE_URL);
+const pool = new pg.Pool({
+  host:     dbUrl.hostname,
+  port:     parseInt(dbUrl.port || '5432', 10),
+  database: dbUrl.pathname.replace(/^\//, ''),
+  user:     decodeURIComponent(dbUrl.username),
+  password: decodeURIComponent(dbUrl.password),
+});
+
+export const db = drizzle({ client: pool });
+export { pool };
 
