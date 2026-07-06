@@ -25,6 +25,8 @@ import {
   ArrowLeft,
   ArrowRight,
   X,
+  Search,
+  RotateCcw,
 } from "lucide-react";
 import Loader from "@/components/fullpage-loader";
 
@@ -74,7 +76,19 @@ interface Offer {
 
 export default function RideList() {
   const [status, setStatus] = useState<string>("");
+  const [statusDraft, setStatusDraft] = useState<string>("");
   const [page, setPage] = useState(1);
+
+  const handleSearchSubmit = () => {
+    setStatus(statusDraft);
+    setPage(1);
+  };
+
+  const handleSearchReset = () => {
+    setStatusDraft("");
+    setStatus("");
+    setPage(1);
+  };
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
@@ -142,13 +156,10 @@ export default function RideList() {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Filters Row */}
-          <div>
+          <div className="flex flex-wrap items-center justify-end gap-3 w-full">
             <select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setPage(1);
-              }}
+              value={statusDraft}
+              onChange={(e) => setStatusDraft(e.target.value)}
               className="bg-card text-foreground border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
             >
               <option value="">All Statuses</option>
@@ -161,6 +172,24 @@ export default function RideList() {
               <option value="cancelled">Cancelled</option>
               <option value="expired">Expired</option>
             </select>
+            <div className="flex items-center shrink-0">
+              <Button
+                onClick={handleSearchSubmit}
+                variant="outline"
+                className="rounded-r-none border-r-0 h-9 gap-2 shadow-sm font-semibold cursor-pointer"
+              >
+                <Search className="h-3.5 w-3.5" />
+                <span className="font-medium">Search</span>
+              </Button>
+              <Button
+                onClick={handleSearchReset}
+                variant="outline"
+                className="rounded-l-none h-9 px-3 hover:bg-accent/50 text-muted-foreground cursor-pointer"
+                title="Reset Filters"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
 
           {/* Table */}

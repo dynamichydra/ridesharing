@@ -31,6 +31,7 @@ import {
   User,
   ArrowLeft,
   ArrowRight,
+  RotateCcw,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import Loader from "@/components/fullpage-loader";
@@ -64,8 +65,24 @@ interface Driver {
 export default function DriverList() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
   const [approvalStatus, setApprovalStatus] = useState<string>("");
+  const [approvalStatusDraft, setApprovalStatusDraft] = useState<string>("");
   const [page, setPage] = useState(1);
+
+  const handleSearchSubmit = () => {
+    setSearch(searchDraft);
+    setApprovalStatus(approvalStatusDraft);
+    setPage(1);
+  };
+
+  const handleSearchReset = () => {
+    setSearchDraft("");
+    setApprovalStatusDraft("");
+    setSearch("");
+    setApprovalStatus("");
+    setPage(1);
+  };
   
   // Modals status
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
@@ -174,22 +191,24 @@ export default function DriverList() {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Filters Row */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3 w-full">
             <div className="relative w-full sm:max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Filter drivers by name/phone..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={searchDraft}
+                onChange={(e) => setSearchDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleSearchSubmit();
+                  }
+                }}
                 className="pl-9"
               />
             </div>
             <select
-              value={approvalStatus}
-              onChange={(e) => {
-                setApprovalStatus(e.target.value);
-                setPage(1);
-              }}
+              value={approvalStatusDraft}
+              onChange={(e) => setApprovalStatusDraft(e.target.value)}
               className="bg-card text-foreground border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
             >
               <option value="">All Verification Status</option>
@@ -197,6 +216,24 @@ export default function DriverList() {
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
             </select>
+            <div className="flex items-center shrink-0">
+              <Button
+                onClick={handleSearchSubmit}
+                variant="outline"
+                className="rounded-r-none border-r-0 h-9 gap-2 shadow-sm font-semibold cursor-pointer"
+              >
+                <Search className="h-3.5 w-3.5" />
+                <span className="font-medium">Search</span>
+              </Button>
+              <Button
+                onClick={handleSearchReset}
+                variant="outline"
+                className="rounded-l-none h-9 px-3 hover:bg-accent/50 text-muted-foreground cursor-pointer"
+                title="Reset Filters"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
 
           {/* Table */}

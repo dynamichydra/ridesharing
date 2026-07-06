@@ -27,6 +27,7 @@ import {
   XCircle,
   ArrowLeft,
   ArrowRight,
+  RotateCcw,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import Loader from "@/components/fullpage-loader";
@@ -48,7 +49,19 @@ interface Rider {
 export default function UserList() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
   const [page, setPage] = useState(1);
+
+  const handleSearchSubmit = () => {
+    setSearch(searchDraft);
+    setPage(1);
+  };
+
+  const handleSearchReset = () => {
+    setSearchDraft("");
+    setSearch("");
+    setPage(1);
+  };
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newRider, setNewRider] = useState({ name: "", phone: "", email: "", isVerified: false });
 
@@ -137,18 +150,38 @@ export default function UserList() {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Filters Row */}
-          <div className="flex items-center gap-2 w-full max-w-sm">
-            <div className="relative w-full">
+          <div className="flex flex-wrap items-center justify-end gap-3 w-full">
+            <div className="relative w-full sm:max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search by name, email or phone..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
+                value={searchDraft}
+                onChange={(e) => setSearchDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleSearchSubmit();
+                  }
                 }}
                 className="pl-9"
               />
+            </div>
+            <div className="flex items-center shrink-0">
+              <Button
+                onClick={handleSearchSubmit}
+                variant="outline"
+                className="rounded-r-none border-r-0 h-9 gap-2 shadow-sm font-semibold cursor-pointer"
+              >
+                <Search className="h-3.5 w-3.5" />
+                <span className="font-medium">Search</span>
+              </Button>
+              <Button
+                onClick={handleSearchReset}
+                variant="outline"
+                className="rounded-l-none h-9 px-3 hover:bg-accent/50 text-muted-foreground cursor-pointer"
+                title="Reset Filters"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </Button>
             </div>
           </div>
 
