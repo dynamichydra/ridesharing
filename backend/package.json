@@ -25,7 +25,7 @@
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.79.1",
     "dotenv": "^17.4.2",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^1.0.0-rc.4",
     "fastify": "^5.8.5",
     "fastify-raw-body": "^5.0.0",
     "firebase-admin": "^14.1.0",
@@ -40,6 +40,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.31.10"
+    "drizzle-kit": "^1.0.0-rc.4"
   }
 }

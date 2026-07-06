@@ -39,8 +39,18 @@ import {
 } from './drizzle/schema/index.js';
 
 // ── DB connection ─────────────────────────────────────────────────────────────
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db   = drizzle(pool);
+// Parse manually so special chars in the password (e.g. @) are properly decoded
+// before being handed to pg — pg's URL parser does NOT decode %40 etc.
+// drizzle v1 RC requires { client: pool } — passing pool directly is silently ignored.
+const _dbUrl = new URL(process.env.DATABASE_URL);
+const pool = new pg.Pool({
+  host:     _dbUrl.hostname,
+  port:     parseInt(_dbUrl.port || '5432', 10),
+  database: _dbUrl.pathname.replace(/^\//, ''),
+  user:     decodeURIComponent(_dbUrl.username),
+  password: decodeURIComponent(_dbUrl.password),
+});
+const db = drizzle({ client: pool });
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
