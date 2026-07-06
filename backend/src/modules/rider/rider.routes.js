@@ -1,8 +1,10 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
-import { authenticateRider } from '../../middleware/authenticate.js';
+import { authenticateRider, authenticateAdmin } from '../../middleware/authenticate.js';
 import * as riderService from './rider.service.js';
 
 export async function riderRoutes(app) {
+
+  // ── Rider self ──────────────────────────────────────────────────────────────
 
   app.get('/profile', { preHandler: [authenticateRider] }, async (request, reply) => {
     const data = await riderService.getProfile(request.user.id);
@@ -26,4 +28,31 @@ export async function riderRoutes(app) {
     const data = await riderService.updateFcmToken(request.user.id, fcmToken);
     return sendSuccess(reply, data);
   });
+
+  // ── Admin ──────────────────────────────────────────────────────────────────
+
+  app.get('/', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const filters = {
+      isVerified: request.query.isVerified !== undefined ? request.query.isVerified === 'true' : undefined,
+      isBlocked: request.query.isBlocked !== undefined ? request.query.isBlocked === 'true' : undefined,
+      search: request.query.search,
+    };
+    const { rows, pagination } = await riderService.listRiders(filters, page, limit, offset);
+    return sendList(reply, rows, pagination);
+  });
+
+  app.post('/', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    if (!request.body.phone || !request.body.name) {
+      return sendError(reply, 'Phone and name are required');
+    }
+    const data = await riderService.adminCreateRider(request.body);
+    return sendSuccess(reply, data, 201);
+  });
+
+  app.patch('/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await riderService.adminUpdateRider(request.params.id, request.body);
+    return sendSuccess(reply, data);
+  });
 }
+
