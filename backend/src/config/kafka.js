@@ -21,6 +21,7 @@ export const TOPICS = {
   RIDE_TIMEOUT: 'ride.timeout',
   DRIVER_LOCATION: 'driver.location',
   DRIVER_STATUS_CHANGED: 'driver.status_changed',
+  DRIVER_REGISTRATION_SUBMITTED: 'driver.registration_submitted',
   FARE_CALCULATED: 'fare.calculated',
   PAYMENT_SUCCESS: 'payment.success',
   PAYMENT_FAILED: 'payment.failed',

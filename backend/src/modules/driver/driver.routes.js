@@ -16,6 +16,37 @@ export async function driverRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  app.put('/driving-location', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const { countryId, stateId, cityId } = request.body;
+    if (!countryId || !stateId || !cityId) return sendError(reply, 'countryId, stateId and cityId are required');
+    const data = await driverService.updateDrivingLocation(request.user.id, request.body);
+    return sendSuccess(reply, data);
+  });
+
+  app.post('/profile-photo/upload-url', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const { contentType } = request.body;
+    if (!contentType) return sendError(reply, 'contentType is required');
+    const data = await driverService.requestProfilePhotoUploadUrl(contentType);
+    return sendSuccess(reply, data);
+  });
+
+  app.post('/profile-photo', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const { key } = request.body;
+    if (!key) return sendError(reply, 'key is required');
+    const data = await driverService.confirmProfilePhoto(request.user.id, key);
+    return sendSuccess(reply, data);
+  });
+
+  app.get('/registration-summary', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const data = await driverService.getRegistrationSummary(request.user.id);
+    return sendSuccess(reply, data);
+  });
+
+  app.post('/submit-application', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const data = await driverService.submitApplication(request.user.id);
+    return sendSuccess(reply, data);
+  });
+
   app.post('/documents', { preHandler: [authenticateDriver] }, async (request, reply) => {
     const data = await driverService.submitDocuments(request.user.id, request.body);
     return sendSuccess(reply, data);
@@ -60,6 +91,11 @@ export async function driverRoutes(app) {
     return sendList(reply, rows, pagination);
   });
 
+  app.get('/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await driverService.getDriverDetail(request.params.id);
+    return sendSuccess(reply, data);
+  });
+
   app.post('/:id/approve', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const data = await driverService.approveDriver(request.params.id, request.user.id, request.body.note);
     return sendSuccess(reply, data);
@@ -69,6 +105,15 @@ export async function driverRoutes(app) {
     const { note } = request.body;
     if (!note) return sendError(reply, 'Rejection note is required');
     const data = await driverService.rejectDriver(request.params.id, request.user.id, note);
+    return sendSuccess(reply, data);
+  });
+
+  app.post('/:id/request-documents', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { documentTypeCodes, note } = request.body;
+    if (!Array.isArray(documentTypeCodes) || !documentTypeCodes.length) {
+      return sendError(reply, 'documentTypeCodes[] is required');
+    }
+    const data = await driverService.requestMoreDocuments(request.params.id, request.user.id, documentTypeCodes, note);
     return sendSuccess(reply, data);
   });
 

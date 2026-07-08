@@ -20,6 +20,10 @@ import { rideRoutes } from './modules/ride/ride.routes.js';
 import { subscriptionRoutes } from './modules/subscription/subscription.routes.js';
 import { adminRoutes } from './modules/admin/admin.routes.js';
 import { trackingRoutes } from './modules/tracking/tracking.routes.js';
+import { geoRoutes } from './modules/geo/geo.routes.js';
+import { documentsRoutes } from './modules/documents/documents.routes.js';
+import { vehicleRoutes } from './modules/vehicle/vehicle.routes.js';
+import { onboardingRoutes } from './modules/onboarding/onboarding.routes.js';
 
 const PREFIX = `/api/${env.API_VERSION}`;
 
@@ -53,6 +57,10 @@ async function build() {
   await app.register(trackingRoutes, { prefix: `${PREFIX}/tracking` });
   await app.register(subscriptionRoutes, { prefix: `${PREFIX}/subscriptions` });
   await app.register(adminRoutes, { prefix: `${PREFIX}/admin` });
+  await app.register(geoRoutes, { prefix: `${PREFIX}/geo` });
+  await app.register(documentsRoutes, { prefix: `${PREFIX}/documents` });
+  await app.register(vehicleRoutes, { prefix: `${PREFIX}/vehicles` });
+  await app.register(onboardingRoutes, { prefix: `${PREFIX}/onboarding` });
 
   app.get('/health', async () => ({
     SUCCESS: true,

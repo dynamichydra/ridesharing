@@ -28,7 +28,12 @@ export const REDIS_KEYS = {
 
   // Auth
   otpCode: (phone) => `otp:${phone}`,               // TTL 300s
-  refreshToken: (id) => `refresh:${id}`,              // TTL 30d
+  otpAttempts: (phone) => `otp:attempts:${phone}`,      // TTL 900s — wrong-verify counter
+  otpLock: (phone) => `otp:lock:${phone}`,          // TTL 900s — set after max attempts
+  otpResendCooldown: (phone) => `otp:resend:${phone}`,      // TTL 30s
+  otpSendCount: (phone) => `otp:sendcount:${phone}`,     // TTL 3600s — hourly send cap
+  emailCode: (email) => `emailcode:${email}`,         // TTL 600s
+  refreshToken: (id, deviceId = 'default') => `refresh:${id}:${deviceId}`, // TTL 30d, device-scoped
 
   // Cache
   fareCache: (key) => `fare:${key}`,                // TTL 120s

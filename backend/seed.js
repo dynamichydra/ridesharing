@@ -36,6 +36,14 @@ import {
   drivers,
   rides,
   auditLogs,
+  countries,
+  states,
+  cities,
+  languages,
+  documentTypes,
+  legalDocuments,
+  onboardingQuestions,
+  translations,
 } from './drizzle/schema/index.js';
 
 // ── DB connection ─────────────────────────────────────────────────────────────
@@ -110,6 +118,91 @@ async function seed() {
 
   log.ok(`Super admin → admin@rideshare.com / Admin@123456`);
   log.ok(`Ops admin   → ops@rideshare.com   / Ops@123456`);
+
+  // ── 1b. Geography & Languages ───────────────────────────────────────────────
+  log.section('1b. Geography & Languages');
+
+  await db.insert(languages).values([
+    { code: 'en', name: 'English', nativeName: 'English', isDefault: true, isActive: true },
+    { code: 'hi', name: 'Hindi',   nativeName: 'हिन्दी',   isDefault: false, isActive: true },
+  ]).onConflictDoNothing();
+
+  const [india] = await db.insert(countries).values({
+    name: 'India', isoCode: 'IN', dialCode: '+91', currencyCode: 'INR',
+    defaultLanguageCode: 'en', isActive: true, sortOrder: 1,
+  }).onConflictDoNothing().returning();
+
+  const [westBengal] = await db.insert(states).values({
+    countryId: india?.id, name: 'West Bengal', code: 'WB', isActive: true,
+  }).onConflictDoNothing().returning();
+
+  const [kolkata] = await db.insert(cities).values({
+    stateId: westBengal?.id, countryId: india?.id, name: 'Kolkata',
+    timezone: 'Asia/Kolkata', isActive: true, sortOrder: 1,
+  }).onConflictDoNothing().returning();
+
+  log.ok(`India → West Bengal → Kolkata`);
+  log.ok(`Languages: English (default), Hindi`);
+
+  // ── 1c. Document Types ───────────────────────────────────────────────────────
+  log.section('1c. Document Types');
+
+  await db.insert(documentTypes).values([
+    { code: 'DRIVERS_LICENSE', requiresFront: true, requiresBack: true, requiresExpiry: true, requiresDocNumber: true, maxFileSizeMb: 10, sortOrder: 1 },
+    { code: 'VEHICLE_REGISTRATION', requiresFront: true, requiresBack: false, requiresExpiry: true, requiresDocNumber: true, sortOrder: 2 },
+    { code: 'INSURANCE_CERTIFICATE', requiresFront: true, requiresBack: false, requiresExpiry: true, requiresDocNumber: true, sortOrder: 3 },
+    { code: 'NATIONAL_ID', requiresFront: true, requiresBack: true, requiresExpiry: false, requiresDocNumber: true, sortOrder: 4 },
+  ]).onConflictDoNothing();
+
+  log.ok(`Driver's License, Vehicle Registration, Insurance Certificate, National ID`);
+
+  // ── 1d. Legal Documents ──────────────────────────────────────────────────────
+  log.section('1d. Legal Documents');
+
+  await db.insert(legalDocuments).values([
+    { type: 'terms', version: '1.0', countryId: null, contentUrl: 'https://cdn.example.com/legal/terms-v1.0.html', effectiveFrom: new Date(), isActive: true },
+    { type: 'privacy_policy', version: '1.0', countryId: null, contentUrl: 'https://cdn.example.com/legal/privacy-v1.0.html', effectiveFrom: new Date(), isActive: true },
+  ]).onConflictDoNothing();
+
+  log.ok(`Terms v1.0, Privacy Policy v1.0 (global)`);
+
+  // ── 1e. Onboarding Questionnaire ─────────────────────────────────────────────
+  log.section('1e. Onboarding Questionnaire');
+
+  const [qOwnVehicle] = await db.insert(onboardingQuestions).values({
+    code: 'own_vehicle', questionType: 'yes_no', isRequired: true, sortOrder: 1, isActive: true,
+  }).onConflictDoNothing().returning();
+
+  const [qWeeklyHours] = await db.insert(onboardingQuestions).values({
+    code: 'weekly_hours', questionType: 'number', isRequired: true, sortOrder: 2, isActive: true, minValue: 1, maxValue: 80,
+  }).onConflictDoNothing().returning();
+
+  const [qWorkedBefore] = await db.insert(onboardingQuestions).values({
+    code: 'worked_before', questionType: 'yes_no', isRequired: false, sortOrder: 3, isActive: true,
+  }).onConflictDoNothing().returning();
+
+  if (qOwnVehicle?.id) {
+    await db.insert(onboardingQuestions).values({
+      code: 'rental_interest', questionType: 'yes_no', isRequired: false, sortOrder: 4, isActive: true,
+      dependsOnQuestionId: qOwnVehicle.id, dependsOnOperator: 'equals', dependsOnValue: false,
+    }).onConflictDoNothing();
+  }
+
+  const questionLabels = [
+    [qOwnVehicle?.id, 'Do you own a vehicle?'],
+    [qWeeklyHours?.id, 'How many hours per week can you drive?'],
+    [qWorkedBefore?.id, 'Have you worked with another ride-sharing platform?'],
+  ].filter(([id]) => id);
+
+  if (questionLabels.length) {
+    await db.insert(translations).values(
+      questionLabels.map(([entityId, value]) => ({
+        entityType: 'onboarding_question', entityId, fieldName: 'label', languageCode: 'en', value,
+      })),
+    ).onConflictDoNothing();
+  }
+
+  log.ok(`4 onboarding questions (own_vehicle, weekly_hours, worked_before, rental_interest)`);
 
   // ── 2. Vehicle Types ────────────────────────────────────────────────────────
   log.section('2. Vehicle Types');
@@ -578,7 +671,18 @@ async function seed() {
 
   const insertedDrivers = await db
     .insert(drivers)
-    .values(driverData.map((d) => ({ ...d, isBlocked: d.isBlocked || false })))
+    .values(driverData.map((d) => ({
+      ...d,
+      isBlocked: d.isBlocked || false,
+      countryId: india?.id,
+      stateId: westBengal?.id,
+      cityId: kolkata?.id,
+      registrationStatus: d.isBlocked ? 'suspended'
+        : d.approvalStatus === 'approved' ? 'approved'
+        : d.approvalStatus === 'rejected' ? 'rejected'
+        : 'pending_review',
+      registrationStep: 12,
+    })))
     .onConflictDoNothing()
     .returning();
 
@@ -893,6 +997,10 @@ ${'═'.repeat(55)}
     +919876543216  Dipak Saha       [REJECTED / inactive]
     +919876543219  Raju Pal         [BLOCKED  / active sub]
 
+  Geography:      India → West Bengal → Kolkata
+  Document Types: Driver's License, Vehicle Registration, Insurance Certificate, National ID
+  Legal Docs:     Terms v1.0, Privacy Policy v1.0 (global)
+  Questions:      own_vehicle, weekly_hours, worked_before, rental_interest
   Vehicle Types:  Bike, Auto, Cab, Premium Cab
   Zones:          City Centre (×1.0), Airport (×1.5), Salt Lake (×1.1)
   Fare Rules:     Night Surge, Morning Peak, Evening Peak, Traffic, Airport, Weekend

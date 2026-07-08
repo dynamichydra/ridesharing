@@ -1,12 +1,30 @@
-import { pgTable, uuid, varchar, boolean, timestamp, decimal, text, smallint, integer } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, decimal, text, smallint, integer, date } from 'drizzle-orm/pg-core';
 import { vehicleTypes } from './vehicle-types.js';
+import { countries } from './countries.js';
+import { states } from './states.js';
+import { cities } from './cities.js';
 
 export const drivers = pgTable('drivers', {
   id:                 uuid('id').primaryKey().defaultRandom(),
-  phone:              varchar('phone', { length: 15 }).unique().notNull(),
+  phone:              varchar('phone', { length: 20 }).unique(), // nullable — email-first signups may not have one yet
   name:               varchar('name', { length: 100 }),
-  email:              varchar('email', { length: 255 }),
+  email:              varchar('email', { length: 255 }).unique(),
   profilePhoto:       text('profile_photo'),
+  // ── Personal info (Step 2) ──────────────────────────────────────────────
+  dateOfBirth:        date('date_of_birth'),
+  gender:             varchar('gender', { length: 20 }),   // male | female | other | prefer_not_to_say
+  referralCode:       varchar('referral_code', { length: 20 }),
+  referredByDriverId: uuid('referred_by_driver_id'),
+  preferredLanguageCode: varchar('preferred_language_code', { length: 8 }),
+  // ── Driving location (Step 4) ────────────────────────────────────────────
+  countryId:          uuid('country_id').references(() => countries.id),
+  stateId:            uuid('state_id').references(() => states.id),
+  cityId:             uuid('city_id').references(() => cities.id),
+  // ── Registration state machine ───────────────────────────────────────────
+  registrationStatus: varchar('registration_status', { length: 30 }).default('new'),
+  // new | mobile_verified | email_verified | registration_in_progress | documents_pending
+  // | pending_review | under_verification | approved | rejected | suspended | active | inactive
+  registrationStep:  integer('registration_step').default(0), // furthest completed step, 0-12
   licenseNumber:      varchar('license_number', { length: 50 }),
   licenseDoc:         text('license_doc'),
   aadharNumber:       varchar('aadhar_number', { length: 16 }),
