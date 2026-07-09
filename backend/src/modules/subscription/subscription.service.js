@@ -6,9 +6,9 @@ import { subscriptionPlans, subscriptions, drivers } from '../../../drizzle/sche
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { addDays } from '../../utils/time.js';
 import { paginate } from '../../utils/response.js';
-import { env } from '../../config/env.js';
+import { env, isRazorpayConfigured } from '../../config/env.js';
 
-const razorpay = env.RAZORPAY_KEY_ID
+const razorpay = isRazorpayConfigured
   ? new Razorpay({ key_id: env.RAZORPAY_KEY_ID, key_secret: env.RAZORPAY_KEY_SECRET })
   : null;
 
@@ -96,7 +96,8 @@ export async function initiateSubscription(driverId, planId) {
 }
 
 export async function verifyAndActivate(driverId, planId, razorpayOrderId, razorpayPaymentId, razorpaySignature) {
-  if (env.NODE_ENV !== 'production') {
+  if (!razorpay) {
+    // No Razorpay keys configured — nothing real to verify against
     const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, planId)).limit(1);
     return _activateSubscription(driverId, planId, plan, razorpayPaymentId, razorpayOrderId);
   }
@@ -164,6 +165,12 @@ export async function getSubscriptionHistory(driverId, page, limit, offset) {
 
 // Razorpay webhook handler
 export async function handleRazorpayWebhook(rawBody, signature) {
+  if (!razorpay) {
+    // No Razorpay keys configured — nothing real sends webhooks here; ack without verifying
+    console.log('[Subscription] Razorpay webhook received but Razorpay is not configured — ignoring.');
+    return { received: true };
+  }
+
   const expected = createHmac('sha256', env.RAZORPAY_WEBHOOK_SECRET || '')
     .update(rawBody).digest('hex');
   if (expected !== signature) throw { statusCode: 400, message: 'Invalid webhook signature' };

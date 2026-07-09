@@ -28,6 +28,7 @@ const schema = z.object({
   S3_SECRET_KEY: z.string().optional(),
   S3_BUCKET: z.string().optional(),
   S3_PUBLIC_URL: z.string().optional(),
+  APP_BASE_URL: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -38,3 +39,9 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+// Each of these flips a dependency service from its local/dummy dev fallback to the
+// real integration the moment its keys are present in .env — no other flag to flip.
+export const isS3Configured = !!(env.S3_ENDPOINT && env.S3_ACCESS_KEY && env.S3_SECRET_KEY && env.S3_BUCKET);
+export const isTwilioConfigured = !!(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_PHONE_NUMBER);
+export const isRazorpayConfigured = !!(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET);

@@ -1,5 +1,5 @@
 import { redis, REDIS_KEYS } from '../config/redis.js';
-import { env } from '../config/env.js';
+import { env, isTwilioConfigured } from '../config/env.js';
 
 const OTP_TTL_SECONDS       = 300;   // 5 minutes
 const RESEND_COOLDOWN_SECONDS = 30;   // min gap between sends
@@ -63,8 +63,8 @@ export async function verifyOtp(phone, otp) {
 }
 
 export async function sendOtpSms(phone, otp) {
-  // In dev mode — just log it
-  if (env.NODE_ENV !== 'production' || !env.TWILIO_ACCOUNT_SID) {
+  // No Twilio creds configured — just log it (auto-switches to real SMS once they're set)
+  if (!isTwilioConfigured) {
     console.log(`📱 OTP for ${phone}: ${otp}`);
     return;
   }
