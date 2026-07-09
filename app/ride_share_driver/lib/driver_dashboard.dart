@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'style/appcolors.dart';
-import 'api_service.dart';
+import 'core/network/api_client.dart';
+import 'injection_container.dart' as di;
 
 class DriverDashboard extends StatefulWidget {
   final VoidCallback onLogout;
@@ -40,9 +41,16 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 activeColor: AppColors.primary,
                 onChanged: (val) async {
                   if (val) {
-                    await ApiService.goOnline(12.9716, 77.5946);
+                    try {
+                      await di.sl<ApiClient>().dio.post('/drivers/go-online', data: {
+                        'lat': 12.9716,
+                        'lng': 77.5946,
+                      });
+                    } catch (_) {}
                   } else {
-                    await ApiService.goOffline();
+                    try {
+                      await di.sl<ApiClient>().dio.post('/drivers/go-offline');
+                    } catch (_) {}
                   }
                   setState(() {
                     _isOnline = val;
