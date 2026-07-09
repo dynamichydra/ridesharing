@@ -1,6 +1,6 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'style/appcolors.dart';
+import 'api_service.dart';
 
 class DriverDashboard extends StatefulWidget {
   final VoidCallback onLogout;
@@ -14,142 +14,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
   bool _isOnline = false;
   double _todayEarnings = 1850.50;
   int _todayTrips = 8;
-  double _onlineHours = 6.5;
-
-  // Ride Request state
-  bool _showIncomingRequest = false;
-  int _secondsLeft = 15;
-  Timer? _countdownTimer;
-
-  // Active Ride Navigation simulation state
-  bool _isNavigating = false;
-  String _navigationTitle = 'Heading to Pickup';
-  String _navigationSubtitle = 'Pick up Jane Smith at Vasanth Nagar, Bengaluru';
-  String _actionButtonText = 'I Have Arrived';
-  int _navigationStep = 0;
-  Timer? _navigationProgressTimer;
-
-  @override
-  void dispose() {
-    _countdownTimer?.cancel();
-    _navigationProgressTimer?.cancel();
-    super.dispose();
-  }
-
-  void _simulateIncomingRequest() {
-    if (!_isOnline) return;
-    _countdownTimer?.cancel();
-    setState(() {
-      _showIncomingRequest = true;
-      _secondsLeft = 15;
-    });
-
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_secondsLeft > 1) {
-        setState(() {
-          _secondsLeft--;
-        });
-      } else {
-        _declineRequest();
-      }
-    });
-  }
-
-  void _declineRequest() {
-    _countdownTimer?.cancel();
-    setState(() {
-      _showIncomingRequest = false;
-    });
-  }
-
-  void _acceptRequest() {
-    _countdownTimer?.cancel();
-    setState(() {
-      _showIncomingRequest = false;
-      _isNavigating = true;
-      _navigationTitle = 'Heading to Pickup';
-      _navigationSubtitle = 'Pick up Jane Smith at Vasanth Nagar, Bengaluru';
-      _actionButtonText = 'I Have Arrived';
-      _navigationStep = 0;
-    });
-
-    // Simulate automatic driver vehicle movement progress
-    _navigationProgressTimer?.cancel();
-    _navigationProgressTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
-      setState(() {
-        _navigationStep++;
-        if (_navigationStep == 2) {
-          _navigationTitle = 'Arrived at Pickup';
-          _navigationSubtitle = 'Waiting for Jane Smith. Tell them you have arrived.';
-          _actionButtonText = 'Start Trip';
-        } else if (_navigationStep == 4) {
-          _navigationTitle = 'Trip in Progress';
-          _navigationSubtitle = 'Navigating to Indiranagar Metro Station, Bengaluru';
-          _actionButtonText = 'Complete Trip';
-        } else if (_navigationStep >= 6) {
-          timer.cancel();
-          _completeTrip();
-        }
-      });
-    });
-  }
-
-  void _advanceNavigation() {
-    setState(() {
-      if (_navigationStep < 2) {
-        _navigationStep = 2;
-        _navigationTitle = 'Arrived at Pickup';
-        _navigationSubtitle = 'Waiting for Jane Smith. Tell them you have arrived.';
-        _actionButtonText = 'Start Trip';
-      } else if (_navigationStep < 4) {
-        _navigationStep = 4;
-        _navigationTitle = 'Trip in Progress';
-        _navigationSubtitle = 'Navigating to Indiranagar Metro Station, Bengaluru';
-        _actionButtonText = 'Complete Trip';
-      } else {
-        _navigationProgressTimer?.cancel();
-        _completeTrip();
-      }
-    });
-  }
-
-  void _completeTrip() {
-    _navigationProgressTimer?.cancel();
-    setState(() {
-      _isNavigating = false;
-      _todayEarnings += 185.00;
-      _todayTrips += 1;
-    });
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle_rounded, color: AppColors.primary),
-            SizedBox(width: 8),
-            Text('Trip Completed!'),
-          ],
-        ),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Passenger: Jane Smith'),
-            Text('Fare Collected: ₹185.00'),
-            Text('Distance: 5.8 km'),
-          ],
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Confirm'),
-          )
-        ],
-      ),
-    );
-  }
+  final double _onlineHours = 6.5;
 
   @override
   Widget build(BuildContext context) {
@@ -173,13 +38,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
               Switch(
                 value: _isOnline,
                 activeColor: AppColors.primary,
-                onChanged: (val) {
+                onChanged: (val) async {
+                  if (val) {
+                    await ApiService.goOnline(12.9716, 77.5946);
+                  } else {
+                    await ApiService.goOffline();
+                  }
                   setState(() {
                     _isOnline = val;
-                    if (!_isOnline) {
-                      _isNavigating = false;
-                      _navigationProgressTimer?.cancel();
-                    }
                   });
                 },
               ),
@@ -189,256 +55,86 @@ class _DriverDashboardState extends State<DriverDashboard> {
         ],
       ),
       drawer: _buildDrawer(context),
-      body: Stack(
-        children: [
-          // Main Body Dashboard Content
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Warning banner if offline
-                if (!_isOnline)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.warning.withOpacity(0.1),
-                      border: Border.all(color: AppColors.warning),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.warning_amber_rounded, color: AppColors.warning),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'You are offline. Go online to start receiving ride requests!',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                // Stats Dashboard Grid
-                GridView.count(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 1.4,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    _buildStatCard('Earnings Today', '₹$_todayEarnings', Icons.payments_rounded, AppColors.primary),
-                    _buildStatCard('Trips Done', '$_todayTrips', Icons.directions_car_rounded, AppColors.secondary),
-                    _buildStatCard('Online Hours', '${_onlineHours}h', Icons.access_time_rounded, Colors.orange),
-                    _buildStatCard('Avg Rating', '4.88 ★', Icons.star_rounded, AppColors.accent),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // Radar / Navigation Simulation Box
-                const Text(
-                  'Live Navigation Radar',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                ),
-                const SizedBox(height: 8),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Warning banner if offline
+              if (!_isOnline)
                 Container(
-                  height: 250,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.border),
+                    color: AppColors.warning.withOpacity(0.1),
+                    border: Border.all(color: AppColors.warning),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Stack(
-                    alignment: Alignment.center,
+                  child: const Row(
                     children: [
-                      // Simulated radar graphic
-                      Icon(Icons.radar_rounded, size: 100, color: AppColors.primary.withOpacity(0.1)),
-                      Positioned(
+                      Icon(Icons.warning_amber_rounded, color: AppColors.warning),
+                      SizedBox(width: 12),
+                      Expanded(
                         child: Text(
-                          _isNavigating 
-                              ? 'Route simulation active' 
-                              : _isOnline ? 'Scanning for passengers...' : 'Radar Offline',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                          'You are offline. Go online to start receiving ride requests!',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                         ),
                       ),
-                      
-                      // Show active navigation indicators on radar
-                      if (_isNavigating)
-                        Positioned(
-                          bottom: 12,
-                          left: 12,
-                          right: 12,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            color: Colors.black87,
-                            child: Row(
-                              children: [
-                                const Icon(Icons.navigation_rounded, color: AppColors.primary, size: 16),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    _navigationTitle,
-                                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
 
-                // Weekly Performance Chart
-                _buildWeeklyPerformanceChart(),
-                const SizedBox(height: 24),
+              // Stats Dashboard Grid
+              GridView.count(
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 1.4,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _buildStatCard('Earnings Today', '₹$_todayEarnings', Icons.payments_rounded, AppColors.primary),
+                  _buildStatCard('Trips Done', '$_todayTrips', Icons.directions_car_rounded, AppColors.secondary),
+                  _buildStatCard('Online Hours', '${_onlineHours}h', Icons.access_time_rounded, Colors.orange),
+                  _buildStatCard('Avg Rating', '4.88 ★', Icons.star_rounded, AppColors.accent),
+                ],
+              ),
+              const SizedBox(height: 24),
 
-                // Simulator Trigger
-                if (_isOnline && !_isNavigating) ...[
-                  const Divider(),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.secondary),
-                    onPressed: _simulateIncomingRequest,
-                    icon: const Icon(Icons.notifications_active_rounded),
-                    label: const Text('Simulate Booking Request Alert'),
-                  ),
-                ]
-              ],
-            ),
+              // Radar Availability Indicator Box
+              const Text(
+                'Live Location Radar',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                height: 250,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Icon(Icons.radar_rounded, size: 100, color: AppColors.primary.withOpacity(0.1)),
+                    Positioned(
+                      child: Text(
+                        _isOnline ? 'Scanning for passengers...' : 'Radar Offline',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Weekly Performance Summary Chart
+              _buildWeeklyPerformanceChart(),
+            ],
           ),
-
-          // Sliding Sheet Modal for Incoming Request
-          if (_showIncomingRequest)
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(24),
-                  ),
-                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, spreadRadius: 5)],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Incoming Booking Request',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                        Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            CircularProgressIndicator(
-                              value: _secondsLeft / 15.0,
-                              strokeWidth: 4,
-                              color: AppColors.primary,
-                            ),
-                            Text('$_secondsLeft', style: const TextStyle(fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        const CircleAvatar(child: Icon(Icons.person)),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Jane Smith', style: TextStyle(fontWeight: FontWeight.bold)),
-                              Text('Rating: 4.9 ★'),
-                            ],
-                          ),
-                        ),
-                        Text('₹185.00', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('Pickup: Vasanth Nagar, Bengaluru', style: TextStyle(color: AppColors.textSecondary)),
-                    const Text('Drop: Indiranagar Metro Station, Bengaluru', style: TextStyle(color: AppColors.textSecondary)),
-                    const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(foregroundColor: AppColors.error, side: const BorderSide(color: AppColors.error)),
-                            onPressed: _declineRequest,
-                            child: const Text('Decline'),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-                            onPressed: _acceptRequest,
-                            child: const Text('Accept'),
-                          ),
-                        ),
-                      ],
-                    )
-                  ],
-                ),
-              ),
-            ),
-
-          // Active Navigation Panel Sheet
-          if (_isNavigating)
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(24),
-                  ),
-                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, spreadRadius: 5)],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      _navigationTitle,
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _navigationSubtitle,
-                      style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
-                    ),
-                    const SizedBox(height: 16),
-                    const LinearProgressIndicator(color: AppColors.primary, backgroundColor: AppColors.border),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-                      onPressed: _advanceNavigation,
-                      child: Text(_actionButtonText),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }

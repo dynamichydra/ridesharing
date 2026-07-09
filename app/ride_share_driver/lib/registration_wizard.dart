@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'style/appcolors.dart';
+import 'api_service.dart';
 
 class RegistrationWizard extends StatefulWidget {
   final VoidCallback onComplete;
@@ -10,12 +11,22 @@ class RegistrationWizard extends StatefulWidget {
 }
 
 class _RegistrationWizardState extends State<RegistrationWizard> {
-  int _currentStep = 0; // 0: Welcome, 1: Email, 2: Terms, 3: Vehicle Pref, 4: Vehicle Form, 5: Checklist
+  int _currentStep = 0; // 0: Welcome, 1: Phone, 2: OTP, 3: Email, 4: Terms, 5: Region, 6: Vehicle Pref, 7: Vehicle Form, 8: Checklist
 
-  // Form inputs controllers
+  // Form input controllers
+  final _phoneController = TextEditingController(text: '9876543211');
+  final _otpController = TextEditingController(text: '123456');
   final _emailController = TextEditingController(text: 'arijit.bose.sit@gmail.com');
+  
   final _licenseController = TextEditingController();
   final _sinController = TextEditingController();
+  final _bankAccountController = TextEditingController();
+  final _emergencyNameController = TextEditingController();
+
+  // Region selections
+  String _selectedCountry = 'India';
+  String _selectedState = 'Karnataka';
+  String _selectedCity = 'Bengaluru';
 
   // Vehicle states
   String _selectedYear = '2022';
@@ -26,12 +37,16 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
   String _selectedSeatbelts = '5';
   bool _wheelchairRamp = false;
 
-  // Checklist items progress
+  // Checklist items progress states (9 items)
   bool _carDetailsDone = false;
   bool _sinDone = false;
   bool _licenseDone = false;
   bool _photoDone = false;
   bool _bgCheckDone = false;
+  bool _proofOfWorkDone = false;
+  bool _vehicleInspectionDone = false;
+  bool _directDepositDone = false;
+  bool _emergencyContactDone = false;
 
   void _nextStep() {
     setState(() {
@@ -54,6 +69,10 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
     if (_licenseDone) count++;
     if (_photoDone) count++;
     if (_bgCheckDone) count++;
+    if (_proofOfWorkDone) count++;
+    if (_vehicleInspectionDone) count++;
+    if (_directDepositDone) count++;
+    if (_emergencyContactDone) count++;
     return count;
   }
 
@@ -76,7 +95,7 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
                   onPressed: _prevStep,
                 ),
                 title: Text(
-                  'Step $_currentStep of 5',
+                  'Step $_currentStep of 8',
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
                 ),
                 backgroundColor: Colors.white,
@@ -87,10 +106,10 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
         body: SafeArea(
           child: Column(
             children: [
-              // Top progress bar indicator
+              // Progress bar
               if (_currentStep > 0)
                 LinearProgressIndicator(
-                  value: _currentStep / 5.0,
+                  value: _currentStep / 8.0,
                   color: AppColors.primary,
                   backgroundColor: AppColors.border,
                   minHeight: 3,
@@ -113,14 +132,20 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
       case 0:
         return _buildWelcomeScreen();
       case 1:
-        return _buildEmailScreen();
+        return _buildPhoneScreen();
       case 2:
-        return _buildTermsScreen();
+        return _buildOtpScreen();
       case 3:
-        return _buildVehiclePreferenceScreen();
+        return _buildEmailScreen();
       case 4:
-        return _buildVehicleFormScreen();
+        return _buildTermsScreen();
       case 5:
+        return _buildRegionScreen();
+      case 6:
+        return _buildVehiclePreferenceScreen();
+      case 7:
+        return _buildVehicleFormScreen();
+      case 8:
         return _buildChecklistScreen();
       default:
         return _buildWelcomeScreen();
@@ -128,24 +153,23 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
   }
 
   // ==========================================
-  // Step 0: Welcome / Landing Page (Exact Lyft wireframe layout, Brand green color)
+  // Step 0: Welcome / Landing Page
   // ==========================================
   Widget _buildWelcomeScreen() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Top Section: Illustration or text branding
         Expanded(
           flex: 6,
           child: Container(
             color: AppColors.surface,
-            child: Center(
+            child: const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.local_taxi_rounded, size: 100, color: AppColors.primary),
-                  const SizedBox(height: 16),
-                  const Text(
+                  SizedBox(height: 16),
+                  Text(
                     'lyft',
                     style: TextStyle(
                       fontSize: 60,
@@ -159,7 +183,6 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
             ),
           ),
         ),
-        // Bottom Text and Button
         Expanded(
           flex: 4,
           child: Padding(
@@ -173,7 +196,7 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 26,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
                     height: 1.2,
                   ),
@@ -218,7 +241,145 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
   }
 
   // ==========================================
-  // Step 1: Email Capture Screen
+  // Step 1: Phone Entry Screen
+  // ==========================================
+  Widget _buildPhoneScreen() {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 16),
+          const Text(
+            'Enter your mobile number',
+            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'We will send a 6-digit verification code to confirm your device.',
+            style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 32),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.border),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text('+91', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: 'Phone Number',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: const BorderSide(color: AppColors.primary, width: 2.0),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 54),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+            ),
+            onPressed: () async {
+              if (_phoneController.text.isNotEmpty) {
+                await ApiService.startPhoneAuth('+91${_phoneController.text}', 'device-id-mock-123');
+                _nextStep();
+              }
+            },
+            child: const Text(
+              'Next',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // Step 2: OTP Verification Screen
+  // ==========================================
+  Widget _buildOtpScreen() {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 16),
+          const Text(
+            'Verify code',
+            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'We sent a code to +91 ${_phoneController.text}. Enter it below.',
+            style: const TextStyle(fontSize: 15, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 32),
+          TextField(
+            controller: _otpController,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 8),
+            decoration: InputDecoration(
+              labelText: '6-Digit Verification Code',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              focusedBorder: OutlineInputBorder(
+                borderSide: const BorderSide(color: AppColors.primary, width: 2.0),
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: () {},
+            child: const Text('Resend Code', style: TextStyle(color: AppColors.secondary, fontWeight: FontWeight.bold)),
+          ),
+          const Spacer(),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 54),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+            ),
+            onPressed: () async {
+              if (_otpController.text.length >= 4) {
+                await ApiService.verifyPhoneOtp('+91${_phoneController.text}', _otpController.text, 'device-id-mock-123');
+                _nextStep();
+              }
+            },
+            child: const Text(
+              'Verify & Continue',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // Step 3: Email Screen
   // ==========================================
   Widget _buildEmailScreen() {
     return Padding(
@@ -228,10 +389,10 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
         children: [
           const SizedBox(height: 16),
           const Text(
-            'Great to meet you, Arijit.\nMind sharing your email?',
+            'Great to meet you.\nMind sharing your email?',
             style: TextStyle(
               fontSize: 26,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.bold,
               color: AppColors.textPrimary,
               height: 1.2,
             ),
@@ -264,8 +425,12 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
                 borderRadius: BorderRadius.circular(28),
               ),
             ),
-            onPressed: () {
+            onPressed: () async {
               if (_emailController.text.isNotEmpty) {
+                await ApiService.updateProfile(
+                  name: 'Arijit Bose',
+                  email: _emailController.text,
+                );
                 _nextStep();
               }
             },
@@ -280,7 +445,7 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
   }
 
   // ==========================================
-  // Step 2: Terms & Agreement Screen
+  // Step 4: Terms Agreement Screen
   // ==========================================
   Widget _buildTermsScreen() {
     return Column(
@@ -347,7 +512,66 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
   }
 
   // ==========================================
-  // Step 3: Vehicle Preference Selection Screen
+  // Step 5: Region Selection Screen
+  // ==========================================
+  Widget _buildRegionScreen() {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 16),
+          const Text(
+            'Where would you like to drive?',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Select your primary country, state, and city limits.',
+            style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 32),
+          _buildDropdown('Country', _selectedCountry, ['India', 'Canada', 'USA'], (val) {
+            setState(() { _selectedCountry = val!; });
+          }),
+          const SizedBox(height: 16),
+          _buildDropdown('State', _selectedState, ['Karnataka', 'Maharashtra', 'Delhi'], (val) {
+            setState(() { _selectedState = val!; });
+          }),
+          const SizedBox(height: 16),
+          _buildDropdown('City', _selectedCity, ['Bengaluru', 'Mumbai', 'New Delhi'], (val) {
+            setState(() { _selectedCity = val!; });
+          }),
+          const Spacer(),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 54),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+            ),
+            onPressed: () async {
+              await ApiService.setDrivingLocation(
+                countryId: 'in',
+                stateId: 'ka',
+                cityId: 'blr',
+              );
+              _nextStep();
+            },
+            child: const Text(
+              'Continue',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // Step 6: Vehicle Preference Selection Screen
   // ==========================================
   Widget _buildVehiclePreferenceScreen() {
     return SingleChildScrollView(
@@ -357,11 +581,9 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
         children: [
           const Text(
             'Vehicle Preference',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.textPrimary),
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
           ),
           const SizedBox(height: 24),
-          
-          // Own Vehicle option card
           Card(
             color: Colors.white,
             elevation: 0,
@@ -403,8 +625,6 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
             ),
           ),
           const SizedBox(height: 20),
-
-          // Rental car option card
           Card(
             color: Colors.white,
             elevation: 0,
@@ -440,7 +660,7 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
                     ),
                     onPressed: () {
                       setState(() {
-                        _currentStep = 5; // Go to Checklist directly
+                        _currentStep = 8; // Skip directly to Checklist
                         _carDetailsDone = false;
                       });
                     },
@@ -456,7 +676,7 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
   }
 
   // ==========================================
-  // Step 4: Personal Vehicle details Form Screen
+  // Step 7: Personal Vehicle Form Screen
   // ==========================================
   Widget _buildVehicleFormScreen() {
     return SingleChildScrollView(
@@ -466,40 +686,33 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
         children: [
           const Text(
             'Add Personal Vehicle',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.textPrimary),
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
           ),
           const SizedBox(height: 24),
-
           _buildDropdown('Year', _selectedYear, ['2025', '2024', '2023', '2022', '2021', '2020', '2019'], (val) {
             setState(() { _selectedYear = val!; });
           }),
           const SizedBox(height: 16),
-
           _buildDropdown('Make', _selectedMake, ['Toyota', 'Honda', 'Hyundai', 'Ford', 'Chevrolet'], (val) {
             setState(() { _selectedMake = val!; });
           }),
           const SizedBox(height: 16),
-
           _buildDropdown('Model', _selectedModel, ['Prius', 'Camry', 'Civic', 'Elantra', 'Focus'], (val) {
             setState(() { _selectedModel = val!; });
           }),
           const SizedBox(height: 16),
-
           _buildDropdown('Colour', _selectedColor, ['Silver', 'Black', 'White', 'Blue', 'Red'], (val) {
             setState(() { _selectedColor = val!; });
           }),
           const SizedBox(height: 16),
-
           _buildDropdown('Doors', _selectedDoors, ['4', '5'], (val) {
             setState(() { _selectedDoors = val!; });
           }),
           const SizedBox(height: 16),
-
           _buildDropdown('Seatbelts', _selectedSeatbelts, ['5', '6', '7'], (val) {
             setState(() { _selectedSeatbelts = val!; });
           }),
           const SizedBox(height: 16),
-
           CheckboxListTile(
             title: const Text('Vehicle has a wheelchair accessible ramp', style: TextStyle(fontSize: 14, color: AppColors.textPrimary)),
             value: _wheelchairRamp,
@@ -511,7 +724,6 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
             contentPadding: EdgeInsets.zero,
           ),
           const SizedBox(height: 24),
-
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
@@ -521,10 +733,17 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
                 borderRadius: BorderRadius.circular(28),
               ),
             ),
-            onPressed: () {
+            onPressed: () async {
+              await ApiService.addVehicle(
+                vehicleTypeId: 'sedan',
+                model: '$_selectedMake $_selectedModel',
+                year: _selectedYear,
+                registrationNumber: 'KA-01-LYFT-1234',
+                color: _selectedColor,
+              );
               setState(() {
                 _carDetailsDone = true;
-                _currentStep = 5; // Go to Checklist
+                _currentStep = 8; // Go to Checklist
               });
             },
             child: const Text(
@@ -556,7 +775,7 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
   }
 
   // ==========================================
-  // Step 5: Checklist / To-Do Screen
+  // Step 8: Checklist / To-Do Screen (Lyft 9 Onboarding items)
   // ==========================================
   Widget _buildChecklistScreen() {
     return Column(
@@ -568,7 +787,7 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
             children: [
               const Text(
                 'To-do',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: AppColors.textPrimary),
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
               ),
               const SizedBox(width: 12),
               Container(
@@ -579,7 +798,7 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Text(
-                  '${_getCompletedCount()} / 5 items',
+                  '${_getCompletedCount()} / 9 items',
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: AppColors.textSecondary),
                 ),
               ),
@@ -598,7 +817,7 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
                     : 'We need the colour, year, make, and model',
                 isDone: _carDetailsDone,
                 onTap: () {
-                  setState(() { _currentStep = 3; });
+                  setState(() { _currentStep = 6; });
                 },
               ),
               _buildChecklistItem(
@@ -645,6 +864,50 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
                   setState(() { _bgCheckDone = true; });
                 },
               ),
+              _buildChecklistItem(
+                icon: Icons.verified_user_rounded,
+                title: 'Proof of work eligibility',
+                subtitle: _proofOfWorkDone ? 'Work eligibility confirmed' : 'Work permit, PR, Passport, or Birth Certificate',
+                isDone: _proofOfWorkDone,
+                onTap: () {
+                  setState(() { _proofOfWorkDone = true; });
+                },
+              ),
+              _buildChecklistItem(
+                icon: Icons.build_rounded,
+                title: 'Vehicle inspection',
+                subtitle: _vehicleInspectionDone ? 'Inspection certificate verified' : 'Submit safety certificate documents',
+                isDone: _vehicleInspectionDone,
+                onTap: () {
+                  setState(() { _vehicleInspectionDone = true; });
+                },
+              ),
+              _buildChecklistItem(
+                icon: Icons.payment_rounded,
+                title: 'Direct deposit info',
+                subtitle: _directDepositDone ? 'Direct deposit bank configured' : 'Add account/routing digits for payouts',
+                isDone: _directDepositDone,
+                onTap: () {
+                  _showInputDialog('Direct Deposit Details', 'Enter bank account number', _bankAccountController, () {
+                    if (_bankAccountController.text.isNotEmpty) {
+                      setState(() { _directDepositDone = true; });
+                    }
+                  });
+                },
+              ),
+              _buildChecklistItem(
+                icon: Icons.contact_phone_rounded,
+                title: 'Emergency contact',
+                subtitle: _emergencyContactDone ? 'Contact detail set' : 'Add emergency companion telephone digits',
+                isDone: _emergencyContactDone,
+                onTap: () {
+                  _showInputDialog('Emergency Contact', 'Enter contact name/number', _emergencyNameController, () {
+                    if (_emergencyNameController.text.isNotEmpty) {
+                      setState(() { _emergencyContactDone = true; });
+                    }
+                  });
+                },
+              ),
             ],
           ),
         ),
@@ -659,12 +922,13 @@ class _RegistrationWizardState extends State<RegistrationWizard> {
                 borderRadius: BorderRadius.circular(28),
               ),
             ),
-            onPressed: () {
-              if (_getCompletedCount() >= 5) {
+            onPressed: () async {
+              if (_getCompletedCount() >= 9) {
+                await ApiService.submitApplication();
                 widget.onComplete();
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Please complete all To-do items before submitting.')),
+                  const SnackBar(content: Text('Please complete all 9 To-do items before submitting.')),
                 );
               }
             },

@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'style/style.dart';
 import 'registration_wizard.dart';
 import 'driver_dashboard.dart';
+import 'api_service.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  ApiService.init();
   runApp(const MyApp());
 }
 
