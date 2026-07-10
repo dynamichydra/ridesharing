@@ -1,61 +1,30 @@
 import { apiClient } from "@/lib/api-client";
-import type{
-  ApiResponse,
-  CreateZonePayload,
-  Pagination,
-  RawPagination,
-  UpdateZonePayload,
-  Zone,
-  ZoneListParams,
-  ZoneListResult,
-} from "./types";
+import type { Zone, ZoneListParams, ZonePayload, UpdateZonePayload } from "./types";
 
-function normalizePagination(
-  raw: RawPagination | undefined,
-  fallbackPage: number,
-  fallbackLimit: number
-): Pagination {
-  if (!raw) {
-    return { total: 0, page: fallbackPage, limit: fallbackLimit, totalPages: 1 };
-  }
-  return {
-    total: raw.totalItems,
-    page: raw.currentPage,
-    limit: raw.itemsPerPage,
-    totalPages: raw.totalPages,
-  };
-}
+// Base path: /zones — geofenced pricing zones (city centre, airport, etc)
+const BASE_URL = "/zones";
 
-// GET /zones — Public. Paginated if ?page= is provided.
-export async function fetchZones(params: ZoneListParams): Promise<ZoneListResult> {
-  const page = params.page ?? 1;
-  const limit = params.limit ?? 10;
-
+function buildQuery(params: ZoneListParams) {
   const query = new URLSearchParams();
-  query.set("page", String(page));
-  query.set("limit", String(limit));
-
-  const res = (await apiClient.get<Zone[]>(`/zones?${query.toString()}`)) as ApiResponse<Zone[]>;
-
-  return {
-    data: res.MESSAGE ?? [],
-    pagination: normalizePagination(res.PAGINATION, page, limit),
-  };
+  query.set("page", String(params.page ?? 1));
+  query.set("limit", String(params.limit ?? 10));
+  return query.toString();
 }
 
-// POST /zones — Admin. Create a zone.
-export async function createZone(payload: CreateZonePayload): Promise<Zone> {
-  const res = (await apiClient.post("/zones", payload)) as ApiResponse<Zone>;
-  return res.MESSAGE;
-}
+export const zonesApi = {
+  // GET /zones?page=&limit=  (Public)
+  list: (params: ZoneListParams) => apiClient.get<Zone[]>(`${BASE_URL}?${buildQuery(params)}`),
 
-// PATCH /zones/:id — Admin. Update a zone.
-export async function updateZone(id: string, payload: UpdateZonePayload): Promise<Zone> {
-  const res = (await apiClient.patch(`/zones/${id}`, payload)) as ApiResponse<Zone>;
-  return res.MESSAGE;
-}
+  // GET /zones/:id  (Public)
+  getById: (id: string) => apiClient.get<Zone>(`${BASE_URL}/${id}`),
 
-// DELETE /zones/:id — Admin. Delete a zone.
-export async function deleteZone(id: string): Promise<void> {
-  await apiClient.delete(`/zones/${id}`);
-}
+  // POST /zones  (Admin) { name, type, polygon, multiplier?, description? }
+  create: (payload: ZonePayload) => apiClient.post<Zone>(BASE_URL, payload),
+
+  // PATCH /zones/:id  (Admin) partial fields
+  update: (id: string, payload: UpdateZonePayload) =>
+    apiClient.patch<Zone>(`${BASE_URL}/${id}`, payload),
+
+  // DELETE /zones/:id  (Admin)
+  remove: (id: string) => apiClient.delete(`${BASE_URL}/${id}`),
+};

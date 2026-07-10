@@ -1,99 +1,88 @@
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ZoneForm } from "./form";
-import type { ZoneFormValues } from "./schema";
+import ZoneForm from "./form";
 import type { Zone } from "./types";
 
-const FORM_ID = "zone-form";
+
+//Create / Edit dialog — wraps the self-contained ZoneForm 
+
 
 interface ZoneFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  selectedZone: Zone | null;
-  defaultValues: ZoneFormValues;
-  isSaving: boolean;
-  onSubmit: (values: ZoneFormValues) => void;
+  zone: Zone | null;
+  onSuccess: () => void;
 }
 
-// All dialogs for the Zones feature live here as separate named exports.
-export function ZoneFormDialog({
-  open,
-  onOpenChange,
-  selectedZone,
-  defaultValues,
-  isSaving,
-  onSubmit,
-}: ZoneFormDialogProps) {
+export function ZoneFormDialog({ open, onOpenChange, zone, onSuccess }: ZoneFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {selectedZone ? "Modify Geofence Parameters" : "Create Geofence Zone"}
-          </DialogTitle>
+          <DialogTitle>{zone ? "Edit Zone" : "Create Zone"}</DialogTitle>
+          <DialogDescription>
+            {zone
+              ? "Update the boundary, multiplier, or status for this pricing zone."
+              : "Define a new geofenced pricing zone (city centre, airport, etc)."}
+          </DialogDescription>
         </DialogHeader>
-
-        <ZoneForm formId={FORM_ID} defaultValues={defaultValues} onSubmit={onSubmit} />
-
-        <DialogFooter className="pt-4">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            form={FORM_ID}
-            className="bg-primary hover:bg-primary/90 text-white cursor-pointer"
-            disabled={isSaving}
-          >
-            Save Boundary Setup
-          </Button>
-        </DialogFooter>
+        <ZoneForm initialData={zone} onSuccess={onSuccess} onCancel={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );
 }
 
-interface ZoneDeleteDialogProps {
+
+//Delete confirmation dialog       
+
+
+interface DeleteZoneDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   zone: Zone | null;
-  isDeleting: boolean;
   onConfirm: () => void;
+  isPending: boolean;
 }
 
-export function ZoneDeleteDialog({
+export function DeleteZoneDialog({
   open,
   onOpenChange,
   zone,
-  isDeleting,
   onConfirm,
-}: ZoneDeleteDialogProps) {
+  isPending,
+}: DeleteZoneDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[420px]">
         <DialogHeader>
-          <DialogTitle>Delete Zone Geofence</DialogTitle>
+          <DialogTitle>Delete Zone</DialogTitle>
+          <DialogDescription>
+            This will permanently remove{" "}
+            <span className="font-semibold text-foreground">{zone?.name}</span>. This action
+            cannot be undone.
+          </DialogDescription>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground py-2">
-          Are you sure you want to delete{" "}
-          <span className="font-semibold text-foreground">{zone?.name}</span>? This cannot be
-          undone.
-        </p>
-        <DialogFooter className="pt-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="cursor-pointer"
+          >
             Cancel
           </Button>
           <Button
             type="button"
             onClick={onConfirm}
-            disabled={isDeleting}
             className="bg-red-600 hover:bg-red-700 text-white cursor-pointer"
+            disabled={isPending}
           >
             Delete Zone
           </Button>

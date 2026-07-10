@@ -1,60 +1,64 @@
-import type { ReactNode } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Map, Pencil, Trash2, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, Edit2, Map, Trash2, XCircle } from "lucide-react";
 import type { Zone } from "./types";
 
-export interface ZoneColumn {
-  key: string;
-  header: string;
-  className?: string;
-  render: (zone: Zone) => ReactNode;
-}
-
-interface ColumnActions {
+interface Props {
   onEdit: (zone: Zone) => void;
   onDelete: (zone: Zone) => void;
 }
 
-export function getZoneColumns({ onEdit, onDelete }: ColumnActions): ZoneColumn[] {
+function capitalize(value: string) {
+  if (!value) return value;
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+export function getZoneColumns({ onEdit, onDelete }: Props): ColumnDef<Zone>[] {
   return [
     {
-      key: "details",
+      accessorKey: "name",
       header: "Zone Details",
-      render: (zone) => (
+      cell: ({ row }) => (
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center text-primary font-bold">
+          <div className="h-9 w-9 rounded-md bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
             <Map className="h-4 w-4" />
           </div>
           <div>
-            <div className="font-semibold">{zone.name}</div>
-            <div className="text-xs text-muted-foreground">{zone.description || "No description"}</div>
+            <div className="font-semibold text-foreground">{row.original.name}</div>
+            {row.original.description && (
+              <div className="text-xs text-muted-foreground">{row.original.description}</div>
+            )}
           </div>
         </div>
       ),
     },
     {
-      key: "type",
+      accessorKey: "type",
       header: "Type",
-      className: "capitalize text-muted-foreground",
-      render: (zone) => <>{zone.type}</>,
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{capitalize(row.original.type)}</span>
+      ),
     },
     {
-      key: "multiplier",
+      accessorKey: "multiplier",
       header: "Surge Multiplier",
-      className: "text-muted-foreground font-semibold",
-      render: (zone) => <>{zone.multiplier}x</>,
+      cell: ({ row }) => (
+        <span className="font-semibold text-foreground">{row.original.multiplier}x</span>
+      ),
     },
     {
-      key: "coordinatesCount",
+      id: "coordinatesCount",
       header: "Coordinates Count",
-      className: "text-muted-foreground",
-      render: (zone) => <>{zone.polygon?.coordinates?.[0]?.length || 0} nodes</>,
+      cell: ({ row }) => {
+        const count = row.original.polygon?.coordinates?.[0]?.length ?? 0;
+        return <span className="text-muted-foreground">{count} nodes</span>;
+      },
     },
     {
-      key: "status",
+      accessorKey: "isActive",
       header: "Status",
-      render: (zone) =>
-        zone.isActive ? (
+      cell: ({ row }) =>
+        row.original.isActive ? (
           <span className="flex items-center gap-1 text-green-600 dark:text-green-400 font-semibold text-xs">
             <CheckCircle className="h-3.5 w-3.5" /> Active
           </span>
@@ -65,24 +69,31 @@ export function getZoneColumns({ onEdit, onDelete }: ColumnActions): ZoneColumn[
         ),
     },
     {
-      key: "actions",
-      header: "Actions",
-      className: "text-right",
-      render: (zone) => (
-        <div className="flex justify-end gap-2">
+      id: "actions",
+      header: () => <div className="text-right">Actions</div>,
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2 justify-end">
           <Button
             variant="outline"
-            size="sm"
-            onClick={() => onEdit(zone)}
-            className="text-xs border-border text-foreground hover:bg-muted font-medium cursor-pointer"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(row.original);
+            }}
+            className="h-8 w-8 border-border text-foreground hover:bg-muted cursor-pointer"
+            title="Edit zone"
           >
-            <Edit2 className="h-3.5 w-3.5" />
+            <Pencil className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="destructive"
-            size="sm"
-            onClick={() => onDelete(zone)}
-            className="text-xs font-medium cursor-pointer"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(row.original);
+            }}
+            className="h-8 w-8 cursor-pointer"
+            title="Delete zone"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>

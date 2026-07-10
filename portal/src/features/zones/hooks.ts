@@ -1,25 +1,35 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { createZone, deleteZone, fetchZones, updateZone } from "./api";
-import type { CreateZonePayload, UpdateZonePayload, ZoneListParams } from "./types";
+import { zonesApi } from "./api";
+import type { ZoneListParams, ZonePayload, UpdateZonePayload } from "./types";
+
+const ZONES_KEY = "zones";
 
 export function useZones(params: ZoneListParams) {
   return useQuery({
-    queryKey: ["zones", params],
-    queryFn: () => fetchZones(params),
+    queryKey: [ZONES_KEY, params],
+    queryFn: () => zonesApi.list(params),
+  });
+}
+
+export function useZone(id: string | undefined) {
+  return useQuery({
+    queryKey: [ZONES_KEY, id],
+    queryFn: () => zonesApi.getById(id as string),
+    enabled: !!id,
   });
 }
 
 export function useCreateZone() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: CreateZonePayload) => createZone(payload),
+    mutationFn: (payload: ZonePayload) => zonesApi.create(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["zones"] });
-      toast.success("Zone geofence created!");
+      queryClient.invalidateQueries({ queryKey: [ZONES_KEY], refetchType: "active" });
+      toast.success("Zone created successfully!");
     },
     onError: (err: any) => {
-      toast.error(err?.message ?? "Failed to save zone");
+      toast.error(err.message || "Failed to create zone");
     },
   });
 }
@@ -28,13 +38,13 @@ export function useUpdateZone() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdateZonePayload }) =>
-      updateZone(id, payload),
+      zonesApi.update(id, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["zones"] });
-      toast.success("Zone geofence updated!");
+      queryClient.invalidateQueries({ queryKey: [ZONES_KEY], refetchType: "active" });
+      toast.success("Zone updated successfully!");
     },
     onError: (err: any) => {
-      toast.error(err?.message ?? "Failed to save zone");
+      toast.error(err.message || "Failed to update zone");
     },
   });
 }
@@ -42,13 +52,13 @@ export function useUpdateZone() {
 export function useDeleteZone() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteZone(id),
+    mutationFn: (id: string) => zonesApi.remove(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["zones"] });
-      toast.success("Zone geofence deleted");
+      queryClient.invalidateQueries({ queryKey: [ZONES_KEY], refetchType: "active" });
+      toast.success("Zone deleted");
     },
     onError: (err: any) => {
-      toast.error(err?.message ?? "Failed to delete zone");
+      toast.error(err.message || "Failed to delete zone");
     },
   });
 }

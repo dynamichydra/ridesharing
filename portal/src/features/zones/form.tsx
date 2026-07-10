@@ -1,121 +1,209 @@
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { HelpCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import  { zoneSchema,type ZoneFormValues,  } from "./schema";
-// import {zoneTypeOptions} from "./schema";
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormMessage,
+} from "@/components/ui/form";
+import { DialogFooter } from "@/components/ui/dialog";
+import { useCreateZone, useUpdateZone } from "./hooks";
+import { zoneFormSchema, type ZoneFormValues } from "./schema";
+import type { Zone } from "./types";
 
 interface ZoneFormProps {
-  formId: string;
-  defaultValues: ZoneFormValues;
-  onSubmit: (values: ZoneFormValues) => void;
+  initialData?: Zone | null;
+  onSuccess: () => void;
+  onCancel: () => void;
 }
 
-// Shared form body reused for both create and edit (the dialog decides
-// whether it's calling create or update on submit).
-export function ZoneForm({ formId, defaultValues, onSubmit }: ZoneFormProps) {
-  const {
-    register,
-    handleSubmit,
-    watch,
-    setValue,
-    reset,
-    formState: { errors },
-  } = useForm<ZoneFormValues>({
-    resolver: zodResolver(zoneSchema),
-    defaultValues,
+const EMPTY: ZoneFormValues = {
+  name: "",
+  type: "city",
+  multiplier: "1.00",
+  description: "",
+  polygonText: "",
+  isActive: true,
+};
+
+
+export default function ZoneForm({ initialData, onSuccess, onCancel }: ZoneFormProps) {
+  const createMutation = useCreateZone();
+  const updateMutation = useUpdateZone();
+
+  const form = useForm<ZoneFormValues>({
+    resolver: zodResolver(zoneFormSchema),
+    defaultValues: EMPTY,
   });
 
-  // Re-sync whenever a different zone is opened for edit (or the dialog is
-  // reopened for create with fresh empty defaults).
   useEffect(() => {
-    reset(defaultValues);
-  }, [defaultValues, reset]);
+    if (initialData) {
+      form.reset({
+        name: initialData.name,
+        type: initialData.type,
+        multiplier: initialData.multiplier,
+        description: initialData.description ?? "",
+        polygonText: JSON.stringify(initialData.polygon, null, 2),
+        isActive: initialData.isActive,
+      });
+    } else {
+      form.reset(EMPTY);
+    }
+  }, [initialData, form]);
 
-  const isActive = watch("isActive");
+  const onSubmit = async (values: ZoneFormValues) => {
+    const polygon = JSON.parse(values.polygonText);
+    const payload = {
+      name: values.name,
+      type: values.type,
+      polygon,
+      multiplier: values.multiplier || undefined,
+      description: values.description || undefined,
+      isActive: values.isActive,
+    };
 
-  const submit = handleSubmit((values) => {
-    onSubmit(values);
-  });
+    try {
+      if (initialData) {
+        await updateMutation.mutateAsync({ id: initialData.id, payload });
+      } else {
+        await createMutation.mutateAsync(payload);
+        form.reset(EMPTY);
+      }
+      onSuccess();
+    } catch (error) {
+      console.error("Zone form error:", error);
+    }
+  };
+
+  const isLoading = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <form id={formId} onSubmit={submit} className="space-y-4 py-3">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="name">
-            Zone Name <span className="text-red-500">*</span>
-          </Label>
-          <Input id="name" placeholder="e.g. Airport Zone" {...register("name")} />
-          {errors.name && <p className="text-xs text-red-500">{errors.name.message}</p>}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="type">Zone Category</Label>
-          <select
-            id="type"
-            {...register("type")}
-            className="w-full bg-card text-foreground border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
-          >
-            <option value="city">City Core</option>
-            <option value="large_city">Large City Area</option>
-            <option value="suburb">Suburb Boundary</option>
-            <option value="airport">Airport Hub</option>
-            <option value="highway">Highway Segment</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="description">Remarks / Description</Label>
-        <Input
-          id="description"
-          placeholder="Description of geographic boundaries"
-          {...register("description")}
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-3">
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem className="space-y-2">
+              <FormLabel>
+                Zone Name <span className="text-red-500">*</span>
+              </FormLabel>
+              <FormControl>
+                <Input placeholder="e.g. Kolkata City Centre" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
 
-      <div className="grid grid-cols-2 gap-4 items-center">
-        <div className="space-y-2">
-          <Label htmlFor="multiplier">Surge Multiplier</Label>
-          <Input id="multiplier" placeholder="e.g. 1.25" {...register("multiplier")} />
-          {errors.multiplier && <p className="text-xs text-red-500">{errors.multiplier.message}</p>}
-        </div>
-        <div className="flex items-center gap-2 self-end h-10">
-          <input
-            id="isActive"
-            type="checkbox"
-            checked={isActive}
-            onChange={(e) => setValue("isActive", e.target.checked, { shouldDirty: true })}
-            className="h-4 w-4 accent-primary rounded border-border"
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="type"
+            render={({ field }) => (
+              <FormItem className="space-y-2">
+                <FormLabel>
+                  Zone Type <span className="text-red-500">*</span>
+                </FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g. city, airport, suburb" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-          <Label htmlFor="isActive" className="cursor-pointer">
-            Enable Service in Zone
-          </Label>
+          <FormField
+            control={form.control}
+            name="multiplier"
+            render={({ field }) => (
+              <FormItem className="space-y-2">
+                <FormLabel>Multiplier</FormLabel>
+                <FormControl>
+                  <Input placeholder="1.00" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </div>
-      </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="polygon" className="flex items-center gap-1.5">
-            Polygon GPS Coordinates (JSON Matrix) <span className="text-red-500">*</span>
-          </Label>
-          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-            <HelpCircle className="h-3 w-3" /> Array of [[[lng, lat], ...]]
-          </span>
-        </div>
-        <Textarea
-          id="polygon"
-          rows={4}
-          className="font-mono text-xs"
-          placeholder="[[[88.34, 22.56], [88.39, 22.56], [88.39, 22.59], [88.34, 22.59], [88.34, 22.56]]]"
-          {...register("coordinatesText")}
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem className="space-y-2">
+              <FormLabel>Description</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="e.g. Central Kolkata – Park Street, BBD Bagh, Esplanade"
+                  rows={2}
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-        {errors.coordinatesText && (
-          <p className="text-xs text-red-500">{errors.coordinatesText.message}</p>
-        )}
-      </div>
-    </form>
+
+        <FormField
+          control={form.control}
+          name="polygonText"
+          render={({ field }) => (
+            <FormItem className="space-y-2">
+              <FormLabel>
+                Polygon (GeoJSON) <span className="text-red-500">*</span>
+              </FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder='{ "type": "Polygon", "coordinates": [[[88.34,22.55],[88.38,22.55],[88.38,22.59],[88.34,22.55]]] }'
+                  rows={5}
+                  className="font-mono text-xs"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="flex items-center gap-2">
+          <input
+            id="zone-active"
+            type="checkbox"
+            checked={form.watch("isActive") ?? true}
+            onChange={(e) => form.setValue("isActive", e.target.checked)}
+            className="h-4 w-4 rounded border-border cursor-pointer"
+          />
+          <FormLabel htmlFor="zone-active" className="cursor-pointer font-normal">
+            Active
+          </FormLabel>
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={isLoading}
+            className="cursor-pointer"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={isLoading}
+            className="bg-primary hover:bg-primary/90 text-white cursor-pointer"
+          >
+            {isLoading ? "Saving..." : initialData ? "Save Changes" : "Create Zone"}
+          </Button>
+        </DialogFooter>
+      </form>
+    </Form>
   );
 }
