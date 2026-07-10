@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../style/appcolors.dart';
-import '../../domain/entities/question.dart';
+import '../../../style/appcolors.dart';
+import '../../../domain/entities/question.dart';
 
 class QuestionnaireScreen extends StatefulWidget {
   final List<OnboardingQuestion> questions;

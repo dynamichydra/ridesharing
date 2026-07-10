@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../style/appcolors.dart';
-import '../../domain/repositories/onboarding_repository.dart';
+import '../../../style/appcolors.dart';
+import '../../../domain/repositories/onboarding_repository.dart';
 
 class ChecklistScreen extends StatelessWidget {
   final RegistrationSummary summary;

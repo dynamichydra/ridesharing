@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../style/appcolors.dart';
-import '../../domain/entities/vehicle.dart';
+import '../../../style/appcolors.dart';
+import '../../../domain/entities/vehicle.dart';
 
 class VehicleFormScreen extends StatefulWidget {
   final List<VehicleType> vehicleTypes;

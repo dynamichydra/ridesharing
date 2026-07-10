@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../style/appcolors.dart';
-import '../../domain/entities/document.dart';
+import '../../../style/appcolors.dart';
+import '../../../domain/entities/document.dart';
 
 class DocumentUploadScreen extends StatefulWidget {
   final DocumentType docType;

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'style/appcolors.dart';
-import 'core/network/api_client.dart';
-import 'injection_container.dart' as di;
+import '../../../../style/appcolors.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../../injection_container.dart' as di;
 
 class DriverDashboard extends StatefulWidget {
   final VoidCallback onLogout;

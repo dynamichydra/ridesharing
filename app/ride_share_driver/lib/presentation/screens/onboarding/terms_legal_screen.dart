@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../style/appcolors.dart';
+import '../../../style/appcolors.dart';
 
 class TermsLegalScreen extends StatefulWidget {
   final String termsContent;

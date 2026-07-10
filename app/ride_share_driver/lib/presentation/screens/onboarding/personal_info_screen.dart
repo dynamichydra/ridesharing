@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../style/appcolors.dart';
+import '../../../style/appcolors.dart';
 
 class PersonalInfoScreen extends StatefulWidget {
   final Function({required String name, required String email, String? dob, String? gender, String? referralCode}) onSave;

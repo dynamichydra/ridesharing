@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../style/appcolors.dart';
+import '../../../style/appcolors.dart';
 
 class WelcomeScreen extends StatelessWidget {
   final VoidCallback onGetStarted;

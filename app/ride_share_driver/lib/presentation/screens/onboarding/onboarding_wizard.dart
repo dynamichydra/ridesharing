@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../core/storage/secure_storage.dart';
-import '../../style/appcolors.dart';
-import '../../domain/repositories/onboarding_repository.dart';
-import '../../injection_container.dart';
-import '../bloc/onboarding/onboarding_bloc.dart';
-import '../bloc/auth/auth_bloc.dart';
+import '../../../style/appcolors.dart';
+import '../../../domain/repositories/onboarding_repository.dart';
+import '../../../injection_container.dart';
+import '../../bloc/onboarding/onboarding_bloc.dart';
+import '../../bloc/auth/auth_bloc.dart';
 
 // Screens
 import 'welcome_screen.dart';
-import 'phone_auth_screen.dart';
-import 'otp_verification_screen.dart';
+import '../auth/phone_auth_screen.dart';
+import '../auth/otp_verification_screen.dart';
 import 'personal_info_screen.dart';
 import 'terms_legal_screen.dart';
 import 'driving_location_screen.dart';
@@ -18,7 +17,6 @@ import 'vehicle_selection_screen.dart';
 import 'vehicle_form_screen.dart';
 import 'checklist_screen.dart';
 import 'document_upload_screen.dart';
-import 'questionnaire_screen.dart';
 import 'profile_photo_screen.dart';
 import 'bank_details_screen.dart';
 import 'emergency_contact_screen.dart';

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../style/appcolors.dart';
+import '../../../style/appcolors.dart';
 
 class VehicleSelectionScreen extends StatelessWidget {
   final VoidCallback onHasVehicle;

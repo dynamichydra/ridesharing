@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'style/style.dart';
-import 'presentation/screens/onboarding_wizard.dart';
-import 'driver_dashboard.dart';
 import 'injection_container.dart' as di;
+import 'core/router/app_router.dart';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'presentation/bloc/auth/auth_bloc.dart';
@@ -22,47 +21,30 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  bool _isRegistered = false;
+  late final AuthBloc _authBloc;
+  late final OnboardingBloc _onboardingBloc;
+  late final AppRouter _appRouter;
+
+  @override
+  void initState() {
+    super.initState();
+    _authBloc = di.sl<AuthBloc>()..add(CheckAuthStatus());
+    _onboardingBloc = di.sl<OnboardingBloc>();
+    _appRouter = AppRouter(_authBloc);
+  }
 
   @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
-        BlocProvider<AuthBloc>(create: (_) => di.sl<AuthBloc>()..add(CheckAuthStatus())),
-        BlocProvider<OnboardingBloc>(create: (_) => di.sl<OnboardingBloc>()),
+        BlocProvider<AuthBloc>.value(value: _authBloc),
+        BlocProvider<OnboardingBloc>.value(value: _onboardingBloc),
       ],
-      child: MaterialApp(
+      child: MaterialApp.router(
         title: 'Ride Sharing Driver',
         debugShowCheckedModeBanner: false,
         theme: Style().theme,
-        home: BlocBuilder<AuthBloc, AuthState>(
-          builder: (context, authState) {
-            if (authState is Authenticated) {
-              final isFullyApproved = authState.driver.registrationStatus == 'approved';
-              if (isFullyApproved || _isRegistered) {
-                return DriverDashboard(
-                  onLogout: () {
-                    context.read<AuthBloc>().add(LogoutRequested(deviceId: 'driver_emulator'));
-                  },
-                );
-              }
-              return OnboardingWizard(
-                onComplete: () {
-                  setState(() {
-                    _isRegistered = true;
-                  });
-                },
-              );
-            }
-            return OnboardingWizard(
-              onComplete: () {
-                setState(() {
-                  _isRegistered = true;
-                });
-              },
-            );
-          },
-        ),
+        routerConfig: _appRouter.router,
       ),
     );
   }
