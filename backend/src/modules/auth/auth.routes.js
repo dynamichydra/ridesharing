@@ -66,7 +66,7 @@ export async function authRoutes(app) {
   app.post('/rider/send-otp', async (request, reply) => {
     const { phone } = request.body;
     if (!phone) return sendError(reply, 'Phone is required');
-    await authService.sendOtp(phone);
+    await authService.sendOtp(phone, 'rider');
     return sendSuccess(reply, 'OTP sent successfully');
   });
 
@@ -82,7 +82,7 @@ export async function authRoutes(app) {
   app.post('/driver/send-otp', async (request, reply) => {
     const { phone } = request.body;
     if (!phone) return sendError(reply, 'Phone is required');
-    await authService.sendOtp(phone);
+    await authService.sendOtp(phone, 'driver');
     return sendSuccess(reply, 'OTP sent successfully');
   });
 
