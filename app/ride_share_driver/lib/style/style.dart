@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class Style {
   final ThemeData theme = ThemeData(
     useMaterial3: true,
+    fontFamily: GoogleFonts.outfit().fontFamily,
 
     // Brand Colors
-    primaryColor: const Color(0xFF08B24E),
+    primaryColor: const Color(0xFF01A34D),
 
     colorScheme: const ColorScheme.light(
-      primary: Color(0xFF08B24E),
-      secondary: Color(0xFF0D6FD1),
+      primary: Color(0xFF01A34D),
+      secondary: Color(0xFF0165B7),
       tertiary: Color(0xFFFFC800),
-      surface: Color(0xFFF6F8FA),
+      surface: Color(0xFFF9FAFB),
       onPrimary: Colors.white,
       onSecondary: Colors.white,
-      onSurface: Color(0xFF212121),
+      onSurface: Color(0xFF1F2937),
     ),
 
     scaffoldBackgroundColor: Colors.white,
@@ -23,54 +25,55 @@ class Style {
       elevation: 0,
       centerTitle: true,
       backgroundColor: Colors.white,
-      foregroundColor: Color(0xFF212121),
+      foregroundColor: Color(0xFF1F2937),
       surfaceTintColor: Colors.transparent,
     ),
 
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
       backgroundColor: Colors.white,
-      selectedItemColor: Color(0xFF08B24E),
+      selectedItemColor: Color(0xFF01A34D),
       unselectedItemColor: Colors.grey,
       type: BottomNavigationBarType.fixed,
       elevation: 10,
     ),
 
     cardTheme: CardThemeData(
-      color: const Color(0xFFF6F8FA),
-      elevation: 2,
+      color: Colors.white,
+      elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade100, width: 1),
       ),
     ),
 
     textTheme: const TextTheme(
       headlineLarge: TextStyle(
-        color: Color(0xFF212121),
+        color: Color(0xFF1F2937),
         fontWeight: FontWeight.bold,
       ),
       headlineMedium: TextStyle(
-        color: Color(0xFF212121),
+        color: Color(0xFF1F2937),
         fontWeight: FontWeight.w600,
       ),
       bodyLarge: TextStyle(
-        color: Color(0xFF212121),
+        color: Color(0xFF1F2937),
       ),
       bodyMedium: TextStyle(
-        color: Color(0xFF424242),
+        color: Color(0xFF4B5563),
       ),
       bodySmall: TextStyle(
-        color: Color(0xFF757575),
+        color: Color(0xFF6B7280),
       ),
     ),
 
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF08B24E),
+        backgroundColor: const Color(0xFF01A34D),
         foregroundColor: Colors.white,
-        minimumSize: const Size(double.infinity, 52),
+        minimumSize: const Size(double.infinity, 54),
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
         ),
         textStyle: const TextStyle(
           fontSize: 16,
@@ -81,33 +84,34 @@ class Style {
 
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: const Color(0xFF08B24E),
+        foregroundColor: const Color(0xFF01A34D),
         side: const BorderSide(
-          color: Color(0xFF08B24E),
+          color: Color(0xFF01A34D),
+          width: 1.5,
         ),
-        minimumSize: const Size(double.infinity, 52),
+        minimumSize: const Size(double.infinity, 54),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
         ),
       ),
     ),
 
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: const Color(0xFF0D6FD1),
+        foregroundColor: const Color(0xFF0165B7),
       ),
     ),
 
     radioTheme: const RadioThemeData(
       fillColor: WidgetStatePropertyAll(
-        Color(0xFF08B24E),
+        Color(0xFF01A34D),
       ),
     ),
 
     checkboxTheme: CheckboxThemeData(
       fillColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return const Color(0xFF08B24E);
+          return const Color(0xFF01A34D);
         }
         return Colors.transparent;
       }),
@@ -115,20 +119,24 @@ class Style {
         Colors.white,
       ),
       side: const BorderSide(
-        color: Color(0xFF08B24E),
+        color: Color(0xFF01A34D),
+        width: 1.5,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4),
       ),
     ),
 
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return const Color(0xFF08B24E);
+          return const Color(0xFF01A34D);
         }
         return Colors.grey.shade400;
       }),
       trackColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return const Color(0x3308B24E);
+          return const Color(0x3301A34D);
         }
         return Colors.grey.shade300;
       }),
@@ -136,38 +144,39 @@ class Style {
 
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: Colors.white,
+      fillColor: const Color(0xFFF9FAFB),
       contentPadding: const EdgeInsets.symmetric(
         horizontal: 16,
         vertical: 16,
       ),
       floatingLabelStyle: const TextStyle(
-        color: Color(0xFF08B24E),
+        color: Color(0xFF01A34D),
       ),
       hintStyle: TextStyle(
-        color: Colors.grey.shade500,
+        color: Colors.grey.shade400,
+        fontWeight: FontWeight.normal,
       ),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(
-          color: Color(0xFFE0E0E0),
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(
+          color: Colors.grey.shade200,
         ),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(
-          color: Color(0xFFE0E0E0),
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(
+          color: Colors.grey.shade200,
         ),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(
-          color: Color(0xFF08B24E),
+          color: Color(0xFF0165B7),
           width: 2,
         ),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         borderSide: const BorderSide(
           color: Colors.red,
         ),
@@ -176,37 +185,37 @@ class Style {
 
     scrollbarTheme: ScrollbarThemeData(
       thumbColor: WidgetStateProperty.all(
-        const Color(0xFF08B24E),
+        const Color(0xFF01A34D),
       ),
       radius: const Radius.circular(20),
     ),
 
     textSelectionTheme: const TextSelectionThemeData(
-      cursorColor: Color(0xFF08B24E),
-      selectionHandleColor: Color(0xFF08B24E),
-      selectionColor: Color(0x3308B24E),
+      cursorColor: Color(0xFF01A34D),
+      selectionHandleColor: Color(0xFF01A34D),
+      selectionColor: Color(0x3301A34D),
     ),
 
     chipTheme: ChipThemeData(
-      selectedColor: const Color(0xFF08B24E),
-      backgroundColor: Colors.grey.shade100,
+      selectedColor: const Color(0xFF01A34D),
+      backgroundColor: const Color(0xFFF3F4F6),
       checkmarkColor: Colors.white,
       labelStyle: const TextStyle(
-        color: Color(0xFF212121),
+        color: Color(0xFF1F2937),
       ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(30),
       ),
     ),
 
-    dividerColor: const Color(0xFFE8E8E8),
+    dividerColor: const Color(0xFFE5E7EB),
 
     progressIndicatorTheme: const ProgressIndicatorThemeData(
-      color: Color(0xFF08B24E),
+      color: Color(0xFF01A34D),
     ),
 
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: Color(0xFF08B24E),
+      backgroundColor: Color(0xFF01A34D),
       foregroundColor: Colors.white,
     ),
   );

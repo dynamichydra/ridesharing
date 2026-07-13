@@ -33,7 +33,7 @@ class AppLocalizations {
       'get_started': 'Get started',
       'welcome_aboard': 'Welcome Ryva Ride',
       'enter_number_desc': 'Enter your number to log in.',
-      'new_number_find_account': 'New number? Find your account.',
+      'new_number_find_account': "Don't have an account? Create new",
     },
     'hi': {
       'welcome_title': 'अच्छा पैसा कमाएं, बेहतरीन लोगों से मिलें',
@@ -59,7 +59,7 @@ class AppLocalizations {
       'get_started': 'शुरू करें',
       'welcome_aboard': 'राइवा राइड में स्वागत है',
       'enter_number_desc': 'लॉग इन करने के लिए अपना नंबर दर्ज करें।',
-      'new_number_find_account': 'नया नंबर? अपना खाता ढूंढें।',
+      'new_number_find_account': 'खाता नहीं है? नया बनाएं',
     }
   };
 

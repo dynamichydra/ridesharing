@@ -34,26 +34,19 @@ class AuthRemoteDataSource {
       );
     } on DioException catch (dioErr) {
       print('❌ [API ERROR] $dioErr');
-      if (dioErr.type == DioExceptionType.badResponse) {
-        final resp = dioErr.response;
-        final msg = (resp?.data is Map) ? resp?.data['MESSAGE']?.toString() : null;
-        return PhoneAuthStartResult(
-          success: false,
-          isNewAccount: false,
-          error: msg ?? 'Failed to request OTP',
-        );
-      }
-      // Offline fallback:
+      final resp = dioErr.response;
+      final msg = (resp?.data is Map) ? resp?.data['MESSAGE']?.toString() : null;
       return PhoneAuthStartResult(
-        success: true,
+        success: false,
         isNewAccount: false,
+        error: msg ?? 'Connection failed: ${dioErr.message}',
       );
     } catch (e) {
       print('❌ [API ERROR] $e');
       return PhoneAuthStartResult(
         success: false,
         isNewAccount: false,
-        error: e.toString(),
+        error: 'Unexpected error: $e',
       );
     }
   }
@@ -79,27 +72,12 @@ class AuthRemoteDataSource {
       throw Exception(response.data['MESSAGE'] ?? 'OTP verification failed');
     } on DioException catch (dioErr) {
       print('❌ [API ERROR] $dioErr');
-      if (dioErr.type == DioExceptionType.badResponse) {
-        final resp = dioErr.response;
-        final msg = (resp?.data is Map) ? resp?.data['MESSAGE']?.toString() : null;
-        throw Exception(msg ?? 'OTP verification failed');
-      }
-      // Offline fallback:
-      final Map<String, dynamic> mockData = {
-        'token': 'mock_driver_token_jwt',
-        'refreshToken': 'mock_driver_refresh_token_jwt',
-        'user': {
-          'id': 'mock_driver_123',
-          'phone': phone,
-          'registrationStatus': 'new',
-          'registrationStep': 1,
-          'rating': '5.00'
-        }
-      };
-      return mockData;
+      final resp = dioErr.response;
+      final msg = (resp?.data is Map) ? resp?.data['MESSAGE']?.toString() : null;
+      throw Exception(msg ?? 'Connection failed: ${dioErr.message}');
     } catch (e) {
       print('❌ [API ERROR] $e');
-      throw Exception(e.toString());
+      throw Exception('Unexpected error: $e');
     }
   }
 

@@ -17,7 +17,8 @@ class AppRouter {
       final isOnboarding = state.matchedLocation == '/onboarding';
 
       if (authState is Authenticated) {
-        final isFullyApproved = authState.driver.registrationStatus == 'approved';
+        final isFullyApproved = authState.driver.registrationStatus == 'approved' ||
+                                authState.driver.registrationStatus == 'active';
         if (isFullyApproved) {
           if (isOnboarding || state.matchedLocation == '/') {
             return '/dashboard';

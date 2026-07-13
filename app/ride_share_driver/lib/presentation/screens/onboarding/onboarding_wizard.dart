@@ -146,25 +146,35 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         builder: (context, state) {
           return Scaffold(
             backgroundColor: Colors.white,
-              appBar: _currentStep > 0
-                  ? AppBar(
-                      leading: IconButton(
-                        icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textPrimary),
-                        onPressed: _prevStep,
+            extendBodyBehindAppBar: _currentStep <= 2,
+            appBar: _currentStep > 0
+                ? AppBar(
+                    backgroundColor: _currentStep <= 2 ? Colors.transparent : Colors.white,
+                    elevation: 0,
+                    leading: IconButton(
+                      icon: Icon(
+                        Icons.arrow_back_rounded,
+                        color: _currentStep <= 2 ? Colors.white : AppColors.textPrimary,
                       ),
-                      title: Text(
-                        _currentStep >= 8
-                            ? l10n.verificationSteps
-                            : (_currentStep >= 3
-                                ? l10n.stepNOf8(_currentStep - 2)
-                                : ''),
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                      onPressed: _prevStep,
+                    ),
+                    title: Text(
+                      _currentStep >= 8
+                          ? l10n.verificationSteps
+                          : (_currentStep >= 3
+                              ? l10n.stepNOf8(_currentStep - 2)
+                              : ''),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: _currentStep <= 2 ? Colors.white : AppColors.textSecondary,
                       ),
-                    )
-                  : null,
-              body: SafeArea(
-                top: _currentStep > 0,
-                bottom: _currentStep > 0,
+                    ),
+                  )
+                : null,
+            body: SafeArea(
+              top: _currentStep >= 3,
+              bottom: _currentStep >= 3,
                 child: Column(
                   children: [
                     if (_currentStep >= 3 && _currentStep < 8)

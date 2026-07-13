@@ -9,64 +9,73 @@ class LanguageToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = LocaleController.of(context);
     if (controller == null) return const SizedBox.shrink();
-    final currentLang = controller.locale.languageCode == 'hi' ? 'हिंदी' : 'English';
 
-    return Theme(
-      data: Theme.of(context).copyWith(
-        cardColor: Colors.white,
+    final currentLang = controller.locale.languageCode == 'hi'
+        ? 'हिंदी'
+        : 'English';
+
+    return PopupMenuButton<String>(
+      position: PopupMenuPosition.under, // Opens below the button
+
+      offset: const Offset(0, 8),
+
+      color: Colors.black.withOpacity(0.10), // Transparent background
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Colors.white, width: 1),
       ),
-      child: PopupMenuButton<String>(
-        onSelected: (langCode) {
-          controller.changeLanguage(langCode);
-        },
-        itemBuilder: (BuildContext context) => [
-          const PopupMenuItem<String>(
-            value: 'en',
-            child: Text('English', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+
+      onSelected: (langCode) {
+        controller.changeLanguage(langCode);
+      },
+
+      itemBuilder: (context) => const [
+        PopupMenuItem<String>(
+          value: 'en',
+          child: Text(
+            'English',
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
           ),
-          const PopupMenuItem<String>(
-            value: 'hi',
-            child: Text('हिंदी', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+        ),
+        PopupMenuItem<String>(
+          value: 'hi',
+          child: Text(
+            'हिंदी',
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
           ),
-        ],
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+        ),
+      ],
+
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.language_rounded, size: 16, color: Colors.white),
+            const SizedBox(width: 6),
+            Text(
+              currentLang,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
               ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.language_rounded,
-                size: 16,
-                color: Colors.black87,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                currentLang,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(width: 4),
-              const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 16,
-                color: Colors.black87,
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 16,
+              color: Colors.white,
+            ),
+          ],
         ),
       ),
     );
@@ -77,12 +86,16 @@ class WelcomeScreen extends StatelessWidget {
   final VoidCallback onRegister;
   final VoidCallback onLogin;
 
-  const WelcomeScreen({super.key, required this.onRegister, required this.onLogin});
+  const WelcomeScreen({
+    super.key,
+    required this.onRegister,
+    required this.onLogin,
+  });
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Stack(
       children: [
         // Full screen background image
@@ -116,7 +129,10 @@ class WelcomeScreen extends StatelessWidget {
           right: 0,
           child: SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 16.0,
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -138,7 +154,10 @@ class WelcomeScreen extends StatelessWidget {
           right: 0,
           child: SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 24.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
@@ -169,23 +188,36 @@ class WelcomeScreen extends StatelessWidget {
                     ),
                     child: Text(
                       l10n.getStarted,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 20),
                   TextButton(
                     onPressed: () {
-                      debugPrint('[WelcomeScreen] Ready to ride rider link clicked');
+                      debugPrint(
+                        '[WelcomeScreen] Ready to ride rider link clicked',
+                      );
                     },
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
                           l10n.readyToRide,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
                         ),
                         const SizedBox(width: 4),
-                        const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 16),
+                        const Icon(
+                          Icons.arrow_forward_rounded,
+                          color: Colors.white,
+                          size: 16,
+                        ),
                       ],
                     ),
                   ),
