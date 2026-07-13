@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
 import '../../core/network/api_client.dart';
 import '../../core/storage/secure_storage.dart';
+
+import '../../domain/repositories/auth_repository.dart';
 
 class AuthRemoteDataSource {
   final ApiClient apiClient;
@@ -8,27 +11,63 @@ class AuthRemoteDataSource {
 
   AuthRemoteDataSource({required this.apiClient, required this.secureStorage});
 
-  Future<bool> startPhoneAuth(String phone, String deviceId) async {
+  Future<PhoneAuthStartResult> startPhoneAuth(String phone, String deviceId, bool isLogin) async {
+    const path = '/auth/driver/send-otp';
+    final body = {'phone': phone};
+
+    print('🚀 [API CALL] POST ${apiClient.dio.options.baseUrl}$path | Body: $body');
+    
     try {
-      final response = await apiClient.dio.post('/auth/driver/mobile/start', data: {
-        'phone': phone,
-        'deviceId': deviceId,
-      });
-      return response.data['SUCCESS'] == true;
-    } catch (_) {
-      // Return true to allow fallback simulated verification flow if server isn't reachable
-      return true;
+      final response = await apiClient.dio.post(path, data: body);
+      print('🚀 [API RESPONSE] Status: ${response.statusCode} | Data: ${response.data}');
+
+      if (response.data['SUCCESS'] == true) {
+        return PhoneAuthStartResult(
+          success: true,
+          isNewAccount: false,
+        );
+      }
+      return PhoneAuthStartResult(
+        success: false,
+        isNewAccount: false,
+        error: response.data['MESSAGE']?.toString() ?? 'Failed to request OTP',
+      );
+    } on DioException catch (dioErr) {
+      print('❌ [API ERROR] $dioErr');
+      if (dioErr.type == DioExceptionType.badResponse) {
+        final resp = dioErr.response;
+        final msg = (resp?.data is Map) ? resp?.data['MESSAGE']?.toString() : null;
+        return PhoneAuthStartResult(
+          success: false,
+          isNewAccount: false,
+          error: msg ?? 'Failed to request OTP',
+        );
+      }
+      // Offline fallback:
+      return PhoneAuthStartResult(
+        success: true,
+        isNewAccount: false,
+      );
+    } catch (e) {
+      print('❌ [API ERROR] $e');
+      return PhoneAuthStartResult(
+        success: false,
+        isNewAccount: false,
+        error: e.toString(),
+      );
     }
   }
 
-  Future<Map<String, dynamic>> verifyPhoneOtp(String phone, String otp, String deviceId) async {
+  Future<Map<String, dynamic>> verifyPhoneOtp(String phone, String otp, String deviceId, bool isLogin) async {
+    const path = '/auth/driver/verify-otp';
+    final body = {'phone': phone, 'otp': otp};
+
+    print('🚀 [API CALL] POST ${apiClient.dio.options.baseUrl}$path | Body: $body');
+
     try {
-      final response = await apiClient.dio.post('/auth/driver/mobile/verify', data: {
-        'phone': phone,
-        'otp': otp,
-        'deviceId': deviceId,
-        'platform': 'android', // or 'ios'
-      });
+      final response = await apiClient.dio.post(path, data: body);
+      print('🚀 [API RESPONSE] Status: ${response.statusCode} | Data: ${response.data}');
+
       if (response.data['SUCCESS'] == true) {
         final message = response.data['MESSAGE'];
         return {
@@ -38,8 +77,14 @@ class AuthRemoteDataSource {
         };
       }
       throw Exception(response.data['MESSAGE'] ?? 'OTP verification failed');
-    } catch (e) {
-      // Mock Fallback verification for demo
+    } on DioException catch (dioErr) {
+      print('❌ [API ERROR] $dioErr');
+      if (dioErr.type == DioExceptionType.badResponse) {
+        final resp = dioErr.response;
+        final msg = (resp?.data is Map) ? resp?.data['MESSAGE']?.toString() : null;
+        throw Exception(msg ?? 'OTP verification failed');
+      }
+      // Offline fallback:
       final Map<String, dynamic> mockData = {
         'token': 'mock_driver_token_jwt',
         'refreshToken': 'mock_driver_refresh_token_jwt',
@@ -52,6 +97,9 @@ class AuthRemoteDataSource {
         }
       };
       return mockData;
+    } catch (e) {
+      print('❌ [API ERROR] $e');
+      throw Exception(e.toString());
     }
   }
 

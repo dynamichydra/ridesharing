@@ -5,6 +5,7 @@ import '../../../domain/repositories/onboarding_repository.dart';
 import '../../../injection_container.dart';
 import '../../bloc/onboarding/onboarding_bloc.dart';
 import '../../bloc/auth/auth_bloc.dart';
+import '../../../core/localization/app_localizations.dart';
 
 // Screens
 import 'welcome_screen.dart';
@@ -17,6 +18,7 @@ import 'vehicle_selection_screen.dart';
 import 'vehicle_form_screen.dart';
 import 'checklist_screen.dart';
 import 'document_upload_screen.dart';
+import '../../widgets/custom_toast.dart';
 import 'profile_photo_screen.dart';
 import 'bank_details_screen.dart';
 import 'emergency_contact_screen.dart';
@@ -36,6 +38,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
   // Sub-flows: 9: Document DL, 10: Document Aadhar, 11: Questionnaire, 12: ProfilePhoto, 13: BankDetails, 14: EmergencyContact
 
   String _phoneNumber = '';
+  bool _isLogin = false;
   OnboardingConfig? _config;
   RegistrationSummary? _summary;
 
@@ -62,6 +65,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return WillPopScope(
       onWillPop: () async {
         if (_currentStep > 0) {
@@ -78,6 +82,14 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
             if (_currentStep == 2) {
               _nextStep();
             }
+          } else if (authState is AuthOtpSent) {
+            debugPrint('[OnboardingWizard] AuthState: AuthOtpSent. Moving to OTP Verification screen.');
+            if (_currentStep == 1) {
+              _nextStep();
+            }
+          } else if (authState is AuthError) {
+            debugPrint('[OnboardingWizard] AuthState: AuthError: ${authState.message}');
+            CustomToast.show(context, authState.message);
           }
         },
         child: BlocConsumer<OnboardingBloc, OnboardingState>(
@@ -128,9 +140,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
             } else if (state is ApplicationSubmitted) {
               widget.onComplete();
             } else if (state is OnboardingError) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(state.message)),
-              );
+              CustomToast.show(context, state.message);
             }
           },
         builder: (context, state) {
@@ -143,17 +153,23 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                         onPressed: _prevStep,
                       ),
                       title: Text(
-                        _currentStep >= 8 ? 'Verification steps' : 'Step $_currentStep of 8',
+                        _currentStep >= 8
+                            ? l10n.verificationSteps
+                            : (_currentStep >= 3
+                                ? l10n.stepNOf8(_currentStep - 2)
+                                : ''),
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
                       ),
                     )
                   : null,
               body: SafeArea(
+                top: _currentStep > 0,
+                bottom: _currentStep > 0,
                 child: Column(
                   children: [
-                    if (_currentStep > 0 && _currentStep < 8)
+                    if (_currentStep >= 3 && _currentStep < 8)
                       LinearProgressIndicator(
-                        value: _currentStep / 8.0,
+                        value: (_currentStep - 2) / 6.0,
                         color: AppColors.primary,
                         backgroundColor: AppColors.border,
                         minHeight: 3,
@@ -179,15 +195,28 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
   Widget _buildStepContent(BuildContext context) {
     switch (_currentStep) {
       case 0:
-        return WelcomeScreen(onGetStarted: _nextStep);
+        return WelcomeScreen(
+          onRegister: () {
+            setState(() {
+              _isLogin = false;
+              _currentStep = 1;
+            });
+          },
+          onLogin: () {
+            setState(() {
+              _isLogin = true;
+              _currentStep = 1;
+            });
+          },
+        );
       case 1:
         return PhoneAuthScreen(
+          isLogin: _isLogin,
           onPhoneSubmitted: (phone) {
             _phoneNumber = phone;
             context.read<AuthBloc>().add(
-              StartPhoneAuthentication(phone: phone, deviceId: 'driver_emulator'),
+              StartPhoneAuthentication(phone: phone, deviceId: 'driver_emulator', isLogin: _isLogin),
             );
-            _nextStep();
           },
         );
       case 2:
@@ -196,11 +225,15 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           onOtpVerified: (otp) {
             // Dispatch actual verification event to AuthBloc
             context.read<AuthBloc>().add(
-              VerifyOtpCode(phone: _phoneNumber, otp: otp, deviceId: 'driver_emulator'),
+              VerifyOtpCode(phone: _phoneNumber, otp: otp, deviceId: 'driver_emulator', isLogin: _isLogin),
             );
             // OnboardingBloc will trigger loading config when Authenticated state is received
           },
-          onResendRequested: () {},
+          onResendRequested: () {
+            context.read<AuthBloc>().add(
+              StartPhoneAuthentication(phone: _phoneNumber, deviceId: 'driver_emulator', isLogin: _isLogin),
+            );
+          },
         );
       case 3:
         return PersonalInfoScreen(
@@ -346,7 +379,20 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           },
         );
       default:
-        return WelcomeScreen(onGetStarted: _nextStep);
+        return WelcomeScreen(
+          onRegister: () {
+            setState(() {
+              _isLogin = false;
+              _currentStep = 1;
+            });
+          },
+          onLogin: () {
+            setState(() {
+              _isLogin = true;
+              _currentStep = 1;
+            });
+          },
+        );
     }
   }
 }

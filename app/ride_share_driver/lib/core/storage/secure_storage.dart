@@ -7,6 +7,7 @@ class SecureStorage {
   static const String _refreshTokenKey = 'driver_refresh_token';
   static const String _userIdKey = 'driver_user_id';
   static const String _phoneKey = 'driver_phone_number';
+  static const String _languageCodeKey = 'driver_language_code';
 
   Future<void> saveToken(String token) async {
     await _storage.write(key: _tokenKey, value: token);
@@ -40,10 +41,19 @@ class SecureStorage {
     return await _storage.read(key: _phoneKey);
   }
 
+  Future<void> saveLanguageCode(String code) async {
+    await _storage.write(key: _languageCodeKey, value: code);
+  }
+
+  Future<String?> getLanguageCode() async {
+    return await _storage.read(key: _languageCodeKey);
+  }
+
   Future<void> clearAll() async {
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _refreshTokenKey);
     await _storage.delete(key: _userIdKey);
     await _storage.delete(key: _phoneKey);
+    await _storage.delete(key: _languageCodeKey);
   }
 }

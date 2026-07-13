@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../style/appcolors.dart';
 import '../../../domain/entities/document.dart';
+import '../../widgets/custom_toast.dart';
 
 class DocumentUploadScreen extends StatefulWidget {
   final DocumentType docType;
@@ -68,9 +69,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     if (_formKey.currentState!.validate()) {
       if (widget.docType.requiresExpiry && _selectedExpiryDate == null) {
         debugPrint('[DocumentUploadScreen] Missing required expiration date');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select an expiration date')),
-        );
+        CustomToast.show(context, 'Please select an expiration date');
         return;
       }
 

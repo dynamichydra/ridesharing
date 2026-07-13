@@ -13,13 +13,13 @@ class AuthRepositoryImpl implements AuthRepository {
   });
 
   @override
-  Future<bool> startPhoneAuth(String phone, String deviceId) async {
-    return await remoteDataSource.startPhoneAuth(phone, deviceId);
+  Future<PhoneAuthStartResult> startPhoneAuth(String phone, String deviceId, bool isLogin) async {
+    return await remoteDataSource.startPhoneAuth(phone, deviceId, isLogin);
   }
 
   @override
-  Future<DriverProfile> verifyPhoneOtp(String phone, String otp, String deviceId) async {
-    final data = await remoteDataSource.verifyPhoneOtp(phone, otp, deviceId);
+  Future<DriverProfile> verifyPhoneOtp(String phone, String otp, String deviceId, bool isLogin) async {
+    final data = await remoteDataSource.verifyPhoneOtp(phone, otp, deviceId, isLogin);
     
     final token = data['token'];
     final refreshToken = data['refreshToken'];
