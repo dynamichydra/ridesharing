@@ -11,7 +11,11 @@ class StartPhoneAuthentication extends AuthEvent {
   final String phone;
   final String deviceId;
   final bool isLogin;
-  StartPhoneAuthentication({required this.phone, required this.deviceId, required this.isLogin});
+  StartPhoneAuthentication({
+    required this.phone,
+    required this.deviceId,
+    required this.isLogin,
+  });
 }
 
 class VerifyOtpCode extends AuthEvent {
@@ -19,7 +23,12 @@ class VerifyOtpCode extends AuthEvent {
   final String otp;
   final String deviceId;
   final bool isLogin;
-  VerifyOtpCode({required this.phone, required this.otp, required this.deviceId, required this.isLogin});
+  VerifyOtpCode({
+    required this.phone,
+    required this.otp,
+    required this.deviceId,
+    required this.isLogin,
+  });
 }
 
 class LogoutRequested extends AuthEvent {
@@ -62,11 +71,28 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<StartPhoneAuthentication>((event, emit) async {
       emit(AuthLoading());
       try {
-        final result = await authRepository.startPhoneAuth(event.phone, event.deviceId, event.isLogin);
+        final result = await authRepository.startPhoneAuth(
+          event.phone,
+          event.deviceId,
+          event.isLogin,
+        );
         if (result.success) {
-          emit(AuthOtpSent());
+          if (!event.isLogin && !result.isNewAccount) {
+            emit(
+              AuthError(
+                message:
+                    'This phone number is already registered.',
+              ),
+            );
+          } else {
+            emit(AuthOtpSent());
+          }
         } else {
-          emit(AuthError(message: result.error ?? 'Failed to request OTP. Try again.'));
+          emit(
+            AuthError(
+              message: result.error ?? 'Failed to request OTP. Try again.',
+            ),
+          );
         }
       } catch (e) {
         emit(AuthError(message: e.toString()));
@@ -76,7 +102,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<VerifyOtpCode>((event, emit) async {
       emit(AuthLoading());
       try {
-        final driver = await authRepository.verifyPhoneOtp(event.phone, event.otp, event.deviceId, event.isLogin);
+        final driver = await authRepository.verifyPhoneOtp(
+          event.phone,
+          event.otp,
+          event.deviceId,
+          event.isLogin,
+        );
         emit(Authenticated(driver: driver));
       } catch (e) {
         emit(AuthError(message: e.toString()));

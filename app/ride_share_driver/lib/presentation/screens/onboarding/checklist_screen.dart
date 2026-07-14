@@ -23,7 +23,8 @@ class ChecklistScreen extends StatelessWidget {
         title: 'Personal Info',
         description: 'First, last name and date of birth details',
         icon: Icons.person_rounded,
-        isCompleted: summary.driver.name != null && summary.driver.name!.isNotEmpty,
+        isCompleted:
+            summary.driver.name != null && summary.driver.name!.isNotEmpty,
       ),
       _ChecklistItem(
         code: 'drivingLocation',
@@ -51,21 +52,23 @@ class ChecklistScreen extends StatelessWidget {
         title: 'Driver\'s licence',
         description: 'Identity validation and DL proof',
         icon: Icons.badge_rounded,
-        isCompleted: summary.documents.any((d) => d.documentTypeId == 'DRIVERS_LICENSE' || !summary.missing.contains('document:DRIVERS_LICENSE')),
+        isCompleted: !summary.missing.contains('document:DRIVERS_LICENSE'),
       ),
       _ChecklistItem(
         code: 'document:NATIONAL_ID',
         title: 'Aadhar Card (National ID)',
         description: 'Aadhar card validation proof',
         icon: Icons.style_rounded,
-        isCompleted: summary.documents.any((d) => d.documentTypeId == 'NATIONAL_ID' || !summary.missing.contains('document:NATIONAL_ID')),
+        isCompleted: !summary.missing.contains('document:NATIONAL_ID'),
       ),
       _ChecklistItem(
         code: 'profile_photo',
         title: 'Profile photo',
         description: 'Clear image so passengers know who you are',
         icon: Icons.camera_alt_rounded,
-        isCompleted: summary.driver.profilePhoto != null && summary.driver.profilePhoto!.isNotEmpty,
+        isCompleted:
+            summary.driver.profilePhoto != null &&
+            summary.driver.profilePhoto!.isNotEmpty,
       ),
       _ChecklistItem(
         code: 'bank_details',
@@ -94,11 +97,18 @@ class ChecklistScreen extends StatelessWidget {
             children: [
               const Text(
                 'To-do',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
               ),
               const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(12),
@@ -106,7 +116,11 @@ class ChecklistScreen extends StatelessWidget {
                 ),
                 child: Text(
                   '$completedCount / 9 items',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textSecondary),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ),
             ],
@@ -126,22 +140,43 @@ class ChecklistScreen extends StatelessWidget {
                   side: const BorderSide(color: AppColors.border),
                 ),
                 child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 16,
+                  ),
                   leading: CircleAvatar(
-                    backgroundColor: item.isCompleted ? AppColors.primary.withOpacity(0.1) : AppColors.surface,
-                    child: Icon(item.icon, color: item.isCompleted ? AppColors.primary : AppColors.textSecondary),
+                    backgroundColor: item.isCompleted
+                        ? AppColors.primary.withOpacity(0.1)
+                        : AppColors.surface,
+                    child: Icon(
+                      item.icon,
+                      color: item.isCompleted
+                          ? AppColors.primary
+                          : AppColors.textSecondary,
+                    ),
                   ),
                   title: Text(
                     item.title,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                   subtitle: Text(
                     item.description,
-                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                   trailing: Icon(
-                    item.isCompleted ? Icons.check_circle_rounded : Icons.chevron_right_rounded,
-                    color: item.isCompleted ? AppColors.primary : AppColors.border,
+                    item.isCompleted
+                        ? Icons.check_circle_rounded
+                        : Icons.chevron_right_rounded,
+                    color: item.isCompleted
+                        ? AppColors.primary
+                        : AppColors.border,
                   ),
                   onTap: () => onItemTap(item.code),
                 ),

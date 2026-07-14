@@ -6,24 +6,46 @@ import '../../../core/localization/app_localizations.dart';
 class PhoneAuthScreen extends StatefulWidget {
   final Function(String) onPhoneSubmitted;
   final bool isLogin;
+  final Function(bool)? onLoginModeChanged;
+  final String? initialPhone;
 
-  const PhoneAuthScreen({super.key, required this.onPhoneSubmitted, required this.isLogin});
+  const PhoneAuthScreen({
+    super.key,
+    required this.onPhoneSubmitted,
+    required this.isLogin,
+    this.onLoginModeChanged,
+    this.initialPhone,
+  });
 
   @override
   State<PhoneAuthScreen> createState() => _PhoneAuthScreenState();
 }
 
 class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
-  final _phoneController = TextEditingController();
+  late final TextEditingController _phoneController;
   bool _isValid = true;
+
+  @override
+  void initState() {
+    super.initState();
+    String p = widget.initialPhone ?? '';
+    if (p.startsWith('+91')) {
+      p = p.substring(3);
+    }
+    _phoneController = TextEditingController(text: p);
+  }
 
   void _submit() {
     final phone = _phoneController.text.trim();
-    debugPrint('[PhoneAuthScreen] Submit button clicked. Entered phone: $phone');
+    debugPrint(
+      '[PhoneAuthScreen] Submit button clicked. Entered phone: $phone',
+    );
     if (phone.length == 10 && RegExp(r'^[0-9]+$').hasMatch(phone)) {
       widget.onPhoneSubmitted('+91$phone');
     } else {
-      debugPrint('[PhoneAuthScreen] Validation failed for phone number: $phone');
+      debugPrint(
+        '[PhoneAuthScreen] Validation failed for phone number: $phone',
+      );
       setState(() {
         _isValid = false;
       });
@@ -70,7 +92,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    l10n.welcomeAboard,
+                    widget.isLogin ? l10n.loginTitle : l10n.registerTitle,
                     style: const TextStyle(
                       fontSize: 34,
                       fontWeight: FontWeight.bold,
@@ -80,7 +102,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    l10n.enterNumberDesc,
+                    widget.isLogin
+                        ? l10n.enterPhoneDescLogin
+                        : l10n.enterPhoneDescRegister,
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.white.withOpacity(0.85),
@@ -122,9 +146,15 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     ),
                     decoration: InputDecoration(
                       hintText: '+91-9876543210',
-                      hintStyle: const TextStyle(color: Colors.grey, fontWeight: FontWeight.normal, letterSpacing: 0),
+                      hintStyle: const TextStyle(
+                        color: Colors.grey,
+                        fontWeight: FontWeight.normal,
+                        letterSpacing: 0,
+                      ),
                       counterText: '',
-                      prefixText: _phoneController.text.isNotEmpty ? '+91 ' : null,
+                      prefixText: _phoneController.text.isNotEmpty
+                          ? '+91 '
+                          : null,
                       prefixStyle: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w500,
@@ -133,7 +163,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                       errorText: _isValid ? null : l10n.validationPhone,
                       filled: true,
                       fillColor: Colors.grey.shade50,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: Colors.grey.shade300),
@@ -144,7 +177,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppColors.secondary, width: 2),
+                        borderSide: const BorderSide(
+                          color: AppColors.secondary,
+                          width: 2,
+                        ),
                       ),
                     ),
                     onChanged: (val) {
@@ -159,10 +195,17 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   const SizedBox(height: 20),
                   GestureDetector(
                     onTap: () {
-                      debugPrint('[PhoneAuthScreen] New number link clicked');
+                      debugPrint(
+                        '[PhoneAuthScreen] Toggle login/register mode clicked',
+                      );
+                      if (widget.onLoginModeChanged != null) {
+                        widget.onLoginModeChanged!(!widget.isLogin);
+                      }
                     },
                     child: Text(
-                      l10n.newNumberFindAccount,
+                      widget.isLogin
+                          ? l10n.newNumberFindAccount
+                          : l10n.loginBtn,
                       style: const TextStyle(
                         color: AppColors.secondary,
                         fontWeight: FontWeight.w600,
@@ -188,7 +231,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     ),
                     child: Text(
                       l10n.getStarted,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],

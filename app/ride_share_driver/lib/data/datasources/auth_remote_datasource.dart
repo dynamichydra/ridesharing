@@ -11,21 +11,34 @@ class AuthRemoteDataSource {
 
   AuthRemoteDataSource({required this.apiClient, required this.secureStorage});
 
-  Future<PhoneAuthStartResult> startPhoneAuth(String phone, String deviceId, bool isLogin) async {
-    const path = '/auth/driver/send-otp';
-    final body = {'phone': phone};
+  Future<PhoneAuthStartResult> startPhoneAuth(
+    String phone,
+    String deviceId,
+    bool isLogin,
+  ) async {
+    final path = isLogin
+        ? '/auth/driver/send-otp'
+        : '/auth/driver/mobile/start';
+    final body = isLogin
+        ? {'phone': phone}
+        : {'phone': phone, 'deviceId': deviceId};
 
-    print('🚀 [API CALL] POST ${apiClient.dio.options.baseUrl}$path | Body: $body');
-    
+    print(
+      '🚀 [API CALL] POST ${apiClient.dio.options.baseUrl}$path | Body: $body',
+    );
+
     try {
       final response = await apiClient.dio.post(path, data: body);
-      print('🚀 [API RESPONSE] Status: ${response.statusCode} | Data: ${response.data}');
+      print(
+        '🚀 [API RESPONSE] Status: ${response.statusCode} | Data: ${response.data}',
+      );
 
       if (response.data['SUCCESS'] == true) {
-        return PhoneAuthStartResult(
-          success: true,
-          isNewAccount: false,
-        );
+        final message = response.data['MESSAGE'];
+        final isNew = (message is Map)
+            ? (message['isNewAccount'] ?? false)
+            : false;
+        return PhoneAuthStartResult(success: true, isNewAccount: isNew);
       }
       return PhoneAuthStartResult(
         success: false,
@@ -35,7 +48,9 @@ class AuthRemoteDataSource {
     } on DioException catch (dioErr) {
       print('❌ [API ERROR] $dioErr');
       final resp = dioErr.response;
-      final msg = (resp?.data is Map) ? resp?.data['MESSAGE']?.toString() : null;
+      final msg = (resp?.data is Map)
+          ? resp?.data['MESSAGE']?.toString()
+          : null;
       return PhoneAuthStartResult(
         success: false,
         isNewAccount: false,
@@ -51,15 +66,28 @@ class AuthRemoteDataSource {
     }
   }
 
-  Future<Map<String, dynamic>> verifyPhoneOtp(String phone, String otp, String deviceId, bool isLogin) async {
-    const path = '/auth/driver/verify-otp';
-    final body = {'phone': phone, 'otp': otp};
+  Future<Map<String, dynamic>> verifyPhoneOtp(
+    String phone,
+    String otp,
+    String deviceId,
+    bool isLogin,
+  ) async {
+    final path = isLogin
+        ? '/auth/driver/verify-otp'
+        : '/auth/driver/mobile/verify';
+    final body = isLogin
+        ? {'phone': phone, 'otp': otp}
+        : {'phone': phone, 'otp': otp, 'deviceId': deviceId};
 
-    print('🚀 [API CALL] POST ${apiClient.dio.options.baseUrl}$path | Body: $body');
+    print(
+      '🚀 [API CALL] POST ${apiClient.dio.options.baseUrl}$path | Body: $body',
+    );
 
     try {
       final response = await apiClient.dio.post(path, data: body);
-      print('🚀 [API RESPONSE] Status: ${response.statusCode} | Data: ${response.data}');
+      print(
+        '🚀 [API RESPONSE] Status: ${response.statusCode} | Data: ${response.data}',
+      );
 
       if (response.data['SUCCESS'] == true) {
         final message = response.data['MESSAGE'];
@@ -73,7 +101,9 @@ class AuthRemoteDataSource {
     } on DioException catch (dioErr) {
       print('❌ [API ERROR] $dioErr');
       final resp = dioErr.response;
-      final msg = (resp?.data is Map) ? resp?.data['MESSAGE']?.toString() : null;
+      final msg = (resp?.data is Map)
+          ? resp?.data['MESSAGE']?.toString()
+          : null;
       throw Exception(msg ?? 'Connection failed: ${dioErr.message}');
     } catch (e) {
       print('❌ [API ERROR] $e');
@@ -83,9 +113,10 @@ class AuthRemoteDataSource {
 
   Future<bool> logout(String deviceId) async {
     try {
-      final response = await apiClient.dio.post('/auth/logout', data: {
-        'deviceId': deviceId,
-      });
+      final response = await apiClient.dio.post(
+        '/auth/logout',
+        data: {'deviceId': deviceId},
+      );
       return response.data['SUCCESS'] == true;
     } catch (_) {
       return true;

@@ -4,13 +4,24 @@ import '../../../domain/entities/geo.dart';
 
 class DrivingLocationScreen extends StatefulWidget {
   final List<Country> countries;
+  final String? initialCountryId;
+  final String? initialStateId;
+  final String? initialCityId;
   final Future<List<StateProvince>> Function(String) getStates;
   final Future<List<City>> Function(String) getCities;
-  final Function({required String countryId, required String stateId, required String cityId}) onSave;
+  final Function({
+    required String countryId,
+    required String stateId,
+    required String cityId,
+  })
+  onSave;
 
   const DrivingLocationScreen({
     super.key,
     required this.countries,
+    this.initialCountryId,
+    this.initialStateId,
+    this.initialCityId,
     required this.getStates,
     required this.getCities,
     required this.onSave,
@@ -34,15 +45,62 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
   @override
   void initState() {
     super.initState();
-    // Default country to India if available in config
-    final india = widget.countries.firstWhere(
-      (c) => c.isoCode == 'IN' || c.name.toLowerCase() == 'india',
-      orElse: () => widget.countries.isNotEmpty ? widget.countries.first : Country(id: '', name: '', isoCode: '', dialCode: '', currencyCode: ''),
-    );
-    if (india.id.isNotEmpty) {
-      _selectedCountryId = india.id;
-      _loadStates(india.id);
+    if (widget.initialCountryId != null) {
+      _selectedCountryId = widget.initialCountryId;
+      _loadStatesAndCities(
+        widget.initialCountryId!,
+        widget.initialStateId,
+        widget.initialCityId,
+      );
+    } else {
+      final india = widget.countries.firstWhere(
+        (c) => c.isoCode == 'IN' || c.name.toLowerCase() == 'india',
+        orElse: () => widget.countries.isNotEmpty
+            ? widget.countries.first
+            : Country(
+                id: '',
+                name: '',
+                isoCode: '',
+                dialCode: '',
+                currencyCode: '',
+              ),
+      );
+      if (india.id.isNotEmpty) {
+        _selectedCountryId = india.id;
+        _loadStates(india.id);
+      }
     }
+  }
+
+  Future<void> _loadStatesAndCities(
+    String countryId,
+    String? stateId,
+    String? cityId,
+  ) async {
+    setState(() {
+      _loadingStates = true;
+    });
+    try {
+      final states = await widget.getStates(countryId);
+      setState(() {
+        _states = states;
+        _selectedStateId = stateId;
+      });
+      if (stateId != null) {
+        setState(() {
+          _loadingCities = true;
+        });
+        final cities = await widget.getCities(stateId);
+        setState(() {
+          _cities = cities;
+          _selectedCityId = cityId;
+        });
+      }
+    } catch (_) {}
+    setState(() {
+      _loadingStates = false;
+      _loadingCities = false;
+    });
   }
 
   Future<void> _loadStates(String countryId) async {
@@ -82,7 +140,9 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
   }
 
   void _submit() {
-    if (_selectedCountryId != null && _selectedStateId != null && _selectedCityId != null) {
+    if (_selectedCountryId != null &&
+        _selectedStateId != null &&
+        _selectedCityId != null) {
       widget.onSave(
         countryId: _selectedCountryId!,
         stateId: _selectedStateId!,
@@ -101,7 +161,11 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
           const SizedBox(height: 16),
           const Text(
             'Where would you drive?',
-            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
           ),
           const SizedBox(height: 8),
           const Text(
@@ -112,7 +176,9 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
           DropdownButtonFormField<String>(
             value: _selectedCountryId,
             decoration: const InputDecoration(labelText: 'Country'),
-            items: widget.countries.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+            items: widget.countries
+                .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
+                .toList(),
             onChanged: (val) {
               debugPrint('[DrivingLocationScreen] Country changed: $val');
               if (val != null) {
@@ -128,9 +194,17 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
             value: _selectedStateId,
             decoration: InputDecoration(
               labelText: 'State / Province',
-              suffixIcon: _loadingStates ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+              suffixIcon: _loadingStates
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : null,
             ),
-            items: _states.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
+            items: _states
+                .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
+                .toList(),
             onChanged: (val) {
               debugPrint('[DrivingLocationScreen] State changed: $val');
               if (val != null) {
@@ -146,9 +220,17 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
             value: _selectedCityId,
             decoration: InputDecoration(
               labelText: 'City limit',
-              suffixIcon: _loadingCities ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+              suffixIcon: _loadingCities
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : null,
             ),
-            items: _cities.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+            items: _cities
+                .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
+                .toList(),
             onChanged: (val) {
               debugPrint('[DrivingLocationScreen] City changed: $val');
               setState(() {
@@ -158,12 +240,17 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
           ),
           const Spacer(),
           ElevatedButton(
-            onPressed: (_selectedCountryId != null && _selectedStateId != null && _selectedCityId != null) 
-              ? () {
-                  debugPrint('[DrivingLocationScreen] Save location clicked. Country: $_selectedCountryId, State: $_selectedStateId, City: $_selectedCityId');
-                  _submit();
-                }
-              : null,
+            onPressed:
+                (_selectedCountryId != null &&
+                    _selectedStateId != null &&
+                    _selectedCityId != null)
+                ? () {
+                    debugPrint(
+                      '[DrivingLocationScreen] Save location clicked. Country: $_selectedCountryId, State: $_selectedStateId, City: $_selectedCityId',
+                    );
+                    _submit();
+                  }
+                : null,
             child: const Text('Save location'),
           ),
         ],

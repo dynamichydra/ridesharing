@@ -4,11 +4,28 @@ import '../../../domain/entities/vehicle.dart';
 
 class VehicleFormScreen extends StatefulWidget {
   final List<VehicleType> vehicleTypes;
-  final Function({required String vehicleTypeId, required String model, required String year, required String registrationNumber, String? color}) onSave;
+  final String? initialVehicleTypeId;
+  final String? initialModel;
+  final String? initialYear;
+  final String? initialRegistrationNumber;
+  final String? initialColor;
+  final Function({
+    required String vehicleTypeId,
+    required String model,
+    required String year,
+    required String registrationNumber,
+    String? color,
+  })
+  onSave;
 
   const VehicleFormScreen({
     super.key,
     required this.vehicleTypes,
+    this.initialVehicleTypeId,
+    this.initialModel,
+    this.initialYear,
+    this.initialRegistrationNumber,
+    this.initialColor,
     required this.onSave,
   });
 
@@ -18,21 +35,45 @@ class VehicleFormScreen extends StatefulWidget {
 
 class _VehicleFormScreenState extends State<VehicleFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _modelController = TextEditingController(text: 'Maruti Swift Dzire');
-  final _regNumberController = TextEditingController(text: 'KA-01-AB-1234');
-  
-  String? _selectedVehicleTypeId;
-  String _selectedYear = '2023';
-  String _selectedColor = 'White';
+  late final TextEditingController _modelController;
+  late final TextEditingController _regNumberController;
 
-  final List<String> _colors = ['White', 'Silver', 'Black', 'Blue', 'Grey', 'Yellow'];
-  final List<String> _years = ['2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019'];
+  String? _selectedVehicleTypeId;
+  late String _selectedYear;
+  late String _selectedColor;
+
+  final List<String> _colors = [
+    'White',
+    'Silver',
+    'Black',
+    'Blue',
+    'Grey',
+    'Yellow',
+  ];
+  final List<String> _years = [
+    '2026',
+    '2025',
+    '2024',
+    '2023',
+    '2022',
+    '2021',
+    '2020',
+    '2019',
+  ];
 
   @override
   void initState() {
     super.initState();
-    // Default vehicle type to Cab / Sedan
-    if (widget.vehicleTypes.isNotEmpty) {
+    _modelController = TextEditingController(text: widget.initialModel);
+    _regNumberController = TextEditingController(
+      text: widget.initialRegistrationNumber,
+    );
+    _selectedYear = widget.initialYear ?? '2025';
+    _selectedColor = widget.initialColor ?? 'White';
+
+    if (widget.initialVehicleTypeId != null) {
+      _selectedVehicleTypeId = widget.initialVehicleTypeId;
+    } else if (widget.vehicleTypes.isNotEmpty) {
       final cab = widget.vehicleTypes.firstWhere(
         (v) => v.slug == 'cab' || v.name.toLowerCase().contains('cab'),
         orElse: () => widget.vehicleTypes.first,
@@ -44,8 +85,10 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
   void _submit() {
     final model = _modelController.text.trim();
     final reg = _regNumberController.text.trim();
-    debugPrint('[VehicleFormScreen] Submit clicked. Category: $_selectedVehicleTypeId, Model: $model, Reg: $reg, Year: $_selectedYear, Color: $_selectedColor');
-    
+    debugPrint(
+      '[VehicleFormScreen] Submit clicked. Category: $_selectedVehicleTypeId, Model: $model, Reg: $reg, Year: $_selectedYear, Color: $_selectedColor',
+    );
+
     if (_formKey.currentState!.validate() && _selectedVehicleTypeId != null) {
       widget.onSave(
         vehicleTypeId: _selectedVehicleTypeId!,
@@ -68,7 +111,11 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
         children: [
           const Text(
             'Vehicle Details',
-            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
           ),
           const SizedBox(height: 8),
           const Text(
@@ -79,7 +126,9 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
           DropdownButtonFormField<String>(
             value: _selectedVehicleTypeId,
             decoration: const InputDecoration(labelText: 'Vehicle Category'),
-            items: widget.vehicleTypes.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))).toList(),
+            items: widget.vehicleTypes
+                .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name)))
+                .toList(),
             onChanged: (val) {
               debugPrint('[VehicleFormScreen] Vehicle category selected: $val');
               setState(() {
@@ -90,21 +139,36 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
           const SizedBox(height: 20),
           TextFormField(
             controller: _modelController,
-            decoration: const InputDecoration(labelText: 'Vehicle Make & Model (e.g. Honda Amaze)'),
-            validator: (val) => val == null || val.isEmpty ? 'Model is required' : null,
-            onChanged: (val) => debugPrint('[VehicleFormScreen] Model changed: $val'),
+            decoration: const InputDecoration(
+              labelText: 'Vehicle Make & Model (e.g. Honda Amaze)',
+            ),
+            validator: (val) =>
+                val == null || val.isEmpty ? 'Model is required' : null,
+            onChanged: (val) =>
+                debugPrint('[VehicleFormScreen] Model changed: $val'),
           ),
           const SizedBox(height: 20),
           TextFormField(
             controller: _regNumberController,
-            decoration: const InputDecoration(labelText: 'Registration Plate Number (e.g. KA-01-MX-1234)'),
+            decoration: const InputDecoration(
+              labelText: 'Registration Plate Number (e.g. KA-01-AB-1234)',
+            ),
             validator: (val) {
-              if (val == null || val.isEmpty) return 'Registration number is required';
-              // Standard Indian plate check (simplified regex)
-              if (!RegExp(r'^[a-zA-Z]{2}[0-9a-zA-Z- ]{2,12}$').hasMatch(val)) return 'Invalid plate format';
+              if (val == null || val.trim().isEmpty)
+                return 'Registration number is required';
+              final cleanVal = val
+                  .trim()
+                  .replaceAll(RegExp(r'[- ]'), '')
+                  .toUpperCase();
+              if (!RegExp(
+                r'^[A-Z]{2}[0-9]{2}[A-Z]{1,3}[0-9]{4}$',
+              ).hasMatch(cleanVal)) {
+                return 'Invalid plate format (e.g. KA-01-AB-1234)';
+              }
               return null;
             },
-            onChanged: (val) => debugPrint('[VehicleFormScreen] Reg number changed: $val'),
+            onChanged: (val) =>
+                debugPrint('[VehicleFormScreen] Reg number changed: $val'),
           ),
           const SizedBox(height: 20),
           Row(
@@ -113,7 +177,9 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                 child: DropdownButtonFormField<String>(
                   value: _selectedYear,
                   decoration: const InputDecoration(labelText: 'Year'),
-                  items: _years.map((y) => DropdownMenuItem(value: y, child: Text(y))).toList(),
+                  items: _years
+                      .map((y) => DropdownMenuItem(value: y, child: Text(y)))
+                      .toList(),
                   onChanged: (val) {
                     debugPrint('[VehicleFormScreen] Year selected: $val');
                     if (val != null) {
@@ -129,7 +195,9 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                 child: DropdownButtonFormField<String>(
                   value: _selectedColor,
                   decoration: const InputDecoration(labelText: 'Color'),
-                  items: _colors.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                  items: _colors
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
                   onChanged: (val) {
                     debugPrint('[VehicleFormScreen] Color selected: $val');
                     if (val != null) {

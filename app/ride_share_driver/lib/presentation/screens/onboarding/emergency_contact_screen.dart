@@ -2,9 +2,23 @@ import 'package:flutter/material.dart';
 import '../../../style/appcolors.dart';
 
 class EmergencyContactScreen extends StatefulWidget {
-  final VoidCallback onComplete;
+  final String? initialName;
+  final String? initialPhone;
+  final String? initialRelationship;
+  final Function({
+    required String name,
+    required String phone,
+    required String relationship,
+  })
+  onSave;
 
-  const EmergencyContactScreen({super.key, required this.onComplete});
+  const EmergencyContactScreen({
+    super.key,
+    this.initialName,
+    this.initialPhone,
+    this.initialRelationship,
+    required this.onSave,
+  });
 
   @override
   State<EmergencyContactScreen> createState() => _EmergencyContactScreenState();
@@ -12,17 +26,27 @@ class EmergencyContactScreen extends StatefulWidget {
 
 class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
-  String _relationship = 'Spouse';
+  late final TextEditingController _nameController;
+  late final TextEditingController _phoneController;
+  late String _relationship;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initialName);
+    _phoneController = TextEditingController(text: widget.initialPhone);
+    _relationship = widget.initialRelationship ?? 'Spouse';
+  }
 
   void _submit() {
     final name = _nameController.text.trim();
     final phone = _phoneController.text.trim();
-    debugPrint('[EmergencyContactScreen] Submit clicked. Name: $name, Phone: +91 $phone, Relationship: $_relationship');
-    
+    debugPrint(
+      '[EmergencyContactScreen] Submit clicked. Name: $name, Phone: +91 $phone, Relationship: $_relationship',
+    );
+
     if (_formKey.currentState!.validate()) {
-      widget.onComplete();
+      widget.onSave(name: name, phone: phone, relationship: _relationship);
     } else {
       debugPrint('[EmergencyContactScreen] Validation failed');
     }
@@ -37,7 +61,11 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
         children: [
           const Text(
             'Emergency Contact',
-            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
           ),
           const SizedBox(height: 8),
           const Text(
@@ -48,8 +76,10 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
           TextFormField(
             controller: _nameController,
             decoration: const InputDecoration(labelText: 'Contact Name'),
-            validator: (val) => val == null || val.isEmpty ? 'Contact name is required' : null,
-            onChanged: (val) => debugPrint('[EmergencyContactScreen] Name changed: $val'),
+            validator: (val) =>
+                val == null || val.isEmpty ? 'Contact name is required' : null,
+            onChanged: (val) =>
+                debugPrint('[EmergencyContactScreen] Name changed: $val'),
           ),
           const SizedBox(height: 20),
           DropdownButtonFormField<String>(
@@ -63,7 +93,9 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
               DropdownMenuItem(value: 'Other', child: Text('Other')),
             ],
             onChanged: (val) {
-              debugPrint('[EmergencyContactScreen] Relationship selected: $val');
+              debugPrint(
+                '[EmergencyContactScreen] Relationship selected: $val',
+              );
               if (val != null) {
                 setState(() {
                   _relationship = val;
@@ -86,12 +118,15 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
               if (val.length != 10) return 'Must be a 10-digit number';
               return null;
             },
-            onChanged: (val) => debugPrint('[EmergencyContactScreen] Phone changed: $val'),
+            onChanged: (val) =>
+                debugPrint('[EmergencyContactScreen] Phone changed: $val'),
           ),
           const SizedBox(height: 40),
           ElevatedButton(
             onPressed: () {
-              debugPrint('[EmergencyContactScreen] Save Contact Details button clicked');
+              debugPrint(
+                '[EmergencyContactScreen] Save Contact Details button clicked',
+              );
               _submit();
             },
             child: const Text('Save Contact Details'),

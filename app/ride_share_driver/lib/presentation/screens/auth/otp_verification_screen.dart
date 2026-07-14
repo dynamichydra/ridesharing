@@ -45,12 +45,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       otpInteractor: _otpInteractor,
     );
     if (Platform.isAndroid) {
-      _otpController.startListenUserConsent(
-        (code) {
-          final exp = RegExp(r'(\d{6})');
-          return exp.stringMatch(code ?? '') ?? '';
-        },
-      );
+      _otpController.startListenUserConsent((code) {
+        final exp = RegExp(r'(\d{6})');
+        return exp.stringMatch(code ?? '') ?? '';
+      });
     }
     _otpController.text = '';
     _startTimer();
@@ -84,7 +82,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   void _submit() {
     final otp = _otpController.text.trim();
-    debugPrint('[OtpVerificationScreen] Submit button clicked. Entered OTP: $otp');
+    debugPrint(
+      '[OtpVerificationScreen] Submit button clicked. Entered OTP: $otp',
+    );
     if (otp.length == 6 && RegExp(r'^[0-9]+$').hasMatch(otp)) {
       widget.onOtpVerified(otp);
     } else {
@@ -101,7 +101,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, authState) {
         if (authState is AuthOtpSent) {
-          debugPrint('[OtpVerificationScreen] AuthOtpSent received, starting countdown timer.');
+          debugPrint(
+            '[OtpVerificationScreen] AuthOtpSent received, starting countdown timer.',
+          );
           _startTimer();
           CustomToast.show(context, 'OTP resent successfully');
         }
@@ -193,7 +195,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                               focusNode: _focusNode,
                               keyboardType: TextInputType.number,
                               maxLength: 6,
-                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
                               enableSuggestions: false,
                               autocorrect: false,
                               showCursor: false,
@@ -202,7 +206,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                 border: InputBorder.none,
                               ),
                               onChanged: (val) {
-                                debugPrint('[OtpVerificationScreen] OTP input changed: $val');
+                                debugPrint(
+                                  '[OtpVerificationScreen] OTP input changed: $val',
+                                );
                                 setState(() {
                                   if (!_isValid && val.length == 6) {
                                     _isValid = true;
@@ -224,7 +230,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                               if (index < text.length) {
                                 char = text[index];
                               }
-                              final isFocused = _focusNode.hasFocus && index == text.length;
+                              final isFocused =
+                                  _focusNode.hasFocus && index == text.length;
 
                               return Container(
                                 width: 44,
@@ -236,8 +243,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                     color: !_isValid
                                         ? AppColors.error
                                         : isFocused
-                                            ? AppColors.secondary
-                                            : Colors.grey.shade300,
+                                        ? AppColors.secondary
+                                        : Colors.grey.shade300,
                                     width: isFocused ? 2 : 1.5,
                                   ),
                                 ),
@@ -260,22 +267,31 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       const SizedBox(height: 8),
                       Text(
                         l10n.validationOtp,
-                        style: const TextStyle(color: AppColors.error, fontSize: 13),
+                        style: const TextStyle(
+                          color: AppColors.error,
+                          fontSize: 13,
+                        ),
                         textAlign: TextAlign.left,
                       ),
                     ],
                     const SizedBox(height: 16),
                     TextButton(
-                      onPressed: _resendCountdown > 0 ? null : () {
-                        debugPrint('[OtpVerificationScreen] Resend Code link clicked');
-                        widget.onResendRequested();
-                      },
+                      onPressed: _resendCountdown > 0
+                          ? null
+                          : () {
+                              debugPrint(
+                                '[OtpVerificationScreen] Resend Code link clicked',
+                              );
+                              widget.onResendRequested();
+                            },
                       child: Text(
-                        _resendCountdown > 0 
+                        _resendCountdown > 0
                             ? '${l10n.resendCode} (${_resendCountdown}s)'
                             : l10n.resendCode,
                         style: TextStyle(
-                          color: _resendCountdown > 0 ? Colors.grey : AppColors.secondary,
+                          color: _resendCountdown > 0
+                              ? Colors.grey
+                              : AppColors.secondary,
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                         ),
@@ -284,7 +300,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     const SizedBox(height: 24),
                     ElevatedButton(
                       onPressed: () {
-                        debugPrint('[OtpVerificationScreen] Verify & Continue button clicked');
+                        debugPrint(
+                          '[OtpVerificationScreen] Verify & Continue button clicked',
+                        );
                         _submit();
                       },
                       style: ElevatedButton.styleFrom(

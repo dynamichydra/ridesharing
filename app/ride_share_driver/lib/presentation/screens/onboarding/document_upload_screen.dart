@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../style/appcolors.dart';
 import '../../../domain/entities/document.dart';
 import '../../widgets/custom_toast.dart';
@@ -6,7 +9,14 @@ import '../../widgets/custom_toast.dart';
 class DocumentUploadScreen extends StatefulWidget {
   final DocumentType docType;
   final DriverDocument? existingDoc;
-  final Function({required String side, required String docNumber, String? expiryDate, required List<int> bytes, required String contentType}) onUpload;
+  final Function({
+    required String side,
+    required String docNumber,
+    String? expiryDate,
+    required List<int> bytes,
+    required String contentType,
+  })
+  onUpload;
 
   const DocumentUploadScreen({
     super.key,
@@ -30,7 +40,9 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     if (widget.existingDoc != null) {
       _numController.text = widget.existingDoc!.documentNumber ?? '';
       if (widget.existingDoc!.expiryDate != null) {
-        _selectedExpiryDate = DateTime.tryParse(widget.existingDoc!.expiryDate!);
+        _selectedExpiryDate = DateTime.tryParse(
+          widget.existingDoc!.expiryDate!,
+        );
       }
     }
   }
@@ -39,7 +51,8 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     debugPrint('[DocumentUploadScreen] Expiration date selector clicked');
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedExpiryDate ?? DateTime.now().add(const Duration(days: 365)),
+      initialDate:
+          _selectedExpiryDate ?? DateTime.now().add(const Duration(days: 365)),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365 * 15)),
       builder: (context, child) {
@@ -63,34 +76,187 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     }
   }
 
-  void _triggerSimulatedUpload(String side) {
+  Future<void> _showUploadSourceSheet(String side) async {
+    if (!_formKey.currentState!.validate()) {
+      debugPrint('[DocumentUploadScreen] Validation failed');
+      return;
+    }
+    if (widget.docType.requiresExpiry && _selectedExpiryDate == null) {
+      debugPrint('[DocumentUploadScreen] Missing required expiration date');
+      CustomToast.show(context, 'Please select an expiration date');
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Select Upload Source',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.camera_alt_rounded,
+                  color: AppColors.primary,
+                ),
+                title: const Text('Take Photo with Camera'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _processPick(side, ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.photo_library_rounded,
+                  color: AppColors.primary,
+                ),
+                title: const Text('Choose Photo from Gallery'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _processPick(side, ImageSource.gallery);
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.picture_as_pdf_rounded,
+                  color: AppColors.primary,
+                ),
+                title: const Text('Upload PDF / Document File'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _processFilePicker(side);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _processPick(String side, ImageSource source) async {
     final numStr = _numController.text.trim();
-    debugPrint('[DocumentUploadScreen] Upload clicked for side: $side. Doc number: $numStr');
-    if (_formKey.currentState!.validate()) {
-      if (widget.docType.requiresExpiry && _selectedExpiryDate == null) {
-        debugPrint('[DocumentUploadScreen] Missing required expiration date');
-        CustomToast.show(context, 'Please select an expiration date');
+    try {
+      final picker = ImagePicker();
+      final file = await picker.pickImage(
+        source: source,
+        maxWidth: 1500,
+        maxHeight: 1500,
+        imageQuality: 85,
+      );
+
+      if (file == null) {
+        debugPrint('[DocumentUploadScreen] No image picked');
+        return;
+      }
+
+      final bytes = await file.readAsBytes();
+      String contentType = 'image/jpeg';
+      final pathLower = file.path.toLowerCase();
+      if (pathLower.endsWith('.png')) {
+        contentType = 'image/png';
+      }
+
+      String? expiryString;
+      if (_selectedExpiryDate != null) {
+        expiryString =
+            "${_selectedExpiryDate!.year}-${_selectedExpiryDate!.month.toString().padLeft(2, '0')}-${_selectedExpiryDate!.day.toString().padLeft(2, '0')}";
+      }
+
+      debugPrint(
+        '[DocumentUploadScreen] Submitting image upload: $side, docNumber: $numStr, expiry: $expiryString, contentType: $contentType',
+      );
+      widget.onUpload(
+        side: side,
+        docNumber: numStr,
+        expiryDate: expiryString,
+        bytes: bytes,
+        contentType: contentType,
+      );
+    } catch (e) {
+      debugPrint('[DocumentUploadScreen] Error picking image: $e');
+      if (mounted) {
+        CustomToast.show(context, 'Failed to pick image: $e');
+      }
+    }
+  }
+
+  Future<void> _processFilePicker(String side) async {
+    final numStr = _numController.text.trim();
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        debugPrint('[DocumentUploadScreen] No file selected');
+        return;
+      }
+
+      final file = result.files.first;
+      List<int>? bytes = file.bytes;
+
+      if (bytes == null && file.path != null) {
+        final ioFile = File(file.path!);
+        bytes = await ioFile.readAsBytes();
+      }
+
+      if (bytes == null) {
+        debugPrint('[DocumentUploadScreen] Error: file bytes are null');
+        if (mounted) {
+          CustomToast.show(context, 'Could not read file data');
+        }
         return;
       }
 
       String? expiryString;
       if (_selectedExpiryDate != null) {
-        expiryString = "${_selectedExpiryDate!.year}-${_selectedExpiryDate!.month.toString().padLeft(2, '0')}-${_selectedExpiryDate!.day.toString().padLeft(2, '0')}";
+        expiryString =
+            "${_selectedExpiryDate!.year}-${_selectedExpiryDate!.month.toString().padLeft(2, '0')}-${_selectedExpiryDate!.day.toString().padLeft(2, '0')}";
       }
 
-      // Simulate file bytes for presigned url upload
-      final List<int> simulatedBytes = List.filled(500, 0);
+      String contentType = 'image/jpeg';
+      final ext = file.extension?.toLowerCase();
+      if (ext == 'pdf') {
+        contentType = 'application/pdf';
+      } else if (ext == 'png') {
+        contentType = 'image/png';
+      } else if (ext == 'jpg' || ext == 'jpeg') {
+        contentType = 'image/jpeg';
+      }
 
-      debugPrint('[DocumentUploadScreen] Submitting upload: $side, docNumber: $numStr, expiry: $expiryString');
+      debugPrint(
+        '[DocumentUploadScreen] Submitting file upload: $side, docNumber: $numStr, expiry: $expiryString, contentType: $contentType',
+      );
       widget.onUpload(
         side: side,
         docNumber: numStr,
         expiryDate: expiryString,
-        bytes: simulatedBytes,
-        contentType: 'image/jpeg',
+        bytes: bytes,
+        contentType: contentType,
       );
-    } else {
-      debugPrint('[DocumentUploadScreen] Validation failed');
+    } catch (e) {
+      debugPrint('[DocumentUploadScreen] Error picking file: $e');
+      if (mounted) {
+        CustomToast.show(context, 'Error selecting file');
+      }
     }
   }
 
@@ -109,12 +275,19 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         children: [
           Text(
             'Upload $documentName',
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             'Provide details and upload images of your driving license, vehicle registry, or identity cards.',
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary.withOpacity(0.8)),
+            style: TextStyle(
+              fontSize: 14,
+              color: AppColors.textSecondary.withOpacity(0.8),
+            ),
           ),
           const SizedBox(height: 32),
           if (widget.docType.requiresDocNumber) ...[
@@ -122,10 +295,35 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
               controller: _numController,
               decoration: InputDecoration(
                 labelText: '$documentName Document Number',
-                hintText: 'e.g. DL-XXXXXXXXXXXXX or Aadhar UID',
+                hintText: widget.docType.code == 'DRIVERS_LICENSE'
+                    ? 'e.g. KA5120150123456'
+                    : 'e.g. 12-digit Aadhar number',
               ),
-              validator: (val) => val == null || val.isEmpty ? 'Document number is required' : null,
-              onChanged: (val) => debugPrint('[DocumentUploadScreen] Document number changed: $val'),
+              validator: (val) {
+                if (val == null || val.trim().isEmpty) {
+                  return 'Document number is required';
+                }
+                final text = val.trim();
+                if (widget.docType.code == 'DRIVERS_LICENSE') {
+                  final cleanDL = text
+                      .replaceAll(RegExp(r'[- ]'), '')
+                      .toUpperCase();
+                  if (!RegExp(
+                    r'^[A-Z]{2}[0-9]{2}[0-9A-Z]{11}$',
+                  ).hasMatch(cleanDL)) {
+                    return 'Invalid DL format (e.g. KA5120150123456, 15 chars)';
+                  }
+                } else if (widget.docType.code == 'NATIONAL_ID') {
+                  final cleanAadhar = text.replaceAll(RegExp(r'[- ]'), '');
+                  if (!RegExp(r'^[0-9]{12}$').hasMatch(cleanAadhar)) {
+                    return 'Invalid Aadhar format (must be exactly 12 digits)';
+                  }
+                }
+                return null;
+              },
+              onChanged: (val) => debugPrint(
+                '[DocumentUploadScreen] Document number changed: $val',
+              ),
             ),
             const SizedBox(height: 20),
           ],
@@ -136,12 +334,12 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
               child: InputDecorator(
                 decoration: const InputDecoration(
                   labelText: 'Expiry Date',
-                  suffixIcon: Icon(Icons.calendar_today_rounded, color: AppColors.primary),
+                  suffixIcon: Icon(
+                    Icons.calendar_today_rounded,
+                    color: AppColors.primary,
+                  ),
                 ),
-                child: Text(
-                  expiryText,
-                  style: const TextStyle(fontSize: 16),
-                ),
+                child: Text(expiryText, style: const TextStyle(fontSize: 16)),
               ),
             ),
             const SizedBox(height: 32),
@@ -165,11 +363,17 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                       children: [
                         const Text(
                           'Already Uploaded',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
                         ),
                         Text(
                           'Status: ${widget.existingDoc!.status.toUpperCase()}',
-                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ],
                     ),
@@ -188,7 +392,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           ],
           if (widget.docType.requiresPdf && !widget.docType.requiresFront) ...[
             _buildUploadPlaceholder('Main Document PDF Upload', 'pdf'),
-          ]
+          ],
         ],
       ),
     );
@@ -198,7 +402,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     return InkWell(
       onTap: () {
         debugPrint('[DocumentUploadScreen] Upload Card tapped for side: $side');
-        _triggerSimulatedUpload(side);
+        _showUploadSourceSheet(side);
       },
       borderRadius: BorderRadius.circular(16),
       child: Container(
@@ -211,11 +415,18 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.cloud_upload_rounded, size: 48, color: AppColors.primary),
+            const Icon(
+              Icons.cloud_upload_rounded,
+              size: 48,
+              color: AppColors.primary,
+            ),
             const SizedBox(height: 12),
             Text(
               label,
-              style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
             ),
             const SizedBox(height: 4),
             const Text(
