@@ -17,14 +17,24 @@ class UpdatePersonalInfo extends OnboardingEvent {
   final String? dob;
   final String? gender;
   final String? referralCode;
-  UpdatePersonalInfo({required this.name, required this.email, this.dob, this.gender, this.referralCode});
+  UpdatePersonalInfo({
+    required this.name,
+    required this.email,
+    this.dob,
+    this.gender,
+    this.referralCode,
+  });
 }
 
 class SelectDrivingRegion extends OnboardingEvent {
   final String countryId;
   final String stateId;
   final String cityId;
-  SelectDrivingRegion({required this.countryId, required this.stateId, required this.cityId});
+  SelectDrivingRegion({
+    required this.countryId,
+    required this.stateId,
+    required this.cityId,
+  });
 }
 
 class AcceptTermsAndPrivacy extends OnboardingEvent {
@@ -44,7 +54,13 @@ class AddVehicleDetails extends OnboardingEvent {
   final String year;
   final String registrationNumber;
   final String? color;
-  AddVehicleDetails({required this.vehicleTypeId, required this.model, required this.year, required this.registrationNumber, this.color});
+  AddVehicleDetails({
+    required this.vehicleTypeId,
+    required this.model,
+    required this.year,
+    required this.registrationNumber,
+    this.color,
+  });
 }
 
 class UploadDocumentFileEvent extends OnboardingEvent {
@@ -54,7 +70,14 @@ class UploadDocumentFileEvent extends OnboardingEvent {
   final String? expiryDate;
   final List<int> bytes;
   final String contentType;
-  UploadDocumentFileEvent({required this.documentTypeId, required this.side, required this.docNumber, this.expiryDate, required this.bytes, required this.contentType});
+  UploadDocumentFileEvent({
+    required this.documentTypeId,
+    required this.side,
+    required this.docNumber,
+    this.expiryDate,
+    required this.bytes,
+    required this.contentType,
+  });
 }
 
 class UploadProfilePhotoEvent extends OnboardingEvent {
@@ -110,7 +133,8 @@ class OnboardingError extends OnboardingState {
 class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
   final OnboardingRepository onboardingRepository;
 
-  OnboardingBloc({required this.onboardingRepository}) : super(OnboardingInitial()) {
+  OnboardingBloc({required this.onboardingRepository})
+    : super(OnboardingInitial()) {
     on<LoadOnboardingConfig>((event, emit) async {
       emit(OnboardingLoading());
       try {
@@ -191,20 +215,25 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
     on<UploadDocumentFileEvent>((event, emit) async {
       emit(OnboardingLoading());
       try {
-        // 1. request upload url
-        final uploadUrl = await onboardingRepository.requestUploadUrl(event.documentTypeId, event.side, event.contentType);
-        
-        // Extract key from URL or use URL direct for simulated upload
-        final String key = uploadUrl.split('?').first.split('/').last;
+        // 1. request upload url & key
+        final uploadResp = await onboardingRepository.requestUploadUrl(
+          event.documentTypeId,
+          event.side,
+          event.contentType,
+        );
 
         // 2. Upload file
-        await onboardingRepository.uploadDocumentFile(uploadUrl, event.bytes, event.contentType);
+        await onboardingRepository.uploadDocumentFile(
+          uploadResp.uploadUrl,
+          event.bytes,
+          event.contentType,
+        );
 
         // 3. Confirm document upload to backend
         await onboardingRepository.confirmDocument(
           event.documentTypeId,
           side: event.side,
-          key: key,
+          key: uploadResp.key,
           documentNumber: event.docNumber,
           expiryDate: event.expiryDate,
         );
@@ -218,11 +247,15 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
     on<UploadProfilePhotoEvent>((event, emit) async {
       emit(OnboardingLoading());
       try {
-        final uploadUrl = await onboardingRepository.requestProfilePhotoUploadUrl(event.contentType);
-        final String key = uploadUrl.split('?').first.split('/').last;
+        final uploadResp = await onboardingRepository
+            .requestProfilePhotoUploadUrl(event.contentType);
 
-        await onboardingRepository.uploadDocumentFile(uploadUrl, event.bytes, event.contentType);
-        await onboardingRepository.confirmProfilePhoto(key);
+        await onboardingRepository.uploadDocumentFile(
+          uploadResp.uploadUrl,
+          event.bytes,
+          event.contentType,
+        );
+        await onboardingRepository.confirmProfilePhoto(uploadResp.key);
 
         emit(OnboardingSuccess());
       } catch (e) {

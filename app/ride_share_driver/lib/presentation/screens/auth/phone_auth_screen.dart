@@ -3,6 +3,25 @@ import 'package:flutter/services.dart';
 import '../../../style/appcolors.dart';
 import '../../../core/localization/app_localizations.dart';
 
+class _CountryCode {
+  final String name;
+  final String code;
+  final String dialCode;
+  final String flag;
+
+  const _CountryCode({
+    required this.name,
+    required this.code,
+    required this.dialCode,
+    required this.flag,
+  });
+}
+
+const List<_CountryCode> _countries = [
+  _CountryCode(name: 'India', code: 'IN', dialCode: '+91', flag: '🇮🇳'),
+  _CountryCode(name: 'Canada', code: 'CA', dialCode: '+1', flag: '🇨🇦'),
+];
+
 class PhoneAuthScreen extends StatefulWidget {
   final Function(String) onPhoneSubmitted;
   final bool isLogin;
@@ -24,13 +43,18 @@ class PhoneAuthScreen extends StatefulWidget {
 class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   late final TextEditingController _phoneController;
   bool _isValid = true;
+  _CountryCode _selectedCountry = _countries[0];
 
   @override
   void initState() {
     super.initState();
     String p = widget.initialPhone ?? '';
-    if (p.startsWith('+91')) {
-      p = p.substring(3);
+    for (final c in _countries) {
+      if (p.startsWith(c.dialCode)) {
+        _selectedCountry = c;
+        p = p.substring(c.dialCode.length);
+        break;
+      }
     }
     _phoneController = TextEditingController(text: p);
   }
@@ -38,10 +62,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   void _submit() {
     final phone = _phoneController.text.trim();
     debugPrint(
-      '[PhoneAuthScreen] Submit button clicked. Entered phone: $phone',
+      '[PhoneAuthScreen] Submit button clicked. Entered phone: $phone, Country: ${_selectedCountry.dialCode}',
     );
     if (phone.length == 10 && RegExp(r'^[0-9]+$').hasMatch(phone)) {
-      widget.onPhoneSubmitted('+91$phone');
+      widget.onPhoneSubmitted('${_selectedCountry.dialCode}$phone');
     } else {
       debugPrint(
         '[PhoneAuthScreen] Validation failed for phone number: $phone',
@@ -133,64 +157,114 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextField(
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    maxLength: 10,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 1,
-                      color: AppColors.textPrimary,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: '+91-9876543210',
-                      hintStyle: const TextStyle(
-                        color: Colors.grey,
-                        fontWeight: FontWeight.normal,
-                        letterSpacing: 0,
-                      ),
-                      counterText: '',
-                      prefixText: _phoneController.text.isNotEmpty
-                          ? '+91 '
-                          : null,
-                      prefixStyle: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textPrimary,
-                      ),
-                      errorText: _isValid ? null : l10n.validationPhone,
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 16,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade200),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: AppColors.secondary,
-                          width: 2,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        height: 52, // Matches content layout
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _isValid
+                                ? Colors.grey.shade200
+                                : Colors.redAccent,
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<_CountryCode>(
+                            value: _selectedCountry,
+                            icon: const Icon(
+                              Icons.arrow_drop_down,
+                              color: AppColors.textSecondary,
+                            ),
+                            onChanged: (newValue) {
+                              if (newValue != null) {
+                                setState(() {
+                                  _selectedCountry = newValue;
+                                });
+                              }
+                            },
+                            items: _countries.map((c) {
+                              return DropdownMenuItem<_CountryCode>(
+                                value: c,
+                                child: Text(
+                                  '${c.flag} ${c.code} (${c.dialCode})',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
                         ),
                       ),
-                    ),
-                    onChanged: (val) {
-                      debugPrint('[PhoneAuthScreen] Phone input changed: $val');
-                      setState(() {
-                        if (!_isValid && val.length == 10) {
-                          _isValid = true;
-                        }
-                      });
-                    },
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          maxLength: 10,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 1,
+                            color: AppColors.textPrimary,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: '98765 43210',
+                            hintStyle: const TextStyle(
+                              color: Colors.grey,
+                              fontWeight: FontWeight.normal,
+                              letterSpacing: 0,
+                            ),
+                            counterText: '',
+                            errorText: _isValid ? null : l10n.validationPhone,
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade200,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                color: AppColors.secondary,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                          onChanged: (val) {
+                            debugPrint(
+                              '[PhoneAuthScreen] Phone input changed: $val',
+                            );
+                            setState(() {
+                              if (!_isValid && val.length == 10) {
+                                _isValid = true;
+                              }
+                            });
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 20),
                   GestureDetector(

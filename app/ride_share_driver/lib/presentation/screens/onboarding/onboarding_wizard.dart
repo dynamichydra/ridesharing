@@ -6,6 +6,7 @@ import '../../../injection_container.dart';
 import '../../bloc/onboarding/onboarding_bloc.dart';
 import '../../bloc/auth/auth_bloc.dart';
 import '../../../core/localization/app_localizations.dart';
+import '../../../domain/entities/document.dart';
 
 // Screens
 import 'welcome_screen.dart';
@@ -22,6 +23,7 @@ import '../../widgets/custom_toast.dart';
 import 'profile_photo_screen.dart';
 import 'bank_details_screen.dart';
 import 'emergency_contact_screen.dart';
+import 'questionnaire_screen.dart';
 
 class OnboardingWizard extends StatefulWidget {
   final VoidCallback onComplete;
@@ -68,15 +70,15 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
     if (_currentStep > 0) {
       setState(() {
         if (_enteredFromChecklist) {
-          _currentStep = 8;
+          _currentStep = 9;
           _enteredFromChecklist = false;
-        } else if (_currentStep >= 9) {
-          _currentStep = 8; // Go back to checklist from subflows
-        } else if (_currentStep == 8) {
+        } else if (_currentStep >= 10) {
+          _currentStep = 9; // Go back to checklist from subflows
+        } else if (_currentStep == 9) {
           if (_needsVehicleRental) {
-            _currentStep = 6;
-          } else {
             _currentStep = 7;
+          } else {
+            _currentStep = 8;
           }
         } else {
           _currentStep--;
@@ -149,29 +151,91 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                 // we route them to their actual registration step (e.g., Step 3 for Personal Info).
                 if (_currentStep == 2) {
                   final step = state.summary.driver.registrationStep;
-                  if (step >= 1 && step < 8) {
+                  if (step >= 1 && step < 9) {
                     _currentStep =
                         step +
                         2; // Map DB step to local UI step: step 1 (personal info) => case 3
-                  } else if (step >= 8) {
-                    _currentStep = 8; // Checklist
+                  } else if (step >= 9) {
+                    _currentStep = 9; // Checklist
                   }
                 }
               });
             } else if (state is OnboardingSuccess) {
               context.read<OnboardingBloc>().add(LoadRegistrationSummary());
               setState(() {
-                if (_enteredFromChecklist) {
-                  _currentStep = 8;
-                  _enteredFromChecklist = false;
-                } else if (_currentStep >= 3 && _currentStep < 8) {
-                  _nextStep();
+                bool shouldGoBackToChecklist = true;
+
+                if (_currentStep == 10 || _currentStep == 11) {
+                  final docCode = _currentStep == 10
+                      ? 'DRIVERS_LICENSE'
+                      : 'NATIONAL_ID';
+                  if (_config != null && _summary != null) {
+                    DocumentType? docReq;
+                    for (final req in _config!.documentRequirements) {
+                      if (req.code == docCode) {
+                        docReq = req;
+                        break;
+                      }
+                    }
+                    if (docReq != null) {
+                      DriverDocument? doc;
+                      for (final d in _summary!.documents) {
+                        if (d.documentTypeId == docReq.id) {
+                          doc = d;
+                          break;
+                        }
+                      }
+
+                      if (doc == null) {
+                        final needsMultiple =
+                            docReq.requiresFront && docReq.requiresBack;
+                        if (needsMultiple) {
+                          shouldGoBackToChecklist = false;
+                        }
+                      } else {
+                        if (docReq.requiresFront && docReq.requiresBack) {
+                          final hadFront =
+                              doc.frontUrl != null && doc.frontUrl!.isNotEmpty;
+                          final hadBack =
+                              doc.backUrl != null && doc.backUrl!.isNotEmpty;
+                          if (!hadFront || !hadBack) {
+                            shouldGoBackToChecklist = false;
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+
+                if (shouldGoBackToChecklist) {
+                  if (_enteredFromChecklist) {
+                    _currentStep = 9;
+                    _enteredFromChecklist = false;
+                  } else if (_currentStep >= 3 && _currentStep < 9) {
+                    _nextStep();
+                  } else {
+                    _currentStep = 9;
+                  }
                 } else {
-                  _currentStep = 8; // Back to checklist from subflows
+                  debugPrint(
+                    '[OnboardingWizard] Remaining side needs upload, staying on step $_currentStep',
+                  );
                 }
               });
             } else if (state is ApplicationSubmitted) {
-              widget.onComplete();
+              setState(() {
+                _currentStep = 0;
+                _phoneNumber = '';
+                _isLogin = false;
+                _config = null;
+                _summary = null;
+                _needsVehicleRental = false;
+                _enteredFromChecklist = false;
+                _simulatedCompletedItems.clear();
+              });
+              context.read<AuthBloc>().add(
+                LogoutRequested(deviceId: 'driver_emulator'),
+              );
             } else if (state is OnboardingError) {
               CustomToast.show(context, state.message);
             }
@@ -196,7 +260,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                         onPressed: _prevStep,
                       ),
                       title: Text(
-                        _currentStep >= 8
+                        _currentStep >= 9
                             ? l10n.verificationSteps
                             : (_currentStep >= 3
                                   ? l10n.stepNOf8(_currentStep - 2)
@@ -216,9 +280,9 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                 bottom: _currentStep >= 3,
                 child: Column(
                   children: [
-                    if (_currentStep >= 3 && _currentStep < 8)
+                    if (_currentStep >= 3 && _currentStep < 9)
                       LinearProgressIndicator(
-                        value: (_currentStep - 2) / 6.0,
+                        value: (_currentStep - 2) / 7.0,
                         color: AppColors.primary,
                         backgroundColor: AppColors.border,
                         minHeight: 3,
@@ -372,21 +436,75 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           },
         );
       case 6:
+        if (_config == null || _summary == null) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return QuestionnaireScreen(
+          questions: _config!.questionnaire,
+          existingAnswers: _summary!.answers,
+          onSubmit: (answers) {
+            context.read<OnboardingBloc>().add(
+              SubmitQuestionAnswers(answers: answers),
+            );
+          },
+        );
+      case 7:
         return VehicleSelectionScreen(
           onHasVehicle: () {
             setState(() {
               _needsVehicleRental = false;
-              _currentStep = 7;
-            });
-          },
-          onNeedVehicle: () {
-            setState(() {
-              _needsVehicleRental = true;
               _currentStep = 8;
             });
           },
+          onNeedVehicle: () {
+            if (_config != null) {
+              if (_config!.vehicleTypes.isNotEmpty) {
+                final firstType = _config!.vehicleTypes.first;
+                context.read<OnboardingBloc>().add(
+                  AddVehicleDetails(
+                    vehicleTypeId: firstType.id,
+                    model: 'Rental (Requested)',
+                    year: DateTime.now().year.toString(),
+                    registrationNumber:
+                        'RENTAL-${_summary?.driver.id.substring(0, 8).toUpperCase() ?? "VEHICLE"}',
+                    color: 'Virtual',
+                  ),
+                );
+              }
+              // Submit dummy documents for VEHICLE_REGISTRATION and INSURANCE_CERTIFICATE
+              for (final docType in _config!.documentRequirements) {
+                if (docType.code == 'VEHICLE_REGISTRATION' ||
+                    docType.code == 'INSURANCE_CERTIFICATE') {
+                  context.read<OnboardingBloc>().add(
+                    UploadDocumentFileEvent(
+                      documentTypeId: docType.id,
+                      side: 'front',
+                      docNumber: 'RENTAL-PLACEHOLDER',
+                      bytes: [137, 80, 78, 71, 13, 10, 26, 10],
+                      contentType: 'image/png',
+                    ),
+                  );
+                  if (docType.requiresBack) {
+                    context.read<OnboardingBloc>().add(
+                      UploadDocumentFileEvent(
+                        documentTypeId: docType.id,
+                        side: 'back',
+                        docNumber: 'RENTAL-PLACEHOLDER',
+                        bytes: [137, 80, 78, 71, 13, 10, 26, 10],
+                        contentType: 'image/png',
+                      ),
+                    );
+                  }
+                }
+              }
+            }
+            setState(() {
+              _needsVehicleRental = true;
+              _currentStep = 9;
+            });
+          },
         );
-      case 7:
+      case 8:
         if (_config == null) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -419,12 +537,14 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                 );
               },
         );
-      case 8:
-        if (_summary == null) {
+      case 9:
+        if (_summary == null || _config == null) {
           return const Center(child: CircularProgressIndicator());
         }
         return ChecklistScreen(
           summary: _summary!,
+          needsVehicleRental: _needsVehicleRental,
+          documentRequirements: _config!.documentRequirements,
           onItemTap: (code) {
             setState(() {
               _enteredFromChecklist = true;
@@ -434,12 +554,14 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                 _currentStep = 5;
               } else if (code == 'legalAcceptance') {
                 _currentStep = 4;
+              } else if (code == 'questionnaire') {
+                _currentStep = 6;
               } else if (code == 'vehicle') {
-                _currentStep = 7;
+                _currentStep = _needsVehicleRental ? 7 : 8;
               } else if (code == 'document:DRIVERS_LICENSE') {
-                _currentStep = 9;
-              } else if (code == 'document:NATIONAL_ID') {
                 _currentStep = 10;
+              } else if (code == 'document:NATIONAL_ID') {
+                _currentStep = 11;
               } else if (code == 'profile_photo') {
                 _currentStep = 12;
               } else if (code == 'bank_details') {
@@ -450,13 +572,54 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
             });
           },
           onSubmit: () {
+            // Frontend validation for both sides of the required documents
+            bool allDocsComplete = true;
+            for (final docReq in _config!.documentRequirements) {
+              if (docReq.isRequired) {
+                DriverDocument? doc;
+                for (final d in _summary!.documents) {
+                  if (d.documentTypeId == docReq.id) {
+                    doc = d;
+                    break;
+                  }
+                }
+                if (doc == null) {
+                  allDocsComplete = false;
+                  break;
+                }
+                if (docReq.requiresFront &&
+                    (doc.frontUrl == null || doc.frontUrl!.isEmpty)) {
+                  allDocsComplete = false;
+                  break;
+                }
+                if (docReq.requiresBack &&
+                    (doc.backUrl == null || doc.backUrl!.isEmpty)) {
+                  allDocsComplete = false;
+                  break;
+                }
+                if (docReq.requiresPdf &&
+                    (doc.pdfUrl == null || doc.pdfUrl!.isEmpty)) {
+                  allDocsComplete = false;
+                  break;
+                }
+              }
+            }
+
+            if (!allDocsComplete) {
+              CustomToast.show(
+                context,
+                'Please upload all required document sides (front & back).',
+              );
+              return;
+            }
+
             context.read<OnboardingBloc>().add(SubmitOnboardingApplication());
           },
         );
-      case 9:
       case 10:
+      case 11:
         // DL & Aadhar upload subflow
-        final docCode = _currentStep == 9 ? 'DRIVERS_LICENSE' : 'NATIONAL_ID';
+        final docCode = _currentStep == 10 ? 'DRIVERS_LICENSE' : 'NATIONAL_ID';
         if (_config == null)
           return const Center(child: CircularProgressIndicator());
 
@@ -521,7 +684,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                   _bankAccount = accountNumber;
                   _bankIfsc = ifscCode;
                   _simulatedCompletedItems.add('bank_details');
-                  _currentStep = 8;
+                  _currentStep = 9;
                   _enteredFromChecklist = false;
                 });
                 context.read<OnboardingBloc>().add(LoadRegistrationSummary());
@@ -538,7 +701,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
               _emergencyPhone = phone;
               _emergencyRelationship = relationship;
               _simulatedCompletedItems.add('emergency_contact');
-              _currentStep = 8;
+              _currentStep = 9;
               _enteredFromChecklist = false;
             });
             context.read<OnboardingBloc>().add(LoadRegistrationSummary());

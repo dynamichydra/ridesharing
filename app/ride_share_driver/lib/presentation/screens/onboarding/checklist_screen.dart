@@ -1,21 +1,59 @@
 import 'package:flutter/material.dart';
 import '../../../style/appcolors.dart';
 import '../../../domain/repositories/onboarding_repository.dart';
+import '../../../domain/entities/document.dart';
 
 class ChecklistScreen extends StatelessWidget {
   final RegistrationSummary summary;
+  final bool needsVehicleRental;
+  final List<DocumentType> documentRequirements;
   final Function(String itemCode) onItemTap;
   final VoidCallback onSubmit;
 
   const ChecklistScreen({
     super.key,
     required this.summary,
+    this.needsVehicleRental = false,
+    required this.documentRequirements,
     required this.onItemTap,
     required this.onSubmit,
   });
 
   @override
   Widget build(BuildContext context) {
+    bool isDocumentComplete(String docCode) {
+      DocumentType? docReq;
+      for (final req in documentRequirements) {
+        if (req.code == docCode) {
+          docReq = req;
+          break;
+        }
+      }
+      if (docReq == null) return false;
+
+      DriverDocument? doc;
+      for (final d in summary.documents) {
+        if (d.documentTypeId == docReq.id) {
+          doc = d;
+          break;
+        }
+      }
+      if (doc == null) return false;
+
+      if (docReq.requiresFront &&
+          (doc.frontUrl == null || doc.frontUrl!.isEmpty)) {
+        return false;
+      }
+      if (docReq.requiresBack &&
+          (doc.backUrl == null || doc.backUrl!.isEmpty)) {
+        return false;
+      }
+      if (docReq.requiresPdf && (doc.pdfUrl == null || doc.pdfUrl!.isEmpty)) {
+        return false;
+      }
+      return true;
+    }
+
     // 9 standard todo items matching Lyft Driver flow
     final todoItems = [
       _ChecklistItem(
@@ -41,25 +79,34 @@ class ChecklistScreen extends StatelessWidget {
         isCompleted: !summary.missing.contains('legalAcceptance'),
       ),
       _ChecklistItem(
+        code: 'questionnaire',
+        title: 'Survey Questions',
+        description: 'Complete driver profile questionnaire',
+        icon: Icons.question_answer_rounded,
+        isCompleted: !summary.missing.any(
+          (item) => item.startsWith('question:'),
+        ),
+      ),
+      _ChecklistItem(
         code: 'vehicle',
         title: 'Car details',
         description: 'Add make, model, year and license plate',
         icon: Icons.directions_car_rounded,
-        isCompleted: summary.vehicles.isNotEmpty,
+        isCompleted: needsVehicleRental || summary.vehicles.isNotEmpty,
       ),
       _ChecklistItem(
         code: 'document:DRIVERS_LICENSE',
         title: 'Driver\'s licence',
         description: 'Identity validation and DL proof',
         icon: Icons.badge_rounded,
-        isCompleted: !summary.missing.contains('document:DRIVERS_LICENSE'),
+        isCompleted: isDocumentComplete('DRIVERS_LICENSE'),
       ),
       _ChecklistItem(
         code: 'document:NATIONAL_ID',
         title: 'Aadhar Card (National ID)',
         description: 'Aadhar card validation proof',
         icon: Icons.style_rounded,
-        isCompleted: !summary.missing.contains('document:NATIONAL_ID'),
+        isCompleted: isDocumentComplete('NATIONAL_ID'),
       ),
       _ChecklistItem(
         code: 'profile_photo',
@@ -115,7 +162,7 @@ class ChecklistScreen extends StatelessWidget {
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Text(
-                  '$completedCount / 9 items',
+                  '$completedCount / 10 items',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 12,

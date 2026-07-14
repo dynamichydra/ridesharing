@@ -154,16 +154,8 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
               labelText: 'Registration Plate Number (e.g. KA-01-AB-1234)',
             ),
             validator: (val) {
-              if (val == null || val.trim().isEmpty)
+              if (val == null || val.trim().isEmpty) {
                 return 'Registration number is required';
-              final cleanVal = val
-                  .trim()
-                  .replaceAll(RegExp(r'[- ]'), '')
-                  .toUpperCase();
-              if (!RegExp(
-                r'^[A-Z]{2}[0-9]{2}[A-Z]{1,3}[0-9]{4}$',
-              ).hasMatch(cleanVal)) {
-                return 'Invalid plate format (e.g. KA-01-AB-1234)';
               }
               return null;
             },

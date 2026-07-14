@@ -34,6 +34,16 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
   final _numController = TextEditingController();
   DateTime? _selectedExpiryDate;
 
+  // Local picked state
+  final Map<String, List<int>> _selectedBytes = {};
+  final Map<String, String> _selectedPaths = {};
+  final Map<String, String> _selectedContentTypes = {};
+
+  // Uploaded state mirroring
+  String? _uploadedFrontUrl;
+  String? _uploadedBackUrl;
+  String? _uploadedPdfUrl;
+
   @override
   void initState() {
     super.initState();
@@ -44,7 +54,28 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           widget.existingDoc!.expiryDate!,
         );
       }
+      _uploadedFrontUrl = widget.existingDoc!.frontUrl;
+      _uploadedBackUrl = widget.existingDoc!.backUrl;
+      _uploadedPdfUrl = widget.existingDoc!.pdfUrl;
     }
+  }
+
+  @override
+  void didUpdateWidget(covariant DocumentUploadScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.existingDoc != oldWidget.existingDoc &&
+        widget.existingDoc != null) {
+      setState(() {
+        _uploadedFrontUrl = widget.existingDoc!.frontUrl;
+        _uploadedBackUrl = widget.existingDoc!.backUrl;
+        _uploadedPdfUrl = widget.existingDoc!.pdfUrl;
+      });
+    }
+  }
+
+  String _getDownloadUrl(String key) {
+    if (key.startsWith('http')) return key;
+    return 'http://localhost:3000/api/v1/dev-storage/$key';
   }
 
   Future<void> _selectDate(BuildContext context) async {
@@ -150,7 +181,6 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
   }
 
   Future<void> _processPick(String side, ImageSource source) async {
-    final numStr = _numController.text.trim();
     try {
       final picker = ImagePicker();
       final file = await picker.pickImage(
@@ -172,22 +202,11 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         contentType = 'image/png';
       }
 
-      String? expiryString;
-      if (_selectedExpiryDate != null) {
-        expiryString =
-            "${_selectedExpiryDate!.year}-${_selectedExpiryDate!.month.toString().padLeft(2, '0')}-${_selectedExpiryDate!.day.toString().padLeft(2, '0')}";
-      }
-
-      debugPrint(
-        '[DocumentUploadScreen] Submitting image upload: $side, docNumber: $numStr, expiry: $expiryString, contentType: $contentType',
-      );
-      widget.onUpload(
-        side: side,
-        docNumber: numStr,
-        expiryDate: expiryString,
-        bytes: bytes,
-        contentType: contentType,
-      );
+      setState(() {
+        _selectedBytes[side] = bytes;
+        _selectedPaths[side] = file.path;
+        _selectedContentTypes[side] = contentType;
+      });
     } catch (e) {
       debugPrint('[DocumentUploadScreen] Error picking image: $e');
       if (mounted) {
@@ -197,7 +216,6 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
   }
 
   Future<void> _processFilePicker(String side) async {
-    final numStr = _numController.text.trim();
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -226,12 +244,6 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         return;
       }
 
-      String? expiryString;
-      if (_selectedExpiryDate != null) {
-        expiryString =
-            "${_selectedExpiryDate!.year}-${_selectedExpiryDate!.month.toString().padLeft(2, '0')}-${_selectedExpiryDate!.day.toString().padLeft(2, '0')}";
-      }
-
       String contentType = 'image/jpeg';
       final ext = file.extension?.toLowerCase();
       if (ext == 'pdf') {
@@ -242,22 +254,69 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         contentType = 'image/jpeg';
       }
 
-      debugPrint(
-        '[DocumentUploadScreen] Submitting file upload: $side, docNumber: $numStr, expiry: $expiryString, contentType: $contentType',
-      );
-      widget.onUpload(
-        side: side,
-        docNumber: numStr,
-        expiryDate: expiryString,
-        bytes: bytes,
-        contentType: contentType,
-      );
+      setState(() {
+        _selectedBytes[side] = bytes!;
+        _selectedPaths[side] = file.path ?? file.name;
+        _selectedContentTypes[side] = contentType;
+      });
     } catch (e) {
       debugPrint('[DocumentUploadScreen] Error picking file: $e');
       if (mounted) {
         CustomToast.show(context, 'Error selecting file');
       }
     }
+  }
+
+  void _confirmUpload(String side) {
+    if (!_formKey.currentState!.validate()) {
+      debugPrint('[DocumentUploadScreen] Validation failed');
+      return;
+    }
+    if (widget.docType.requiresExpiry && _selectedExpiryDate == null) {
+      debugPrint('[DocumentUploadScreen] Missing required expiration date');
+      CustomToast.show(context, 'Please select an expiration date');
+      return;
+    }
+
+    final bytes = _selectedBytes[side];
+    final contentType = _selectedContentTypes[side];
+    if (bytes == null || contentType == null) return;
+
+    final numStr = _numController.text.trim();
+    String? expiryString;
+    if (_selectedExpiryDate != null) {
+      expiryString =
+          "${_selectedExpiryDate!.year}-${_selectedExpiryDate!.month.toString().padLeft(2, '0')}-${_selectedExpiryDate!.day.toString().padLeft(2, '0')}";
+    }
+
+    debugPrint(
+      '[DocumentUploadScreen] Confirming upload: $side, docNumber: $numStr, expiry: $expiryString, contentType: $contentType',
+    );
+
+    widget.onUpload(
+      side: side,
+      docNumber: numStr,
+      expiryDate: expiryString,
+      bytes: bytes,
+      contentType: contentType,
+    );
+
+    setState(() {
+      _selectedBytes.remove(side);
+      _selectedPaths.remove(side);
+      _selectedContentTypes.remove(side);
+
+      // Keep temporary local UI state showing uploaded, until widget updates from repository
+      if (side == 'front') {
+        _uploadedFrontUrl = 'pending';
+      } else if (side == 'back') {
+        _uploadedBackUrl = 'pending';
+      } else {
+        _uploadedPdfUrl = 'pending';
+      }
+    });
+
+    CustomToast.show(context, 'Document uploaded successfully');
   }
 
   @override
@@ -302,22 +361,6 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
               validator: (val) {
                 if (val == null || val.trim().isEmpty) {
                   return 'Document number is required';
-                }
-                final text = val.trim();
-                if (widget.docType.code == 'DRIVERS_LICENSE') {
-                  final cleanDL = text
-                      .replaceAll(RegExp(r'[- ]'), '')
-                      .toUpperCase();
-                  if (!RegExp(
-                    r'^[A-Z]{2}[0-9]{2}[0-9A-Z]{11}$',
-                  ).hasMatch(cleanDL)) {
-                    return 'Invalid DL format (e.g. KA5120150123456, 15 chars)';
-                  }
-                } else if (widget.docType.code == 'NATIONAL_ID') {
-                  final cleanAadhar = text.replaceAll(RegExp(r'[- ]'), '');
-                  if (!RegExp(r'^[0-9]{12}$').hasMatch(cleanAadhar)) {
-                    return 'Invalid Aadhar format (must be exactly 12 digits)';
-                  }
                 }
                 return null;
               },
@@ -384,11 +427,11 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           ],
           if (widget.docType.requiresFront) ...[
             _buildUploadPlaceholder('Front Image / PDF Upload', 'front'),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
           ],
           if (widget.docType.requiresBack) ...[
             _buildUploadPlaceholder('Back Image / PDF Upload', 'back'),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
           ],
           if (widget.docType.requiresPdf && !widget.docType.requiresFront) ...[
             _buildUploadPlaceholder('Main Document PDF Upload', 'pdf'),
@@ -399,42 +442,215 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
   }
 
   Widget _buildUploadPlaceholder(String label, String side) {
-    return InkWell(
-      onTap: () {
-        debugPrint('[DocumentUploadScreen] Upload Card tapped for side: $side');
-        _showUploadSourceSheet(side);
-      },
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        height: 150,
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border.all(color: AppColors.border, style: BorderStyle.solid),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.cloud_upload_rounded,
-              size: 48,
-              color: AppColors.primary,
+    final hasLocalSelected = _selectedPaths[side] != null;
+    final uploadedUrl = side == 'front'
+        ? _uploadedFrontUrl
+        : (side == 'back' ? _uploadedBackUrl : _uploadedPdfUrl);
+
+    final hasUploaded = uploadedUrl != null && uploadedUrl.isNotEmpty;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (hasLocalSelected) ...[
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
+              child: _selectedContentTypes[side] == 'application/pdf'
+                  ? Container(
+                      height: 160,
+                      color: Colors.grey.shade50,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.picture_as_pdf_rounded,
+                            size: 48,
+                            color: Colors.redAccent,
+                          ),
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Text(
+                              _selectedPaths[side]!.split('/').last,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Image.file(
+                      File(_selectedPaths[side]!),
+                      height: 160,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        setState(() {
+                          _selectedBytes.remove(side);
+                          _selectedPaths.remove(side);
+                          _selectedContentTypes.remove(side);
+                        });
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.redAccent,
+                        side: const BorderSide(color: Colors.redAccent),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: const Text('Clear'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => _confirmUpload(side),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: const Text('Confirm Upload'),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 4),
-            const Text(
-              'Supports PNG, JPG, PDF up to 10MB',
-              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+          ] else if (hasUploaded) ...[
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
+              child: uploadedUrl.toLowerCase().contains('pdf')
+                  ? Container(
+                      height: 160,
+                      color: Colors.grey.shade50,
+                      child: const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.picture_as_pdf_rounded,
+                            size: 48,
+                            color: Colors.redAccent,
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Uploaded Document (PDF)',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Image.network(
+                      _getDownloadUrl(uploadedUrl),
+                      height: 160,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        height: 160,
+                        color: Colors.grey.shade100,
+                        child: const Icon(
+                          Icons.description_rounded,
+                          size: 48,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                children: [
+                  const Icon(Icons.verified_rounded, color: Colors.green),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Uploaded',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () => _showUploadSourceSheet(side),
+                    icon: const Icon(
+                      Icons.sync_rounded,
+                      size: 16,
+                      color: AppColors.primary,
+                    ),
+                    label: const Text(
+                      'Re-upload',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            InkWell(
+              onTap: () => _showUploadSourceSheet(side),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                height: 150,
+                alignment: Alignment.center,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.cloud_upload_rounded,
+                      size: 48,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Supports PNG, JPG, PDF up to 10MB',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
-        ),
+        ],
       ),
     );
   }

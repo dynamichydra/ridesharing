@@ -38,19 +38,20 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
   @override
   Future<OnboardingConfig> getOnboardingConfig() async {
     final data = await remoteDataSource.getOnboardingConfig();
-    
+
     final List<Country> countries = (data['countries'] as List)
         .map((c) => Country.fromJson(c))
         .toList();
-    
-    final List<OnboardingQuestion> questionnaire = (data['questionnaire'] as List)
-        .map((q) => OnboardingQuestion.fromJson(q))
-        .toList();
-    
+
+    final List<OnboardingQuestion> questionnaire =
+        (data['questionnaire'] as List)
+            .map((q) => OnboardingQuestion.fromJson(q))
+            .toList();
+
     final List<DocumentType> docReqs = (data['documentRequirements'] as List)
         .map((d) => DocumentType.fromJson(d))
         .toList();
-    
+
     final List<VehicleType> vehicleTypes = (data['vehicleTypes'] as List)
         .map((v) => VehicleType.fromJson(v))
         .toList();
@@ -89,7 +90,11 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
     required String stateId,
     required String cityId,
   }) async {
-    return await remoteDataSource.setDrivingLocation(countryId, stateId, cityId);
+    return await remoteDataSource.setDrivingLocation(
+      countryId,
+      stateId,
+      cityId,
+    );
   }
 
   @override
@@ -105,14 +110,33 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
   }
 
   @override
-  Future<String> requestUploadUrl(String documentTypeId, String side, String contentType) async {
-    final res = await remoteDataSource.requestUploadUrl(documentTypeId, side, contentType);
-    return res['uploadUrl'] ?? res['key'] ?? '';
+  Future<UploadUrlResponse> requestUploadUrl(
+    String documentTypeId,
+    String side,
+    String contentType,
+  ) async {
+    final res = await remoteDataSource.requestUploadUrl(
+      documentTypeId,
+      side,
+      contentType,
+    );
+    return UploadUrlResponse(
+      uploadUrl: res['uploadUrl'] ?? '',
+      key: res['key'] ?? '',
+    );
   }
 
   @override
-  Future<bool> uploadDocumentFile(String uploadUrl, List<int> bytes, String contentType) async {
-    return await remoteDataSource.uploadDocumentFile(uploadUrl, bytes, contentType);
+  Future<bool> uploadDocumentFile(
+    String uploadUrl,
+    List<int> bytes,
+    String contentType,
+  ) async {
+    return await remoteDataSource.uploadDocumentFile(
+      uploadUrl,
+      bytes,
+      contentType,
+    );
   }
 
   @override
@@ -134,9 +158,16 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
   }
 
   @override
-  Future<String> requestProfilePhotoUploadUrl(String contentType) async {
-    final res = await remoteDataSource.requestProfilePhotoUploadUrl(contentType);
-    return res['uploadUrl'] ?? res['key'] ?? '';
+  Future<UploadUrlResponse> requestProfilePhotoUploadUrl(
+    String contentType,
+  ) async {
+    final res = await remoteDataSource.requestProfilePhotoUploadUrl(
+      contentType,
+    );
+    return UploadUrlResponse(
+      uploadUrl: res['uploadUrl'] ?? '',
+      key: res['key'] ?? '',
+    );
   }
 
   @override
@@ -183,17 +214,17 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
   @override
   Future<RegistrationSummary> getRegistrationSummary() async {
     final data = await remoteDataSource.getRegistrationSummary();
-    
+
     final driver = DriverProfile.fromJson(data['driver']);
-    
+
     final List<DriverVehicle> vehicles = (data['vehicles'] as List)
         .map((v) => DriverVehicle.fromJson(v))
         .toList();
-        
+
     final List<DriverDocument> documents = (data['documents'] as List)
         .map((d) => DriverDocument.fromJson(d))
         .toList();
-        
+
     final List<DriverAnswer> answers = (data['answers'] as List)
         .map((a) => DriverAnswer.fromJson(a))
         .toList();
@@ -204,7 +235,8 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
       documents: documents,
       answers: answers,
       isComplete: data['isComplete'] ?? false,
-      missing: (data['missing'] as List?)?.map((m) => m.toString()).toList() ?? [],
+      missing:
+          (data['missing'] as List?)?.map((m) => m.toString()).toList() ?? [],
     );
   }
 
