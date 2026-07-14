@@ -25,6 +25,7 @@ import {
   getRideHistory
 } from './ride_status_history.service.js';
 import { paginate } from '../../utils/response.js';
+import { fromMinor, formatMoney } from '../../utils/money.js';
 
 // ── Rider actions ──────────────────────────────────────────────────────────────
 
@@ -54,9 +55,11 @@ export async function requestRide({
 
   const [ride] = await db.insert(rides).values({
     riderId, vehicleTypeId,
+    countryId: fareData.countryId,
+    currencyCode: fareData.currencyCode,
     pickupLat: String(pickupLat), pickupLng: String(pickupLng), pickupAddress,
     dropLat: String(dropLat), dropLng: String(dropLng), dropAddress,
-    estimatedFare: String(fareData.estimatedFare),
+    estimatedFareMinor: fareData.estimatedFareMinor,
     distanceKm: String(fareData.distanceKm),
     durationMin: fareData.durationInTrafficMin,
     polyline: fareData.polyline,
@@ -287,21 +290,21 @@ export async function completeRide(rideId, driverId) {
     : ride.durationMin;
 
   const snapshot = ride.fareSnapshot || {};
-  const baseFare = snapshot.breakdown?.baseFare ?? parseFloat(ride.estimatedFare) * 0.2;
-  const distanceFare = snapshot.breakdown?.distanceFare ?? parseFloat(ride.estimatedFare) * 0.6;
-  const perMinRate = snapshot.breakdown?.timeFare
-    ? snapshot.breakdown.timeFare / Math.max(ride.durationMin, 1)
+  const baseFareMinor = snapshot.breakdown?.baseFareMinor ?? Math.round(ride.estimatedFareMinor * 0.2);
+  const distanceFareMinor = snapshot.breakdown?.distanceFareMinor ?? Math.round(ride.estimatedFareMinor * 0.6);
+  const perMinRateMinor = snapshot.breakdown?.timeFareMinor
+    ? snapshot.breakdown.timeFareMinor / Math.max(ride.durationMin, 1)
     : 0;
-  const actualTimeFare = perMinRate * actualDurationMin;
+  const actualTimeFareMinor = perMinRateMinor * actualDurationMin;
   const zoneMultiplier = snapshot.breakdown?.zoneMultiplier ?? 1;
   const surgeMultiplier = snapshot.breakdown?.surgeMultiplier ?? 1;
-  const minFare = parseFloat(snapshot.breakdown?.minFare ?? 0);
-  const rawFinalFare = (baseFare + distanceFare + actualTimeFare) * zoneMultiplier * surgeMultiplier;
-  const finalFare = Math.ceil(Math.max(rawFinalFare, minFare));
+  const minFareMinor = snapshot.breakdown?.minFareMinor ?? 0;
+  const rawFinalFareMinor = (baseFareMinor + distanceFareMinor + actualTimeFareMinor) * zoneMultiplier * surgeMultiplier;
+  const finalFareMinor = Math.ceil(Math.max(rawFinalFareMinor, minFareMinor));
 
   const [updated] = await db.update(rides).set({
     status: 'completed',
-    finalFare: String(finalFare),
+    finalFareMinor,
     durationMin: actualDurationMin,
     completedAt: new Date(),
   }).where(eq(rides.id, rideId)).returning();
@@ -309,7 +312,7 @@ export async function completeRide(rideId, driverId) {
   await recordStatusChange({
     rideId, fromStatus: 'started', toStatus: 'completed',
     changedBy: 'driver', changedById: driverId,
-    meta: { finalFare, actualDurationMin },
+    meta: { finalFareMinor, actualDurationMin },
   });
 
   // Release driver
@@ -319,13 +322,14 @@ export async function completeRide(rideId, driverId) {
     .where(eq(drivers.id, driverId));
 
   await publishEvent(TOPICS.RIDE_COMPLETED, {
-    id: rideId, rideId, driverId, riderId: ride.riderId, finalFare,
+    id: rideId, rideId, driverId, riderId: ride.riderId,
+    finalFare: fromMinor(finalFareMinor, ride.currencyCode), currency: ride.currencyCode,
   });
   await publishEvent(TOPICS.NOTIF_PUSH, {
     userType: 'rider', userId: ride.riderId,
     type: 'RIDE_COMPLETED',
     title: 'Ride Completed',
-    body: `Your ride is complete. Total fare: ₹${finalFare}`,
+    body: `Your ride is complete. Total fare: ${formatMoney(finalFareMinor, ride.currencyCode)}`,
   });
   return updated;
 }

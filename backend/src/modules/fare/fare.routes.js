@@ -3,6 +3,7 @@ import { authenticateAdmin } from '../../middleware/authenticate.js';
 import { calculateFare, estimateAllTypes } from './fare.service.js';
 import { listAll } from '../vehicle-type/vehicle-type.service.js';
 import * as fareRulesService from './fare-rules.service.js';
+import * as taxRulesService from './tax-rules.service.js';
 
 export async function fareRoutes(app) {
 
@@ -68,6 +69,33 @@ export async function fareRoutes(app) {
 
   app.delete('/rules/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const data = await fareRulesService.remove(request.params.id);
+    return sendSuccess(reply, data);
+  });
+
+  // ── Tax Rules CRUD (admin) ────────────────────────────────────────────────
+
+  app.get('/tax-rules', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const { rows, pagination } = await taxRulesService.listPaginated(page, limit, offset);
+    return sendList(reply, rows, pagination);
+  });
+
+  app.post('/tax-rules', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { countryId, name, appliesTo, rate } = request.body;
+    if (!countryId || !name || !appliesTo || rate == null) {
+      return sendError(reply, 'countryId, name, appliesTo and rate are required');
+    }
+    const data = await taxRulesService.create(request.body);
+    return sendSuccess(reply, data, 201);
+  });
+
+  app.patch('/tax-rules/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await taxRulesService.update(request.params.id, request.body);
+    return sendSuccess(reply, data);
+  });
+
+  app.delete('/tax-rules/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await taxRulesService.remove(request.params.id);
     return sendSuccess(reply, data);
   });
 }

@@ -1,6 +1,7 @@
 import { sendSuccess, sendError } from '../../utils/response.js';
 import { authenticateRider, authenticateDriver } from '../../middleware/authenticate.js';
 import { getRideTrackingState } from './tracking.service.js';
+import { fromMinor } from '../../utils/money.js';
 
 export async function trackingRoutes(app) {
 
@@ -30,7 +31,8 @@ export async function trackingRoutes(app) {
       pickup: { lat: ride.pickupLat, lng: ride.pickupLng, address: ride.pickupAddress },
       drop: { lat: ride.dropLat, lng: ride.dropLng, address: ride.dropAddress },
       polyline: ride.polyline,   // pickup → drop
-      estimatedFare: ride.estimatedFare,
+      estimatedFare: fromMinor(ride.estimatedFareMinor, ride.currencyCode),
+      currency: ride.currencyCode,
       distanceKm: ride.distanceKm,
       durationMin: ride.durationMin,
     });

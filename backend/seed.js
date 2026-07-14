@@ -8,15 +8,19 @@
  *
  * What it seeds:
  *   1.  1  super admin
- *   2.  3  vehicle types   (Bike, Auto, Cab)
- *   3.  3  zones           (City Centre, Airport, Suburb)
- *   4.  5  fare rules      (Night surge, peak hours, evening peak, traffic, airport zone)
- *   5.  4  subscription plans (Monthly, Quarterly, Yearly, Lifetime)
- *   6.  5  riders
- *   7. 10  drivers         (various statuses & vehicle types)
- *   8.  5  active driver subscriptions
- *   9. 12  rides           (various statuses)
- *  10.  3  audit log entries
+ *   2.  2  countries       (India — default, Canada) to prove multi-country pricing works
+ *   3.  4  vehicle types   (Bike, Auto, Cab, Premium Cab) — global catalog
+ *   4.  6  vehicle-type rate cards (India: all 4; Canada: Cab + Premium only — Bike/Auto
+ *          intentionally left unpriced there to demonstrate "not offered in this country")
+ *   5.  5  zones           (3 Kolkata, 2 Toronto)
+ *   6.  7  fare rules      (1 global, 5 India-scoped, 1 Canada-scoped)
+ *   7.  2  tax rules       (India GST, Canada HST)
+ *   8.  7  subscription plans (5 India/INR, 2 Canada/CAD)
+ *   9.  5  riders
+ *  10. 10  drivers         (various statuses & vehicle types, all India for this seed)
+ *  11.  5  active driver subscriptions + 1 expired
+ *  12. 12  rides           (various statuses)
+ *  13.  3  audit log entries
  */
 
 import 'dotenv/config';
@@ -28,8 +32,10 @@ import bcrypt from 'bcryptjs';
 import {
   admins,
   vehicleTypes,
+  vehicleTypePricing,
   zones,
   fareRules,
+  taxRules,
   subscriptionPlans,
   subscriptions,
   users,
@@ -70,8 +76,10 @@ function daysAgo(n) {
   return new Date(Date.now() - n * 86_400_000);
 }
 
-function randomFare(min, max) {
-  return String((Math.random() * (max - min) + min).toFixed(2));
+// Minor-unit random fare (₹80–250 -> 8000–25000 paise), matching fare.service.js's
+// integer-minor-unit convention everywhere money is stored.
+function randomFareMinor(minMajor, maxMajor) {
+  return Math.round((Math.random() * (maxMajor - minMajor) + minMajor) * 100);
 }
 
 // ── console helper ─────────────────────────────────────────────────────────────
@@ -120,6 +128,9 @@ async function seed() {
   log.ok(`Ops admin   → ops@rideshare.com   / Ops@123456`);
 
   // ── 1b. Geography & Languages ───────────────────────────────────────────────
+  // Two countries on purpose — this is the seed that proves the pricing model
+  // isn't secretly single-market: different currency, different rate card,
+  // different subscription plans, different tax rule, same code path throughout.
   log.section('1b. Geography & Languages');
 
   await db.insert(languages).values([
@@ -129,11 +140,22 @@ async function seed() {
 
   const [india] = await db.insert(countries).values({
     name: 'India', isoCode: 'IN', dialCode: '+91', currencyCode: 'INR',
-    defaultLanguageCode: 'en', isActive: true, sortOrder: 1,
+    defaultLanguageCode: 'en', timezone: 'Asia/Kolkata', roundingIncrementMinor: 1,
+    isDefault: true, isActive: true, sortOrder: 1,
+  }).onConflictDoNothing().returning();
+
+  const [canada] = await db.insert(countries).values({
+    name: 'Canada', isoCode: 'CA', dialCode: '+1', currencyCode: 'CAD',
+    defaultLanguageCode: 'en', timezone: 'America/Toronto', roundingIncrementMinor: 5, // cash rounds to the nickel
+    isDefault: false, isActive: true, sortOrder: 2,
   }).onConflictDoNothing().returning();
 
   const [westBengal] = await db.insert(states).values({
     countryId: india?.id, name: 'West Bengal', code: 'WB', isActive: true,
+  }).onConflictDoNothing().returning();
+
+  const [ontario] = await db.insert(states).values({
+    countryId: canada?.id, name: 'Ontario', code: 'ON', isActive: true,
   }).onConflictDoNothing().returning();
 
   const [kolkata] = await db.insert(cities).values({
@@ -141,7 +163,13 @@ async function seed() {
     timezone: 'Asia/Kolkata', isActive: true, sortOrder: 1,
   }).onConflictDoNothing().returning();
 
-  log.ok(`India → West Bengal → Kolkata`);
+  const [toronto] = await db.insert(cities).values({
+    stateId: ontario?.id, countryId: canada?.id, name: 'Toronto',
+    timezone: 'America/Toronto', isActive: true, sortOrder: 1,
+  }).onConflictDoNothing().returning();
+
+  log.ok(`India (default, INR)  → West Bengal → Kolkata`);
+  log.ok(`Canada (CAD)          → Ontario → Toronto`);
   log.ok(`Languages: English (default), Hindi`);
 
   // ── 1c. Document Types ───────────────────────────────────────────────────────
@@ -204,71 +232,52 @@ async function seed() {
 
   log.ok(`4 onboarding questions (own_vehicle, weekly_hours, worked_before, rental_interest)`);
 
-  // ── 2. Vehicle Types ────────────────────────────────────────────────────────
-  log.section('2. Vehicle Types');
+  // ── 2. Vehicle Types (global catalog — no rates here) ─────────────────────────
+  log.section('2. Vehicle Types (catalog)');
 
   const [vtBike] = await db.insert(vehicleTypes).values({
-    name:        'Bike',
-    slug:        'bike',
-    capacity:     1,
-    baseRate:    '15.00',
-    perKmRate:   '6.00',
-    perMinRate:  '0.50',
-    minFare:     '30.00',
-    sortOrder:    1,
-    isActive:     true,
-    createdBy:    superAdmin?.id,
+    name: 'Bike', slug: 'bike', capacity: 1, sortOrder: 1, isActive: true, createdBy: superAdmin?.id,
   }).onConflictDoNothing().returning();
 
   const [vtAuto] = await db.insert(vehicleTypes).values({
-    name:        'Auto',
-    slug:        'auto',
-    capacity:     3,
-    baseRate:    '25.00',
-    perKmRate:   '10.00',
-    perMinRate:  '0.75',
-    minFare:     '50.00',
-    sortOrder:    2,
-    isActive:     true,
-    createdBy:    superAdmin?.id,
+    name: 'Auto', slug: 'auto', capacity: 3, sortOrder: 2, isActive: true, createdBy: superAdmin?.id,
   }).onConflictDoNothing().returning();
 
   const [vtCab] = await db.insert(vehicleTypes).values({
-    name:        'Cab',
-    slug:        'cab',
-    capacity:     4,
-    baseRate:    '50.00',
-    perKmRate:   '14.00',
-    perMinRate:  '1.00',
-    minFare:     '80.00',
-    sortOrder:    3,
-    isActive:     true,
-    createdBy:    superAdmin?.id,
+    name: 'Cab', slug: 'cab', capacity: 4, sortOrder: 3, isActive: true, createdBy: superAdmin?.id,
   }).onConflictDoNothing().returning();
 
   const [vtPremium] = await db.insert(vehicleTypes).values({
-    name:        'Premium Cab',
-    slug:        'premium-cab',
-    capacity:     4,
-    baseRate:    '100.00',
-    perKmRate:   '20.00',
-    perMinRate:  '1.50',
-    minFare:     '150.00',
-    sortOrder:    4,
-    isActive:     true,
-    createdBy:    superAdmin?.id,
+    name: 'Premium Cab', slug: 'premium-cab', capacity: 4, sortOrder: 4, isActive: true, createdBy: superAdmin?.id,
   }).onConflictDoNothing().returning();
 
-  log.ok(`Bike        (base ₹15 + ₹6/km + ₹0.50/min, min ₹30)`);
-  log.ok(`Auto        (base ₹25 + ₹10/km + ₹0.75/min, min ₹50)`);
-  log.ok(`Cab         (base ₹50 + ₹14/km + ₹1.00/min, min ₹80)`);
-  log.ok(`Premium Cab (base ₹100 + ₹20/km + ₹1.50/min, min ₹150)`);
+  log.ok(`Bike, Auto, Cab, Premium Cab — same catalog in every country`);
+
+  // ── 2b. Per-country rate cards ─────────────────────────────────────────────
+  log.section('2b. Vehicle-Type Pricing (per country)');
+
+  await db.insert(vehicleTypePricing).values([
+    // India — INR, amounts in paise
+    { vehicleTypeId: vtBike?.id,    countryId: india?.id, currencyCode: 'INR', baseRateMinor: 1500,  perKmRateMinor: 600,  perMinRateMinor: 50,  minFareMinor: 3000 },
+    { vehicleTypeId: vtAuto?.id,    countryId: india?.id, currencyCode: 'INR', baseRateMinor: 2500,  perKmRateMinor: 1000, perMinRateMinor: 75,  minFareMinor: 5000 },
+    { vehicleTypeId: vtCab?.id,     countryId: india?.id, currencyCode: 'INR', baseRateMinor: 5000,  perKmRateMinor: 1400, perMinRateMinor: 100, minFareMinor: 8000 },
+    { vehicleTypeId: vtPremium?.id, countryId: india?.id, currencyCode: 'INR', baseRateMinor: 10000, perKmRateMinor: 2000, perMinRateMinor: 150, minFareMinor: 15000 },
+    // Canada — CAD, amounts in cents. Bike/Auto intentionally NOT priced here —
+    // estimateAllTypes() silently drops them for Canadian pickups (getRate() 404s,
+    // caught and filtered), proving a vehicle type can be catalog-global but market-partial.
+    { vehicleTypeId: vtCab?.id,     countryId: canada?.id, currencyCode: 'CAD', baseRateMinor: 500,  perKmRateMinor: 150, perMinRateMinor: 25, minFareMinor: 800 },
+    { vehicleTypeId: vtPremium?.id, countryId: canada?.id, currencyCode: 'CAD', baseRateMinor: 1000, perKmRateMinor: 250, perMinRateMinor: 40, minFareMinor: 1500 },
+  ]).onConflictDoNothing();
+
+  log.ok(`India:  Bike ₹15+₹6/km, Auto ₹25+₹10/km, Cab ₹50+₹14/km, Premium ₹100+₹20/km`);
+  log.ok(`Canada: Cab $5+$1.50/km, Premium $10+$2.50/km  (Bike/Auto not offered)`);
 
   // ── 3. Zones ────────────────────────────────────────────────────────────────
-  log.section('3. Zones (Kolkata)');
+  log.section('3. Zones');
 
   const [zoneCityCentre] = await db.insert(zones).values({
     name:        'Kolkata City Centre',
+    countryId:   india?.id,
     type:        'city',
     multiplier:  '1.00',
     description: 'Central Kolkata — Park Street, BBD Bagh, Esplanade',
@@ -287,6 +296,7 @@ async function seed() {
 
   const [zoneAirport] = await db.insert(zones).values({
     name:        'Kolkata Airport Zone',
+    countryId:   india?.id,
     type:        'airport',
     multiplier:  '1.50',
     description: 'Netaji Subhas Chandra Bose International Airport area',
@@ -305,6 +315,7 @@ async function seed() {
 
   const [zoneSuburb] = await db.insert(zones).values({
     name:        'Salt Lake & New Town',
+    countryId:   india?.id,
     type:        'suburb',
     multiplier:  '1.10',
     description: 'Salt Lake City (Bidhannagar) and New Town Rajarhat',
@@ -321,9 +332,46 @@ async function seed() {
     isActive: true,
   }).onConflictDoNothing().returning();
 
-  log.ok(`City Centre  (1.00x) — Park Street, BBD Bagh`);
-  log.ok(`Airport Zone (1.50x) — NSCBI Airport`);
-  log.ok(`Salt Lake & New Town (1.10x)`);
+  const [zoneTorontoDowntown] = await db.insert(zones).values({
+    name:        'Toronto Downtown',
+    countryId:   canada?.id,
+    type:        'city',
+    multiplier:  '1.00',
+    description: 'Downtown Toronto core',
+    polygon: {
+      type: 'Polygon',
+      coordinates: [[
+        [-79.4100, 43.6300],
+        [-79.3600, 43.6300],
+        [-79.3600, 43.6700],
+        [-79.4100, 43.6700],
+        [-79.4100, 43.6300],
+      ]],
+    },
+    isActive: true,
+  }).onConflictDoNothing().returning();
+
+  const [zonePearson] = await db.insert(zones).values({
+    name:        'Pearson Airport Zone',
+    countryId:   canada?.id,
+    type:        'airport',
+    multiplier:  '1.40',
+    description: 'Toronto Pearson International Airport area',
+    polygon: {
+      type: 'Polygon',
+      coordinates: [[
+        [-79.6500, 43.6700],
+        [-79.5900, 43.6700],
+        [-79.5900, 43.7100],
+        [-79.6500, 43.7100],
+        [-79.6500, 43.6700],
+      ]],
+    },
+    isActive: true,
+  }).onConflictDoNothing().returning();
+
+  log.ok(`India:  City Centre (1.00x), Airport (1.50x), Salt Lake & New Town (1.10x)`);
+  log.ok(`Canada: Toronto Downtown (1.00x), Pearson Airport (1.40x)`);
 
   // ── 4. Fare Rules ───────────────────────────────────────────────────────────
   log.section('4. Fare Rules');
@@ -331,6 +379,7 @@ async function seed() {
   await db.insert(fareRules).values([
     {
       name:        'Night Surge',
+      countryId:   null,   // applies in every country — evaluated in each country's local timezone
       ruleType:    'time',
       startTime:   '22:00',
       endTime:     '05:00',
@@ -338,10 +387,10 @@ async function seed() {
       multiplier:  '1.50',
       priority:    10,
       isActive:    true,
-      // null vehicleTypeId = applies to all vehicle types
     },
     {
       name:        'Morning Peak Hours',
+      countryId:   india?.id,
       ruleType:    'time',
       startTime:   '08:00',
       endTime:     '10:30',
@@ -352,6 +401,7 @@ async function seed() {
     },
     {
       name:        'Evening Peak Hours',
+      countryId:   india?.id,
       ruleType:    'time',
       startTime:   '17:30',
       endTime:     '20:00',
@@ -362,6 +412,7 @@ async function seed() {
     },
     {
       name:           'Heavy Traffic Surge',
+      countryId:      india?.id,
       ruleType:       'traffic',
       trafficDelayS:  600,   // 10 minutes of delay
       multiplier:     '1.20',
@@ -370,6 +421,7 @@ async function seed() {
     },
     {
       name:        'Airport Zone Premium',
+      countryId:   india?.id,
       ruleType:    'zone',
       multiplier:  '1.30',
       priority:    6,
@@ -378,6 +430,7 @@ async function seed() {
     },
     {
       name:        'Weekend Night Surge',
+      countryId:   india?.id,
       ruleType:    'time',
       startTime:   '23:00',
       endTime:     '04:00',
@@ -386,22 +439,41 @@ async function seed() {
       priority:    12,
       isActive:    true,
     },
+    {
+      name:        'Pearson Airport Premium',
+      countryId:   canada?.id,
+      ruleType:    'zone',
+      multiplier:  '1.25',
+      priority:    6,
+      zoneId:       zonePearson?.id,
+      isActive:    true,
+    },
   ]).onConflictDoNothing();
 
-  log.ok(`Night Surge           — 10 PM–5 AM daily          ×1.50`);
-  log.ok(`Morning Peak          — 8:00–10:30 AM weekdays    ×1.25`);
-  log.ok(`Evening Peak          — 5:30–8 PM weekdays        ×1.30`);
-  log.ok(`Heavy Traffic Surge   — when delay ≥10 min        ×1.20`);
-  log.ok(`Airport Zone Premium  — airport zone rides         ×1.30`);
-  log.ok(`Weekend Night Surge   — Fri/Sat 11 PM–4 AM        ×2.00`);
+  log.ok(`Global:  Night Surge — 10 PM–5 AM daily ×1.50 (every country, local time)`);
+  log.ok(`India:   Morning/Evening Peak, Heavy Traffic, Airport Zone, Weekend Night`);
+  log.ok(`Canada:  Pearson Airport Premium ×1.25`);
+
+  // ── 4b. Tax Rules ───────────────────────────────────────────────────────────
+  log.section('4b. Tax Rules');
+
+  await db.insert(taxRules).values([
+    { countryId: india?.id, name: 'GST', appliesTo: 'subscription', rate: '0.1800', isInclusive: false, isActive: true },
+    { countryId: canada?.id, name: 'HST', appliesTo: 'both', rate: '0.1300', isInclusive: false, isActive: true },
+  ]).onConflictDoNothing();
+
+  log.ok(`India:  GST 18% on subscriptions`);
+  log.ok(`Canada: HST 13% on both fares and subscriptions`);
 
   // ── 5. Subscription Plans ───────────────────────────────────────────────────
   log.section('5. Subscription Plans');
 
   const [planMonthly] = await db.insert(subscriptionPlans).values({
     name:           'Monthly Plan',
+    countryId:       india?.id,
     type:           'monthly',
-    price:          '999.00',
+    currencyCode:   'INR',
+    priceMinor:      99900,
     durationDays:    30,
     trialDays:        3,
     features:        ['Unlimited rides', 'Priority matching', 'No commission cut', '24/7 support'],
@@ -412,8 +484,10 @@ async function seed() {
 
   const [planQuarterly] = await db.insert(subscriptionPlans).values({
     name:           'Quarterly Plan',
+    countryId:       india?.id,
     type:           'quarterly',
-    price:          '2499.00',
+    currencyCode:   'INR',
+    priceMinor:      249900,
     durationDays:    90,
     trialDays:        0,
     features:        ['Unlimited rides', 'Priority matching', 'No commission cut', '24/7 support', 'Save ₹498 vs monthly'],
@@ -424,8 +498,10 @@ async function seed() {
 
   const [planYearly] = await db.insert(subscriptionPlans).values({
     name:           'Yearly Plan',
+    countryId:       india?.id,
     type:           'yearly',
-    price:          '7999.00',
+    currencyCode:   'INR',
+    priceMinor:      799900,
     durationDays:    365,
     trialDays:        7,
     features:        ['Unlimited rides', 'Priority matching', 'No commission cut', '24/7 support', 'Save ₹3989 vs monthly', 'Featured driver listing'],
@@ -436,8 +512,10 @@ async function seed() {
 
   const [planLifetime] = await db.insert(subscriptionPlans).values({
     name:           'Lifetime Plan',
+    countryId:       india?.id,
     type:           'lifetime',
-    price:          '24999.00',
+    currencyCode:   'INR',
+    priceMinor:      2499900,
     durationDays:    null,    // no expiry
     trialDays:        0,
     features:        ['Unlimited rides forever', 'VIP support', 'One-time payment', 'All future features included', 'Priority matching always'],
@@ -448,8 +526,10 @@ async function seed() {
 
   const [planWeekly] = await db.insert(subscriptionPlans).values({
     name:           'Weekly Trial Plan',
+    countryId:       india?.id,
     type:           'weekly',
-    price:          '299.00',
+    currencyCode:   'INR',
+    priceMinor:      29900,
     durationDays:    7,
     trialDays:        0,
     features:        ['Unlimited rides', 'Basic support', 'No commission cut'],
@@ -458,11 +538,36 @@ async function seed() {
     isActive:         true,
   }).onConflictDoNothing().returning();
 
-  log.ok(`Monthly   — ₹999  / 30 days  (3-day trial)`);
-  log.ok(`Quarterly — ₹2499 / 90 days`);
-  log.ok(`Yearly    — ₹7999 / 365 days (7-day trial)`);
-  log.ok(`Lifetime  — ₹24999 / forever`);
-  log.ok(`Weekly    — ₹299  / 7 days   (max 20 rides/day)`);
+  const [planMonthlyCA] = await db.insert(subscriptionPlans).values({
+    name:           'Monthly Plan',
+    countryId:       canada?.id,
+    type:           'monthly',
+    currencyCode:   'CAD',
+    priceMinor:      4999,
+    durationDays:    30,
+    trialDays:        3,
+    features:        ['Unlimited rides', 'Priority matching', 'No commission cut', '24/7 support'],
+    maxRidesPerDay:  null,
+    sortOrder:        1,
+    isActive:         true,
+  }).onConflictDoNothing().returning();
+
+  const [planYearlyCA] = await db.insert(subscriptionPlans).values({
+    name:           'Yearly Plan',
+    countryId:       canada?.id,
+    type:           'yearly',
+    currencyCode:   'CAD',
+    priceMinor:      49999,
+    durationDays:    365,
+    trialDays:        7,
+    features:        ['Unlimited rides', 'Priority matching', 'No commission cut', '24/7 support', 'Save vs monthly'],
+    maxRidesPerDay:  null,
+    sortOrder:        2,
+    isActive:         true,
+  }).onConflictDoNothing().returning();
+
+  log.ok(`India:  Weekly ₹299, Monthly ₹999, Quarterly ₹2499, Yearly ₹7999, Lifetime ₹24999`);
+  log.ok(`Canada: Monthly $49.99, Yearly $499.99`);
 
   // ── 6. Riders ───────────────────────────────────────────────────────────────
   log.section('6. Riders');
@@ -484,6 +589,8 @@ async function seed() {
   insertedRiders.forEach((r) => log.ok(`${r.phone} → ${r.name}`));
 
   // ── 7. Drivers ──────────────────────────────────────────────────────────────
+  // All India for this seed — Canada onboarding is proven via pricing/zones/plans above,
+  // not by inventing a second driver roster with no rides to drive.
   log.section('7. Drivers');
 
   const driverData = [
@@ -697,29 +804,25 @@ async function seed() {
     (d) => d.approvalStatus === 'approved' && d.subscriptionStatus === 'active' && !d.isBlocked,
   );
 
-  const planIds = [
-    planMonthly?.id,
-    planQuarterly?.id,
-    planYearly?.id,
-    planLifetime?.id,
-    planMonthly?.id,    // reuse for 5th driver
-  ].filter(Boolean);
+  const seedPlans = [planMonthly, planQuarterly, planYearly, planLifetime, planMonthly].filter((p) => p?.id);
 
-  if (approvedOnlineDrivers.length && planIds.length) {
-    const subValues = approvedOnlineDrivers.slice(0, 5).map((driver, i) => ({
-      driverId:  driver.id,
-      planId:    planIds[i % planIds.length],
-      status:    'active',
-      startDate: daysAgo(10),
-      endDate:   planIds[i % planIds.length] === planLifetime?.id ? null : daysFromNow(20 + i * 5),
-      paymentId: `pay_seed_${String(i + 1).padStart(6, '0')}`,
-      orderId:   `order_seed_${String(i + 1).padStart(6, '0')}`,
-      amount:    ['999.00', '2499.00', '7999.00', '24999.00', '999.00'][i],
-    }));
+  if (approvedOnlineDrivers.length && seedPlans.length) {
+    const subValues = approvedOnlineDrivers.slice(0, 5).map((driver, i) => {
+      const plan = seedPlans[i % seedPlans.length];
+      return {
+        driverId:     driver.id,
+        planId:       plan.id,
+        status:       'active',
+        startDate:    daysAgo(10),
+        endDate:      plan.id === planLifetime?.id ? null : daysFromNow(20 + i * 5),
+        currencyCode: plan.currencyCode,
+        amountMinor:  plan.priceMinor,
+      };
+    });
 
     await db.insert(subscriptions).values(subValues).onConflictDoNothing();
     subValues.forEach((s, i) =>
-      log.ok(`${approvedOnlineDrivers[i]?.name} → plan ${planIds[i % planIds.length]?.slice(-8)} active`),
+      log.ok(`${approvedOnlineDrivers[i]?.name} → plan ${s.planId?.slice(-8)} active`),
     );
   }
 
@@ -727,19 +830,18 @@ async function seed() {
   const tapan = insertedDrivers.find((d) => d.name === 'Tapan Roy');
   if (tapan && planMonthly?.id) {
     await db.insert(subscriptions).values({
-      driverId:  tapan.id,
-      planId:    planMonthly.id,
-      status:    'expired',
-      startDate: daysAgo(40),
-      endDate:   daysAgo(10),
-      paymentId: 'pay_seed_expired_001',
-      orderId:   'order_seed_expired_001',
-      amount:    '999.00',
+      driverId:     tapan.id,
+      planId:       planMonthly.id,
+      status:       'expired',
+      startDate:    daysAgo(40),
+      endDate:      daysAgo(10),
+      currencyCode: planMonthly.currencyCode,
+      amountMinor:  planMonthly.priceMinor,
     }).onConflictDoNothing();
     log.ok(`Tapan Roy → monthly expired 10 days ago`);
   }
 
-  // ── 9. Rides ────────────────────────────────────────────────────────────────
+  // ── 9. Rides (all India/INR — Kolkata pickup points resolve to India via zones) ─
   log.section('9. Rides');
 
   if (insertedRiders.length >= 3 && insertedDrivers.length >= 3) {
@@ -752,14 +854,16 @@ async function seed() {
     const driver3 = insertedDrivers[2];  // Bikash — cab
     const driver7 = insertedDrivers[6];  // Prosenjit — premium
 
-    const fareBreakdownBase = (base, dist, time, surge = 1) => ({
-      baseFare:       base,
-      distanceFare:   dist,
-      timeFare:       time,
-      subtotal:       base + dist + time,
-      zoneMultiplier: 1.0,
+    const fareBreakdownBase = (baseMinor, distMinor, timeMinor, surge = 1) => ({
+      baseFareMinor:   baseMinor,
+      distanceFareMinor: distMinor,
+      timeFareMinor:   timeMinor,
+      subtotalMinor:   baseMinor + distMinor + timeMinor,
+      zoneMultiplier:  1.0,
       surgeMultiplier: surge,
-      appliedSurges:  surge > 1 ? [{ name: 'Night Surge', multiplier: surge }] : [],
+      appliedSurges:   surge > 1 ? [{ name: 'Night Surge', multiplier: surge }] : [],
+      minFareApplied:  false,
+      taxMinor:        0,
     });
 
     const ridesData = [
@@ -768,14 +872,16 @@ async function seed() {
         riderId:       rider1.id,
         driverId:      driver1.id,
         vehicleTypeId: vtBike?.id,
+        countryId:     india?.id,
+        currencyCode:  'INR',
         pickupLat: '22.5726', pickupLng: '88.3639', pickupAddress: 'Park Street, Kolkata',
         dropLat:   '22.5600', dropLng:   '88.3500', dropAddress:   'Kalighat, Kolkata',
         status:        'completed',
-        estimatedFare: '85.00',
-        finalFare:     '82.00',
+        estimatedFareMinor: 8500,
+        finalFareMinor:     8200,
         distanceKm:    '7.200',
         durationMin:    22,
-        fareSnapshot:   fareBreakdownBase(15, 43.2, 11, 1),
+        fareSnapshot:   fareBreakdownBase(1500, 4320, 1100, 1),
         driverRating:   5,
         riderRating:    4,
         driverReview:  'Great rider!',
@@ -789,14 +895,16 @@ async function seed() {
         riderId:       rider2.id,
         driverId:      driver2.id,
         vehicleTypeId: vtAuto?.id,
+        countryId:     india?.id,
+        currencyCode:  'INR',
         pickupLat: '22.5730', pickupLng: '88.3650', pickupAddress: 'Esplanade, Kolkata',
         dropLat:   '22.5958', dropLng:   '88.4286', dropAddress:   'Salt Lake Sector V',
         status:        'completed',
-        estimatedFare: '145.00',
-        finalFare:     '145.00',
+        estimatedFareMinor: 14500,
+        finalFareMinor:     14500,
         distanceKm:    '9.800',
         durationMin:    30,
-        fareSnapshot:   fareBreakdownBase(25, 98, 22.5, 1),
+        fareSnapshot:   fareBreakdownBase(2500, 9800, 2250, 1),
         driverRating:   4,
         riderRating:    5,
         requestedAt:   daysAgo(2),
@@ -809,14 +917,16 @@ async function seed() {
         riderId:       rider3.id,
         driverId:      driver3.id,
         vehicleTypeId: vtCab?.id,
+        countryId:     india?.id,
+        currencyCode:  'INR',
         pickupLat: '22.5715', pickupLng: '88.3620', pickupAddress: 'New Market, Kolkata',
         dropLat:   '22.6450', dropLng:   '88.4450', dropAddress:   'Kolkata Airport',
         status:        'completed',
-        estimatedFare: '420.00',
-        finalFare:     '420.00',
+        estimatedFareMinor: 42000,
+        finalFareMinor:     42000,
         distanceKm:    '14.500',
         durationMin:    40,
-        fareSnapshot:   fareBreakdownBase(50, 203, 40, 1.5),
+        fareSnapshot:   fareBreakdownBase(5000, 20300, 4000, 1.5),
         driverRating:   5,
         riderRating:    5,
         driverReview:  'Excellent driver, very comfortable ride',
@@ -830,13 +940,15 @@ async function seed() {
         riderId:       rider1.id,
         driverId:      driver1.id,
         vehicleTypeId: vtBike?.id,
+        countryId:     india?.id,
+        currencyCode:  'INR',
         pickupLat: '22.5726', pickupLng: '88.3639', pickupAddress: 'Park Street, Kolkata',
         dropLat:   '22.5800', dropLng:   '88.4100', dropAddress:   'Salt Lake Sector I',
         status:        'started',
-        estimatedFare: '110.00',
+        estimatedFareMinor: 11000,
         distanceKm:    '8.100',
         durationMin:    28,
-        fareSnapshot:   fareBreakdownBase(15, 48.6, 14, 1),
+        fareSnapshot:   fareBreakdownBase(1500, 4860, 1400, 1),
         requestedAt:   new Date(Date.now() - 600_000),
         acceptedAt:    new Date(Date.now() - 540_000),
         startedAt:     new Date(Date.now() - 300_000),
@@ -846,13 +958,15 @@ async function seed() {
         riderId:       rider2.id,
         driverId:      driver2.id,
         vehicleTypeId: vtAuto?.id,
+        countryId:     india?.id,
+        currencyCode:  'INR',
         pickupLat: '22.5750', pickupLng: '88.3700', pickupAddress: 'Rabindra Sarani, Kolkata',
         dropLat:   '22.5600', dropLng:   '88.3400', dropAddress:   'Bhowanipore, Kolkata',
         status:        'accepted',
-        estimatedFare: '90.00',
+        estimatedFareMinor: 9000,
         distanceKm:    '5.200',
         durationMin:    18,
-        fareSnapshot:   fareBreakdownBase(25, 52, 13.5, 1),
+        fareSnapshot:   fareBreakdownBase(2500, 5200, 1350, 1),
         requestedAt:   new Date(Date.now() - 120_000),
         acceptedAt:    new Date(Date.now() - 90_000),
       },
@@ -860,15 +974,17 @@ async function seed() {
       {
         riderId:       rider4.id,
         vehicleTypeId: vtCab?.id,
+        countryId:     india?.id,
+        currencyCode:  'INR',
         pickupLat: '22.5726', pickupLng: '88.3639', pickupAddress: 'Park Street',
         dropLat:   '22.5200', dropLng:   '88.3800', dropAddress:   'Garia, Kolkata',
         status:        'cancelled',
         cancelledBy:   'rider',
         cancelReason:  'Changed plans',
-        estimatedFare: '180.00',
+        estimatedFareMinor: 18000,
         distanceKm:    '11.000',
         durationMin:    35,
-        fareSnapshot:   fareBreakdownBase(50, 154, 35, 1),
+        fareSnapshot:   fareBreakdownBase(5000, 15400, 3500, 1),
         requestedAt:   daysAgo(1),
         cancelledAt:   new Date(daysAgo(1).getTime() + 60_000),
       },
@@ -876,15 +992,17 @@ async function seed() {
       {
         riderId:       rider4.id,
         vehicleTypeId: vtPremium?.id,
+        countryId:     india?.id,
+        currencyCode:  'INR',
         pickupLat: '22.4500', pickupLng: '88.2800', pickupAddress: 'Howrah Station',
         dropLat:   '22.5726', dropLng:   '88.3639', dropAddress:   'Park Street',
         status:        'expired',
         cancelledBy:   'system',
         cancelReason:  'No driver found',
-        estimatedFare: '350.00',
+        estimatedFareMinor: 35000,
         distanceKm:    '16.500',
         durationMin:    45,
-        fareSnapshot:   fareBreakdownBase(100, 330, 67.5, 1),
+        fareSnapshot:   fareBreakdownBase(10000, 33000, 6750, 1),
         requestedAt:   daysAgo(4),
         cancelledAt:   new Date(daysAgo(4).getTime() + 75_000),
       },
@@ -893,14 +1011,16 @@ async function seed() {
         riderId:       rider3.id,
         driverId:      driver7?.id,
         vehicleTypeId: vtPremium?.id,
+        countryId:     india?.id,
+        currencyCode:  'INR',
         pickupLat: '22.5726', pickupLng: '88.3639', pickupAddress: 'Park Street, Kolkata',
         dropLat:   '22.6500', dropLng:   '88.4500', dropAddress:   'Kolkata Airport Terminal 2',
         status:        'completed',
-        estimatedFare: '680.00',
-        finalFare:     '680.00',
+        estimatedFareMinor: 68000,
+        finalFareMinor:     68000,
         distanceKm:    '18.300',
         durationMin:    50,
-        fareSnapshot:   fareBreakdownBase(100, 366, 75, 1.3),
+        fareSnapshot:   fareBreakdownBase(10000, 36600, 7500, 1.3),
         driverRating:   5,
         driverReview:  'Professional driver. Excellent car.',
         requestedAt:   daysAgo(5),
@@ -913,14 +1033,16 @@ async function seed() {
         riderId:       insertedRiders[idx % insertedRiders.length].id,
         driverId:      insertedDrivers[idx % 3].id,
         vehicleTypeId: [vtBike?.id, vtAuto?.id, vtCab?.id][idx % 3],
+        countryId:     india?.id,
+        currencyCode:  'INR',
         pickupLat: '22.5726', pickupLng: '88.3639', pickupAddress: 'Kolkata',
         dropLat:   '22.5958', dropLng:   '88.4286', dropAddress:   'Salt Lake',
         status:        'completed',
-        estimatedFare: randomFare(80, 250),
-        finalFare:     randomFare(80, 250),
+        estimatedFareMinor: randomFareMinor(80, 250),
+        finalFareMinor:     randomFareMinor(80, 250),
         distanceKm:    String((Math.random() * 10 + 3).toFixed(3)),
         durationMin:    Math.floor(Math.random() * 30 + 10),
-        fareSnapshot:   fareBreakdownBase(25, 80, 15, 1),
+        fareSnapshot:   fareBreakdownBase(2500, 8000, 1500, 1),
         driverRating:   Math.floor(Math.random() * 2) + 4,
         requestedAt:   daysAgo(daysBack),
         acceptedAt:    new Date(daysAgo(daysBack).getTime() + 60_000),
@@ -997,15 +1119,19 @@ ${'═'.repeat(55)}
     +919876543216  Dipak Saha       [REJECTED / inactive]
     +919876543219  Raju Pal         [BLOCKED  / active sub]
 
-  Geography:      India → West Bengal → Kolkata
+  Geography:      India (default, INR) → West Bengal → Kolkata
+                  Canada (CAD) → Ontario → Toronto
   Document Types: Driver's License, Vehicle Registration, Insurance Certificate, National ID
   Legal Docs:     Terms v1.0, Privacy Policy v1.0 (global)
   Questions:      own_vehicle, weekly_hours, worked_before, rental_interest
-  Vehicle Types:  Bike, Auto, Cab, Premium Cab
-  Zones:          City Centre (×1.0), Airport (×1.5), Salt Lake (×1.1)
-  Fare Rules:     Night Surge, Morning Peak, Evening Peak, Traffic, Airport, Weekend
-  Plans:          Weekly, Monthly, Quarterly, Yearly, Lifetime
-  Rides:          12 (various statuses)
+  Vehicle Types:  Bike, Auto, Cab, Premium Cab (global catalog)
+  Pricing:        India: all 4 types.  Canada: Cab + Premium only.
+  Zones:          Kolkata City Centre/Airport/Salt Lake, Toronto Downtown/Pearson
+  Fare Rules:     Night Surge (global) + 5 India-scoped + 1 Canada-scoped
+  Tax Rules:      India GST 18% (subscription), Canada HST 13% (fare + subscription)
+  Plans:          India: Weekly/Monthly/Quarterly/Yearly/Lifetime (INR)
+                  Canada: Monthly/Yearly (CAD)
+  Rides:          12 (various statuses, India/INR)
 ${'═'.repeat(55)}
 `);
 }

@@ -16,6 +16,12 @@ endpoint fast and knowing who's allowed to call it.
 - **Pagination params** (list endpoints): `?page=1&limit=20` (limit capped at 100).
 - **Auth column values**: `Public` (no token), `Rider`/`Driver`/`Admin` (role-specific JWT),
   `Any` (any valid JWT).
+- **Money**: every amount is an integer in **minor units** (paise/cents), paired with a
+  `currencyCode` (ISO 4217) — never a bare decimal. `100` INR = `10000`.
+- **Country resolution**: a ride's country/currency is never a request parameter — it's resolved
+  server-side from the pickup lat/lng via zone match (falling back to the deployment's default
+  country). Vehicle types are a global catalog; their rates are looked up per-country via
+  [Vehicle Type Pricing](#vehicle-types).
 
 ## Table of contents
 
@@ -148,7 +154,7 @@ Base path: `/geo` — countries → states → cities, used for the driving-loca
 | GET | `/countries/:countryId/states` | Public | — | List active states in a country. |
 | GET | `/states/:stateId/cities` | Public | — | List active cities in a state. |
 | GET | `/admin/countries` | Admin | — | List all countries (paginated). |
-| POST | `/admin/countries` | Admin | `{ name, isoCode, dialCode, currencyCode, defaultLanguageCode?, sortOrder? }` | Add a country. |
+| POST | `/admin/countries` | Admin | `{ name, isoCode, dialCode, currencyCode, defaultLanguageCode?, timezone?, isDefault?, roundingIncrementMinor?, sortOrder? }` | Add a country. `isDefault` marks the fallback country for pickup points that don't resolve to any zone (exactly one country should have it set); `roundingIncrementMinor` rounds final fares to the nearest N minor units (e.g. `5` for CAD nickel-rounding, `1` = no rounding). |
 | PATCH | `/admin/countries/:id` | Admin | partial fields | Update a country. |
 | PATCH | `/admin/countries/:id/enable` | Admin | — | Enable a country. |
 | PATCH | `/admin/countries/:id/disable` | Admin | — | Disable a country. |
@@ -179,42 +185,75 @@ Base path: `/riders`
 
 ## Vehicle Types
 
-Base path: `/vehicle-types` — the rate/category classes (Bike, Auto, Cab, …).
+Base path: `/vehicle-types` — the category classes (Bike, Auto, Cab, …). This is a **global
+catalog** (name/capacity/icon only, same across every country) — per-country rates live
+separately in Vehicle Type Pricing below, so adding a country never duplicates the catalog.
 
 | Method | Path | Auth | Body | Description |
 |---|---|---|---|---|
 | GET | `/` | Public | `?all=true` (admin paginated view) | List active vehicle types (or all, paginated, for admin). |
 | GET | `/:id` | Public | — | Get one vehicle type. |
-| POST | `/` | Admin | `{ name, baseRate, perKmRate, perMinRate, capacity?, minFare?, sortOrder?, icon? }` | Create a vehicle type. |
+| POST | `/` | Admin | `{ name, capacity?, sortOrder?, icon? }` | Create a vehicle type (catalog only — no rates). |
 | PATCH | `/:id` | Admin | partial fields | Update a vehicle type. |
 | DELETE | `/:id` | Admin | — | Soft-delete (deactivate) a vehicle type. |
 
-## Zones
+### Vehicle Type Pricing
 
-Base path: `/zones` — geofenced pricing zones (city centre, airport, etc).
+Per-country rate cards for a vehicle type — one row per `(vehicleTypeId, countryId)`. A vehicle
+type with no pricing row in a given country is simply not offered there: `GET .../pricing` 404s,
+and `POST /fare/estimate-all` silently drops it from the results instead of erroring.
 
 | Method | Path | Auth | Body | Description |
 |---|---|---|---|---|
-| GET | `/` | Public | `?page=` (paginated if provided) | List zones. |
+| GET | `/pricing?countryId=` | Admin | — | Every vehicle type's rate card in one country. |
+| GET | `/:id/pricing?countryId=` | Public | — | One vehicle type's rate card in one country. |
+| PUT | `/:id/pricing` | Admin | `{ countryId, currencyCode, baseRateMinor, perKmRateMinor, perMinRateMinor, minFareMinor? }` | Upsert the rate card for this vehicle type in that country. All amounts are integer minor units. |
+
+## Zones
+
+Base path: `/zones` — geofenced pricing zones (city centre, airport, etc), each scoped to a
+country. `POST /detect` (used internally by fare calculation) matches across every country's
+zones at once — which country a zone belongs to is how a ride's country/currency get resolved
+from a pickup point.
+
+| Method | Path | Auth | Body | Description |
+|---|---|---|---|---|
+| GET | `/` | Public | `?page=&countryId=` (both optional) | List zones, optionally filtered to one country. |
 | GET | `/:id` | Public | — | Get one zone. |
-| POST | `/detect` | Public | `{ lat, lng }` | Find which zone a point falls in (or `null`). |
-| POST | `/` | Admin | `{ name, type, polygon, multiplier?, description? }` | Create a zone. |
+| POST | `/detect` | Public | `{ lat, lng }` | Find which zone a point falls in (or `null`) — searches across all countries. |
+| POST | `/` | Admin | `{ name, countryId, type, polygon, multiplier?, description? }` | Create a zone. |
 | PATCH | `/:id` | Admin | partial fields | Update a zone. |
 | DELETE | `/:id` | Admin | — | Delete a zone. |
 
 ## Fare
 
-Base path: `/fare`
+Base path: `/fare`. Response includes `countryId`, `currencyCode`, `estimatedFareMinor` (integer)
+and `estimatedFare` (major-unit convenience number) — country/currency are resolved from the
+pickup point, never passed in.
 
 | Method | Path | Auth | Body | Description |
 |---|---|---|---|---|
-| POST | `/estimate` | Public | `{ pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId }` | Estimate fare for one vehicle type. |
-| POST | `/estimate-all` | Public | `{ pickupLat, pickupLng, dropLat, dropLng }` | Estimate fare for every active vehicle type (booking screen). |
+| POST | `/estimate` | Public | `{ pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId }` | Estimate fare for one vehicle type. 404s if that vehicle type has no rate card in the resolved country. |
+| POST | `/estimate-all` | Public | `{ pickupLat, pickupLng, dropLat, dropLng }` | Estimate fare for every active vehicle type (booking screen) — types with no rate card in the resolved country are silently omitted. |
 | GET | `/rules` | Admin | — | List fare rules (paginated). |
 | GET | `/rules/:id` | Admin | — | Get one fare rule. |
-| POST | `/rules` | Admin | `{ name, ruleType, multiplier, ... }` | Create a fare rule (time/zone/traffic-based surge). |
+| POST | `/rules` | Admin | `{ name, countryId?, ruleType, multiplier, ... }` | Create a fare rule (time/zone/traffic-based surge). `countryId: null` = applies in every country, each evaluated in that country's own local timezone (`countries.timezone`). |
 | PATCH | `/rules/:id` | Admin | partial fields | Update a fare rule. |
 | DELETE | `/rules/:id` | Admin | — | Delete a fare rule. |
+
+### Tax Rules
+
+Base path: `/fare/tax-rules` — country-scoped tax applied on top of fares and/or subscriptions.
+Exclusive rules (`isInclusive: false`) add a `taxMinor` line on top of the price; inclusive rules
+are informational only (already priced into the rate card). Only country-wide rules (no
+`stateId`) are applied today — a pickup point resolves to a country, not a state/province.
+
+| Method | Path | Auth | Body | Description |
+|---|---|---|---|---|
+| GET | `/` | Admin | — | List tax rules (paginated). |
+| POST | `/` | Admin | `{ countryId, stateId?, name, appliesTo, rate, isInclusive? }` | Create a tax rule. `appliesTo`: `fare`\|`subscription`\|`both`. `rate` is a fraction (`"0.1300"` = 13%). |
+| PATCH | `/:id` | Admin | partial fields | Update a tax rule. |
+| DELETE | `/:id` | Admin | — | Soft-delete (deactivate) a tax rule. |
 
 ## Rides
 
@@ -251,18 +290,23 @@ Base path: `/tracking`
 
 ## Subscriptions
 
-Base path: `/subscriptions` — the core revenue model: drivers pay for a plan instead of per-ride commission.
+Base path: `/subscriptions` — the core revenue model: drivers pay for a plan instead of per-ride
+commission. A plan is a country-specific commercial product (`countryId` + `currencyCode` +
+`priceMinor`) — the payment gateway is resolved server-side from that currency (INR → Razorpay,
+CAD → Stripe; see `src/modules/payment/payment.service.js`). `/initiate` and `/verify` use
+gateway-neutral field names since what they contain differs per gateway.
 
 | Method | Path | Auth | Body | Description |
 |---|---|---|---|---|
-| GET | `/plans` | Public | — | List active subscription plans. |
-| POST | `/initiate` | Driver | `{ planId }` | Start a subscription purchase (creates a Razorpay order). |
-| POST | `/verify` | Driver | `{ planId, razorpayOrderId, razorpayPaymentId, razorpaySignature }` | Verify payment signature → activate the subscription. |
+| GET | `/plans` | Public | `?countryId=` (optional) | List active subscription plans, optionally filtered to one country. |
+| POST | `/initiate` | Driver | `{ planId }` | Start a subscription purchase. Dev mode (gateway not configured) activates directly; otherwise returns a gateway-shaped payload — Razorpay: `{ gateway, gatewayOrderId, amount, currency, keyId }` for Razorpay Checkout; Stripe: `{ gateway, gatewayOrderId, clientSecret, amount, currency, publishableKey }` for Stripe Elements/PaymentSheet. |
+| POST | `/verify` | Driver | `{ planId, orderRef, paymentRef, signature? }` | Verify payment → activate the subscription. Razorpay: `orderRef`/`paymentRef`/`signature` are its order id, payment id and HMAC signature. Stripe: same PaymentIntent id for both `orderRef`/`paymentRef`, `signature` unused (verified via a server-side status check instead). |
 | GET | `/mine` | Driver | — | Get my current subscription. |
 | GET | `/history` | Driver | — | Paginated subscription history. |
 | POST | `/webhook/razorpay` | Public (HMAC-signed) | raw Razorpay payload | Razorpay webhook — signature verified via `X-Razorpay-Signature` header. |
-| GET | `/plans/all` | Admin | — | List all plans, including inactive (paginated). |
-| POST | `/plans` | Admin | `{ name, type, price, durationDays?, trialDays?, features?, vehicleTypeIds?, maxRidesPerDay?, sortOrder? }` | Create a plan (any `type`: monthly/quarterly/yearly/lifetime/custom). |
+| POST | `/webhook/stripe` | Public (signed) | raw Stripe event | Stripe webhook — signature verified via `Stripe-Signature` header (`stripe.webhooks.constructEvent`). |
+| GET | `/plans/all` | Admin | `?countryId=` (optional) | List all plans, including inactive (paginated). |
+| POST | `/plans` | Admin | `{ name, countryId, type, currencyCode, priceMinor, durationDays?, trialDays?, features?, vehicleTypeIds?, maxRidesPerDay?, sortOrder? }` | Create a plan (any `type`: monthly/quarterly/yearly/lifetime/custom). If the currency's gateway is configured, a matching recurring plan is created there too and stored as `gateway`/`gatewayPlanId`. |
 | PATCH | `/plans/:id` | Admin | partial fields | Update a plan. |
 | DELETE | `/plans/:id` | Admin | — | Delete/deactivate a plan. |
 

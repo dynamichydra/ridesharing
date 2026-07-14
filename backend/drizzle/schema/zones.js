@@ -1,7 +1,9 @@
 import { pgTable, uuid, varchar, boolean, timestamp, decimal, jsonb } from 'drizzle-orm/pg-core';
+import { countries } from './countries.js';
 
 export const zones = pgTable('zones', {
   id:          uuid('id').primaryKey().defaultRandom(),
+  countryId:   uuid('country_id').references(() => countries.id).notNull(),
   name:        varchar('name', { length: 100 }).notNull(),
   type:        varchar('type', { length: 30 }).notNull(),   // city | large_city | suburb | airport | highway
   polygon:     jsonb('polygon').notNull(),                  // GeoJSON polygon { type, coordinates }

@@ -1,52 +1,53 @@
 import { eq, and, desc, count, lt } from 'drizzle-orm';
-import Razorpay from 'razorpay';
-import { createHmac } from 'crypto';
 import { db } from '../../config/db.js';
-import { subscriptionPlans, subscriptions, drivers } from '../../../drizzle/schema/index.js';
+import { subscriptionPlans, subscriptions, drivers, payments } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { addDays } from '../../utils/time.js';
 import { paginate } from '../../utils/response.js';
-import { env, isRazorpayConfigured } from '../../config/env.js';
-
-const razorpay = isRazorpayConfigured
-  ? new Razorpay({ key_id: env.RAZORPAY_KEY_ID, key_secret: env.RAZORPAY_KEY_SECRET })
-  : null;
+import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
+import { getApplicableTaxRules } from '../fare/tax-rules.service.js';
 
 // ── Plans (admin) ─────────────────────────────────────────────────────────────
 
-export async function listPlans(onlyActive = true) {
-  const where = onlyActive ? eq(subscriptionPlans.isActive, true) : undefined;
+export async function listPlans(onlyActive = true, countryId) {
+  const conditions = [];
+  if (onlyActive) conditions.push(eq(subscriptionPlans.isActive, true));
+  if (countryId)  conditions.push(eq(subscriptionPlans.countryId, countryId));
+  const where = conditions.length ? and(...conditions) : undefined;
   return db.select().from(subscriptionPlans).where(where).orderBy(subscriptionPlans.sortOrder);
 }
 
-export async function listPlansPaginated(page, limit, offset) {
-  const [{ total }] = await db.select({ total: count() }).from(subscriptionPlans);
-  const rows = await db.select().from(subscriptionPlans).limit(limit).offset(offset);
+export async function listPlansPaginated(page, limit, offset, countryId) {
+  const where = countryId ? eq(subscriptionPlans.countryId, countryId) : undefined;
+  const [{ total }] = await db.select({ total: count() }).from(subscriptionPlans).where(where);
+  const rows = await db.select().from(subscriptionPlans).where(where).limit(limit).offset(offset);
   return { rows, pagination: paginate(page, limit, total) };
 }
 
 export async function createPlan(data) {
   const [plan] = await db.insert(subscriptionPlans).values(data).returning();
 
-  // If recurring (not lifetime), create a Razorpay plan for subscription billing
-  if (razorpay && data.type !== 'lifetime' && data.durationDays) {
-    const period   = data.type === 'monthly'    ? 'monthly'
-                   : data.type === 'quarterly'  ? 'monthly'   // Razorpay: use monthly × 3
-                   : data.type === 'yearly'     ? 'yearly'
-                   : 'monthly'; // custom → monthly as base
-    const interval = data.type === 'quarterly' ? 3 : 1;
+  // If recurring (not lifetime), register a matching recurring plan with that
+  // currency's gateway for subscription billing.
+  const gateway = gatewayForCurrency(plan.currencyCode);
+  if (gateway && plan.type !== 'lifetime' && plan.durationDays) {
+    const period   = plan.type === 'monthly'    ? 'monthly'
+                   : plan.type === 'quarterly'  ? 'monthly'   // billed monthly x 3
+                   : plan.type === 'yearly'     ? 'yearly'
+                   : 'monthly'; // custom -> monthly as base
+    const interval = plan.type === 'quarterly' ? 3 : 1;
     try {
-      const rzPlan = await razorpay.plans.create({
-        period, interval,
-        item: { name: data.name, amount: Math.round(parseFloat(data.price) * 100), currency: 'INR' },
-        notes: { planId: plan.id },
+      const { gatewayPlanId } = await gateway.createPlan({
+        name: plan.name, priceMinor: plan.priceMinor, currencyCode: plan.currencyCode,
+        period, interval, metadata: { planId: plan.id },
       });
       await db.update(subscriptionPlans)
-        .set({ razorpayPlanId: rzPlan.id })
+        .set({ gateway: gateway.name, gatewayPlanId })
         .where(eq(subscriptionPlans.id, plan.id));
-      plan.razorpayPlanId = rzPlan.id;
+      plan.gateway = gateway.name;
+      plan.gatewayPlanId = gatewayPlanId;
     } catch (err) {
-      console.error('[Subscription] Razorpay plan creation failed:', err.message);
+      console.error(`[Subscription] ${gateway.name} plan creation failed:`, err.message);
     }
   }
   return plan;
@@ -74,45 +75,71 @@ export async function initiateSubscription(driverId, planId) {
     .where(and(eq(subscriptionPlans.id, planId), eq(subscriptionPlans.isActive, true))).limit(1);
   if (!plan) throw { statusCode: 404, message: 'Plan not found or inactive' };
 
-  if (!razorpay) {
-    // Dev mode — activate directly without payment
-    return _activateSubscription(driverId, planId, plan, 'dev_payment_' + Date.now(), null);
+  const gateway = gatewayForCurrency(plan.currencyCode);
+  const totalMinor = await addSubscriptionTax(plan.countryId, plan.priceMinor);
+
+  if (!gateway) {
+    // Dev mode — this currency's gateway has no keys configured, activate directly
+    return _activateSubscription(driverId, planId, plan, totalMinor, {
+      gateway: 'none', gatewayPaymentId: 'dev_payment_' + Date.now(), gatewayOrderId: null,
+    });
   }
 
-  // Create Razorpay order
-  const order = await razorpay.orders.create({
-    amount:   Math.round(parseFloat(plan.price) * 100),
-    currency: 'INR',
-    notes:    { driverId, planId },
+  const order = await gateway.createOrder({
+    amountMinor: totalMinor,
+    currencyCode: plan.currencyCode,
+    metadata: { driverId, planId },
   });
 
+  const [payment] = await db.insert(payments).values({
+    subscriptionId: null, // filled in on activation — this row tracks the pending attempt via gatewayOrderId until then
+    countryId: plan.countryId,
+    gateway: gateway.name,
+    currencyCode: plan.currencyCode,
+    amountMinor: totalMinor,
+    status: 'created',
+    gatewayOrderId: order.gatewayOrderId,
+  }).returning();
+
   return {
-    orderId:   order.id,
-    amount:    plan.price,
-    currency:  'INR',
-    keyId:     env.RAZORPAY_KEY_ID,
+    ...order,
+    paymentAttemptId: payment.id,
     plan: { id: plan.id, name: plan.name, type: plan.type, durationDays: plan.durationDays },
   };
 }
 
-export async function verifyAndActivate(driverId, planId, razorpayOrderId, razorpayPaymentId, razorpaySignature) {
-  if (!razorpay) {
-    // No Razorpay keys configured — nothing real to verify against
-    const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, planId)).limit(1);
-    return _activateSubscription(driverId, planId, plan, razorpayPaymentId, razorpayOrderId);
+export async function verifyAndActivate(driverId, planId, orderRef, paymentRef, signature) {
+  const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, planId)).limit(1);
+  if (!plan) throw { statusCode: 404, message: 'Plan not found' };
+
+  const gateway = gatewayForCurrency(plan.currencyCode);
+  if (!gateway) {
+    const totalMinor = await addSubscriptionTax(plan.countryId, plan.priceMinor);
+    return _activateSubscription(driverId, planId, plan, totalMinor, {
+      gateway: 'none', gatewayPaymentId: paymentRef, gatewayOrderId: orderRef,
+    });
   }
 
-  // Verify signature
-  const expected = createHmac('sha256', env.RAZORPAY_KEY_SECRET)
-    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-    .digest('hex');
-  if (expected !== razorpaySignature) throw { statusCode: 400, message: 'Payment verification failed' };
+  const verified = await gateway.verifyPayment({ orderRef, paymentRef, signature });
+  if (!verified) throw { statusCode: 400, message: 'Payment verification failed' };
 
-  const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, planId)).limit(1);
-  return _activateSubscription(driverId, planId, plan, razorpayPaymentId, razorpayOrderId);
+  const [attempt] = await db.select().from(payments)
+    .where(eq(payments.gatewayOrderId, orderRef)).limit(1);
+  const totalMinor = attempt?.amountMinor ?? await addSubscriptionTax(plan.countryId, plan.priceMinor);
+
+  return _activateSubscription(driverId, planId, plan, totalMinor, {
+    gateway: gateway.name, gatewayPaymentId: paymentRef, gatewayOrderId: orderRef, paymentAttemptId: attempt?.id,
+  });
 }
 
-async function _activateSubscription(driverId, planId, plan, paymentId, orderId) {
+async function addSubscriptionTax(countryId, priceMinor) {
+  const rules = await getApplicableTaxRules(countryId, 'subscription');
+  const exclusiveRate = rules.filter((r) => !r.isInclusive)
+    .reduce((sum, r) => sum + parseFloat(r.rate), 0);
+  return priceMinor + Math.round(priceMinor * exclusiveRate);
+}
+
+async function _activateSubscription(driverId, planId, plan, amountMinor, paymentInfo) {
   // Expire any existing active sub
   await db.update(subscriptions).set({ status: 'expired' }).where(
     and(eq(subscriptions.driverId, driverId), eq(subscriptions.status, 'active')),
@@ -122,12 +149,31 @@ async function _activateSubscription(driverId, planId, plan, paymentId, orderId)
 
   const [sub] = await db.insert(subscriptions).values({
     driverId, planId,
-    status:    'active',
+    status:       'active',
     endDate,
-    paymentId,
-    orderId,
-    amount:    String(plan.price),
+    currencyCode: plan.currencyCode,
+    amountMinor,
   }).returning();
+
+  if (paymentInfo.paymentAttemptId) {
+    await db.update(payments)
+      .set({
+        subscriptionId: sub.id, status: 'captured', updatedAt: new Date(),
+        gatewayPaymentId: paymentInfo.gatewayPaymentId,
+      })
+      .where(eq(payments.id, paymentInfo.paymentAttemptId));
+  } else {
+    await db.insert(payments).values({
+      subscriptionId: sub.id,
+      countryId: plan.countryId,
+      gateway: paymentInfo.gateway,
+      currencyCode: plan.currencyCode,
+      amountMinor,
+      status: 'captured',
+      gatewayOrderId: paymentInfo.gatewayOrderId,
+      gatewayPaymentId: paymentInfo.gatewayPaymentId,
+    });
+  }
 
   await db.update(drivers).set({ subscriptionStatus: 'active' }).where(eq(drivers.id, driverId));
 
@@ -163,29 +209,32 @@ export async function getSubscriptionHistory(driverId, page, limit, offset) {
   return { rows, pagination: paginate(page, limit, total) };
 }
 
-// Razorpay webhook handler
-export async function handleRazorpayWebhook(rawBody, signature) {
-  if (!razorpay) {
-    // No Razorpay keys configured — nothing real sends webhooks here; ack without verifying
-    console.log('[Subscription] Razorpay webhook received but Razorpay is not configured — ignoring.');
+// ── Gateway webhooks ────────────────────────────────────────────────────────
+
+export async function handleWebhook(gatewayName, rawBody, signature) {
+  const gateway = getGateway(gatewayName);
+  if (!gateway.isConfigured) {
+    console.log(`[Subscription] ${gatewayName} webhook received but not configured — ignoring.`);
     return { received: true };
   }
+  if (!gateway.verifyWebhookSignature(rawBody, signature)) {
+    throw { statusCode: 400, message: 'Invalid webhook signature' };
+  }
 
-  const expected = createHmac('sha256', env.RAZORPAY_WEBHOOK_SECRET || '')
-    .update(rawBody).digest('hex');
-  if (expected !== signature) throw { statusCode: 400, message: 'Invalid webhook signature' };
-
-  const event = JSON.parse(rawBody);
-  if (event.event === 'payment.captured') {
-    const notes    = event.payload.payment.entity.notes;
-    const driverId = notes.driverId;
-    const planId   = notes.planId;
-    const paymentId = event.payload.payment.entity.id;
-    const orderId   = event.payload.payment.entity.order_id;
-
+  const event = gateway.parseWebhookEvent(rawBody, signature);
+  if (event) {
+    const { driverId, planId } = event.metadata || {};
     if (driverId && planId) {
       const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, planId)).limit(1);
-      if (plan) await _activateSubscription(driverId, planId, plan, paymentId, orderId);
+      if (plan) {
+        const [attempt] = await db.select().from(payments)
+          .where(eq(payments.gatewayOrderId, event.orderRef)).limit(1);
+        const totalMinor = attempt?.amountMinor ?? await addSubscriptionTax(plan.countryId, plan.priceMinor);
+        await _activateSubscription(driverId, planId, plan, totalMinor, {
+          gateway: gateway.name, gatewayPaymentId: event.paymentRef, gatewayOrderId: event.orderRef,
+          paymentAttemptId: attempt?.id,
+        });
+      }
     }
   }
   return { received: true };

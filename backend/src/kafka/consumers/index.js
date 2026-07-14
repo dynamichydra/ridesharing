@@ -118,6 +118,7 @@ async function startRideConsumer() {
             pickupAddress: payload.pickupAddress,
             dropAddress: payload.dropAddress,
             estimatedFare: payload.estimatedFare,
+            currency: payload.currency,
             distanceKm: payload.distanceKm,
             polyline: payload.polyline,
             pickupLat: payload.pickupLat,
@@ -160,6 +161,7 @@ async function startRideConsumer() {
         _io.of('/rider').to(`rider:${payload.riderId}`).emit('ride:completed', {
           rideId: payload.rideId,
           finalFare: payload.finalFare,
+          currency: payload.currency,
         });
       }
 

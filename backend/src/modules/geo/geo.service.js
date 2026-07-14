@@ -35,6 +35,27 @@ export async function setCountryActive(id, isActive) {
   return row;
 }
 
+export async function getCountryById(id) {
+  const [row] = await db.select().from(countries).where(eq(countries.id, id)).limit(1);
+  if (!row) throw { statusCode: 404, message: 'Country not found' };
+  return row;
+}
+
+/**
+ * Fallback country for pickup points that don't fall inside any drawn zone
+ * (e.g. a market that hasn't finished zone setup yet). Every deployment must
+ * have exactly one country flagged isDefault — admin-configurable, not hardcoded.
+ */
+export async function getDefaultCountry() {
+  const [row] = await db.select().from(countries)
+    .where(and(eq(countries.isDefault, true), eq(countries.isActive, true))).limit(1);
+  if (row) return row;
+  const [fallback] = await db.select().from(countries)
+    .where(eq(countries.isActive, true)).orderBy(asc(countries.sortOrder)).limit(1);
+  if (!fallback) throw { statusCode: 500, message: 'No active country configured' };
+  return fallback;
+}
+
 // ── States ───────────────────────────────────────────────────────────────────
 
 export async function listStates(countryId, onlyActive = true) {

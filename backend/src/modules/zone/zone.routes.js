@@ -4,14 +4,14 @@ import * as zoneService from './zone.service.js';
 
 export async function zoneRoutes(app) {
 
-  // Public — anyone can list active zones
+  // Public — anyone can list active zones, optionally scoped to a country
   app.get('/', async (request, reply) => {
     if (request.query.page) {
       const { page, limit, offset } = parsePagination(request.query);
-      const { rows, pagination } = await zoneService.listPaginated(page, limit, offset);
+      const { rows, pagination } = await zoneService.listPaginated(page, limit, offset, request.query.countryId);
       return sendList(reply, rows, pagination);
     }
-    const data = await zoneService.listAll();
+    const data = await zoneService.listAll(request.query.countryId);
     return sendSuccess(reply, data);
   });
 
@@ -30,8 +30,10 @@ export async function zoneRoutes(app) {
 
   // Admin only
   app.post('/', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const { name, type, polygon, multiplier, description } = request.body;
-    if (!name || !type || !polygon) return sendError(reply, 'name, type and polygon are required');
+    const { name, type, polygon, countryId } = request.body;
+    if (!name || !type || !polygon || !countryId) {
+      return sendError(reply, 'name, type, polygon and countryId are required');
+    }
     const data = await zoneService.create(request.body);
     return sendSuccess(reply, data, 201);
   });

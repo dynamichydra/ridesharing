@@ -6,9 +6,9 @@ export async function subscriptionRoutes(app) {
 
   // ── Public / Drivers ──────────────────────────────────────────────────────
 
-  // GET /api/v1/subscriptions/plans
+  // GET /api/v1/subscriptions/plans?countryId=
   app.get('/plans', async (request, reply) => {
-    const data = await subService.listPlans(true);
+    const data = await subService.listPlans(true, request.query.countryId);
     return sendSuccess(reply, data);
   });
 
@@ -21,13 +21,16 @@ export async function subscriptionRoutes(app) {
   });
 
   // POST /api/v1/subscriptions/verify
+  // orderRef/paymentRef/signature are gateway-neutral names — what they actually contain
+  // depends on which gateway the plan's currency maps to (Razorpay order+payment+HMAC
+  // signature, or a Stripe PaymentIntent id for both order/paymentRef with no signature).
   app.post('/verify', { preHandler: [authenticateDriver] }, async (request, reply) => {
-    const { planId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = request.body;
-    if (!planId || !razorpayOrderId || !razorpayPaymentId) {
-      return sendError(reply, 'planId, razorpayOrderId, razorpayPaymentId are required');
+    const { planId, orderRef, paymentRef, signature } = request.body;
+    if (!planId || !orderRef || !paymentRef) {
+      return sendError(reply, 'planId, orderRef, paymentRef are required');
     }
     const data = await subService.verifyAndActivate(
-      request.user.id, planId, razorpayOrderId, razorpayPaymentId, razorpaySignature,
+      request.user.id, planId, orderRef, paymentRef, signature,
     );
     return sendSuccess(reply, data);
   });
@@ -52,7 +55,18 @@ export async function subscriptionRoutes(app) {
     const signature = request.headers['x-razorpay-signature'];
     if (!signature) return sendError(reply, 'Missing signature', 400);
     const raw = request.rawBody || JSON.stringify(request.body);
-    const data = await subService.handleRazorpayWebhook(raw, signature);
+    const data = await subService.handleWebhook('razorpay', raw, signature);
+    return sendSuccess(reply, data);
+  });
+
+  // POST /api/v1/subscriptions/webhook/stripe
+  app.post('/webhook/stripe', {
+    config: { rawBody: true }, // need raw body for Stripe's signature check
+  }, async (request, reply) => {
+    const signature = request.headers['stripe-signature'];
+    if (!signature) return sendError(reply, 'Missing signature', 400);
+    const raw = request.rawBody || JSON.stringify(request.body);
+    const data = await subService.handleWebhook('stripe', raw, signature);
     return sendSuccess(reply, data);
   });
 
@@ -60,13 +74,15 @@ export async function subscriptionRoutes(app) {
 
   app.get('/plans/all', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);
-    const { rows, pagination } = await subService.listPlansPaginated(page, limit, offset);
+    const { rows, pagination } = await subService.listPlansPaginated(page, limit, offset, request.query.countryId);
     return sendList(reply, rows, pagination);
   });
 
   app.post('/plans', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const { name, type, price } = request.body;
-    if (!name || !type || !price) return sendError(reply, 'name, type and price are required');
+    const { name, type, countryId, currencyCode, priceMinor } = request.body;
+    if (!name || !type || !countryId || !currencyCode || !priceMinor) {
+      return sendError(reply, 'name, type, countryId, currencyCode and priceMinor are required');
+    }
     const data = await subService.createPlan(request.body);
     return sendSuccess(reply, data, 201);
   });

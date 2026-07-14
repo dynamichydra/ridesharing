@@ -24,6 +24,7 @@ import {
   computeRouteProgress
 } from '../../utils/maps.js';
 import { haversineKm } from '../../utils/geo.js';
+import { fromMinor } from '../../utils/money.js';
 
 // ── Approach phase ─────────────────────────────────────────────────────────────
 
@@ -276,8 +277,9 @@ export async function getRideTrackingState(rideId, riderId) {
       status: ride.status,
       pickupAddress: ride.pickupAddress,
       dropAddress: ride.dropAddress,
-      estimatedFare: ride.estimatedFare,
-      finalFare: ride.finalFare,
+      estimatedFare: fromMinor(ride.estimatedFareMinor, ride.currencyCode),
+      finalFare: ride.finalFareMinor != null ? fromMinor(ride.finalFareMinor, ride.currencyCode) : null,
+      currency: ride.currencyCode,
       distanceKm: ride.distanceKm,
       durationMin: ride.durationMin,
       polyline: ride.polyline,         // pickup→drop full polyline

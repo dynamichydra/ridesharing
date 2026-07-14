@@ -2,7 +2,7 @@
   "info": {
     "name": "RideShare Platform API",
     "_postman_id": "rideshare-platform-v1",
-    "description": "Industrial Rideshare Platform — complete API collection.\n\n## Setup\n1. Set `base_url` variable to `http://localhost:3000`\n2. Run **Admin Login** → token auto-saves to `admin_token`\n3. Run **Rider Verify OTP** → token auto-saves to `rider_token`\n4. Driver login has two paths:\n   - Legacy: **Driver (legacy) — Send/Verify OTP** (phone only, no device scoping) → `driver_token`\n   - Current: **Driver Mobile — Start/Verify** or **Driver Email — Start/Verify** (device-scoped via `device_id`, see `driver_devices` table) → `driver_token` + `driver_refresh_token`\n5. All subsequent requests use these tokens automatically.\n6. Driver onboarding order: Geo (pick country/state/city) → Update Driving Location → Documents (types → upload-url → confirm) → Onboarding (questions/answers, legal accept) → Vehicles → Submit Application → Admin Approve.\n\n## Response Format\n```json\n{ \"SUCCESS\": true, \"MESSAGE\": <data> }\n{ \"SUCCESS\": true, \"MESSAGE\": [...], \"COUNT\": n, \"PAGINATION\": { \"currentPage\", \"itemsPerPage\", \"totalItems\", \"totalPages\" } }\n{ \"SUCCESS\": false, \"MESSAGE\": \"error reason\" }\n```",
+    "description": "Industrial Rideshare Platform — complete API collection.\n\n## Setup\n1. Set `base_url` variable to `http://localhost:3000`\n2. Run **Admin Login** → token auto-saves to `admin_token`\n3. Run **Rider Verify OTP** → token auto-saves to `rider_token`\n4. Driver login has two paths:\n   - Legacy: **Driver (legacy) — Send/Verify OTP** (phone only, no device scoping) → `driver_token`\n   - Current: **Driver Mobile — Start/Verify** or **Driver Email — Start/Verify** (device-scoped via `device_id`, see `driver_devices` table) → `driver_token` + `driver_refresh_token`\n5. All subsequent requests use these tokens automatically.\n6. Driver onboarding order: Geo (pick country/state/city) → Update Driving Location → Documents (types → upload-url → confirm) → Onboarding (questions/answers, legal accept) → Vehicles → Submit Application → Admin Approve.\n\n## Multi-country pricing\nMoney is stored as **integer minor units** (paise/cents) paired with a `currencyCode` everywhere — never a bare decimal. Vehicle types are a global catalog; their rates live per-country in **Vehicle Type Pricing** (`vehicle-types/:id/pricing`). Country/currency for a ride is resolved server-side from the pickup coordinates via zone match — it is never a request parameter. To see two markets side by side:\n1. **Geo → Create Country — Admin** (India) → saves `country_id`, then **Create Country — Admin (Canada, second market)** → saves `country_id_secondary`.\n2. **Vehicle Types → Create Vehicle Type** (catalog, no rates) → **Set Pricing — India** and **Set Pricing — Canada** for the same vehicle type.\n3. **Zones → Create Zone — City Centre/Airport** (India) and **Create Zone — Toronto Downtown (Canada)** — this is what lets `POST /fare/estimate*` resolve country from lat/lng.\n4. **Fare → Tax Rules** — India GST on subscriptions, Canada HST on fare + subscriptions.\n5. **Subscriptions → Create Plan — Canada Monthly/Yearly (CAD)** alongside the India (INR) plans.\n6. Compare **Fare → Estimate Fare (All Vehicle Types)** (Kolkata pickup) against **Estimate Fare — Canada pickup** (Toronto pickup) — same endpoint, different currency/rate card/tax based purely on where the pickup point is.\n\nPayment gateway is resolved from the plan's `currencyCode` (INR→Razorpay, CAD→Stripe, see `src/modules/payment/payment.service.js`) — `subscriptions/initiate` and `/verify` use gateway-neutral field names (`orderRef`/`paymentRef`/`signature`) since their meaning differs per gateway.\n\n## Response Format\n```json\n{ \"SUCCESS\": true, \"MESSAGE\": <data> }\n{ \"SUCCESS\": true, \"MESSAGE\": [...], \"COUNT\": n, \"PAGINATION\": { \"currentPage\", \"itemsPerPage\", \"totalItems\", \"totalPages\" } }\n{ \"SUCCESS\": false, \"MESSAGE\": \"error reason\" }\n```",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -103,6 +103,18 @@
     },
     {
       "key": "country_id",
+      "value": "",
+      "type": "string",
+      "description": "Primary country for most flows (e.g. India)"
+    },
+    {
+      "key": "country_id_secondary",
+      "value": "",
+      "type": "string",
+      "description": "Second country used to demonstrate multi-country pricing (e.g. Canada)"
+    },
+    {
+      "key": "tax_rule_id",
       "value": "",
       "type": "string"
     },
@@ -847,8 +859,9 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"India\",\n  \"isoCode\": \"IN\",\n  \"dialCode\": \"+91\",\n  \"currencyCode\": \"INR\"\n}"
-            }
+              "raw": "{\n  \"name\": \"India\",\n  \"isoCode\": \"IN\",\n  \"dialCode\": \"+91\",\n  \"currencyCode\": \"INR\",\n  \"defaultLanguageCode\": \"en\",\n  \"timezone\": \"Asia/Kolkata\",\n  \"isDefault\": true,\n  \"roundingIncrementMinor\": 1,\n  \"sortOrder\": 1\n}"
+            },
+            "description": "isDefault marks the fallback country used when a pickup point can't be resolved to a zone. roundingIncrementMinor rounds the final fare to the nearest N minor units (1 = no rounding)."
           },
           "response": [],
           "event": [
@@ -861,6 +874,56 @@
                   "if (res.SUCCESS) {",
                   "  pm.collectionVariables.set('country_id', res.MESSAGE.id);",
                   "  console.log('✅ country_id saved:', res.MESSAGE.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Country — Admin (Canada, second market)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/geo/admin/countries",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "geo",
+                "admin",
+                "countries"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Canada\",\n  \"isoCode\": \"CA\",\n  \"dialCode\": \"+1\",\n  \"currencyCode\": \"CAD\",\n  \"defaultLanguageCode\": \"en\",\n  \"timezone\": \"America/Toronto\",\n  \"isDefault\": false,\n  \"roundingIncrementMinor\": 5,\n  \"sortOrder\": 2\n}"
+            },
+            "description": "Demonstrates onboarding a new market as pure configuration — no code deploy needed as long as CAD's gateway (Stripe) is already integrated. roundingIncrementMinor 5 rounds fares to the nearest nickel."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS) {",
+                  "  pm.collectionVariables.set('country_id_secondary', res.MESSAGE.id);",
+                  "  console.log('✅ country_id_secondary saved:', res.MESSAGE.id);",
                   "}"
                 ]
               }
@@ -1507,8 +1570,9 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Bike\",\n  \"baseRate\": \"15.00\",\n  \"perKmRate\": \"6.00\",\n  \"perMinRate\": \"0.50\",\n  \"minFare\": \"30.00\",\n  \"capacity\": 1,\n  \"sortOrder\": 1\n}"
+              "raw": "{\n  \"name\": \"Bike\",\n  \"capacity\": 1,\n  \"sortOrder\": 1\n}"
             },
+            "description": "Vehicle types are a global catalog (name/capacity/icon only) — the same Bike exists in every country. Rates live separately per country in Vehicle Type Pricing below.",
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/vehicle-types",
               "host": [
@@ -1539,7 +1603,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Auto\",\n  \"baseRate\": \"25.00\",\n  \"perKmRate\": \"10.00\",\n  \"perMinRate\": \"0.75\",\n  \"minFare\": \"50.00\",\n  \"capacity\": 3,\n  \"sortOrder\": 2\n}"
+              "raw": "{\n  \"name\": \"Auto\",\n  \"capacity\": 3,\n  \"sortOrder\": 2\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/vehicle-types",
@@ -1571,7 +1635,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Cab\",\n  \"baseRate\": \"50.00\",\n  \"perKmRate\": \"14.00\",\n  \"perMinRate\": \"1.00\",\n  \"minFare\": \"80.00\",\n  \"capacity\": 4,\n  \"sortOrder\": 3\n}"
+              "raw": "{\n  \"name\": \"Cab\",\n  \"capacity\": 4,\n  \"sortOrder\": 3\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/vehicle-types",
@@ -1603,7 +1667,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"perKmRate\": \"7.00\",\n  \"minFare\": \"35.00\",\n  \"isActive\": true\n}"
+              "raw": "{\n  \"capacity\": 1,\n  \"isActive\": true\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/vehicle-types/{{vehicle_type_id}}",
@@ -1617,6 +1681,135 @@
                 "{{vehicle_type_id}}"
               ]
             }
+          },
+          "response": []
+        },
+        {
+          "name": "List Pricing for Country",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/vehicle-types/pricing?countryId={{country_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "vehicle-types",
+                "pricing"
+              ],
+              "query": [
+                {
+                  "key": "countryId",
+                  "value": "{{country_id}}"
+                }
+              ]
+            },
+            "description": "Every vehicle type's rate card in one country — what the admin portal shows on a per-country rates screen."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Pricing for Vehicle Type in Country",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/vehicle-types/{{vehicle_type_id}}/pricing?countryId={{country_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "vehicle-types",
+                "{{vehicle_type_id}}",
+                "pricing"
+              ],
+              "query": [
+                {
+                  "key": "countryId",
+                  "value": "{{country_id}}"
+                }
+              ]
+            },
+            "description": "404s if this vehicle type isn't offered in that country (e.g. Bike in Canada in the seed data) — estimate-all silently drops it instead of erroring."
+          },
+          "response": []
+        },
+        {
+          "name": "Set Pricing — India (INR, paise)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"countryId\": \"{{country_id}}\",\n  \"currencyCode\": \"INR\",\n  \"baseRateMinor\": 1500,\n  \"perKmRateMinor\": 600,\n  \"perMinRateMinor\": 50,\n  \"minFareMinor\": 3000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/vehicle-types/{{vehicle_type_id}}/pricing",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "vehicle-types",
+                "{{vehicle_type_id}}",
+                "pricing"
+              ]
+            },
+            "description": "Upsert — one rate card per (vehicleTypeId, countryId). All amounts are integer minor units: 1500 = ₹15.00 base, 600 = ₹6.00/km, 50 = ₹0.50/min, 3000 = ₹30.00 minimum fare."
+          },
+          "response": []
+        },
+        {
+          "name": "Set Pricing — Canada (CAD, cents)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"countryId\": \"{{country_id_secondary}}\",\n  \"currencyCode\": \"CAD\",\n  \"baseRateMinor\": 500,\n  \"perKmRateMinor\": 150,\n  \"perMinRateMinor\": 25,\n  \"minFareMinor\": 800\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/vehicle-types/{{vehicle_type_id}}/pricing",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "vehicle-types",
+                "{{vehicle_type_id}}",
+                "pricing"
+              ]
+            },
+            "description": "Same vehicle type, different country, different currency and rate card: 500 = $5.00 base, 150 = $1.50/km, 25 = $0.25/min, 800 = $8.00 minimum fare."
           },
           "response": []
         },
@@ -1840,6 +2033,14 @@
                 "api",
                 "{{api_version}}",
                 "zones"
+              ],
+              "query": [
+                {
+                  "key": "countryId",
+                  "value": "{{country_id}}",
+                  "disabled": true,
+                  "description": "Optional — omit to list zones across every country"
+                }
               ]
             }
           },
@@ -1925,7 +2126,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Kolkata City Centre\",\n  \"type\": \"city\",\n  \"multiplier\": \"1.00\",\n  \"description\": \"Central Kolkata including Park Street, BBD Bagh\",\n  \"polygon\": {\n    \"type\": \"Polygon\",\n    \"coordinates\": [[\n      [88.3400, 22.5500],\n      [88.3800, 22.5500],\n      [88.3800, 22.5900],\n      [88.3400, 22.5900],\n      [88.3400, 22.5500]\n    ]]\n  }\n}"
+              "raw": "{\n  \"name\": \"Kolkata City Centre\",\n  \"countryId\": \"{{country_id}}\",\n  \"type\": \"city\",\n  \"multiplier\": \"1.00\",\n  \"description\": \"Central Kolkata including Park Street, BBD Bagh\",\n  \"polygon\": {\n    \"type\": \"Polygon\",\n    \"coordinates\": [[\n      [88.3400, 22.5500],\n      [88.3800, 22.5500],\n      [88.3800, 22.5900],\n      [88.3400, 22.5900],\n      [88.3400, 22.5500]\n    ]]\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/zones",
@@ -1957,7 +2158,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Kolkata Airport Zone\",\n  \"type\": \"airport\",\n  \"multiplier\": \"1.50\",\n  \"description\": \"Netaji Subhas Chandra Bose International Airport area\",\n  \"polygon\": {\n    \"type\": \"Polygon\",\n    \"coordinates\": [[\n      [88.4300, 22.6400],\n      [88.4600, 22.6400],\n      [88.4600, 22.6700],\n      [88.4300, 22.6700],\n      [88.4300, 22.6400]\n    ]]\n  }\n}"
+              "raw": "{\n  \"name\": \"Kolkata Airport Zone\",\n  \"countryId\": \"{{country_id}}\",\n  \"type\": \"airport\",\n  \"multiplier\": \"1.50\",\n  \"description\": \"Netaji Subhas Chandra Bose International Airport area\",\n  \"polygon\": {\n    \"type\": \"Polygon\",\n    \"coordinates\": [[\n      [88.4300, 22.6400],\n      [88.4600, 22.6400],\n      [88.4600, 22.6700],\n      [88.4300, 22.6700],\n      [88.4300, 22.6400]\n    ]]\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/zones",
@@ -1970,6 +2171,39 @@
                 "zones"
               ]
             }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Zone — Toronto Downtown (Canada)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Toronto Downtown\",\n  \"countryId\": \"{{country_id_secondary}}\",\n  \"type\": \"city\",\n  \"multiplier\": \"1.00\",\n  \"description\": \"Downtown Toronto core\",\n  \"polygon\": {\n    \"type\": \"Polygon\",\n    \"coordinates\": [[\n      [-79.4100, 43.6300],\n      [-79.3600, 43.6300],\n      [-79.3600, 43.6700],\n      [-79.4100, 43.6700],\n      [-79.4100, 43.6300]\n    ]]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/zones",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "zones"
+              ]
+            },
+            "description": "A pickup point inside this polygon resolves fare.service.js's country lookup to Canada/CAD — that's how currency and rate card get picked automatically, no country field on the ride request itself."
           },
           "response": []
         },
@@ -2097,6 +2331,36 @@
           "response": []
         },
         {
+          "name": "Estimate Fare — Canada pickup (multi-country demo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pickupLat\": 43.6500,\n  \"pickupLng\": -79.3800,\n  \"dropLat\": 43.6600,\n  \"dropLng\": -79.3900\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/fare/estimate-all",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "fare",
+                "estimate-all"
+              ]
+            },
+            "description": "Same endpoint as the India example above — country/currency/rate-card are all resolved server-side from the pickup coordinates via zone match. A Toronto pickup returns CAD amounts and only the vehicle types priced for Canada (Bike/Auto silently filtered out if unpriced there, per the seed data)."
+          },
+          "response": []
+        },
+        {
           "name": "List Fare Rules",
           "event": [
             {
@@ -2203,7 +2467,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Night Surge\",\n  \"ruleType\": \"time\",\n  \"startTime\": \"22:00\",\n  \"endTime\": \"05:00\",\n  \"daysOfWeek\": [0, 1, 2, 3, 4, 5, 6],\n  \"multiplier\": \"1.50\",\n  \"priority\": 10,\n  \"vehicleTypeId\": null,\n  \"zoneId\": null\n}"
+              "raw": "{\n  \"name\": \"Night Surge\",\n  \"countryId\": null,\n  \"ruleType\": \"time\",\n  \"startTime\": \"22:00\",\n  \"endTime\": \"05:00\",\n  \"daysOfWeek\": [0, 1, 2, 3, 4, 5, 6],\n  \"multiplier\": \"1.50\",\n  \"priority\": 10,\n  \"vehicleTypeId\": null,\n  \"zoneId\": null\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/fare/rules",
@@ -2217,7 +2481,7 @@
                 "rules"
               ]
             },
-            "description": "Applies 1.5x multiplier between 10 PM and 5 AM every day, all vehicle types."
+            "description": "countryId: null = applies in every country, each evaluated in that country's own local timezone (countries.timezone). Applies 1.5x multiplier between 10 PM and 5 AM every day, all vehicle types."
           },
           "response": []
         },
@@ -2237,7 +2501,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Morning Peak Hours\",\n  \"ruleType\": \"time\",\n  \"startTime\": \"08:00\",\n  \"endTime\": \"10:30\",\n  \"daysOfWeek\": [1, 2, 3, 4, 5],\n  \"multiplier\": \"1.25\",\n  \"priority\": 8,\n  \"vehicleTypeId\": null,\n  \"zoneId\": null\n}"
+              "raw": "{\n  \"name\": \"Morning Peak Hours\",\n  \"countryId\": \"{{country_id}}\",\n  \"ruleType\": \"time\",\n  \"startTime\": \"08:00\",\n  \"endTime\": \"10:30\",\n  \"daysOfWeek\": [1, 2, 3, 4, 5],\n  \"multiplier\": \"1.25\",\n  \"priority\": 8,\n  \"vehicleTypeId\": null,\n  \"zoneId\": null\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/fare/rules",
@@ -2270,7 +2534,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Heavy Traffic Surge\",\n  \"ruleType\": \"traffic\",\n  \"trafficDelayS\": 600,\n  \"multiplier\": \"1.20\",\n  \"priority\": 5,\n  \"vehicleTypeId\": null,\n  \"zoneId\": null\n}"
+              "raw": "{\n  \"name\": \"Heavy Traffic Surge\",\n  \"countryId\": \"{{country_id}}\",\n  \"ruleType\": \"traffic\",\n  \"trafficDelayS\": 600,\n  \"multiplier\": \"1.20\",\n  \"priority\": 5,\n  \"vehicleTypeId\": null,\n  \"zoneId\": null\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/fare/rules",
@@ -2304,7 +2568,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Airport Zone Premium\",\n  \"ruleType\": \"zone\",\n  \"multiplier\": \"1.30\",\n  \"priority\": 6,\n  \"vehicleTypeId\": null,\n  \"zoneId\": \"{{zone_id}}\"\n}"
+              "raw": "{\n  \"name\": \"Airport Zone Premium\",\n  \"countryId\": \"{{country_id}}\",\n  \"ruleType\": \"zone\",\n  \"multiplier\": \"1.30\",\n  \"priority\": 6,\n  \"vehicleTypeId\": null,\n  \"zoneId\": \"{{zone_id}}\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/fare/rules",
@@ -2376,6 +2640,199 @@
                 "fare",
                 "rules",
                 "{{fare_rule_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Tax Rules",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.length > 0) {",
+                  "  pm.collectionVariables.set('tax_rule_id', res.MESSAGE[0].id);",
+                  "  console.log('✅ tax_rule_id saved:', res.MESSAGE[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/fare/tax-rules?page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "fare",
+                "tax-rules"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Tax Rule — India GST (subscriptions)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS) {",
+                  "  pm.collectionVariables.set('tax_rule_id', res.MESSAGE.id);",
+                  "  console.log('✅ tax_rule_id saved:', res.MESSAGE.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"countryId\": \"{{country_id}}\",\n  \"name\": \"GST\",\n  \"appliesTo\": \"subscription\",\n  \"rate\": \"0.1800\",\n  \"isInclusive\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/fare/tax-rules",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "fare",
+                "tax-rules"
+              ]
+            },
+            "description": "appliesTo: 'fare' | 'subscription' | 'both'. rate is a fraction (0.1800 = 18%). isInclusive:false means it's added on top of the price, not baked in."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Tax Rule — Canada HST (fare + subscription)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"countryId\": \"{{country_id_secondary}}\",\n  \"name\": \"HST\",\n  \"appliesTo\": \"both\",\n  \"rate\": \"0.1300\",\n  \"isInclusive\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/fare/tax-rules",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "fare",
+                "tax-rules"
+              ]
+            },
+            "description": "13% HST applied to both ride fares and subscription charges in Canada — shows up as a separate taxMinor line in the fare breakdown."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Tax Rule",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rate\": \"0.1500\",\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/fare/tax-rules/{{tax_rule_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "fare",
+                "tax-rules",
+                "{{tax_rule_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Tax Rule (Soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/fare/tax-rules/{{tax_rule_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "fare",
+                "tax-rules",
+                "{{tax_rule_id}}"
               ]
             }
           },
@@ -3495,8 +3952,9 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Monthly Plan\",\n  \"type\": \"monthly\",\n  \"price\": \"999.00\",\n  \"durationDays\": 30,\n  \"trialDays\": 3,\n  \"features\": [\"Unlimited rides\", \"Priority support\", \"No commission cut\"],\n  \"maxRidesPerDay\": null,\n  \"sortOrder\": 1\n}"
+              "raw": "{\n  \"name\": \"Monthly Plan\",\n  \"countryId\": \"{{country_id}}\",\n  \"type\": \"monthly\",\n  \"currencyCode\": \"INR\",\n  \"priceMinor\": 99900,\n  \"durationDays\": 30,\n  \"trialDays\": 3,\n  \"features\": [\"Unlimited rides\", \"Priority support\", \"No commission cut\"],\n  \"maxRidesPerDay\": null,\n  \"sortOrder\": 1\n}"
             },
+            "description": "priceMinor is in minor units (99900 paise = ₹999.00). Plans are country-specific commercial products — the same 'Monthly Plan' name can exist per country with its own currency/price.",
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/subscriptions/plans",
               "host": [
@@ -3528,7 +3986,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Quarterly Plan\",\n  \"type\": \"quarterly\",\n  \"price\": \"2499.00\",\n  \"durationDays\": 90,\n  \"trialDays\": 0,\n  \"features\": [\"Unlimited rides\", \"Priority support\", \"Save ₹500 vs monthly\"],\n  \"maxRidesPerDay\": null,\n  \"sortOrder\": 2\n}"
+              "raw": "{\n  \"name\": \"Quarterly Plan\",\n  \"countryId\": \"{{country_id}}\",\n  \"type\": \"quarterly\",\n  \"currencyCode\": \"INR\",\n  \"priceMinor\": 249900,\n  \"durationDays\": 90,\n  \"trialDays\": 0,\n  \"features\": [\"Unlimited rides\", \"Priority support\", \"Save ₹500 vs monthly\"],\n  \"maxRidesPerDay\": null,\n  \"sortOrder\": 2\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/subscriptions/plans",
@@ -3561,7 +4019,74 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Yearly Plan\",\n  \"type\": \"yearly\",\n  \"price\": \"7999.00\",\n  \"durationDays\": 365,\n  \"trialDays\": 7,\n  \"features\": [\"Unlimited rides\", \"Priority support\", \"Save ₹3989 vs monthly\", \"Featured listing\"],\n  \"maxRidesPerDay\": null,\n  \"sortOrder\": 3\n}"
+              "raw": "{\n  \"name\": \"Yearly Plan\",\n  \"countryId\": \"{{country_id}}\",\n  \"type\": \"yearly\",\n  \"currencyCode\": \"INR\",\n  \"priceMinor\": 799900,\n  \"durationDays\": 365,\n  \"trialDays\": 7,\n  \"features\": [\"Unlimited rides\", \"Priority support\", \"Save ₹3989 vs monthly\", \"Featured listing\"],\n  \"maxRidesPerDay\": null,\n  \"sortOrder\": 3\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/subscriptions/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "subscriptions",
+                "plans"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Plan — Canada Monthly (CAD)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Monthly Plan\",\n  \"countryId\": \"{{country_id_secondary}}\",\n  \"type\": \"monthly\",\n  \"currencyCode\": \"CAD\",\n  \"priceMinor\": 4999,\n  \"durationDays\": 30,\n  \"trialDays\": 3,\n  \"features\": [\"Unlimited rides\", \"Priority support\", \"No commission cut\"],\n  \"maxRidesPerDay\": null,\n  \"sortOrder\": 1\n}"
+            },
+            "description": "priceMinor 4999 cents = $49.99 CAD. On create, if this currency's gateway (Stripe) is configured, a matching recurring Price is created there automatically and gatewayPlanId is stored on the plan.",
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/subscriptions/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "subscriptions",
+                "plans"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Plan — Canada Yearly (CAD)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Yearly Plan\",\n  \"countryId\": \"{{country_id_secondary}}\",\n  \"type\": \"yearly\",\n  \"currencyCode\": \"CAD\",\n  \"priceMinor\": 49999,\n  \"durationDays\": 365,\n  \"trialDays\": 7,\n  \"features\": [\"Unlimited rides\", \"Priority support\", \"Save vs monthly\"],\n  \"maxRidesPerDay\": null,\n  \"sortOrder\": 2\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/subscriptions/plans",
@@ -3594,7 +4119,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Lifetime Plan\",\n  \"type\": \"lifetime\",\n  \"price\": \"24999.00\",\n  \"durationDays\": null,\n  \"trialDays\": 0,\n  \"features\": [\"Unlimited rides forever\", \"VIP support\", \"One-time payment\", \"All future features\"],\n  \"maxRidesPerDay\": null,\n  \"sortOrder\": 4\n}"
+              "raw": "{\n  \"name\": \"Lifetime Plan\",\n  \"countryId\": \"{{country_id}}\",\n  \"type\": \"lifetime\",\n  \"currencyCode\": \"INR\",\n  \"priceMinor\": 2499900,\n  \"durationDays\": null,\n  \"trialDays\": 0,\n  \"features\": [\"Unlimited rides forever\", \"VIP support\", \"One-time payment\", \"All future features\"],\n  \"maxRidesPerDay\": null,\n  \"sortOrder\": 4\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/subscriptions/plans",
@@ -3627,7 +4152,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"price\": \"899.00\",\n  \"trialDays\": 5\n}"
+              "raw": "{\n  \"priceMinor\": 89900,\n  \"trialDays\": 5\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/subscriptions/plans/{{plan_id}}",
@@ -3679,9 +4204,9 @@
               "script": {
                 "exec": [
                   "const res = pm.response.json();",
-                  "if (res.SUCCESS && res.MESSAGE.orderId) {",
-                  "  pm.collectionVariables.set('razorpay_order_id', res.MESSAGE.orderId);",
-                  "  console.log('✅ orderId:', res.MESSAGE.orderId);",
+                  "if (res.SUCCESS && res.MESSAGE.gatewayOrderId) {",
+                  "  pm.collectionVariables.set('gateway_order_id', res.MESSAGE.gatewayOrderId);",
+                  "  console.log('✅ gateway:', res.MESSAGE.gateway, '| gatewayOrderId:', res.MESSAGE.gatewayOrderId);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -3716,7 +4241,7 @@
                 "initiate"
               ]
             },
-            "description": "In dev mode (no Razorpay key) — subscription is activated directly. In prod — returns orderId for Razorpay checkout."
+            "description": "Gateway is resolved server-side from the plan's currencyCode (see src/modules/payment/payment.service.js's currency->gateway map — INR->Razorpay, CAD->Stripe). If that gateway has no keys configured (dev mode), the subscription activates directly. Otherwise the response shape depends on the gateway: Razorpay returns { gateway, gatewayOrderId, amount, currency, keyId } for Razorpay Checkout; Stripe returns { gateway, gatewayOrderId, clientSecret, amount, currency, publishableKey } for Stripe Elements/PaymentSheet."
           },
           "response": []
         },
@@ -3736,7 +4261,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"planId\": \"{{plan_id}}\",\n  \"razorpayOrderId\": \"order_dev_test\",\n  \"razorpayPaymentId\": \"pay_dev_test_001\",\n  \"razorpaySignature\": \"dev_signature\"\n}"
+              "raw": "{\n  \"planId\": \"{{plan_id}}\",\n  \"orderRef\": \"{{gateway_order_id}}\",\n  \"paymentRef\": \"pay_dev_test_001\",\n  \"signature\": \"dev_signature\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/{{api_version}}/subscriptions/verify",
@@ -3749,7 +4274,8 @@
                 "subscriptions",
                 "verify"
               ]
-            }
+            },
+            "description": "Gateway-neutral field names — what they contain depends on the plan's gateway: Razorpay uses orderRef/paymentRef/signature as its order id, payment id and HMAC signature; Stripe uses the same PaymentIntent id for both orderRef and paymentRef and ignores signature (verification is a server-side status check instead)."
           },
           "response": []
         },
@@ -3859,6 +4385,41 @@
                 "razorpay"
               ]
             }
+          },
+          "response": []
+        },
+        {
+          "name": "Stripe Webhook (simulated)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "stripe-signature",
+                "value": "TEST_SIGNATURE"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"payment_intent.succeeded\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"pi_test_webhook_001\",\n      \"metadata\": {\n        \"driverId\": \"{{driver_id}}\",\n        \"planId\":   \"{{plan_id}}\"\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/subscriptions/webhook/stripe",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "subscriptions",
+                "webhook",
+                "stripe"
+              ]
+            },
+            "description": "Same activation path as the Razorpay webhook, dispatched by gateway name — src/modules/subscription/subscription.service.js handleWebhook('stripe', ...). Like the Razorpay example, this needs a real STRIPE_WEBHOOK_SECRET and a genuine Stripe-signed payload to pass signature verification once Stripe is actually configured; in dev mode (no Stripe keys) the webhook is acknowledged without verification."
           },
           "response": []
         }

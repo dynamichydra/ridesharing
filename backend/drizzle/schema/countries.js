@@ -7,6 +7,9 @@ export const countries = pgTable('countries', {
   dialCode:            varchar('dial_code', { length: 8 }).notNull(),          // "+91"
   currencyCode:        varchar('currency_code', { length: 3 }).notNull(),      // ISO 4217
   defaultLanguageCode: varchar('default_language_code', { length: 8 }),
+  timezone:            varchar('timezone', { length: 50 }).default('UTC'),     // IANA tz — evaluates fare-rule time windows in local time
+  roundingIncrementMinor: integer('rounding_increment_minor').default(1),      // e.g. CAD cash rounds to nearest 5 cents
+  isDefault:           boolean('is_default').default(false),                   // fallback country when a pickup point can't be geo-resolved
   isActive:            boolean('is_active').default(true),
   sortOrder:           integer('sort_order').default(0),
   createdAt:           timestamp('created_at').defaultNow(),

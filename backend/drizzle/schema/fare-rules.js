@@ -1,10 +1,12 @@
 import { pgTable, uuid, varchar, boolean, timestamp, decimal, integer, time } from 'drizzle-orm/pg-core';
 import { vehicleTypes } from './vehicle-types.js';
 import { zones } from './zones.js';
+import { countries } from './countries.js';
 
 export const fareRules = pgTable('fare_rules', {
   id:            uuid('id').primaryKey().defaultRandom(),
   name:          varchar('name', { length: 100 }).notNull(),
+  countryId:     uuid('country_id').references(() => countries.id),         // null = applies in every country
   vehicleTypeId: uuid('vehicle_type_id').references(() => vehicleTypes.id), // null = all types
   zoneId:        uuid('zone_id').references(() => zones.id),                // null = all zones
   ruleType:      varchar('rule_type', { length: 30 }).notNull(),           // time | traffic | zone | demand

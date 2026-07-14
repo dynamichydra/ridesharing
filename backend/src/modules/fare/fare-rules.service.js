@@ -51,14 +51,16 @@ export async function remove(id) {
 }
 
 /**
- * Load all active rules applicable to a given vehicleTypeId.
- * Includes rules with no vehicleTypeId (applies to all types).
+ * Load all active rules applicable to a given vehicleTypeId + countryId.
+ * Includes rules with no vehicleTypeId (applies to all types) and no countryId
+ * (applies in every country).
  */
-export async function getActiveRulesForVehicle(vehicleTypeId) {
+export async function getActiveRulesForVehicle(vehicleTypeId, countryId) {
   return db.select().from(fareRules).where(
     and(
       eq(fareRules.isActive, true),
       or(eq(fareRules.vehicleTypeId, vehicleTypeId), isNull(fareRules.vehicleTypeId)),
+      or(eq(fareRules.countryId, countryId), isNull(fareRules.countryId)),
     ),
   ).orderBy(desc(fareRules.priority));
 }

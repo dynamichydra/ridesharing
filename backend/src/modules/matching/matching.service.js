@@ -24,6 +24,7 @@ import {
   REDIS_KEYS
 } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
+import { fromMinor } from '../../utils/money.js';
 import {
   createOffersForRing,
   expirePendingOffers,
@@ -219,7 +220,8 @@ async function _runMatchingRings(ride) {
       pickupAddress: ride.pickupAddress,
       dropAddress: ride.dropAddress,
       vehicleTypeId,
-      estimatedFare: ride.estimatedFare,
+      estimatedFare: fromMinor(ride.estimatedFareMinor, ride.currencyCode),
+      currency: ride.currencyCode,
       distanceKm: ride.distanceKm,
       polyline: ride.polyline,
       expiresAt: Date.now() + ACCEPT_TIMEOUT_MS,

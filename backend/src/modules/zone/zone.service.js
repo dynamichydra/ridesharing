@@ -1,16 +1,19 @@
-import { eq, count } from 'drizzle-orm';
+import { eq, and, count } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { zones } from '../../../drizzle/schema/index.js';
 import { isPointInPolygon } from '../../utils/geo.js';
 import { paginate } from '../../utils/response.js';
 
-export async function listAll() {
-  return db.select().from(zones).where(eq(zones.isActive, true));
+export async function listAll(countryId) {
+  const conditions = [eq(zones.isActive, true)];
+  if (countryId) conditions.push(eq(zones.countryId, countryId));
+  return db.select().from(zones).where(and(...conditions));
 }
 
-export async function listPaginated(page, limit, offset) {
-  const [{ total }] = await db.select({ total: count() }).from(zones);
-  const rows = await db.select().from(zones).limit(limit).offset(offset);
+export async function listPaginated(page, limit, offset, countryId) {
+  const where = countryId ? eq(zones.countryId, countryId) : undefined;
+  const [{ total }] = await db.select({ total: count() }).from(zones).where(where);
+  const rows = await db.select().from(zones).where(where).limit(limit).offset(offset);
   return { rows, pagination: paginate(page, limit, total) };
 }
 

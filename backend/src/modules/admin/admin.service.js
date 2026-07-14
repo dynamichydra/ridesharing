@@ -52,12 +52,13 @@ export async function getSubscriptionStats() {
     SELECT
       sp.name  AS plan_name,
       sp.type  AS plan_type,
-      sp.price,
+      sp.price_minor,
+      sp.currency_code,
       COUNT(s.id)                                    AS total_subscriptions,
       COUNT(s.id) FILTER (WHERE s.status = 'active') AS active_count
     FROM subscription_plans sp
     LEFT JOIN subscriptions s ON s.plan_id = sp.id
-    GROUP BY sp.id, sp.name, sp.type, sp.price
+    GROUP BY sp.id, sp.name, sp.type, sp.price_minor, sp.currency_code
     ORDER BY total_subscriptions DESC
   `);
   return rows;
