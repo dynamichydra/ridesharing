@@ -66,7 +66,7 @@ class _TermsLegalScreenState extends State<TermsLegalScreen> {
                 Text(
                   widget.termsContent.isNotEmpty
                       ? widget.termsContent
-                      : 'Welcome to Lyft Partner Driver India. By signing up, you agree to our driving rules and platform terms. Please scroll down to review and agree.\n\n'
+                      : 'Welcome to Ryva Ride Partner Driver India. By signing up, you agree to our driving rules and platform terms. Please scroll down to review and agree.\n\n'
                             '1. Platform Matching Policy\n'
                             'We match partners with riders within a reasonable distance. Surge rates may apply dynamically during traffic spikes, peak hours, and airport pickups.\n\n'
                             '2. Payment Terms\n'

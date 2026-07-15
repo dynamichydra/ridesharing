@@ -59,6 +59,17 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
 
   // Track simulated checklist items completed but not saved in DB
   final Set<String> _simulatedCompletedItems = {};
+  String? _selectedUploadDocCode;
+
+  @override
+  void initState() {
+    super.initState();
+    final authState = context.read<AuthBloc>().state;
+    if (authState is Authenticated) {
+      context.read<OnboardingBloc>().add(LoadOnboardingConfig());
+      _currentStep = 2;
+    }
+  }
 
   void _nextStep() {
     setState(() {
@@ -101,13 +112,65 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
       child: BlocListener<AuthBloc, AuthState>(
         listener: (context, authState) {
           if (authState is Authenticated) {
+            final status = authState.driver.registrationStatus;
+            if (status == 'under_verification' || status == 'rejected' || status == 'suspended') {
+              String msg = 'This account is under verification.';
+              if (status == 'rejected') {
+                msg = 'This account is rejected.';
+              } else if (status == 'suspended') {
+                msg = 'This account is suspended.';
+              }
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => AlertDialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  title: Row(
+                    children: [
+                      const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 28),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Account Status',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  content: Text(
+                    msg,
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 16),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        context.read<AuthBloc>().add(
+                          LogoutRequested(deviceId: 'driver_emulator'),
+                        );
+                        setState(() {
+                          _currentStep = 0;
+                          _phoneNumber = '';
+                          _isLogin = false;
+                          _config = null;
+                          _summary = null;
+                          _needsVehicleRental = false;
+                          _enteredFromChecklist = false;
+                          _simulatedCompletedItems.clear();
+                        });
+                      },
+                      child: const Text('OK', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              );
+              return;
+            }
+
             debugPrint(
               '[OnboardingWizard] AuthState transitioned to Authenticated. Fetching configuration.',
             );
             context.read<OnboardingBloc>().add(LoadOnboardingConfig());
-            if (_currentStep == 2) {
-              _nextStep();
-            }
           } else if (authState is AuthOtpSent) {
             debugPrint(
               '[OnboardingWizard] AuthState: AuthOtpSent. Moving to OTP Verification screen.',
@@ -149,15 +212,8 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                 // For newly registered drivers or partially registered returning drivers:
                 // If they are currently at the OTP screen (index 2) but the config has finished loading,
                 // we route them to their actual registration step (e.g., Step 3 for Personal Info).
-                if (_currentStep == 2) {
-                  final step = state.summary.driver.registrationStep;
-                  if (step >= 1 && step < 9) {
-                    _currentStep =
-                        step +
-                        2; // Map DB step to local UI step: step 1 (personal info) => case 3
-                  } else if (step >= 9) {
-                    _currentStep = 9; // Checklist
-                  }
+                 if (_currentStep == 2) {
+                  _currentStep = 3; // Always open from the first onboarding page (Personal Info)
                 }
               });
             } else if (state is OnboardingSuccess) {
@@ -165,11 +221,9 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
               setState(() {
                 bool shouldGoBackToChecklist = true;
 
-                if (_currentStep == 10 || _currentStep == 11) {
-                  final docCode = _currentStep == 10
-                      ? 'DRIVERS_LICENSE'
-                      : 'NATIONAL_ID';
-                  if (_config != null && _summary != null) {
+                if (_currentStep == 10) {
+                  final docCode = _selectedUploadDocCode;
+                  if (_config != null && _summary != null && docCode != null) {
                     DocumentType? docReq;
                     for (final req in _config!.documentRequirements) {
                       if (req.code == docCode) {
@@ -223,21 +277,128 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                 }
               });
             } else if (state is ApplicationSubmitted) {
-              setState(() {
-                _currentStep = 0;
-                _phoneNumber = '';
-                _isLogin = false;
-                _config = null;
-                _summary = null;
-                _needsVehicleRental = false;
-                _enteredFromChecklist = false;
-                _simulatedCompletedItems.clear();
-              });
-              context.read<AuthBloc>().add(
-                LogoutRequested(deviceId: 'driver_emulator'),
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => AlertDialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  title: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.check_circle_rounded,
+                          color: AppColors.primary,
+                          size: 48,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Application Submitted',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  content: const Text(
+                    'Your partner application has been successfully submitted. '
+                    'Our operations team will review your details and document proofs shortly.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 15,
+                      height: 1.4,
+                    ),
+                  ),
+                  actionsAlignment: MainAxisAlignment.center,
+                  actions: [
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          setState(() {
+                            _currentStep = 0;
+                            _phoneNumber = '';
+                            _isLogin = false;
+                            _config = null;
+                            _summary = null;
+                            _needsVehicleRental = false;
+                            _enteredFromChecklist = false;
+                            _simulatedCompletedItems.clear();
+                          });
+                          context.read<AuthBloc>().add(
+                            LogoutRequested(deviceId: 'driver_emulator'),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'OK',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               );
             } else if (state is OnboardingError) {
-              CustomToast.show(context, state.message);
+              final isEmailDuplicate = state.message.toLowerCase().contains('email') ||
+                  state.message.toLowerCase().contains('duplicate') ||
+                  state.message.toLowerCase().contains('already in use') ||
+                  state.message.toLowerCase().contains('already registered');
+              if (isEmailDuplicate) {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    title: Row(
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 28),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Email in Use',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    content: const Text(
+                      'This email address is already in use by another account. Please use a different email address.',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 15, height: 1.4),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+                      ),
+                    ],
+                  ),
+                );
+              } else {
+                CustomToast.show(context, state.message);
+              }
             }
           },
           builder: (context, state) {
@@ -548,7 +709,10 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           onItemTap: (code) {
             setState(() {
               _enteredFromChecklist = true;
-              if (code == 'personal_info') {
+              if (code.startsWith('document:')) {
+                _selectedUploadDocCode = code.split(':').last;
+                _currentStep = 10;
+              } else if (code == 'personal_info') {
                 _currentStep = 3;
               } else if (code == 'drivingLocation') {
                 _currentStep = 5;
@@ -558,10 +722,6 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                 _currentStep = 6;
               } else if (code == 'vehicle') {
                 _currentStep = _needsVehicleRental ? 7 : 8;
-              } else if (code == 'document:DRIVERS_LICENSE') {
-                _currentStep = 10;
-              } else if (code == 'document:NATIONAL_ID') {
-                _currentStep = 11;
               } else if (code == 'profile_photo') {
                 _currentStep = 12;
               } else if (code == 'bank_details') {
@@ -617,14 +777,11 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           },
         );
       case 10:
-      case 11:
-        // DL & Aadhar upload subflow
-        final docCode = _currentStep == 10 ? 'DRIVERS_LICENSE' : 'NATIONAL_ID';
-        if (_config == null)
+        if (_config == null || _selectedUploadDocCode == null) {
           return const Center(child: CircularProgressIndicator());
-
+        }
         final docType = _config!.documentRequirements.firstWhere(
-          (d) => d.code == docCode,
+          (d) => d.code == _selectedUploadDocCode,
         );
         final matches = _summary?.documents.where(
           (d) => d.documentTypeId == docType.id,
@@ -671,6 +828,12 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           initialBankName: _bankName,
           initialAccount: _bankAccount,
           initialIfsc: _bankIfsc,
+          onSkip: () {
+            setState(() {
+              _currentStep = 9;
+              _enteredFromChecklist = false;
+            });
+          },
           onSave:
               ({
                 required accountNumber,
@@ -695,6 +858,12 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           initialName: _emergencyName,
           initialPhone: _emergencyPhone,
           initialRelationship: _emergencyRelationship,
+          onSkip: () {
+            setState(() {
+              _currentStep = 9;
+              _enteredFromChecklist = false;
+            });
+          },
           onSave: ({required name, required phone, required relationship}) {
             setState(() {
               _emergencyName = name;

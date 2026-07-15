@@ -89,10 +89,29 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
+            useMaterial3: true,
             colorScheme: const ColorScheme.light(
               primary: AppColors.primary,
               onPrimary: Colors.white,
+              secondary: AppColors.secondary,
+              onSecondary: Colors.white,
+              surface: Colors.white,
               onSurface: AppColors.textPrimary,
+            ),
+            dialogTheme: DialogThemeData(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              elevation: 8,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.secondary,
+                textStyle: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
             ),
           ),
           child: child!,
@@ -327,33 +346,84 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
 
     final documentName = widget.docType.code.replaceAll('_', ' ');
 
+    // Modern input decoration builder
+    InputDecoration buildModernInputDecoration({
+      required String labelText,
+      required IconData prefixIcon,
+      String? hintText,
+      Widget? suffixIcon,
+    }) {
+      return InputDecoration(
+        labelText: labelText,
+        hintText: hintText,
+        labelStyle: const TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 14,
+        ),
+        floatingLabelStyle: const TextStyle(
+          color: AppColors.primary,
+          fontWeight: FontWeight.w600,
+        ),
+        prefixIcon: Icon(prefixIcon, color: AppColors.secondary, size: 22),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: AppColors.surface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.border, width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.error, width: 1),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.error, width: 2),
+        ),
+      );
+    }
+
     return Form(
       key: _formKey,
       child: ListView(
         padding: const EdgeInsets.all(24.0),
+        physics: const BouncingScrollPhysics(),
         children: [
           Text(
             'Upload $documentName',
             style: const TextStyle(
-              fontSize: 24,
+              fontSize: 26,
               fontWeight: FontWeight.bold,
               color: AppColors.textPrimary,
+              letterSpacing: -0.5,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             'Provide details and upload images of your driving license, vehicle registry, or identity cards.',
             style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary.withOpacity(0.8),
+              fontSize: 15,
+              color: AppColors.textSecondary,
+              height: 1.4,
             ),
           ),
           const SizedBox(height: 32),
           if (widget.docType.requiresDocNumber) ...[
             TextFormField(
               controller: _numController,
-              decoration: InputDecoration(
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+              decoration: buildModernInputDecoration(
                 labelText: '$documentName Document Number',
+                prefixIcon: Icons.badge_outlined,
                 hintText: widget.docType.code == 'DRIVERS_LICENSE'
                     ? 'e.g. KA5120150123456'
                     : 'e.g. 12-digit Aadhar number',
@@ -375,30 +445,35 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
               onTap: () => _selectDate(context),
               borderRadius: BorderRadius.circular(12),
               child: InputDecorator(
-                decoration: const InputDecoration(
+                decoration: buildModernInputDecoration(
                   labelText: 'Expiry Date',
-                  suffixIcon: Icon(
-                    Icons.calendar_today_rounded,
-                    color: AppColors.primary,
+                  prefixIcon: Icons.calendar_today_outlined,
+                ),
+                child: Text(
+                  expiryText,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: _selectedExpiryDate == null
+                        ? AppColors.textSecondary.withOpacity(0.8)
+                        : AppColors.textPrimary,
                   ),
                 ),
-                child: Text(expiryText, style: const TextStyle(fontSize: 16)),
               ),
             ),
             const SizedBox(height: 32),
           ],
           if (widget.existingDoc != null) ...[
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               margin: const EdgeInsets.only(bottom: 24),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                color: AppColors.primary.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 1.5),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.verified_rounded, color: AppColors.primary),
+                  const Icon(Icons.verified_rounded, color: AppColors.primary, size: 24),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -409,12 +484,15 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: AppColors.textPrimary,
+                            fontSize: 15,
                           ),
                         ),
+                        const SizedBox(height: 2),
                         Text(
                           'Status: ${widget.existingDoc!.status.toUpperCase()}',
                           style: const TextStyle(
                             fontSize: 12,
+                            fontWeight: FontWeight.w600,
                             color: AppColors.textSecondary,
                           ),
                         ),
@@ -452,8 +530,15 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -461,12 +546,12 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           if (hasLocalSelected) ...[
             ClipRRect(
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
+                top: Radius.circular(20),
               ),
               child: _selectedContentTypes[side] == 'application/pdf'
                   ? Container(
                       height: 160,
-                      color: Colors.grey.shade50,
+                      color: AppColors.surface,
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -481,8 +566,9 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                             child: Text(
                               _selectedPaths[side]!.split('/').last,
                               style: const TextStyle(
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.bold,
                                 fontSize: 14,
+                                color: AppColors.textPrimary,
                               ),
                               textAlign: TextAlign.center,
                               maxLines: 1,
@@ -500,7 +586,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                     ),
             ),
             Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.all(16.0),
               child: Row(
                 children: [
                   Expanded(
@@ -514,16 +600,16 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                       },
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.redAccent,
-                        side: const BorderSide(color: Colors.redAccent),
+                        side: const BorderSide(color: Colors.redAccent, width: 1.5),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: const Text('Clear'),
+                      child: const Text('Clear', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () => _confirmUpload(side),
@@ -533,9 +619,9 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: const Text('Confirm Upload'),
+                      child: const Text('Confirm Upload', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -544,12 +630,12 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           ] else if (hasUploaded) ...[
             ClipRRect(
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
+                top: Radius.circular(20),
               ),
               child: uploadedUrl.toLowerCase().contains('pdf')
                   ? Container(
                       height: 160,
-                      color: Colors.grey.shade50,
+                      color: AppColors.surface,
                       child: const Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -558,10 +644,10 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                             size: 48,
                             color: Colors.redAccent,
                           ),
-                          SizedBox(height: 8),
+                          const SizedBox(height: 8),
                           Text(
                             'Uploaded Document (PDF)',
-                            style: TextStyle(fontWeight: FontWeight.w600),
+                            style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                           ),
                         ],
                       ),
@@ -573,26 +659,26 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) => Container(
                         height: 160,
-                        color: Colors.grey.shade100,
+                        color: AppColors.surface,
                         child: const Icon(
                           Icons.description_rounded,
                           size: 48,
-                          color: Colors.grey,
+                          color: AppColors.textSecondary,
                         ),
                       ),
                     ),
             ),
             Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  const Icon(Icons.verified_rounded, color: Colors.green),
+                  const Icon(Icons.verified_rounded, color: Colors.green, size: 20),
                   const SizedBox(width: 8),
                   const Text(
                     'Uploaded',
                     style: TextStyle(
                       color: Colors.green,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                   const Spacer(),
@@ -617,17 +703,21 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           ] else ...[
             InkWell(
               onTap: () => _showUploadSourceSheet(side),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(20),
               child: Container(
                 height: 150,
                 alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Icon(
                       Icons.cloud_upload_rounded,
-                      size: 48,
-                      color: AppColors.primary,
+                      size: 44,
+                      color: AppColors.secondary,
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -635,13 +725,14 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
+                        fontSize: 15,
                       ),
                     ),
                     const SizedBox(height: 4),
                     const Text(
                       'Supports PNG, JPG, PDF up to 10MB',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         color: AppColors.textSecondary,
                       ),
                     ),

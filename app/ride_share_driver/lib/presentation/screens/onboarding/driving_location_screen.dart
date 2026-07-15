@@ -153,29 +153,81 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Modern input decoration builder
+    InputDecoration buildModernInputDecoration({
+      required String labelText,
+      required IconData prefixIcon,
+      Widget? suffixIcon,
+    }) {
+      return InputDecoration(
+        labelText: labelText,
+        labelStyle: const TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 14,
+        ),
+        floatingLabelStyle: const TextStyle(
+          color: AppColors.primary,
+          fontWeight: FontWeight.w600,
+        ),
+        prefixIcon: Icon(prefixIcon, color: AppColors.secondary, size: 22),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: AppColors.surface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.border, width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        ),
+      );
+    }
+
+    final isFormValid = _selectedCountryId != null &&
+        _selectedStateId != null &&
+        _selectedCityId != null;
+
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 16),
           const Text(
             'Where would you drive?',
+            textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
               color: AppColors.textPrimary,
+              letterSpacing: -0.5,
             ),
           ),
           const SizedBox(height: 8),
           const Text(
             'Select your region. Region determines your local fares, documents, and rules.',
-            style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 15,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 32),
+
+          // Country Selection Dropdown
           DropdownButtonFormField<String>(
             value: _selectedCountryId,
-            decoration: const InputDecoration(labelText: 'Country'),
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+            decoration: buildModernInputDecoration(
+              labelText: 'Country',
+              prefixIcon: Icons.flag_outlined,
+            ),
             items: widget.countries
                 .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
                 .toList(),
@@ -190,15 +242,24 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
             },
           ),
           const SizedBox(height: 20),
+
+          // State Selection Dropdown
           DropdownButtonFormField<String>(
             value: _selectedStateId,
-            decoration: InputDecoration(
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+            decoration: buildModernInputDecoration(
               labelText: 'State / Province',
+              prefixIcon: Icons.map_outlined,
               suffixIcon: _loadingStates
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                  ? const UnconstrainedBox(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
+                        ),
+                      ),
                     )
                   : null,
             ),
@@ -216,15 +277,24 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
             },
           ),
           const SizedBox(height: 20),
+
+          // City Selection Dropdown
           DropdownButtonFormField<String>(
             value: _selectedCityId,
-            decoration: InputDecoration(
-              labelText: 'City limit',
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+            decoration: buildModernInputDecoration(
+              labelText: 'City Limit',
+              prefixIcon: Icons.location_city_outlined,
               suffixIcon: _loadingCities
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                  ? const UnconstrainedBox(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
+                        ),
+                      ),
                     )
                   : null,
             ),
@@ -239,19 +309,63 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
             },
           ),
           const Spacer(),
-          ElevatedButton(
-            onPressed:
-                (_selectedCountryId != null &&
-                    _selectedStateId != null &&
-                    _selectedCityId != null)
-                ? () {
-                    debugPrint(
-                      '[DrivingLocationScreen] Save location clicked. Country: $_selectedCountryId, State: $_selectedStateId, City: $_selectedCityId',
-                    );
-                    _submit();
-                  }
-                : null,
-            child: const Text('Save location'),
+
+          // Submit Button
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 200),
+            opacity: isFormValid ? 1.0 : 0.6,
+            child: Container(
+              height: 56,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: AppColors.primary,
+                boxShadow: isFormValid
+                    ? [
+                        BoxShadow(
+                          color: AppColors.primary.withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: ElevatedButton(
+                onPressed: isFormValid
+                    ? () {
+                        debugPrint(
+                          '[DrivingLocationScreen] Save location clicked. Country: $_selectedCountryId, State: $_selectedStateId, City: $_selectedCityId',
+                        );
+                        _submit();
+                      }
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Save location',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),

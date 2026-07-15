@@ -54,7 +54,7 @@ class ChecklistScreen extends StatelessWidget {
       return true;
     }
 
-    // 9 standard todo items matching Lyft Driver flow
+    // 9 standard todo items matching Ryva Ride Driver flow
     final todoItems = [
       _ChecklistItem(
         code: 'personal_info',
@@ -74,7 +74,7 @@ class ChecklistScreen extends StatelessWidget {
       _ChecklistItem(
         code: 'legalAcceptance',
         title: 'Terms of Service',
-        description: 'Lyft partner legal agreement policy',
+        description: 'Ryva Ride partner legal agreement policy',
         icon: Icons.description_rounded,
         isCompleted: !summary.missing.contains('legalAcceptance'),
       ),
@@ -94,20 +94,47 @@ class ChecklistScreen extends StatelessWidget {
         icon: Icons.directions_car_rounded,
         isCompleted: needsVehicleRental || summary.vehicles.isNotEmpty,
       ),
-      _ChecklistItem(
-        code: 'document:DRIVERS_LICENSE',
-        title: 'Driver\'s licence',
-        description: 'Identity validation and DL proof',
-        icon: Icons.badge_rounded,
-        isCompleted: isDocumentComplete('DRIVERS_LICENSE'),
-      ),
-      _ChecklistItem(
-        code: 'document:NATIONAL_ID',
-        title: 'Aadhar Card (National ID)',
-        description: 'Aadhar card validation proof',
-        icon: Icons.style_rounded,
-        isCompleted: isDocumentComplete('NATIONAL_ID'),
-      ),
+    ];
+
+    // Add required document list dynamically from documentRequirements
+    for (final req in documentRequirements) {
+      if (req.code == 'DRIVERS_LICENSE') {
+        todoItems.add(_ChecklistItem(
+          code: 'document:DRIVERS_LICENSE',
+          title: 'Driver\'s licence',
+          description: 'Identity validation and DL proof',
+          icon: Icons.badge_rounded,
+          isCompleted: isDocumentComplete('DRIVERS_LICENSE'),
+        ));
+      } else if (req.code == 'NATIONAL_ID') {
+        todoItems.add(_ChecklistItem(
+          code: 'document:NATIONAL_ID',
+          title: 'Aadhar Card (National ID)',
+          description: 'Aadhar card validation proof',
+          icon: Icons.style_rounded,
+          isCompleted: isDocumentComplete('NATIONAL_ID'),
+        ));
+      } else if (req.code == 'VEHICLE_REGISTRATION' && !needsVehicleRental) {
+        todoItems.add(_ChecklistItem(
+          code: 'document:VEHICLE_REGISTRATION',
+          title: 'Vehicle Registration',
+          description: 'Upload RC Book front side',
+          icon: Icons.assignment_rounded,
+          isCompleted: isDocumentComplete('VEHICLE_REGISTRATION'),
+        ));
+      } else if (req.code == 'INSURANCE_CERTIFICATE' && !needsVehicleRental) {
+        todoItems.add(_ChecklistItem(
+          code: 'document:INSURANCE_CERTIFICATE',
+          title: 'Insurance Certificate',
+          description: 'Upload valid insurance policy paper',
+          icon: Icons.security_rounded,
+          isCompleted: isDocumentComplete('INSURANCE_CERTIFICATE'),
+        ));
+      }
+    }
+
+    // Add remaining items
+    todoItems.addAll([
       _ChecklistItem(
         code: 'profile_photo',
         title: 'Profile photo',
@@ -131,16 +158,20 @@ class ChecklistScreen extends StatelessWidget {
         icon: Icons.contact_phone_rounded,
         isCompleted: !summary.missing.contains('emergency_contact'),
       ),
-    ];
+    ]);
 
     final completedCount = todoItems.where((i) => i.isCompleted).length;
+    final totalCount = todoItems.length;
+    // We allow skipping Bank Details and Emergency Contact (2 items)
+    final isButtonEnabled = completedCount >= (totalCount - 2);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
                 'To-do',
@@ -148,25 +179,25 @@ class ChecklistScreen extends StatelessWidget {
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
+                  letterSpacing: -0.5,
                 ),
               ),
-              const SizedBox(width: 12),
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
+                  horizontal: 12,
+                  vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
+                  color: AppColors.secondary.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.secondary.withOpacity(0.2)),
                 ),
                 child: Text(
-                  '$completedCount / 10 items',
+                  '$completedCount / $totalCount items',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
-                    color: AppColors.textSecondary,
+                    color: AppColors.secondary,
                   ),
                 ),
               ),
@@ -176,54 +207,93 @@ class ChecklistScreen extends StatelessWidget {
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            physics: const BouncingScrollPhysics(),
             itemCount: todoItems.length,
             itemBuilder: (context, index) {
               final item = todoItems[index];
-              return Card(
-                color: Colors.white,
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
                 margin: const EdgeInsets.only(bottom: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  side: const BorderSide(color: AppColors.border),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: item.isCompleted
+                        ? AppColors.primary.withOpacity(0.4)
+                        : AppColors.border,
+                    width: item.isCompleted ? 1.5 : 1.0,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: item.isCompleted
+                          ? AppColors.primary.withOpacity(0.02)
+                          : Colors.black.withOpacity(0.01),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: ListTile(
                   contentPadding: const EdgeInsets.symmetric(
-                    vertical: 8,
+                    vertical: 6,
                     horizontal: 16,
                   ),
-                  leading: CircleAvatar(
-                    backgroundColor: item.isCompleted
-                        ? AppColors.primary.withOpacity(0.1)
-                        : AppColors.surface,
+                  leading: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: item.isCompleted
+                          ? AppColors.secondary.withOpacity(0.08)
+                          : AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: Icon(
                       item.icon,
                       color: item.isCompleted
-                          ? AppColors.primary
+                          ? AppColors.secondary
                           : AppColors.textSecondary,
+                      size: 22,
                     ),
                   ),
                   title: Text(
                     item.title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
-                      color: AppColors.textPrimary,
+                      color: item.isCompleted ? AppColors.textPrimary : AppColors.textPrimary.withOpacity(0.8),
                     ),
                   ),
-                  subtitle: Text(
-                    item.description,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Text(
+                      item.description,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                        height: 1.3,
+                      ),
                     ),
                   ),
-                  trailing: Icon(
-                    item.isCompleted
-                        ? Icons.check_circle_rounded
-                        : Icons.chevron_right_rounded,
-                    color: item.isCompleted
-                        ? AppColors.primary
-                        : AppColors.border,
+                  trailing: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: item.isCompleted
+                          ? AppColors.primary
+                          : AppColors.surface,
+                      border: Border.all(
+                        color: item.isCompleted ? AppColors.primary : AppColors.border,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Icon(
+                      item.isCompleted
+                          ? Icons.check
+                          : Icons.chevron_right_rounded,
+                      size: 16,
+                      color: item.isCompleted ? Colors.white : AppColors.textSecondary,
+                    ),
                   ),
                   onTap: () => onItemTap(item.code),
                 ),
@@ -233,9 +303,38 @@ class ChecklistScreen extends StatelessWidget {
         ),
         Padding(
           padding: const EdgeInsets.all(24.0),
-          child: ElevatedButton(
-            onPressed: completedCount >= 9 ? onSubmit : null,
-            child: const Text('Submit Application'),
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 200),
+            opacity: isButtonEnabled ? 1.0 : 0.6,
+            child: SizedBox(
+              height: 56,
+              child: ElevatedButton(
+                onPressed: isButtonEnabled ? onSubmit : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: AppColors.textSecondary.withOpacity(0.2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: isButtonEnabled ? 2 : 0,
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Submit Application',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Icon(Icons.send_rounded, size: 18),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ],

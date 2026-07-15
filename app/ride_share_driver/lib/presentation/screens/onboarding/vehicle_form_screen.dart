@@ -104,10 +104,55 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Modern input decoration builder
+    InputDecoration buildModernInputDecoration({
+      required String labelText,
+      required IconData prefixIcon,
+      Widget? suffixIcon,
+    }) {
+      return InputDecoration(
+        labelText: labelText,
+        labelStyle: const TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 14,
+        ),
+        floatingLabelStyle: const TextStyle(
+          color: AppColors.primary,
+          fontWeight: FontWeight.w600,
+        ),
+        prefixIcon: Icon(prefixIcon, color: AppColors.secondary, size: 22),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: AppColors.surface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.border, width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.error, width: 1),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.error, width: 2),
+        ),
+      );
+    }
+
     return Form(
       key: _formKey,
       child: ListView(
         padding: const EdgeInsets.all(24.0),
+        physics: const BouncingScrollPhysics(),
         children: [
           const Text(
             'Vehicle Details',
@@ -115,17 +160,28 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
               fontSize: 26,
               fontWeight: FontWeight.bold,
               color: AppColors.textPrimary,
+              letterSpacing: -0.5,
             ),
           ),
           const SizedBox(height: 8),
           const Text(
             'Enter the details of the vehicle you will drive.',
-            style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
+            style: TextStyle(
+              fontSize: 15,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 32),
+
+          // Vehicle Category Dropdown
           DropdownButtonFormField<String>(
             value: _selectedVehicleTypeId,
-            decoration: const InputDecoration(labelText: 'Vehicle Category'),
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+            decoration: buildModernInputDecoration(
+              labelText: 'Vehicle Category',
+              prefixIcon: Icons.category_outlined,
+            ),
             items: widget.vehicleTypes
                 .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name)))
                 .toList(),
@@ -137,10 +193,14 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
             },
           ),
           const SizedBox(height: 20),
+
+          // Model Input Field
           TextFormField(
             controller: _modelController,
-            decoration: const InputDecoration(
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+            decoration: buildModernInputDecoration(
               labelText: 'Vehicle Make & Model (e.g. Honda Amaze)',
+              prefixIcon: Icons.directions_car_outlined,
             ),
             validator: (val) =>
                 val == null || val.isEmpty ? 'Model is required' : null,
@@ -148,10 +208,14 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                 debugPrint('[VehicleFormScreen] Model changed: $val'),
           ),
           const SizedBox(height: 20),
+
+          // Registration Plate Number Field
           TextFormField(
             controller: _regNumberController,
-            decoration: const InputDecoration(
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+            decoration: buildModernInputDecoration(
               labelText: 'Registration Plate Number (e.g. KA-01-AB-1234)',
+              prefixIcon: Icons.subtitles_outlined,
             ),
             validator: (val) {
               if (val == null || val.trim().isEmpty) {
@@ -163,12 +227,18 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                 debugPrint('[VehicleFormScreen] Reg number changed: $val'),
           ),
           const SizedBox(height: 20),
+
+          // Year and Color Row
           Row(
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
                   value: _selectedYear,
-                  decoration: const InputDecoration(labelText: 'Year'),
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+                  decoration: buildModernInputDecoration(
+                    labelText: 'Year',
+                    prefixIcon: Icons.calendar_today_outlined,
+                  ),
                   items: _years
                       .map((y) => DropdownMenuItem(value: y, child: Text(y)))
                       .toList(),
@@ -186,7 +256,11 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   value: _selectedColor,
-                  decoration: const InputDecoration(labelText: 'Color'),
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+                  decoration: buildModernInputDecoration(
+                    labelText: 'Color',
+                    prefixIcon: Icons.palette_outlined,
+                  ),
                   items: _colors
                       .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                       .toList(),
@@ -203,12 +277,41 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
             ],
           ),
           const SizedBox(height: 40),
-          ElevatedButton(
-            onPressed: () {
-              debugPrint('[VehicleFormScreen] Save & Continue button clicked');
-              _submit();
-            },
-            child: const Text('Save & Continue'),
+
+          // Submit Button
+          SizedBox(
+            height: 56,
+            child: ElevatedButton(
+              onPressed: () {
+                debugPrint('[VehicleFormScreen] Save & Continue button clicked');
+                _submit();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 2,
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Save & Continue',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
