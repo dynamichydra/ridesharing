@@ -9,26 +9,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import {
-  riderSchema,
-  emptyRiderFormValues,
-  type RiderFormValues,
-} from "./schema";
+import { riderSchema, emptyRiderFormValues, type RiderFormValues } from "../schema";
 import { RiderForm } from "./form";
-import { useCreateRider } from "./hooks";
+import { useCreateRider } from "../hooks";
 
 interface CreateRiderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
 }
 
-export function CreateRiderDialog({ open, onOpenChange }: CreateRiderDialogProps) {
+export function CreateRiderDialog({ open, onOpenChange, onSuccess }: CreateRiderDialogProps) {
   const createMutation = useCreateRider();
 
-const form = useForm<RiderFormValues>({
-  resolver: zodResolver(riderSchema),
-  defaultValues: emptyRiderFormValues,
-});
+  const form = useForm<RiderFormValues>({
+    resolver: zodResolver(riderSchema),
+    defaultValues: emptyRiderFormValues,
+  });
 
   // Reset the form every time the dialog is opened fresh.
   useEffect(() => {
@@ -46,7 +43,10 @@ const form = useForm<RiderFormValues>({
         isVerified: values.isVerified,
       },
       {
-        onSuccess: () => onOpenChange(false),
+        onSuccess: () => {
+          onOpenChange(false);
+          onSuccess();
+        },
       }
     );
   });

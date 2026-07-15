@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import ZoneForm from "./form";
-import type { Zone } from "./types";
+import type { Zone } from "../types";
 
 
 //Create / Edit dialog — wraps the self-contained ZoneForm 

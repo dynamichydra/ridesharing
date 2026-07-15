@@ -1,17 +1,8 @@
 import { apiClient } from "@/lib/api-client";
-import type {
-  ApiResponse,
-  Rider,
-  RiderListParams,
-  RiderListResponse,
-  CreateRiderPayload,
-  UpdateRiderPayload,
-} from "./types";
+import type { Rider, RiderListParams, CreateRiderPayload, UpdateRiderPayload } from "./types";
 
-
-// Raw envelope shape returned by the API (see RideShare-API.md):
-// { SUCCESS, MESSAGE: Rider[], COUNT, PAGINATION: { currentPage, itemsPerPage, totalItems, totalPages } }
-
+// Base path: /riders
+const BASE_URL = "/riders";
 
 function buildQuery(params: RiderListParams) {
   const query = new URLSearchParams();
@@ -23,33 +14,15 @@ function buildQuery(params: RiderListParams) {
   return query.toString();
 }
 
-export async function fetchRiders(
-  params: RiderListParams
-): Promise<RiderListResponse> {
-  const query = buildQuery(params);
+export const ridersApi = {
+  // GET /riders?search=&isVerified=&isBlocked=&page=&limit=  (Admin)
+  list: (params: RiderListParams) => apiClient.get<Rider[]>(`${BASE_URL}?${buildQuery(params)}`),
 
-  const res = (await apiClient.get<Rider[]>(
-    `/riders?${query}`
-  )) as ApiResponse<Rider[]>;
+  // POST /riders  (Admin) { phone, name, ... } — doc body is abbreviated;
+  // email/isVerified carried over from the pre-existing implementation, not newly invented.
+  create: (payload: CreateRiderPayload) => apiClient.post<Rider>(BASE_URL, payload),
 
-  const riders = res.MESSAGE ?? [];
-  const raw = res.PAGINATION;
-
-  return {
-    data: riders,
-    pagination: {
-      total: raw?.totalItems ?? riders.length,
-      page: raw?.currentPage ?? params.page ?? 1,
-      limit: raw?.itemsPerPage ?? params.limit ?? 10,
-      totalPages: raw?.totalPages ?? 1,
-    },
-  };
-}
-
-export function createRider(payload: CreateRiderPayload) {
-  return apiClient.post<Rider>("/riders", payload);
-}
-
-export function updateRider(id: string, payload: UpdateRiderPayload) {
-  return apiClient.patch<Rider>(`/riders/${id}`, payload);
-}
+  // PATCH /riders/:id  (Admin) partial fields
+  update: (id: string, payload: UpdateRiderPayload) =>
+    apiClient.patch<Rider>(`${BASE_URL}/${id}`, payload),
+};

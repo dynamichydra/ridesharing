@@ -3,7 +3,7 @@ import toast from "react-hot-toast";
 import { vehicleTypesApi } from "./api";
 import type {
   VehicleTypeListParams,
-  VehicleTypePayload,
+  CreateVehicleTypePayload,
   UpdateVehicleTypePayload,
 } from "./types";
 
@@ -27,9 +27,9 @@ export function useVehicleType(id: string | undefined) {
 export function useCreateVehicleType() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: VehicleTypePayload) => vehicleTypesApi.create(payload),
+    mutationFn: (payload: CreateVehicleTypePayload) => vehicleTypesApi.create(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [VEHICLE_TYPES_KEY] });
+      queryClient.invalidateQueries({ queryKey: [VEHICLE_TYPES_KEY], refetchType: "active" });
       toast.success("Vehicle type created!");
     },
     onError: (err: any) => {
@@ -44,7 +44,7 @@ export function useUpdateVehicleType() {
     mutationFn: ({ id, payload }: { id: string; payload: UpdateVehicleTypePayload }) =>
       vehicleTypesApi.update(id, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [VEHICLE_TYPES_KEY] });
+      queryClient.invalidateQueries({ queryKey: [VEHICLE_TYPES_KEY], refetchType: "active" });
       toast.success("Vehicle type updated!");
     },
     onError: (err: any) => {
@@ -58,7 +58,7 @@ export function useDeleteVehicleType() {
   return useMutation({
     mutationFn: (id: string) => vehicleTypesApi.remove(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [VEHICLE_TYPES_KEY] });
+      queryClient.invalidateQueries({ queryKey: [VEHICLE_TYPES_KEY], refetchType: "active" });
       toast.success("Vehicle type deleted");
     },
     onError: (err: any) => {

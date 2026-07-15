@@ -1,4 +1,4 @@
-import { FileText, Truck, User, Check, X } from "lucide-react";
+import { FileText, Truck, User, Check, X, FilePlus2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -7,19 +7,18 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import DriverActionForm from "./form";
-import type { Driver } from "./types";
+import DriverActionForm, { RequestDocumentsForm } from "./form";
+import type { Driver } from "../types";
 
-/* ------------------------------------------------------------------ */
-/* Docs / Registration review dialog                                   */
-/* ------------------------------------------------------------------ */
 
+//Docs / Registration review dialog                                   
 interface DriverDocsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   driver: Driver | null;
   onApproveClick: () => void;
   onRejectClick: () => void;
+  onRequestDocumentsClick: () => void;
 }
 
 export function DriverDocsDialog({
@@ -28,6 +27,7 @@ export function DriverDocsDialog({
   driver,
   onApproveClick,
   onRejectClick,
+  onRequestDocumentsClick,
 }: DriverDocsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -41,7 +41,7 @@ export function DriverDocsDialog({
 
         {driver && (
           <div className="space-y-6 py-4">
-            {/* Profile info */}
+            {/* profile info */}
             <div className="flex items-center gap-4 bg-muted/30 p-4 rounded-lg">
               <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xl font-bold">
                 {driver.profilePhoto ? (
@@ -171,25 +171,35 @@ export function DriverDocsDialog({
             )}
 
             {/* Decision Actions */}
-            {driver.approvalStatus === "pending" && (
-              <div className="flex gap-2 justify-end pt-4 border-t border-border">
-                <Button
-                  variant="outline"
-                  onClick={onRejectClick}
-                  className="border-red-600 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 cursor-pointer"
-                >
-                  <X className="h-4 w-4 mr-1" />
-                  Reject Application
-                </Button>
-                <Button
-                  onClick={onApproveClick}
-                  className="bg-green-600 hover:bg-green-700 text-white cursor-pointer"
-                >
-                  <Check className="h-4 w-4 mr-1" />
-                  Approve Partner
-                </Button>
-              </div>
-            )}
+            <div className="flex flex-wrap gap-2 justify-end pt-4 border-t border-border">
+              <Button
+                variant="outline"
+                onClick={onRequestDocumentsClick}
+                className="cursor-pointer"
+              >
+                <FilePlus2 className="h-4 w-4 mr-1" />
+                Request More Documents
+              </Button>
+              {driver.approvalStatus === "pending" && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={onRejectClick}
+                    className="border-red-600 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 cursor-pointer"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Reject Application
+                  </Button>
+                  <Button
+                    onClick={onApproveClick}
+                    className="bg-green-600 hover:bg-green-700 text-white cursor-pointer"
+                  >
+                    <Check className="h-4 w-4 mr-1" />
+                    Approve Partner
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         )}
       </DialogContent>
@@ -197,9 +207,8 @@ export function DriverDocsDialog({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Approve confirmation dialog — wraps the shared form.tsx             */
-/* ------------------------------------------------------------------ */
+
+//Approve confirmation dialog — wraps the shared form.tsx
 
 interface ApproveDriverDialogProps {
   open: boolean;
@@ -244,9 +253,8 @@ export function ApproveDriverDialog({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Reject confirmation dialog — wraps the shared form.tsx              */
-/* ------------------------------------------------------------------ */
+
+//Reject confirmation dialog — wraps the shared form.tsx              
 
 interface RejectDriverDialogProps {
   open: boolean;
@@ -285,6 +293,53 @@ export function RejectDriverDialog({
           onCancel={() => onOpenChange(false)}
           submitLabel="Submit Rejection"
           submitClassName="bg-red-600 hover:bg-red-700 text-white"
+          isPending={isPending}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+//Request Documents dialog — wraps the shared form.tsx 
+
+interface RequestDocumentsDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  documentTypeCodes: string;
+  setDocumentTypeCodes: (value: string) => void;
+  note: string;
+  setNote: (value: string) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  isPending: boolean;
+}
+
+export function RequestDocumentsDialog({
+  open,
+  onOpenChange,
+  documentTypeCodes,
+  setDocumentTypeCodes,
+  note,
+  setNote,
+  onSubmit,
+  isPending,
+}: RequestDocumentsDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[460px]">
+        <DialogHeader>
+          <DialogTitle>Request More Documents</DialogTitle>
+          <DialogDescription>
+            Ask the driver to (re-)upload specific documents. This moves their status back to
+            documents pending.
+          </DialogDescription>
+        </DialogHeader>
+        <RequestDocumentsForm
+          documentTypeCodes={documentTypeCodes}
+          setDocumentTypeCodes={setDocumentTypeCodes}
+          note={note}
+          setNote={setNote}
+          onSubmit={onSubmit}
+          onCancel={() => onOpenChange(false)}
           isPending={isPending}
         />
       </DialogContent>

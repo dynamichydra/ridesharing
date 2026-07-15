@@ -1,3 +1,4 @@
+
 export interface Driver {
   id: string;
   phone: string;
@@ -15,11 +16,30 @@ export interface Driver {
   vehicleYear: string | null;
   approvalStatus: "pending" | "approved" | "rejected";
   approvalNote: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
   isOnline: boolean;
   isBlocked: boolean;
+  currentLat: string | null;
+  currentLng: string | null;
+  lastLocationAt: string | null;
+  fcmToken: string | null;
   rating: string;
+  totalRatings: number;
   totalRides: number;
   subscriptionStatus: string;
+  createdAt: string;
+  updatedAt: string;
+  dateOfBirth: string | null;
+  gender: string | null;
+  referralCode: string | null;
+  referredByDriverId: string | null;
+  preferredLanguageCode: string | null;
+  countryId: string | null;
+  stateId: string | null;
+  cityId: string | null;
+  registrationStatus: string;
+  registrationStep: number;
 }
 
 export interface DriverListParams {
@@ -33,10 +53,11 @@ export interface DriverListParams {
   isBlocked?: boolean;
 }
 
+
 export interface Pagination {
-  total: number;
-  page: number;
-  limit: number;
+  currentPage: number;
+  itemsPerPage: number;
+  totalItems: number;
   totalPages: number;
 }
 

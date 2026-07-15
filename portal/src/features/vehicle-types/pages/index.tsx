@@ -5,7 +5,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import VehicleTypeList from "../list";
+import VehicleTypeList from "./list";
 
 export default function VehicleTypeListPage() {
   return (
@@ -15,7 +15,7 @@ export default function VehicleTypeListPage() {
           Vehicle Configurations
         </h2>
         <p className="text-muted-foreground mt-1">
-          Configure parameters, base fares, and distance multipliers for dispatch classes.
+          Manage the global vehicle type catalog used across matching and dispatch.
         </p>
       </div>
 
@@ -23,7 +23,7 @@ export default function VehicleTypeListPage() {
         <CardHeader>
           <CardTitle>Registered Fleet Types</CardTitle>
           <CardDescription>
-            Setup values used by matching engines to calculate ride fares.
+            Vehicle classes available across the platform. Per-country pricing is configured separately.
           </CardDescription>
         </CardHeader>
         <CardContent>

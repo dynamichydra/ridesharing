@@ -4,21 +4,20 @@ export interface VehicleType {
   slug: string;
   icon: string | null;
   capacity: number;
-  baseRate: string;
-  perKmRate: string;
-  perMinRate: string;
-  minFare: string;
   sortOrder: number;
   isActive: boolean;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface VehicleTypeListParams {
   page?: number;
   limit?: number;
+  [key: string]: any; 
 }
 
-// Real runtime shape (confirmed via Network tab on the Fare Rules page):
-// currentPage/itemsPerPage/totalItems/totalPages — matches the API doc.
+
 export interface Pagination {
   currentPage: number;
   itemsPerPage: number;
@@ -26,17 +25,15 @@ export interface Pagination {
   totalPages: number;
 }
 
-export interface VehicleTypePayload {
+
+export interface CreateVehicleTypePayload {
   name: string;
-  slug: string;
   capacity: number;
-  baseRate: string;
-  perKmRate: string;
-  perMinRate: string;
-  minFare: string;
   sortOrder: number;
-  isActive: boolean;
-  icon?: string | null;
 }
 
-export type UpdateVehicleTypePayload = Partial<VehicleTypePayload>;
+
+export interface UpdateVehicleTypePayload {
+  capacity?: number;
+  isActive?: boolean;
+}

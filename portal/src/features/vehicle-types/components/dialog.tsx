@@ -7,50 +7,49 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import FareRuleForm from "./form";
-import type { FareRuleFormValues } from "./schema";
-import type { FareRule } from "./types";
+import VehicleTypeForm from "./form";
+import type { VehicleTypeFormValues } from "../schema";
+import type { VehicleType } from "../types";
 
-/* ------------------------------------------------------------------ */
-/* Create / Edit dialog — same form, different copy depending on mode  */
-/* ------------------------------------------------------------------ */
 
-interface FareRuleFormDialogProps {
+//Create / Edit dialog — same form, different fields/copy by mode     
+
+
+interface VehicleTypeFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
-  values: FareRuleFormValues;
-  setValues: (values: FareRuleFormValues) => void;
+  values: VehicleTypeFormValues;
+  setValues: (values: VehicleTypeFormValues) => void;
+  errors: Partial<Record<keyof VehicleTypeFormValues, string>>;
   onSubmit: (e: React.FormEvent) => void;
   isPending: boolean;
 }
 
-export function FareRuleFormDialog({
+export function VehicleTypeFormDialog({
   open,
   onOpenChange,
   mode,
   values,
   setValues,
+  errors,
   onSubmit,
   isPending,
-}: FareRuleFormDialogProps) {
+}: VehicleTypeFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[520px] max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>{mode === "create" ? "Create Fare Rule" : "Edit Fare Rule"}</DialogTitle>
-          <DialogDescription>
-            {mode === "create"
-              ? "Define a new surge/multiplier rule based on time, zone, or traffic conditions."
-              : "Update the multiplier, conditions, or status for this fare rule."}
-          </DialogDescription>
+          <DialogTitle>{mode === "create" ? "Add Vehicle Type" : "Update Vehicle Type"}</DialogTitle>
         </DialogHeader>
-        <FareRuleForm
+        <VehicleTypeForm
+          mode={mode}
           values={values}
           setValues={setValues}
+          errors={errors}
           onSubmit={onSubmit}
           onCancel={() => onOpenChange(false)}
-          submitLabel={mode === "create" ? "Create Rule" : "Save Changes"}
+          submitLabel={mode === "create" ? "Create Vehicle Type" : "Save Changes"}
           isPending={isPending}
         />
       </DialogContent>
@@ -58,34 +57,34 @@ export function FareRuleFormDialog({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Delete confirmation dialog                                          */
-/* ------------------------------------------------------------------ */
 
-interface DeleteFareRuleDialogProps {
+// Delete confirmation dialog 
+
+
+interface DeleteVehicleTypeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  rule: FareRule | null;
+  vehicleType: VehicleType | null;
   onConfirm: () => void;
   isPending: boolean;
 }
 
-export function DeleteFareRuleDialog({
+export function DeleteVehicleTypeDialog({
   open,
   onOpenChange,
-  rule,
+  vehicleType,
   onConfirm,
   isPending,
-}: DeleteFareRuleDialogProps) {
+}: DeleteVehicleTypeDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[420px]">
         <DialogHeader>
-          <DialogTitle>Delete Fare Rule</DialogTitle>
+          <DialogTitle>Delete Vehicle Type</DialogTitle>
           <DialogDescription>
             This will permanently remove{" "}
-            <span className="font-semibold text-foreground">{rule?.name}</span>. This action
-            cannot be undone.
+            <span className="font-semibold text-foreground">{vehicleType?.name}</span>. This
+            action cannot be undone.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -103,7 +102,7 @@ export function DeleteFareRuleDialog({
             className="bg-red-600 hover:bg-red-700 text-white cursor-pointer"
             disabled={isPending}
           >
-            Delete Rule
+            Delete Vehicle Type
           </Button>
         </DialogFooter>
       </DialogContent>

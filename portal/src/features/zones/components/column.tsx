@@ -1,7 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Map, Pencil, Trash2, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { Zone } from "./types";
+import type { Zone } from "../types";
 
 interface Props {
   onEdit: (zone: Zone) => void;
@@ -68,37 +68,45 @@ export function getZoneColumns({ onEdit, onDelete }: Props): ColumnDef<Zone>[] {
           </span>
         ),
     },
-    {
-      id: "actions",
-      header: () => <div className="text-right">Actions</div>,
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2 justify-end">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit(row.original);
-            }}
-            className="h-8 w-8 border-border text-foreground hover:bg-muted cursor-pointer"
-            title="Edit zone"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="destructive"
-            size="icon"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(row.original);
-            }}
-            className="h-8 w-8 cursor-pointer"
-            title="Delete zone"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      ),
-    },
+   {
+  id: "actions",
+  size: 110,
+  minSize: 110,
+  maxSize: 110,
+
+  header: () => (
+    <div className="w-full text-center">
+      Actions
+    </div>
+  ),
+
+  cell: ({ row }) => (
+    <div className="w-full flex items-center justify-center gap-2">
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={(e) => {
+          e.stopPropagation();
+          onEdit(row.original);
+        }}
+        className="h-8 w-8"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </Button>
+
+      <Button
+        variant="destructive"
+        size="icon"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(row.original);
+        }}
+        className="h-8 w-8"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  ),
+}
   ];
 }

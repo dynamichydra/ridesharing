@@ -5,7 +5,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import DriverList from "../list";
+import DriverList from "./list";
 
 export default function DriverListPage() {
   return (

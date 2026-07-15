@@ -80,7 +80,7 @@ export function DataTable<TData>({
 
   return (
     <div className="flex flex-col space-y-4">
-      <div className="overflow-hidden rounded-md border flex-1 flex flex-col min-h-0 bg-white">
+      <div className="overflow-hidden rounded-xl border border-border bg-card flex-1 flex flex-col min-h-0 shadow-sm">
         <div className="overflow-auto flex-1 relative">
           <Table
             containerClass={cn(fixedHeader && "h-full")}

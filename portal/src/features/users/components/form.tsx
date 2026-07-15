@@ -1,7 +1,7 @@
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { RiderFormValues } from "./schema";
+import type { RiderFormValues } from "../schema";
 
 interface RiderFormProps {
   form: UseFormReturn<RiderFormValues>;

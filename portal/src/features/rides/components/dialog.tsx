@@ -6,7 +6,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Compass, History, MapPin, Route, X } from "lucide-react";
-import type { Ride, RideOffer, RideTimelineEvent } from "./types";
+import type { Ride, RideOffer, RideTimelineEvent } from "../types";
 
 interface RideDetailsDialogProps {
   open: boolean;
@@ -17,7 +17,6 @@ interface RideDetailsDialogProps {
   offers?: RideOffer[];
   offersLoading: boolean;
 }
-
 
 export function RideDetailsDialog({
   open,

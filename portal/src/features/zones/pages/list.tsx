@@ -1,17 +1,20 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/data-table";
 
-import { getZoneColumns } from "./column";
-import { ZoneFormDialog, DeleteZoneDialog } from "./dialog";
-import { useZones, useDeleteZone } from "./hooks";
-import type { Zone, Pagination } from "./types";
+import { getZoneColumns } from "../components/column";
+import { ZoneFormDialog, DeleteZoneDialog } from "../components/dialog";
+import { useZones, useDeleteZone } from "../hooks";
+import type { Zone, Pagination } from "../types";
 
 export default function ZoneList() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
 
   const [selectedZone, setSelectedZone] = useState<Zone | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
@@ -24,10 +27,14 @@ export default function ZoneList() {
   const totalPages = pagination?.totalPages || 1;
   const totalRecords = pagination?.totalItems ?? zones.length;
 
-
   const refreshList = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["zones"], refetchType: "active" });
   }, [queryClient]);
+
+  const handleOpenCreate = () => {
+    setSelectedZone(null);
+    setIsCreateOpen(true);
+  };
 
   const handleOpenEdit = useCallback((zone: Zone) => {
     setSelectedZone(zone);
@@ -64,16 +71,37 @@ export default function ZoneList() {
 
   return (
     <div className="space-y-4">
-      <DataTable
-        columns={columns}
-        data={zones}
-        pageIndex={page - 1}
-        pageCount={totalPages}
-        totalRecords={totalRecords}
-        onPageChange={handlePageChange}
+      <div className="flex justify-end">
+        <Button
+          onClick={handleOpenCreate}
+          className="bg-primary hover:bg-primary/90 text-white flex items-center gap-2 cursor-pointer"
+        >
+          <Plus className="h-4 w-4" />
+          Add Zone
+        </Button>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        <DataTable
+          columns={columns}
+          data={zones}
+          pageIndex={page - 1}
+          pageCount={totalPages}
+          totalRecords={totalRecords}
+          onPageChange={handlePageChange}
+        />
+      </div>
+
+      <ZoneFormDialog
+        open={isCreateOpen}
+        onOpenChange={setIsCreateOpen}
+        zone={null}
+        onSuccess={() => {
+          setIsCreateOpen(false);
+          refreshList();
+        }}
       />
 
-      {/* Edit dialog — */}
       <ZoneFormDialog
         open={isEditOpen}
         onOpenChange={setIsEditOpen}
@@ -83,6 +111,7 @@ export default function ZoneList() {
           refreshList();
         }}
       />
+
       <DeleteZoneDialog
         open={isDeleteOpen}
         onOpenChange={setIsDeleteOpen}

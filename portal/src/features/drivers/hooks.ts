@@ -5,6 +5,7 @@ import type {
   DriverListParams,
   ApproveDriverPayload,
   RejectDriverPayload,
+  RequestDocumentsPayload,
 } from "./types";
 
 const DRIVERS_KEY = "drivers";
@@ -30,7 +31,7 @@ export function useApproveDriver() {
     mutationFn: ({ id, note }: { id: string } & ApproveDriverPayload) =>
       driversApi.approve(id, { note }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY], refetchType: "active" });
       toast.success("Driver approved successfully!");
     },
     onError: (err: any) => {
@@ -45,11 +46,26 @@ export function useRejectDriver() {
     mutationFn: ({ id, note }: { id: string } & RejectDriverPayload) =>
       driversApi.reject(id, { note }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY], refetchType: "active" });
       toast.success("Driver application rejected");
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to reject driver");
+    },
+  });
+}
+
+export function useRequestDriverDocuments() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, documentTypeCodes, note }: { id: string } & RequestDocumentsPayload) =>
+      driversApi.requestDocuments(id, { documentTypeCodes, note }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY], refetchType: "active" });
+      toast.success("Document request sent to driver");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to request documents");
     },
   });
 }
@@ -60,7 +76,7 @@ export function useToggleBlockDriver() {
     mutationFn: ({ id, isBlocked }: { id: string; isBlocked: boolean }) =>
       isBlocked ? driversApi.unblock(id) : driversApi.block(id),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY], refetchType: "active" });
       toast.success(variables.isBlocked ? "Driver unblocked" : "Driver blocked");
     },
     onError: (err: any) => {

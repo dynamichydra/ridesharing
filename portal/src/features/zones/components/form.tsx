@@ -13,9 +13,9 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { DialogFooter } from "@/components/ui/dialog";
-import { useCreateZone, useUpdateZone } from "./hooks";
-import { zoneFormSchema, type ZoneFormValues } from "./schema";
-import type { Zone } from "./types";
+import { useCreateZone, useUpdateZone } from "../hooks";
+import { zoneFormSchema, type ZoneFormValues } from "../schema";
+import type { Zone } from "../types";
 
 interface ZoneFormProps {
   initialData?: Zone | null;

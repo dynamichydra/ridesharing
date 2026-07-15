@@ -1,53 +1,42 @@
+import type { ColumnDef } from "@tanstack/react-table";
 import { Eye, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { Driver } from "./types";
+import type { Driver } from "../types";
 
-export interface DriverColumn {
-  key: string;
-  header: string;
-  headerClassName?: string;
-  cellClassName?: string;
-  render: (driver: Driver) => React.ReactNode;
-}
-
-interface DriverColumnHandlers {
+interface Props {
   onOpenDocs: (driver: Driver) => void;
   onToggleBlock: (driver: Driver) => void;
 }
 
-
-export function getDriverColumns({
-  onOpenDocs,
-  onToggleBlock,
-}: DriverColumnHandlers): DriverColumn[] {
+export function getDriverColumns({ onOpenDocs, onToggleBlock }: Props): ColumnDef<Driver>[] {
   return [
     {
-      key: "details",
+      id: "details",
       header: "Driver details",
-      render: (driver) => (
+      cell: ({ row }) => (
         <>
           <div className="font-semibold text-foreground flex items-center gap-2">
-            {driver.name || "Unnamed Driver"}
-            {driver.isOnline && (
+            {row.original.name || "Unnamed Driver"}
+            {row.original.isOnline && (
               <span className="flex h-2 w-2 rounded-full bg-green-500" title="Online" />
             )}
           </div>
-          <div className="text-xs text-muted-foreground">{driver.phone}</div>
+          <div className="text-xs text-muted-foreground">{row.original.phone}</div>
           <div className="text-xs text-amber-500 font-medium">
-            ★ {driver.rating} ({driver.totalRides} rides)
+            ★ {row.original.rating} ({row.original.totalRides} rides)
           </div>
         </>
       ),
     },
     {
-      key: "vehicle",
+      id: "vehicle",
       header: "Vehicle",
-      render: (driver) =>
-        driver.vehicleNumber ? (
+      cell: ({ row }) =>
+        row.original.vehicleNumber ? (
           <div>
-            <div className="font-medium text-foreground">{driver.vehicleNumber}</div>
+            <div className="font-medium text-foreground">{row.original.vehicleNumber}</div>
             <div className="text-xs text-muted-foreground">
-              {driver.vehicleModel} ({driver.vehicleYear})
+              {row.original.vehicleModel} ({row.original.vehicleYear})
             </div>
           </div>
         ) : (
@@ -55,10 +44,10 @@ export function getDriverColumns({
         ),
     },
     {
-      key: "status",
+      accessorKey: "isBlocked",
       header: "Status",
-      render: (driver) =>
-        driver.isBlocked ? (
+      cell: ({ row }) =>
+        row.original.isBlocked ? (
           <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
             Blocked
           </span>
@@ -69,63 +58,61 @@ export function getDriverColumns({
         ),
     },
     {
-      key: "approval",
+      accessorKey: "approvalStatus",
       header: "Approval",
-      render: (driver) => (
+      cell: ({ row }) => (
         <span
           className={`px-2.5 py-1 text-xs font-bold rounded-full ${
-            driver.approvalStatus === "approved"
+            row.original.approvalStatus === "approved"
               ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-              : driver.approvalStatus === "rejected"
+              : row.original.approvalStatus === "rejected"
               ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
               : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
           }`}
         >
-          {driver.approvalStatus}
+          {row.original.approvalStatus}
         </span>
       ),
     },
     {
-      key: "subscription",
+      accessorKey: "subscriptionStatus",
       header: "Subscription",
-      render: (driver) => (
+      cell: ({ row }) => (
         <span
           className={`px-2.5 py-1 text-xs font-semibold rounded-full ${
-            driver.subscriptionStatus === "active"
+            row.original.subscriptionStatus === "active"
               ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
               : "bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-400"
           }`}
         >
-          {driver.subscriptionStatus}
+          {row.original.subscriptionStatus}
         </span>
       ),
     },
     {
-      key: "actions",
-      header: "Actions",
-      headerClassName: "text-right",
-      cellClassName: "text-right space-x-2",
-      render: (driver) => (
-        <>
+      id: "actions",
+      header: () => <div className="text-right">Actions</div>,
+      cell: ({ row }) => (
+        <div className="text-right space-x-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => onOpenDocs(driver)}
+            onClick={() => onOpenDocs(row.original)}
             className="text-xs border-border text-foreground hover:bg-muted font-medium cursor-pointer"
           >
             <Eye className="h-3.5 w-3.5 mr-1" />
             Review
           </Button>
           <Button
-            variant={driver.isBlocked ? "outline" : "destructive"}
+            variant={row.original.isBlocked ? "outline" : "destructive"}
             size="sm"
-            onClick={() => onToggleBlock(driver)}
+            onClick={() => onToggleBlock(row.original)}
             className="text-xs font-medium cursor-pointer"
           >
             <Ban className="h-3.5 w-3.5 mr-1" />
-            {driver.isBlocked ? "Unblock" : "Block"}
+            {row.original.isBlocked ? "Unblock" : "Block"}
           </Button>
-        </>
+        </div>
       ),
     },
   ];

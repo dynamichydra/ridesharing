@@ -1,15 +1,33 @@
 import { z } from "zod";
 
-export const vehicleTypeSchema = z.object({
-  name: z.string().min(1, "Class name is required"),
-  slug: z.string().min(1, "Slug is required"),
-  capacity: z.coerce.number().int().min(1, "Capacity must be at least 1"),
-  baseRate: z.string().min(1, "Base rate is required"),
-  perKmRate: z.string().min(1, "Per KM rate is required"),
-  perMinRate: z.string().optional(),
-  minFare: z.string().optional(),
-  sortOrder: z.coerce.number().int().optional(),
-  isActive: z.boolean().optional(),
+export const vehicleTypeCreateSchema = z.object({
+  name: z.string().min(1, { message: "Vehicle type name is required" }),
+  capacity: z.coerce
+    .number({ message: "Capacity is required" })
+    .int()
+    .gt(0, { message: "Capacity must be greater than zero" }),
+  sortOrder: z.coerce
+    .number({ message: "Sort order is required" })
+    .int()
+    .min(0, { message: "Sort order must be zero or greater" }),
 });
 
-export type VehicleTypeFormValues = z.infer<typeof vehicleTypeSchema>;
+export type VehicleTypeCreateValues = z.infer<typeof vehicleTypeCreateSchema>;
+
+export const vehicleTypeEditSchema = z.object({
+  capacity: z.coerce
+    .number({ message: "Capacity is required" })
+    .int()
+    .gt(0, { message: "Capacity must be greater than zero" }),
+  isActive: z.boolean(),
+});
+
+export type VehicleTypeEditValues = z.infer<typeof vehicleTypeEditSchema>;
+
+
+export interface VehicleTypeFormValues {
+  name: string;
+  capacity: number | "";
+  sortOrder: number | "";
+  isActive: boolean;
+}

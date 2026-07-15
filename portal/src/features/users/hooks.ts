@@ -1,22 +1,23 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { createRider, fetchRiders, updateRider } from "./api";
-import type { CreateRiderPayload, RiderListParams, UpdateRiderPayload } from "./types";
+import { ridersApi } from "./api";
+import type { RiderListParams, CreateRiderPayload, UpdateRiderPayload } from "./types";
+
+const RIDERS_KEY = "riders";
 
 export function useRiders(params: RiderListParams) {
   return useQuery({
-    queryKey: ["riders", params],
-    queryFn: () => fetchRiders(params),
+    queryKey: [RIDERS_KEY, params],
+    queryFn: () => ridersApi.list(params),
   });
 }
 
 export function useCreateRider() {
   const queryClient = useQueryClient();
-
   return useMutation({
-    mutationFn: (payload: CreateRiderPayload) => createRider(payload),
+    mutationFn: (payload: CreateRiderPayload) => ridersApi.create(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["riders"] });
+      queryClient.invalidateQueries({ queryKey: [RIDERS_KEY], refetchType: "active" });
       toast.success("User created successfully!");
     },
     onError: (err: any) => {
@@ -27,12 +28,11 @@ export function useCreateRider() {
 
 export function useUpdateRider() {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdateRiderPayload }) =>
-      updateRider(id, payload),
+      ridersApi.update(id, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["riders"] });
+      queryClient.invalidateQueries({ queryKey: [RIDERS_KEY], refetchType: "active" });
       toast.success("User updated successfully!");
     },
     onError: (err: any) => {

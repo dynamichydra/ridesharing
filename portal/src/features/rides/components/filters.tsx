@@ -2,15 +2,14 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Search, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { rideFilterSchema, rideStatusOptions } from "./schema";
-import type { RideFilterValues } from "./schema";
+import { rideFilterSchema, rideStatusOptions } from "../schema";
+import type { RideFilterValues } from "../schema";
 
 interface RideFilterFormProps {
   defaultValues: RideFilterValues;
   onApply: (values: RideFilterValues) => void;
   onReset: () => void;
 }
-
 
 export function RideFilterForm({ defaultValues, onApply, onReset }: RideFilterFormProps) {
   const { register, handleSubmit, reset } = useForm<RideFilterValues>({

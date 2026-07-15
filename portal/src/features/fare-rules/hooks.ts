@@ -1,11 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { fareRulesApi } from "./api";
+import { fareRulesApi, lookupsApi } from "./api";
 import type { FareRuleListParams, FareRulePayload, UpdateFareRulePayload } from "./types";
 
 const FARE_RULES_KEY = "fare-rules";
 
-export function useFareRules(params: FareRuleListParams) {
+export function useFareRules(params: FareRuleListParams = {}) {
   return useQuery({
     queryKey: [FARE_RULES_KEY, params],
     queryFn: () => fareRulesApi.list(params),
@@ -25,7 +25,7 @@ export function useCreateFareRule() {
   return useMutation({
     mutationFn: (payload: FareRulePayload) => fareRulesApi.create(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [FARE_RULES_KEY] });
+      queryClient.invalidateQueries({ queryKey: [FARE_RULES_KEY], refetchType: "active" });
       toast.success("Fare rule created successfully!");
     },
     onError: (err: any) => {
@@ -40,7 +40,7 @@ export function useUpdateFareRule() {
     mutationFn: ({ id, payload }: { id: string; payload: UpdateFareRulePayload }) =>
       fareRulesApi.update(id, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [FARE_RULES_KEY] });
+      queryClient.invalidateQueries({ queryKey: [FARE_RULES_KEY], refetchType: "active" });
       toast.success("Fare rule updated successfully!");
     },
     onError: (err: any) => {
@@ -54,11 +54,39 @@ export function useDeleteFareRule() {
   return useMutation({
     mutationFn: (id: string) => fareRulesApi.remove(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [FARE_RULES_KEY] });
+      queryClient.invalidateQueries({ queryKey: [FARE_RULES_KEY], refetchType: "active" });
       toast.success("Fare rule deleted");
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to delete fare rule");
     },
+  });
+}
+
+// ---------------------------------------------------------------------
+// Dropdown lookups
+// ---------------------------------------------------------------------
+
+export function useCountryOptions() {
+  return useQuery({
+    queryKey: ["fare-rules", "lookup-countries"],
+    queryFn: () => lookupsApi.listCountries(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useVehicleTypeOptions() {
+  return useQuery({
+    queryKey: ["fare-rules", "lookup-vehicle-types"],
+    queryFn: () => lookupsApi.listVehicleTypes(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useZoneOptions() {
+  return useQuery({
+    queryKey: ["fare-rules", "lookup-zones"],
+    queryFn: () => lookupsApi.listZones(),
+    staleTime: 5 * 60 * 1000,
   });
 }
