@@ -136,4 +136,11 @@ export async function rideRoutes(app) {
     const data = await rideService.getRideStatusTimeline(request.params.id);
     return sendSuccess(reply, data);
   });
+
+  // POST /api/v1/rides/:id/cancel/admin — support/ops cancels a stuck or disputed ride
+  app.post('/:id/cancel/admin', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await rideService.cancelRideByAdmin(request.params.id, request.user.id, request.body?.reason);
+    await signalRideCancelled(request.params.id).catch(() => { });
+    return sendSuccess(reply, data);
+  });
 }

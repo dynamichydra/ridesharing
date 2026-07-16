@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -5,8 +6,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Compass, History, MapPin, Route, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Ban, Compass, History, MapPin, Route, X } from "lucide-react";
 import type { Ride, RideOffer, RideTimelineEvent } from "../types";
+
+const CANCELLABLE_STATUSES: Ride["status"][] = ["searching", "accepted", "arriving", "started"];
 
 interface RideDetailsDialogProps {
   open: boolean;
@@ -16,6 +21,8 @@ interface RideDetailsDialogProps {
   timelineLoading: boolean;
   offers?: RideOffer[];
   offersLoading: boolean;
+  onCancelRide: (reason: string) => void;
+  isCancelling: boolean;
 }
 
 export function RideDetailsDialog({
@@ -26,7 +33,16 @@ export function RideDetailsDialog({
   timelineLoading,
   offers,
   offersLoading,
+  onCancelRide,
+  isCancelling,
 }: RideDetailsDialogProps) {
+  const [cancelReason, setCancelReason] = useState("");
+  const canCancel = ride && CANCELLABLE_STATUSES.includes(ride.status);
+
+  useEffect(() => {
+    setCancelReason("");
+  }, [ride?.id]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
@@ -72,6 +88,36 @@ export function RideDetailsDialog({
                 <div>
                   <strong>Reason:</strong> {ride.cancelReason || "No reason specified"}
                 </div>
+              </div>
+            )}
+
+            {canCancel && (
+              <div className="border border-destructive/30 p-4 rounded-lg space-y-3">
+                <h4 className="font-semibold text-sm flex items-center gap-2 text-destructive">
+                  <Ban className="h-4 w-4" /> Cancel This Ride
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  Ends the ride immediately and notifies the rider{ride.driverId ? " and driver" : ""}.
+                  Use for stuck or disputed rides.
+                </p>
+                <Textarea
+                  placeholder="Reason (shown to rider/driver)..."
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  className="text-sm"
+                  rows={2}
+                />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  disabled={isCancelling}
+                  onClick={() => onCancelRide(cancelReason)}
+                  className="cursor-pointer"
+                >
+                  <Ban className="h-3.5 w-3.5 mr-1" />
+                  Cancel Ride
+                </Button>
               </div>
             )}
 

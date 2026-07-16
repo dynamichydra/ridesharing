@@ -3,19 +3,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import { DollarSign, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/data-table";
+import { AutoFilters, type FilterSchema } from "@/components/filters/AutoFilters";
+import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getFareRuleColumns } from "../components/column";
 import {
   ViewFareRuleDialog,
   FareRuleFormDialog,
-  DeleteFareRuleDialog,
 } from "../components/dialog";
 import {
   useFareRules,
   useFareRule,
   useCreateFareRule,
   useUpdateFareRule,
-  useDeleteFareRule,
+  useSetFareRuleActive,
   useCountryOptions,
   useVehicleTypeOptions,
   useZoneOptions,
@@ -87,24 +88,61 @@ function buildPayload(values: FareRuleFormValues): FareRulePayload | UpdateFareR
   return { ...base, zoneId: values.zoneId! };
 }
 
+const FILTER_SCHEMA: FilterSchema = {
+  ruleType: {
+    label: "Rule Type",
+    operator: "equals",
+    type: "select",
+    field: "ruleType",
+    placeholder: "All Types",
+    options: [
+      { label: "Time-based", value: "time" },
+      { label: "Traffic-based", value: "traffic" },
+      { label: "Zone-based", value: "zone" },
+    ],
+  },
+  isActive: {
+    label: "Status",
+    operator: "equals",
+    type: "select",
+    field: "isActive",
+    placeholder: "All Statuses",
+    options: [
+      { label: "Active", value: "true" },
+      { label: "Inactive", value: "false" },
+    ],
+  },
+};
+
+function toBool(value: string | undefined): boolean | undefined {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return undefined;
+}
+
 export default function FareRuleList() {
   const queryClient = useQueryClient();
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const controller = useFilterController({ page: 1, limit: 10 });
+  const page = Number(controller.applied.page) || 1;
+  const pageSize = Number(controller.applied.limit) || 10;
 
   const [selectedRule, setSelectedRule] = useState<FareRule | null>(null);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
-  const { data, isLoading, isFetching } = useFareRules({ page, limit: pageSize });
+  const { data, isLoading, isFetching } = useFareRules({
+    page,
+    limit: pageSize,
+    ruleType: (controller.applied.ruleType as FareRule["ruleType"]) || "",
+    isActive: toBool(controller.applied.isActive),
+  });
   const { data: detailData, isLoading: isDetailLoading } = useFareRule(
     (isViewOpen || (isFormOpen && formMode === "edit")) ? selectedRule?.id : undefined
   );
   const createMutation = useCreateFareRule();
   const updateMutation = useUpdateFareRule();
-  const deleteMutation = useDeleteFareRule();
+  const setActiveMutation = useSetFareRuleActive();
 
   const { data: countriesData } = useCountryOptions();
   const { data: vehicleTypesData } = useVehicleTypeOptions();
@@ -140,9 +178,8 @@ export default function FareRuleList() {
     setIsFormOpen(true);
   };
 
-  const handleOpenDelete = (rule: FareRule) => {
-    setSelectedRule(rule);
-    setIsDeleteOpen(true);
+  const handleToggleActive = (rule: FareRule) => {
+    setActiveMutation.mutate({ id: rule.id, isActive: !rule.isActive });
   };
 
   const handleFormSubmit = (values: FareRuleFormValues) => {
@@ -168,22 +205,12 @@ export default function FareRuleList() {
     }
   };
 
-  const handleDeleteConfirm = () => {
-    if (!selectedRule) return;
-    deleteMutation.mutate(selectedRule.id, {
-      onSuccess: () => {
-        setIsDeleteOpen(false);
-        refreshList();
-      },
-    });
-  };
-
   const columns = useMemo(
     () =>
       getFareRuleColumns({
         onView: handleOpenView,
         onEdit: handleOpenEdit,
-        onDelete: handleOpenDelete,
+        onToggleActive: handleToggleActive,
         countries,
         vehicleTypes,
         zones,
@@ -192,7 +219,7 @@ export default function FareRuleList() {
   );
 
   const handlePageChange = (pageIndex: number) => {
-    setPage(pageIndex + 1);
+    controller.apply({ page: pageIndex + 1 });
   };
 
   const editDefaults = formMode === "edit" && detailData?.MESSAGE
@@ -224,6 +251,14 @@ export default function FareRuleList() {
         </Button>
       </div>
 
+      <AutoFilters
+        schema={FILTER_SCHEMA}
+        controller={controller}
+        isFetching={isLoading}
+        compact={true}
+        className="border-none shadow-none bg-accent/20"
+      />
+
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
         <DataTable
           columns={columns}
@@ -232,10 +267,7 @@ export default function FareRuleList() {
           pageSize={pageSize}
           pageCount={totalPages}
           onPageChange={handlePageChange}
-          onPageSizeChange={(size) => {
-            setPageSize(size);
-            setPage(1);
-          }}
+          onPageSizeChange={(size) => controller.apply({ limit: size, page: 1 })}
           isLoading={isLoading}
           isFetching={isFetching}
         />
@@ -262,14 +294,6 @@ export default function FareRuleList() {
         countries={countries}
         vehicleTypes={vehicleTypes}
         zones={zones}
-      />
-
-      <DeleteFareRuleDialog
-        open={isDeleteOpen}
-        onOpenChange={setIsDeleteOpen}
-        rule={selectedRule}
-        onConfirm={handleDeleteConfirm}
-        isPending={deleteMutation.isPending}
       />
     </div>
   );

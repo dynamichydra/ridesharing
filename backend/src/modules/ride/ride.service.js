@@ -462,3 +462,60 @@ export async function listAllRides(filters, page, limit, offset) {
     .orderBy(desc(rides.requestedAt)).limit(limit).offset(offset);
   return { rows, pagination: paginate(page, limit, total) };
 }
+
+// Admin-initiated cancellation — support/ops use for stuck or disputed rides.
+// Unlike the rider/driver cancel paths, this doesn't re-trigger matching; the ride
+// simply ends, since an admin cancel usually means "stop this ride", not "find another driver".
+export async function cancelRideByAdmin(rideId, adminId, reason) {
+  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+
+  const cancellable = ['searching', 'accepted', 'arriving', 'started'];
+  if (!cancellable.includes(ride.status)) {
+    throw { statusCode: 409, message: `Cannot cancel a ride in status: ${ride.status}` };
+  }
+
+  const [updated] = await db.update(rides).set({
+    status: 'cancelled',
+    cancelledBy: 'admin',
+    cancelReason: reason || 'Cancelled by admin',
+    cancelledAt: new Date(),
+  }).where(eq(rides.id, rideId)).returning();
+
+  await recordStatusChange({
+    rideId, fromStatus: ride.status, toStatus: 'cancelled',
+    changedBy: 'admin', changedById: adminId, reason: reason || 'Cancelled by admin',
+  });
+
+  await redis.del(REDIS_KEYS.rideRequest(rideId));
+  await cleanupRideTracking(rideId);
+
+  if (ride.driverId) {
+    await db.update(drivers).set({ isOnline: true }).where(eq(drivers.id, ride.driverId));
+    await redis.del(REDIS_KEYS.driverRideActive(ride.driverId));
+    await publishEvent(TOPICS.NOTIF_PUSH, {
+      userType: 'driver', userId: ride.driverId,
+      type: 'RIDE_CANCELLED_BY_ADMIN',
+      title: 'Ride Cancelled',
+      body: `This ride was cancelled by support. Reason: ${reason || 'Not specified'}`,
+    });
+  }
+
+  await publishEvent(TOPICS.NOTIF_PUSH, {
+    userType: 'rider', userId: ride.riderId,
+    type: 'RIDE_CANCELLED_BY_ADMIN',
+    title: 'Ride Cancelled',
+    body: `Your ride was cancelled by support. Reason: ${reason || 'Not specified'}`,
+  });
+
+  await publishEvent(TOPICS.RIDE_CANCELLED, {
+    id: rideId, rideId, riderId: ride.riderId, driverId: ride.driverId,
+    cancelledBy: 'admin', reason,
+  });
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin',
+    action: 'RIDE_CANCELLED_BY_ADMIN', entityType: 'ride', entityId: rideId,
+    meta: { reason },
+  });
+  return updated;
+}

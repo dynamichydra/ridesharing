@@ -74,7 +74,8 @@ export async function subscriptionRoutes(app) {
 
   app.get('/plans/all', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);
-    const { rows, pagination } = await subService.listPlansPaginated(page, limit, offset, request.query.countryId);
+    const isActive = request.query.isActive !== undefined ? request.query.isActive === 'true' : undefined;
+    const { rows, pagination } = await subService.listPlansPaginated(page, limit, offset, request.query.countryId, isActive);
     return sendList(reply, rows, pagination);
   });
 
@@ -92,8 +93,29 @@ export async function subscriptionRoutes(app) {
     return sendSuccess(reply, data);
   });
 
-  app.delete('/plans/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await subService.deletePlan(request.params.id);
+  app.patch('/plans/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await subService.setPlanActive(request.params.id, true, request.user.id);
     return sendSuccess(reply, data);
+  });
+
+  app.patch('/plans/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await subService.setPlanActive(request.params.id, false, request.user.id);
+    return sendSuccess(reply, data);
+  });
+
+  // ── Admin — per-driver subscription/payment history ─────────────────────────
+
+  // GET /api/v1/subscriptions/admin/drivers/:driverId/history
+  app.get('/admin/drivers/:driverId/history', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const { rows, pagination } = await subService.getSubscriptionHistory(request.params.driverId, page, limit, offset);
+    return sendList(reply, rows, pagination);
+  });
+
+  // GET /api/v1/subscriptions/admin/drivers/:driverId/payments
+  app.get('/admin/drivers/:driverId/payments', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const { rows, pagination } = await subService.getPaymentsForDriver(request.params.driverId, page, limit, offset);
+    return sendList(reply, rows, pagination);
   });
 }

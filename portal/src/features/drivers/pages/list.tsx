@@ -1,13 +1,18 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Car } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
+import { Car, CheckCheck, Download } from "lucide-react";
+import type { RowSelectionState } from "@tanstack/react-table";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/data-table";
 import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getDriverColumns } from "../components/column";
-import { useDrivers, useToggleBlockDriver } from "../hooks";
+import { useDrivers, useToggleBlockDriver, useExportDrivers, useApproveDriver } from "../hooks";
 import type { Driver } from "../types";
 import { AutoFilters, type FilterSchema } from "@/components/filters/AutoFilters";
+import { downloadCsv } from "@/lib/csv";
 
 
 export const driverFilterSchema: FilterSchema = {
@@ -24,10 +29,12 @@ export const driverFilterSchema: FilterSchema = {
 };
 export default function DriverList() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const controller = useFilterController({
     limit: 10,
     page: 1,
   });
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const page = Number(controller.applied.page) || 1;
 
@@ -37,13 +44,55 @@ export default function DriverList() {
     approvalStatus: controller.applied.approvalStatus || undefined,
   });
   const toggleBlockMutation = useToggleBlockDriver();
+  const exportMutation = useExportDrivers();
+  const approveMutation = useApproveDriver();
+
+  const drivers = data?.MESSAGE ?? [];
+  const selectedDrivers = drivers.filter((d) => rowSelection[d.id]);
+  const selectedPendingDrivers = selectedDrivers.filter((d) => d.approvalStatus === "pending");
 
   const handleViewDetail = (driver: Driver) => {
     navigate(`/drivers/${driver.id}`);
   };
 
+  const handleExport = () => {
+    exportMutation.mutate(
+      { approvalStatus: controller.applied.approvalStatus || undefined },
+      {
+        onSuccess: (res) => {
+          downloadCsv(`drivers-${Date.now()}.csv`, res.MESSAGE ?? [], [
+            { header: "ID", accessor: (d: Driver) => d.id },
+            { header: "Name", accessor: (d: Driver) => d.name },
+            { header: "Phone", accessor: (d: Driver) => d.phone },
+            { header: "Email", accessor: (d: Driver) => d.email },
+            { header: "Approval Status", accessor: (d: Driver) => d.approvalStatus },
+            { header: "Registration Status", accessor: (d: Driver) => d.registrationStatus },
+            { header: "Subscription Status", accessor: (d: Driver) => d.subscriptionStatus },
+            { header: "Blocked", accessor: (d: Driver) => d.isBlocked },
+            { header: "Online", accessor: (d: Driver) => d.isOnline },
+            { header: "Rating", accessor: (d: Driver) => d.rating },
+            { header: "Total Rides", accessor: (d: Driver) => d.totalRides },
+            { header: "Created At", accessor: (d: Driver) => d.createdAt },
+          ]);
+        },
+      },
+    );
+  };
+
   const handleToggleBlock = (driver: Driver) => {
     toggleBlockMutation.mutate({ id: driver.id, isBlocked: driver.isBlocked });
+  };
+
+  const handleBulkApprove = async () => {
+    const results = await Promise.allSettled(
+      selectedPendingDrivers.map((d) => approveMutation.mutateAsync({ id: d.id, note: "" })),
+    );
+    const failed = results.filter((r) => r.status === "rejected").length;
+    const succeeded = results.length - failed;
+    if (succeeded) toast.success(`Approved ${succeeded} driver${succeeded === 1 ? "" : "s"}`);
+    if (failed) toast.error(`Failed to approve ${failed} driver${failed === 1 ? "" : "s"}`);
+    setRowSelection({});
+    queryClient.invalidateQueries({ queryKey: ["drivers"], refetchType: "active" });
   };
 
   const columns = useMemo(
@@ -74,6 +123,15 @@ export default function DriverList() {
             {data?.COUNT ?? 0} Total
           </span>
         </div>
+        <Button
+          onClick={handleExport}
+          variant="outline"
+          size="sm"
+          disabled={exportMutation.isPending}
+          className="gap-2 h-8"
+        >
+          <Download className="h-4 w-4" /> Export CSV
+        </Button>
       </div>
       <AutoFilters
         schema={driverFilterSchema}
@@ -82,10 +140,25 @@ export default function DriverList() {
         compact={true}
         className="border-none shadow-none bg-accent/20"
       />
+      {selectedPendingDrivers.length > 0 && (
+        <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-lg px-4 py-2">
+          <span className="text-sm text-foreground">
+            {selectedPendingDrivers.length} pending driver{selectedPendingDrivers.length === 1 ? "" : "s"} selected
+          </span>
+          <Button
+            size="sm"
+            onClick={handleBulkApprove}
+            disabled={approveMutation.isPending}
+            className="gap-2 bg-green-600 hover:bg-green-700 text-white cursor-pointer"
+          >
+            <CheckCheck className="h-4 w-4" /> Approve Selected
+          </Button>
+        </div>
+      )}
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
         <DataTable
           columns={columns}
-          data={data?.MESSAGE ?? []}
+          data={drivers}
           pageCount={data?.PAGINATION?.totalPages || 0}
           pageIndex={(Number(controller.applied.page) || 1) - 1}
           pageSize={Number(controller.applied.limit) || 10}
@@ -95,6 +168,8 @@ export default function DriverList() {
           }
           isLoading={isLoading}
           isFetching={isFetching}
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
         />
       </div>
     </div>

@@ -49,16 +49,17 @@ export function useUpdateFareRule() {
   });
 }
 
-export function useDeleteFareRule() {
+export function useSetFareRuleActive() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => fareRulesApi.remove(id),
-    onSuccess: () => {
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      fareRulesApi.setActive(id, isActive),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [FARE_RULES_KEY], refetchType: "active" });
-      toast.success("Fare rule deleted");
+      toast.success(variables.isActive ? "Fare rule enabled" : "Fare rule disabled");
     },
     onError: (err: any) => {
-      toast.error(err.message || "Failed to delete fare rule");
+      toast.error(err.message || "Failed to update fare rule status");
     },
   });
 }

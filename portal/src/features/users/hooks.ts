@@ -12,6 +12,27 @@ export function useRiders(params: RiderListParams) {
   });
 }
 
+// Pulls up to 5000 rows matching the current filters for CSV export — the API has no
+// dedicated export endpoint, so this reuses the list endpoint with a large page size.
+export function useExportRiders() {
+  return useMutation({
+    mutationFn: (params: Omit<RiderListParams, "page" | "limit">) =>
+      ridersApi.list({ ...params, page: 1, limit: 5000 }),
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to export riders");
+    },
+  });
+}
+
+// Used by the global search (Cmd+K) palette — a small, on-demand lookup, not the list page's query.
+export function useSearchRiders(query: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [RIDERS_KEY, "search", query],
+    queryFn: () => ridersApi.list({ search: query, page: 1, limit: 5 }),
+    enabled: enabled && query.length >= 2,
+  });
+}
+
 export function useCreateRider() {
   const queryClient = useQueryClient();
   return useMutation({

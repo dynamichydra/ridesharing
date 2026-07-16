@@ -1,12 +1,12 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Eye, Edit2, Trash2 } from "lucide-react";
+import { Eye, Edit2, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { FareRule, LookupOption } from "../types";
 
 interface Props {
   onView: (rule: FareRule) => void;
   onEdit: (rule: FareRule) => void;
-  onDelete: (rule: FareRule) => void;
+  onToggleActive: (rule: FareRule) => void;
   countries: LookupOption[];
   vehicleTypes: LookupOption[];
   zones: LookupOption[];
@@ -26,7 +26,7 @@ function nameFromId(options: LookupOption[], id: string | null): string {
 export function getFareRuleColumns({
   onView,
   onEdit,
-  onDelete,
+  onToggleActive,
   countries,
   vehicleTypes,
   zones,
@@ -130,12 +130,13 @@ export function getFareRuleColumns({
             <Edit2 className="h-3.5 w-3.5" />
           </Button>
           <Button
-            variant="destructive"
+            variant={row.original.isActive ? "destructive" : "outline"}
             size="sm"
-            onClick={() => onDelete(row.original)}
+            onClick={() => onToggleActive(row.original)}
             className="cursor-pointer"
+            title={row.original.isActive ? "Disable" : "Enable"}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Ban className="h-3.5 w-3.5" />
           </Button>
         </div>
       ),

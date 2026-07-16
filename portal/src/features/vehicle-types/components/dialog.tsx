@@ -3,10 +3,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import VehicleTypeForm from "./form";
 import PricingForm from "./PricingForm";
 import type { VehicleTypeFormValues, VehicleTypePricingFormValues } from "../schema";
@@ -49,55 +47,6 @@ export function VehicleTypeFormDialog({
           submitLabel={mode === "create" ? "Create Vehicle Type" : "Save Changes"}
           isPending={isPending}
         />
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-interface DeleteVehicleTypeDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  vehicleType: VehicleType | null;
-  onConfirm: () => void;
-  isPending: boolean;
-}
-
-export function DeleteVehicleTypeDialog({
-  open,
-  onOpenChange,
-  vehicleType,
-  onConfirm,
-  isPending,
-}: DeleteVehicleTypeDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[420px]">
-        <DialogHeader>
-          <DialogTitle>Delete Vehicle Type</DialogTitle>
-          <DialogDescription>
-            This will permanently remove{" "}
-            <span className="font-semibold text-foreground">{vehicleType?.name}</span>. This
-            action cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            className="cursor-pointer"
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={onConfirm}
-            className="bg-red-600 hover:bg-red-700 text-white cursor-pointer"
-            disabled={isPending}
-          >
-            Delete Vehicle Type
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

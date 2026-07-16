@@ -9,10 +9,13 @@ import type {
   DriverDocument,
   DocumentType,
   VerifyDocumentPayload,
+  DriverSubscriptionHistoryRow,
+  DriverPaymentRow,
 } from "./types";
 
 const BASE_URL = "/drivers";
 const DOCUMENTS_BASE_URL = "/documents";
+const SUBSCRIPTIONS_BASE_URL = "/subscriptions";
 
 function buildQuery(params: DriverListParams) {
   const query = new URLSearchParams();
@@ -24,6 +27,7 @@ function buildQuery(params: DriverListParams) {
   if (params.countryId) query.set("countryId", params.countryId);
   if (params.cityId) query.set("cityId", params.cityId);
   if (params.isBlocked !== undefined) query.set("isBlocked", String(params.isBlocked));
+  if (params.search) query.set("search", params.search);
   return query.toString();
 }
 
@@ -67,4 +71,18 @@ export const documentsApi = {
   // GET /documents/admin/types  (Admin) — used to label a document's documentTypeId with its code
   listTypes: () =>
     apiClient.get<DocumentType[]>(`${DOCUMENTS_BASE_URL}/admin/types?page=1&limit=100`),
+};
+
+export const driverSubscriptionsApi = {
+  // GET /subscriptions/admin/drivers/:driverId/history?page=&limit=  (Admin)
+  getHistory: (driverId: string, page = 1, limit = 10) =>
+    apiClient.get<DriverSubscriptionHistoryRow[]>(
+      `${SUBSCRIPTIONS_BASE_URL}/admin/drivers/${driverId}/history?page=${page}&limit=${limit}`,
+    ),
+
+  // GET /subscriptions/admin/drivers/:driverId/payments?page=&limit=  (Admin)
+  getPayments: (driverId: string, page = 1, limit = 10) =>
+    apiClient.get<DriverPaymentRow[]>(
+      `${SUBSCRIPTIONS_BASE_URL}/admin/drivers/${driverId}/payments?page=${page}&limit=${limit}`,
+    ),
 };

@@ -86,6 +86,11 @@ export async function onboardingRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  app.get('/admin/questions/:id/options', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await onboardingService.listOptions(request.params.id);
+    return sendSuccess(reply, data);
+  });
+
   app.post('/admin/questions/:id/options', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const { code } = request.body;
     if (!code) return sendError(reply, 'code is required');

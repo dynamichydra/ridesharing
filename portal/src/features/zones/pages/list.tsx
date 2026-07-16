@@ -9,13 +9,12 @@ import { ZoneFilters } from "../components/filters";
 import {
   ZoneFormDialog,
   ZoneDetectDialog,
-  DeleteZoneDialog,
 } from "../components/dialog";
 import {
   useZones,
   useCreateZone,
   useUpdateZone,
-  useDeleteZone,
+  useSetZoneActive,
   useCountries,
   useDetectZone,
 } from "../hooks";
@@ -43,7 +42,6 @@ export default function ZoneList() {
   // Dialog open/close states
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDetectOpen, setIsDetectOpen] = useState(false);
 
   const [selectedZone, setSelectedZone] = useState<Zone | null>(null);
@@ -63,7 +61,7 @@ export default function ZoneList() {
 
   const createMutation = useCreateZone();
   const updateMutation = useUpdateZone();
-  const deleteMutation = useDeleteZone();
+  const setActiveMutation = useSetZoneActive();
   const detectMutation = useDetectZone();
 
   const flatZones: Zone[] = zonesResponse?.MESSAGE || [];
@@ -100,10 +98,9 @@ export default function ZoneList() {
     setIsEditOpen(true);
   }, []);
 
-  const handleDeleteClick = useCallback((zone: Zone) => {
-    setSelectedZone(zone);
-    setIsDeleteOpen(true);
-  }, []);
+  const handleToggleActive = useCallback((zone: Zone) => {
+    setActiveMutation.mutate({ id: zone.id, isActive: !zone.isActive });
+  }, [setActiveMutation]);
 
   const handleCreateSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -129,13 +126,6 @@ export default function ZoneList() {
     });
   }, [selectedZone, updateMutation, formValues]);
 
-  const handleDeleteConfirm = useCallback(() => {
-    if (!selectedZone) return;
-    deleteMutation.mutate(selectedZone.id, {
-      onSuccess: () => setIsDeleteOpen(false),
-    });
-  }, [selectedZone, deleteMutation]);
-
   const handleDetectSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     detectMutation.mutate({
@@ -153,9 +143,9 @@ export default function ZoneList() {
       getZoneColumns({
         countriesMap,
         onEdit: handleEditClick,
-        onDelete: handleDeleteClick,
+        onToggleActive: handleToggleActive,
       }),
-    [countriesMap, handleEditClick, handleDeleteClick]
+    [countriesMap, handleEditClick, handleToggleActive]
   );
 
   return (
@@ -245,14 +235,6 @@ export default function ZoneList() {
         onSubmit={handleDetectSubmit}
         isPending={detectMutation.isPending}
         detectedZoneName={detectedZoneName}
-      />
-
-      <DeleteZoneDialog
-        open={isDeleteOpen}
-        onOpenChange={setIsDeleteOpen}
-        zone={selectedZone}
-        onConfirm={handleDeleteConfirm}
-        isPending={deleteMutation.isPending}
       />
     </div>
   );

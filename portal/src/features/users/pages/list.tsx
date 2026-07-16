@@ -1,6 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 import { DataTable } from "@/components/data-table/data-table";
 import { useCallback, useMemo, useState } from "react";
+import type { RowSelectionState } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { CreateRiderDialog } from "../components/dialog";
 
@@ -11,9 +13,10 @@ import {
 import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getRiderColumns } from "../components/column";
-import { useRiders, useUpdateRider } from "../hooks";
+import { useRiders, useUpdateRider, useExportRiders } from "../hooks";
 import type { Rider } from "../types";
-import { Plus, User } from "lucide-react";
+import { Ban, Download, Plus, User, UserCheck } from "lucide-react";
+import { downloadCsv } from "@/lib/csv";
 
 const FILTER_SCHEMA: FilterSchema = {
   search: {
@@ -57,15 +60,20 @@ export default function UserList() {
   const queryClient = useQueryClient();
   const controller = useFilterController();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const { data, isLoading, isFetching } = useRiders({
     search: controller.applied.search,
     isVerified: toBool(controller.applied.isVerified),
     isBlocked: toBool(controller.applied.isBlocked),
-    limit: 10,
-    page: 1,
+    limit: Number(controller.applied.limit) || 10,
+    page: Number(controller.applied.page) || 1,
   });
   const updateMutation = useUpdateRider();
+  const exportMutation = useExportRiders();
+
+  const riders = data?.MESSAGE ?? [];
+  const selectedRiders = riders.filter((r) => rowSelection[r.id]);
 
   const refreshList = useCallback(() => {
     queryClient.invalidateQueries({
@@ -75,6 +83,31 @@ export default function UserList() {
   }, [queryClient]);
   const handleOpenCreate = () => {
     setIsCreateOpen(true);
+  };
+
+  const handleExport = () => {
+    exportMutation.mutate(
+      {
+        search: controller.applied.search,
+        isVerified: toBool(controller.applied.isVerified),
+        isBlocked: toBool(controller.applied.isBlocked),
+      },
+      {
+        onSuccess: (res) => {
+          downloadCsv(`riders-${Date.now()}.csv`, res.MESSAGE ?? [], [
+            { header: "ID", accessor: (r: Rider) => r.id },
+            { header: "Name", accessor: (r: Rider) => r.name },
+            { header: "Phone", accessor: (r: Rider) => r.phone },
+            { header: "Email", accessor: (r: Rider) => r.email },
+            { header: "Verified", accessor: (r: Rider) => r.isVerified },
+            { header: "Blocked", accessor: (r: Rider) => r.isBlocked },
+            { header: "Rating", accessor: (r: Rider) => r.rating },
+            { header: "Total Rides", accessor: (r: Rider) => r.totalRides },
+            { header: "Created At", accessor: (r: Rider) => r.createdAt },
+          ]);
+        },
+      },
+    );
   };
 
   const handleToggleVerify = useCallback(
@@ -96,6 +129,23 @@ export default function UserList() {
     },
     [updateMutation, refreshList],
   );
+
+  const handleBulkAction = async (action: "block" | "unblock") => {
+    const targets = selectedRiders.filter((r) => (action === "block" ? !r.isBlocked : r.isBlocked));
+    const results = await Promise.allSettled(
+      targets.map((r) =>
+        updateMutation.mutateAsync({ id: r.id, payload: { isBlocked: action === "block" } }),
+      ),
+    );
+    const failed = results.filter((r) => r.status === "rejected").length;
+    const succeeded = results.length - failed;
+    if (succeeded) {
+      toast.success(`${action === "block" ? "Blocked" : "Unblocked"} ${succeeded} rider${succeeded === 1 ? "" : "s"}`);
+    }
+    if (failed) toast.error(`Failed to update ${failed} rider${failed === 1 ? "" : "s"}`);
+    setRowSelection({});
+    refreshList();
+  };
 
   const columns = useMemo(
     () =>
@@ -126,13 +176,24 @@ export default function UserList() {
           </span>
         </div>
 
-        <Button
-          onClick={() => handleOpenCreate()}
-          size="sm"
-          className="gap-2 shadow-sm hover:shadow-md transition-all active:scale-[0.98] h-8"
-        >
-          <Plus className="h-4 w-4" /> Create Rider
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={handleExport}
+            variant="outline"
+            size="sm"
+            disabled={exportMutation.isPending}
+            className="gap-2 h-8"
+          >
+            <Download className="h-4 w-4" /> Export CSV
+          </Button>
+          <Button
+            onClick={() => handleOpenCreate()}
+            size="sm"
+            className="gap-2 shadow-sm hover:shadow-md transition-all active:scale-[0.98] h-8"
+          >
+            <Plus className="h-4 w-4" /> Create Rider
+          </Button>
+        </div>
       </div>
 
       {/* Tighter Filter Section */}
@@ -144,9 +205,36 @@ export default function UserList() {
         className="border-none shadow-none bg-accent/20"
       />
 
+      {selectedRiders.length > 0 && (
+        <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-lg px-4 py-2">
+          <span className="text-sm text-foreground">
+            {selectedRiders.length} rider{selectedRiders.length === 1 ? "" : "s"} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleBulkAction("unblock")}
+              disabled={updateMutation.isPending}
+              className="gap-2 cursor-pointer"
+            >
+              <UserCheck className="h-4 w-4" /> Unblock Selected
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => handleBulkAction("block")}
+              disabled={updateMutation.isPending}
+              className="gap-2 bg-red-600 hover:bg-red-700 text-white cursor-pointer"
+            >
+              <Ban className="h-4 w-4" /> Block Selected
+            </Button>
+          </div>
+        </div>
+      )}
+
       <DataTable
         columns={columns}
-        data={data?.MESSAGE ?? []}
+        data={riders}
         pageCount={data?.PAGINATION?.totalPages || 0}
         pageIndex={(Number(controller.applied.page) || 1) - 1}
         pageSize={Number(controller.applied.limit) || 10}
@@ -154,6 +242,8 @@ export default function UserList() {
         onPageSizeChange={(size) => controller.apply({ limit: size, page: 1 })}
         isLoading={isLoading}
         isFetching={isFetching}
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
       />
 
       <CreateRiderDialog

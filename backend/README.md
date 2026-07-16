@@ -77,7 +77,7 @@ Kafka UI   → http://localhost:8080
 | GET | `/api/v1/vehicle-types` | Public | List active vehicle types |
 | POST | `/api/v1/vehicle-types` | Admin | Create vehicle type |
 | PATCH | `/api/v1/vehicle-types/:id` | Admin | Update vehicle type |
-| DELETE | `/api/v1/vehicle-types/:id` | Admin | Soft-delete vehicle type |
+| PATCH | `/api/v1/vehicle-types/:id/enable` \| `/disable` | Admin | Enable/disable vehicle type |
 | GET | `/api/v1/zones` | Public | List zones |
 | POST | `/api/v1/zones` | Admin | Create zone |
 | POST | `/api/v1/zones/detect` | Public | Detect zone by lat/lng |
@@ -86,7 +86,7 @@ Kafka UI   → http://localhost:8080
 | GET | `/api/v1/fare/rules` | Admin | List fare rules |
 | POST | `/api/v1/fare/rules` | Admin | Create fare rule |
 | PATCH | `/api/v1/fare/rules/:id` | Admin | Update fare rule |
-| DELETE | `/api/v1/fare/rules/:id` | Admin | Delete fare rule |
+| PATCH | `/api/v1/fare/rules/:id/enable` \| `/disable` | Admin | Enable/disable fare rule |
 | POST | `/api/v1/rides` | Rider | Request a ride |
 | GET | `/api/v1/rides/:id/track` | Rider | Track ride + driver location |
 | POST | `/api/v1/rides/:id/cancel` | Rider | Cancel ride |

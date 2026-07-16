@@ -3,31 +3,32 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { LogOut as logoutApi } from "@/features/auth/api";
-import { BadgeCheck, User, LogOut, Lock } from "lucide-react";
+import { User, LogOut } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useNavigate } from "react-router-dom";
 import { memo } from "react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useUser } from "@/hooks/use-user";
+import { GlobalSearch } from "@/components/global-search";
 
 const header = memo(() => {
   const { user } = useUser();
-  const navigate = useNavigate();
-  console.log("Re-Render");
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear w-full group-has-data-[collapsible=icon]/sidebar-wrapper:h-16 bg-sidebar fixed md:w-[calc(100%-var(--sidebar-width))] z-50 group-has-data-[collapsible=icon]/sidebar-wrapper:w-[calc(100%-var(--sidebar-width-icon))]">
       <div className="flex items-center gap-2 px-4 w-full">
         <SidebarTrigger variant={"outline"} />
-        <h1 className="text-sm md:text-xl font-bold">
+        <h1 className="text-sm md:text-xl font-bold hidden lg:block">
           Welcome back, <span className="capitalize">{user?.name}</span> 👋
         </h1>
-        <div className="ml-auto flex justify-center items-center gap-3">
+        <div className="flex-1 flex justify-center px-4">
+          <GlobalSearch />
+        </div>
+        <div className="flex justify-center items-center gap-3">
           <ModeToggle />
           <Separator
             orientation="vertical"
@@ -52,14 +53,6 @@ const header = memo(() => {
                     <span className="truncate text-xs">{user?.email}</span>
                   </div>
                 </div>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate("user/profile")}>
-                <BadgeCheck />
-                Profile
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate(`user/reset-password/${user?.id}`)}>
-                <Lock />
-                Reset Password
               </DropdownMenuItem>
               <DropdownMenuItem onClick={logoutApi}>
                 <LogOut />

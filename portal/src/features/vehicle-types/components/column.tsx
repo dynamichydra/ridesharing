@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Car, Edit2, Trash2, CheckCircle, XCircle, Banknote } from "lucide-react";
+import { Car, Edit2, Ban, CheckCircle, XCircle, Banknote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { VehicleType, VehicleTypePricing } from "../types";
 
@@ -7,7 +7,7 @@ interface Props {
   pricingMap: Record<string, VehicleTypePricing | undefined>;
   countrySelected: boolean;
   onEdit: (vt: VehicleType) => void;
-  onDelete: (vt: VehicleType) => void;
+  onToggleActive: (vt: VehicleType) => void;
   onEditPricing: (vt: VehicleType) => void;
 }
 
@@ -47,7 +47,7 @@ export function getVehicleTypeColumns({
   pricingMap,
   countrySelected,
   onEdit,
-  onDelete,
+  onToggleActive,
   onEditPricing,
 }: Props): ColumnDef<VehicleType>[] {
   return [
@@ -120,13 +120,13 @@ export function getVehicleTypeColumns({
             <Edit2 className="h-3.5 w-3.5" />
           </Button>
           <Button
-            variant="destructive"
+            variant={row.original.isActive ? "destructive" : "outline"}
             size="sm"
-            onClick={() => onDelete(row.original)}
+            onClick={() => onToggleActive(row.original)}
             className="cursor-pointer"
-            title="Delete"
+            title={row.original.isActive ? "Disable" : "Enable"}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Ban className="h-3.5 w-3.5" />
           </Button>
         </div>
       ),

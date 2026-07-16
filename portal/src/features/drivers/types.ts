@@ -51,6 +51,7 @@ export interface DriverListParams {
   countryId?: string;
   cityId?: string;
   isBlocked?: boolean;
+  search?: string;
 }
 
 
@@ -140,4 +141,51 @@ export interface DriverDetail {
 export interface VerifyDocumentPayload {
   approve: boolean;
   rejectionReason?: string;
+}
+
+export interface SubscriptionPlanSummary {
+  id: string;
+  name: string;
+  type: string;
+}
+
+export type SubscriptionStatus = "active" | "expired" | "cancelled" | "trial";
+
+export interface DriverSubscription {
+  id: string;
+  driverId: string;
+  planId: string;
+  status: SubscriptionStatus;
+  startDate: string;
+  endDate: string | null;
+  currencyCode: string | null;
+  amountMinor: number | null;
+  cancelledAt: string | null;
+  cancelNote: string | null;
+  createdAt: string;
+}
+
+export interface DriverSubscriptionHistoryRow {
+  subscription: DriverSubscription;
+  plan: SubscriptionPlanSummary;
+}
+
+export type PaymentStatus = "created" | "captured" | "failed" | "refunded";
+
+export interface Payment {
+  id: string;
+  subscriptionId: string | null;
+  countryId: string;
+  gateway: string;
+  currencyCode: string;
+  amountMinor: number;
+  status: PaymentStatus;
+  gatewayOrderId: string | null;
+  gatewayPaymentId: string | null;
+  createdAt: string;
+}
+
+export interface DriverPaymentRow {
+  payment: Payment;
+  plan: SubscriptionPlanSummary;
 }

@@ -3,15 +3,17 @@ import { useQueryClient } from "@tanstack/react-query";
 import { CreditCard, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/data-table";
+import { AutoFilters, type FilterSchema } from "@/components/filters/AutoFilters";
+import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getSubscriptionPlanColumns } from "../components/column";
-import { SubscriptionPlanFormDialog, SubscriptionPlanDeleteDialog } from "../components/dialog";
+import { SubscriptionPlanFormDialog } from "../components/dialog";
 import {
   useSubscriptionPlans,
   useCountryOptions,
   useCreateSubscriptionPlan,
   useUpdateSubscriptionPlan,
-  useDeleteSubscriptionPlan,
+  useSetSubscriptionPlanActive,
 } from "../hooks";
 import { emptySubscriptionPlanFormValues, type SubscriptionPlanFormValues } from "../schema";
 import type {
@@ -58,23 +60,34 @@ function buildPayload(
   };
 }
 
+function toBool(value: string | undefined): boolean | undefined {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return undefined;
+}
+
 export default function SubscriptionPlanList() {
   const queryClient = useQueryClient();
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const controller = useFilterController({ page: 1, limit: 10 });
+  const page = Number(controller.applied.page) || 1;
+  const pageSize = Number(controller.applied.limit) || 10;
 
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [planPendingDelete, setPlanPendingDelete] = useState<SubscriptionPlan | null>(null);
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
-  const { data, isLoading, isFetching } = useSubscriptionPlans({ page, limit: pageSize });
   const { data: countriesData } = useCountryOptions();
   const countries = countriesData?.MESSAGE || [];
 
+  const { data, isLoading, isFetching } = useSubscriptionPlans({
+    page,
+    limit: pageSize,
+    countryId: controller.applied.countryId || undefined,
+    isActive: toBool(controller.applied.isActive),
+  });
+
   const createMutation = useCreateSubscriptionPlan();
   const updateMutation = useUpdateSubscriptionPlan();
-  const deleteMutation = useDeleteSubscriptionPlan();
+  const setActiveMutation = useSetSubscriptionPlanActive();
 
   const plans = data?.MESSAGE || [];
 
@@ -96,9 +109,8 @@ export default function SubscriptionPlanList() {
     setIsFormOpen(true);
   };
 
-  const handleOpenDelete = (plan: SubscriptionPlan) => {
-    setPlanPendingDelete(plan);
-    setIsDeleteOpen(true);
+  const handleToggleActive = (plan: SubscriptionPlan) => {
+    setActiveMutation.mutate({ id: plan.id, isActive: !plan.isActive });
   };
 
   const defaultValues: SubscriptionPlanFormValues = selectedPlan
@@ -129,24 +141,43 @@ export default function SubscriptionPlanList() {
     }
   };
 
-  const handleConfirmDelete = () => {
-    if (!planPendingDelete) return;
-    deleteMutation.mutate(planPendingDelete.id, {
-      onSuccess: () => {
-        setIsDeleteOpen(false);
-        setPlanPendingDelete(null);
-        refreshList();
-      },
-    });
-  };
-
   const columns = useMemo(
-    () => getSubscriptionPlanColumns({ onEdit: handleOpenEdit, onDelete: handleOpenDelete, countries }),
+    () =>
+      getSubscriptionPlanColumns({
+        onEdit: handleOpenEdit,
+        onToggleActive: handleToggleActive,
+        countries,
+      }),
+    [countries]
+  );
+
+  const filterSchema: FilterSchema = useMemo(
+    () => ({
+      countryId: {
+        label: "Country",
+        operator: "equals",
+        type: "select",
+        field: "countryId",
+        placeholder: "All Countries",
+        options: countries.map((c) => ({ label: c.name, value: c.id })),
+      },
+      isActive: {
+        label: "Status",
+        operator: "equals",
+        type: "select",
+        field: "isActive",
+        placeholder: "All Statuses",
+        options: [
+          { label: "Active", value: "true" },
+          { label: "Inactive", value: "false" },
+        ],
+      },
+    }),
     [countries]
   );
 
   const handlePageChange = (pageIndex: number) => {
-    setPage(pageIndex + 1);
+    controller.apply({ page: pageIndex + 1 });
   };
 
   return (
@@ -174,6 +205,14 @@ export default function SubscriptionPlanList() {
         </Button>
       </div>
 
+      <AutoFilters
+        schema={filterSchema}
+        controller={controller}
+        isFetching={isLoading}
+        compact={true}
+        className="border-none shadow-none bg-accent/20"
+      />
+
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
         <DataTable
           columns={columns}
@@ -182,10 +221,7 @@ export default function SubscriptionPlanList() {
           pageSize={pageSize}
           pageCount={totalPages}
           onPageChange={handlePageChange}
-          onPageSizeChange={(size) => {
-            setPageSize(size);
-            setPage(1);
-          }}
+          onPageSizeChange={(size) => controller.apply({ limit: size, page: 1 })}
           isLoading={isLoading}
           isFetching={isFetching}
         />
@@ -202,17 +238,6 @@ export default function SubscriptionPlanList() {
         countries={countries}
         isSaving={createMutation.isPending || updateMutation.isPending}
         onSubmit={handleSubmit}
-      />
-
-      <SubscriptionPlanDeleteDialog
-        open={isDeleteOpen}
-        onOpenChange={(open) => {
-          setIsDeleteOpen(open);
-          if (!open) setPlanPendingDelete(null);
-        }}
-        plan={planPendingDelete}
-        isDeleting={deleteMutation.isPending}
-        onConfirm={handleConfirmDelete}
       />
     </div>
   );

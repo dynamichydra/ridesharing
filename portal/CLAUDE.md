@@ -160,9 +160,9 @@ thrown by the mismatch when extending it, and don't rename one without the other
    fields plus a `Controller` for the one checkbox field. Split dialog (stateful, mutation-aware)
    from form (dumb, just fields) like this for every feature.
 
-7. **`pages/list.tsx`** — the page component. Notice it does *not* use
-   `components/filters.tsx` (an older, hand-rolled search+reset bar still present in this
-   feature) — it uses the newer shared **`AutoFilters`** system instead:
+7. **`pages/list.tsx`** — the page component. It uses the shared **`AutoFilters`** system
+   (a legacy hand-rolled `components/filters.tsx` search+reset bar pattern predates this and has
+   been removed from every feature):
    - Declare a `FILTER_SCHEMA: FilterSchema` (label/type/field/operator/options per filter).
    - `const controller = useFilterController()` — syncs a `draft`/`applied` pair of filter state
      to the URL query string (draft is what inputs show live; applied is what actually triggers
@@ -200,9 +200,11 @@ thrown by the mismatch when extending it, and don't rename one without the other
   `isFetching` (refetch in flight, stale data still shown) drives the thin top progress bar and a
   60%-opacity dim on existing rows. Pass both through from the feature's `useQuery` — don't
   collapse them into one loading flag, the UX depends on the distinction.
-- **Route-level failures**: `ProtectedRoute` redirects unauthenticated/unauthorized users; there is
-  no error boundary around routed pages, so an uncaught render error in a page currently blanks the
-  app rather than showing a fallback UI (see [Known gaps](#known-gaps--tech-debt)).
+- **Route-level failures**: `ProtectedRoute` redirects unauthenticated/unauthorized users;
+  `src/components/error-boundary.tsx` wraps the whole app in `App.tsx` and catches uncaught render
+  errors anywhere in the route tree, showing a fallback screen with a "Back to Dashboard" action
+  instead of a blank page. It's a single top-level boundary, not per-route — an error in one page
+  still tears down the whole app shell until the user navigates back.
 - **Form validation**: zod + `zodResolver`, errors rendered inline under each field
   (`errors.<field>.message`, styled `text-xs text-destructive`) — never `alert()` or a toast for
   field-level validation, only for submit-level API errors.
@@ -262,8 +264,7 @@ Concrete order for standing up a new admin resource (e.g. "promo codes"):
   through the feature's `hooks.ts`.
 - Don't put list filters in `useState` — use `useFilterController` so filters survive
   back/forward navigation and are shareable via URL.
-- Don't build a new hand-rolled filter bar (à la the legacy `users/components/filters.tsx`) —
-  extend `FilterSchema`/`AutoFilters` instead.
+- Don't build a new hand-rolled filter bar — extend `FilterSchema`/`AutoFilters` instead.
 - Don't add a delete endpoint or delete button for a master-data resource.
 - Don't fetch a large unfiltered page and paginate/filter it client-side — the API and
   `DataTable` are built for server-side pagination.
@@ -281,10 +282,6 @@ unrelated change:
   (e.g. no-implicit-any, strict null checks) holding project-wide.
 - Mutation error handlers are typed `(err: any)` throughout — consistent with the rest of the
   codebase, not a one-off to clean up in an unrelated PR.
-- No error boundary around routed pages — an uncaught exception in a page blanks the app instead
-  of showing a fallback.
 - Auth "session" is a base64-encoded (not encrypted) localStorage blob — acceptable for an
   internal admin tool's current threat model, but don't extend the same storage helper to hold
   anything more sensitive without revisiting this.
-- `src/features/users/components/filters.tsx` is dead code, superseded by `AutoFilters`, kept only
-  because nobody has deleted it yet.

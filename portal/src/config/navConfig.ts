@@ -8,6 +8,8 @@ import {
   Globe,
   DollarSign,
   CreditCard,
+  ScrollText,
+  ClipboardList,
   type LucideIcon
 } from "lucide-react";
 
@@ -60,6 +62,7 @@ export const navItem: NavType[] = [
     icon: CarFront,
     isActive: true,
     type: "regular",
+    roles: ["super_admin"],
   },
   {
     title: "Zones Geofence",
@@ -67,6 +70,7 @@ export const navItem: NavType[] = [
     icon: Map,
     isActive: true,
     type: "regular",
+    roles: ["super_admin"],
   },
   {
     title: "Locations",
@@ -74,6 +78,7 @@ export const navItem: NavType[] = [
     icon: Globe,
     isActive: true,
     type: "regular",
+    roles: ["super_admin"],
   },
   {
     title: "Fare Rules",
@@ -81,6 +86,7 @@ export const navItem: NavType[] = [
     icon: DollarSign,
     isActive: true,
     type: "regular",
+    roles: ["super_admin"],
   },
   {
     title: "Subscription Plans",
@@ -88,5 +94,22 @@ export const navItem: NavType[] = [
     icon: CreditCard,
     isActive: true,
     type: "regular",
+    roles: ["super_admin"],
+  },
+  {
+    title: "Audit Log",
+    url: "/audit-logs",
+    icon: ScrollText,
+    isActive: true,
+    type: "regular",
+    roles: ["super_admin"],
+  },
+  {
+    title: "Onboarding Config",
+    url: "/onboarding-config",
+    icon: ClipboardList,
+    isActive: true,
+    type: "regular",
+    roles: ["super_admin"],
   },
 ];

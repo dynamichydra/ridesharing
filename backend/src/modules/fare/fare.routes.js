@@ -44,7 +44,12 @@ export async function fareRoutes(app) {
 
   app.get('/rules', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);
-    const { rows, pagination } = await fareRulesService.listRules(page, limit, offset);
+    const filters = {
+      ruleType:  request.query.ruleType,
+      isActive:  request.query.isActive !== undefined ? request.query.isActive === 'true' : undefined,
+      countryId: request.query.countryId,
+    };
+    const { rows, pagination } = await fareRulesService.listRules(page, limit, offset, filters);
     return sendList(reply, rows, pagination);
   });
 
@@ -67,8 +72,13 @@ export async function fareRoutes(app) {
     return sendSuccess(reply, data);
   });
 
-  app.delete('/rules/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await fareRulesService.remove(request.params.id);
+  app.patch('/rules/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await fareRulesService.setActive(request.params.id, true, request.user.id);
+    return sendSuccess(reply, data);
+  });
+
+  app.patch('/rules/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await fareRulesService.setActive(request.params.id, false, request.user.id);
     return sendSuccess(reply, data);
   });
 

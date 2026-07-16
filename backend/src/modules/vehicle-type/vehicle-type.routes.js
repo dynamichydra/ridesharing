@@ -35,8 +35,13 @@ export async function vehicleTypeRoutes(app) {
     return sendSuccess(reply, data);
   });
 
-  app.delete('/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await vtService.remove(request.params.id);
+  app.patch('/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await vtService.setActive(request.params.id, true, request.user.id);
+    return sendSuccess(reply, data);
+  });
+
+  app.patch('/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await vtService.setActive(request.params.id, false, request.user.id);
     return sendSuccess(reply, data);
   });
 

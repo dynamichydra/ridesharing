@@ -58,16 +58,17 @@ export function useUpdateZone() {
   });
 }
 
-export function useDeleteZone() {
+export function useSetZoneActive() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => zonesApi.remove(id),
-    onSuccess: () => {
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      zonesApi.setActive(id, isActive),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [ZONES_KEY], refetchType: "active" });
-      toast.success("Zone deleted successfully");
+      toast.success(variables.isActive ? "Zone enabled" : "Zone disabled");
     },
     onError: (err: any) => {
-      toast.error(err.message || "Failed to delete zone");
+      toast.error(err.message || "Failed to update zone status");
     },
   });
 }

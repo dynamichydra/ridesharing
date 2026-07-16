@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { driversApi, documentsApi } from "./api";
+import { driversApi, documentsApi, driverSubscriptionsApi } from "./api";
 import type {
   DriverListParams,
   ApproveDriverPayload,
@@ -16,6 +16,27 @@ export function useDrivers(params: DriverListParams) {
   return useQuery({
     queryKey: [DRIVERS_KEY, params],
     queryFn: () => driversApi.list(params),
+  });
+}
+
+// Used by the global search (Cmd+K) palette — a small, on-demand lookup, not the list page's query.
+export function useSearchDrivers(query: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [DRIVERS_KEY, "search", query],
+    queryFn: () => driversApi.list({ search: query, page: 1, limit: 5 }),
+    enabled: enabled && query.length >= 2,
+  });
+}
+
+// Pulls up to 5000 rows matching the current filters for CSV export — the API has no
+// dedicated export endpoint, so this reuses the list endpoint with a large page size.
+export function useExportDrivers() {
+  return useMutation({
+    mutationFn: (params: Omit<DriverListParams, "page" | "limit">) =>
+      driversApi.list({ ...params, page: 1, limit: 5000 }),
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to export drivers");
+    },
   });
 }
 
@@ -100,6 +121,22 @@ export function useVerifyDocument(driverId: string | undefined) {
     onError: (err: any) => {
       toast.error(err.message || "Failed to update document status");
     },
+  });
+}
+
+export function useDriverSubscriptionHistory(driverId: string | undefined, page = 1, limit = 10) {
+  return useQuery({
+    queryKey: [DRIVERS_KEY, driverId, "subscription-history", page, limit],
+    queryFn: () => driverSubscriptionsApi.getHistory(driverId as string, page, limit),
+    enabled: !!driverId,
+  });
+}
+
+export function useDriverPayments(driverId: string | undefined, page = 1, limit = 10) {
+  return useQuery({
+    queryKey: [DRIVERS_KEY, driverId, "payments", page, limit],
+    queryFn: () => driverSubscriptionsApi.getPayments(driverId as string, page, limit),
+    enabled: !!driverId,
   });
 }
 

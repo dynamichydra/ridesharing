@@ -1,6 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Ban, CheckCircle, UserCheck, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getSelectionColumn } from "@/components/data-table/selection-column";
 import type { Rider } from "../types";
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 
 export function getRiderColumns({ onToggleVerify, onToggleBlock }: Props): ColumnDef<Rider>[] {
   return [
+    getSelectionColumn<Rider>(),
     {
       accessorKey: "name",
       header: "Name",

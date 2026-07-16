@@ -16,12 +16,16 @@ import { TeamSwitcher } from "./team-switcher";
 import { LogOut as logOutApi } from "@/features/auth/api";
 import { navItem } from "@/config/navConfig";
 import { NavMain } from "./nav-main";
+import { useUser } from "@/hooks/use-user";
 
-type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
-  userType?: string;
-};
+type AppSidebarProps = React.ComponentProps<typeof Sidebar>;
 
-export function AppSidebar({ userType, ...props }: AppSidebarProps) {
+export function AppSidebar({ ...props }: AppSidebarProps) {
+  const { user } = useUser();
+  const visibleNavItems = navItem.filter(
+    (nav) => !nav.roles || (user && nav.roles.includes(user.role)),
+  );
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -34,7 +38,7 @@ export function AppSidebar({ userType, ...props }: AppSidebarProps) {
         />
       </SidebarHeader>
       <SidebarContent>
-        {navItem.map((nav) => {
+        {visibleNavItems.map((nav) => {
           if (nav.type === "dropdown") {
             return <NavMain items={nav} key={nav.title} />;
           } else {

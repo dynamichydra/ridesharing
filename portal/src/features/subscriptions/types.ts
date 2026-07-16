@@ -24,6 +24,8 @@ export interface SubscriptionPlan {
 export interface SubscriptionPlanListParams {
   page?: number;
   limit?: number;
+  countryId?: string;
+  isActive?: boolean;
 }
 
 

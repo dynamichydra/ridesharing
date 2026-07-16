@@ -14,6 +14,9 @@ function buildQuery(params: FareRuleListParams) {
   const query = new URLSearchParams();
   query.set("page", String(params.page ?? 1));
   query.set("limit", String(params.limit ?? 10));
+  if (params.ruleType) query.set("ruleType", params.ruleType);
+  if (params.isActive !== undefined) query.set("isActive", String(params.isActive));
+  if (params.countryId) query.set("countryId", params.countryId);
   return query.toString();
 }
 
@@ -38,8 +41,9 @@ export const fareRulesApi = {
   update: (id: string, payload: UpdateFareRulePayload) =>
     apiClient.patch<FareRule>(`${BASE_URL}/${id}`, payload),
 
-  // DELETE /fare/rules/:id  (Admin) — soft delete
-  remove: (id: string) => apiClient.delete(`${BASE_URL}/${id}`),
+  // PATCH /fare/rules/:id/enable | /disable  (Admin)
+  setActive: (id: string, isActive: boolean) =>
+    apiClient.patch<FareRule>(`${BASE_URL}/${id}/${isActive ? "enable" : "disable"}`, {}),
 };
 
 // ---------------------------------------------------------------------

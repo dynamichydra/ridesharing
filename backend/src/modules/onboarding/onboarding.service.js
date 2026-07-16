@@ -82,6 +82,12 @@ export async function reorderQuestions(orderedIds) {
   return { reordered: true };
 }
 
+export async function listOptions(questionId) {
+  return db.select().from(onboardingQuestionOptions)
+    .where(eq(onboardingQuestionOptions.questionId, questionId))
+    .orderBy(asc(onboardingQuestionOptions.sortOrder));
+}
+
 export async function createOption(questionId, data) {
   const [row] = await db.insert(onboardingQuestionOptions).values({ ...data, questionId }).returning();
   return row;

@@ -16,10 +16,11 @@ package.json or monorepo tool tying them together; each is built/run from its ow
 
 ### Commands
 ```bash
-cp .env.example .env          # fill in DATABASE_URL, JWT secrets, Twilio/Razorpay/Firebase/S3 keys etc.
+cp .env.example .env          # fill in DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD, JWT secrets,
+                               # Twilio/Razorpay/Firebase/S3 keys etc.
 docker compose up -d          # starts Redis, Zookeeper, Kafka, Kafka UI — NOT Postgres (that
                                # service is commented out in docker-compose.yml); point
-                               # DATABASE_URL at whatever Postgres instance you actually run
+                               # DB_HOST/DB_PORT/etc at whatever Postgres instance you actually run
 npm install
 npm run kafka:topics          # create all Kafka topics (needed before consumers/producers work)
 npm run db:generate           # drizzle-kit generate — diff drizzle/schema/*.js into a new migration

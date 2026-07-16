@@ -3,15 +3,18 @@ import { Toaster } from "react-hot-toast";
 import queryClient from "@/lib/queryClient";
 import { AppRoutes } from "@/routes/AppRoutes";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="light" storageKey="rideshare-admin-theme">
-        <AppRoutes />
-        <Toaster position="top-right" />
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider defaultTheme="light" storageKey="rideshare-admin-theme">
+          <AppRoutes />
+          <Toaster position="top-right" />
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

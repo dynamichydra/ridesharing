@@ -17,8 +17,11 @@ export async function listPlans(onlyActive = true, countryId) {
   return db.select().from(subscriptionPlans).where(where).orderBy(subscriptionPlans.sortOrder);
 }
 
-export async function listPlansPaginated(page, limit, offset, countryId) {
-  const where = countryId ? eq(subscriptionPlans.countryId, countryId) : undefined;
+export async function listPlansPaginated(page, limit, offset, countryId, isActive) {
+  const conditions = [];
+  if (countryId) conditions.push(eq(subscriptionPlans.countryId, countryId));
+  if (isActive !== undefined) conditions.push(eq(subscriptionPlans.isActive, isActive));
+  const where = conditions.length ? and(...conditions) : undefined;
   const [{ total }] = await db.select({ total: count() }).from(subscriptionPlans).where(where);
   const rows = await db.select().from(subscriptionPlans).where(where).limit(limit).offset(offset);
   return { rows, pagination: paginate(page, limit, total) };
@@ -60,12 +63,17 @@ export async function updatePlan(id, data) {
   return plan;
 }
 
-export async function deletePlan(id) {
+export async function setPlanActive(id, isActive, adminId) {
   const [plan] = await db.update(subscriptionPlans)
-    .set({ isActive: false, updatedAt: new Date() })
+    .set({ isActive, updatedAt: new Date() })
     .where(eq(subscriptionPlans.id, id)).returning();
   if (!plan) throw { statusCode: 404, message: 'Plan not found' };
-  return { deleted: true };
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin',
+    action: isActive ? 'SUBSCRIPTION_PLAN_ENABLED' : 'SUBSCRIPTION_PLAN_DISABLED',
+    entityType: 'subscription_plan', entityId: id,
+  });
+  return plan;
 }
 
 // ── Driver subscription flow ───────────────────────────────────────────────────
@@ -206,6 +214,24 @@ export async function getSubscriptionHistory(driverId, page, limit, offset) {
     .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
     .where(eq(subscriptions.driverId, driverId))
     .orderBy(desc(subscriptions.createdAt)).limit(limit).offset(offset);
+  return { rows, pagination: paginate(page, limit, total) };
+}
+
+// Admin — a driver's payment attempts (retries/renewals included). Only covers attempts
+// already linked to a subscription (payments.subscriptionId); an attempt that failed before
+// ever activating a subscription has no driverId anywhere on the payments row and can't be
+// traced back to a driver without a schema change.
+export async function getPaymentsForDriver(driverId, page, limit, offset) {
+  const where = eq(subscriptions.driverId, driverId);
+  const [{ total }] = await db.select({ total: count() }).from(payments)
+    .innerJoin(subscriptions, eq(payments.subscriptionId, subscriptions.id))
+    .where(where);
+  const rows = await db.select({ payment: payments, plan: subscriptionPlans })
+    .from(payments)
+    .innerJoin(subscriptions, eq(payments.subscriptionId, subscriptions.id))
+    .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+    .where(where)
+    .orderBy(desc(payments.createdAt)).limit(limit).offset(offset);
   return { rows, pagination: paginate(page, limit, total) };
 }
 

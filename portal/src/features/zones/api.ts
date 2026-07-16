@@ -30,9 +30,9 @@ export const zonesApi = {
   update: (id: string, payload: Partial<ZonePayload>) =>
     apiClient.patch<Zone>(`${BASE_URL}/${id}`, payload),
 
-  // DELETE /zones/:id
-  remove: (id: string) => 
-    apiClient.delete(`${BASE_URL}/${id}`),
+  // PATCH /zones/:id/enable | /disable
+  setActive: (id: string, isActive: boolean) =>
+    apiClient.patch<Zone>(`${BASE_URL}/${id}/${isActive ? "enable" : "disable"}`, {}),
 
   // POST /zones/detect
   detect: (payload: ZoneDetectPayload) =>

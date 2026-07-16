@@ -3,6 +3,7 @@ import { db } from '../../config/db.js';
 import { zones } from '../../../drizzle/schema/index.js';
 import { isPointInPolygon } from '../../utils/geo.js';
 import { paginate } from '../../utils/response.js';
+import { publishEvent, TOPICS } from '../../config/kafka.js';
 
 export async function listAll(countryId) {
   const conditions = [eq(zones.isActive, true)];
@@ -40,8 +41,13 @@ export async function update(id, data) {
   return zone;
 }
 
-export async function remove(id) {
-  const [zone] = await db.update(zones).set({ isActive: false }).where(eq(zones.id, id)).returning();
+export async function setActive(id, isActive, adminId) {
+  const [zone] = await db.update(zones).set({ isActive, updatedAt: new Date() }).where(eq(zones.id, id)).returning();
   if (!zone) throw { statusCode: 404, message: 'Zone not found' };
-  return { deleted: true };
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin',
+    action: isActive ? 'ZONE_ENABLED' : 'ZONE_DISABLED',
+    entityType: 'zone', entityId: id,
+  });
+  return zone;
 }

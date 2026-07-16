@@ -33,7 +33,9 @@ export const vehicleTypesApi = {
   update: (id: string, payload: UpdateVehicleTypePayload) =>
     apiClient.patch<VehicleType>(`${BASE_URL}/${id}`, payload),
 
-  remove: (id: string) => apiClient.delete(`${BASE_URL}/${id}`),
+  // PATCH /vehicle-types/:id/enable | /disable  (Admin)
+  setActive: (id: string, isActive: boolean) =>
+    apiClient.patch<VehicleType>(`${BASE_URL}/${id}/${isActive ? "enable" : "disable"}`, {}),
 };
 
 export const vehicleTypePricingApi = {

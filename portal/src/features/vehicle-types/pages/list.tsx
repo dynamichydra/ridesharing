@@ -9,14 +9,13 @@ import { getVehicleTypeColumns } from "../components/column";
 import { VehicleTypeFilters } from "../components/filters";
 import {
   VehicleTypeFormDialog,
-  DeleteVehicleTypeDialog,
   PricingFormDialog,
 } from "../components/dialog";
 import {
   useVehicleTypes,
   useCreateVehicleType,
   useUpdateVehicleType,
-  useDeleteVehicleType,
+  useSetVehicleTypeActive,
   useCountries,
   useVehicleTypePricingForCountry,
   useSetVehicleTypePricing,
@@ -59,7 +58,6 @@ export default function VehicleTypeList() {
 const [formErrors, setFormErrors] = useState<
   Partial<Record<keyof VehicleTypeFormValues, string>>
 >({});
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   const [isPricingOpen, setIsPricingOpen] = useState(false);
   const [pricingVehicleType, setPricingVehicleType] = useState<VehicleType | null>(null);
@@ -85,7 +83,7 @@ const [pricingErrors, setPricingErrors] = useState<
 
   const createMutation = useCreateVehicleType();
   const updateMutation = useUpdateVehicleType();
-  const deleteMutation = useDeleteVehicleType();
+  const setActiveMutation = useSetVehicleTypeActive();
   const setPricingMutation = useSetVehicleTypePricing();
 
   const vehicleTypes = data?.MESSAGE || [];
@@ -130,9 +128,8 @@ const [pricingErrors, setPricingErrors] = useState<
     setIsFormOpen(true);
   };
 
-  const handleOpenDelete = (vt: VehicleType) => {
-    setSelectedVehicleType(vt);
-    setIsDeleteOpen(true);
+  const handleToggleActive = (vt: VehicleType) => {
+    setActiveMutation.mutate({ id: vt.id, isActive: !vt.isActive });
   };
 
   const handleOpenPricing = (vt: VehicleType) => {
@@ -230,23 +227,13 @@ const [pricingErrors, setPricingErrors] = useState<
     );
   };
 
-  const handleDeleteConfirm = () => {
-    if (!selectedVehicleType) return;
-    deleteMutation.mutate(selectedVehicleType.id, {
-      onSuccess: () => {
-        setIsDeleteOpen(false);
-        refreshList();
-      },
-    });
-  };
-
   const columns = useMemo(
     () =>
       getVehicleTypeColumns({
         pricingMap,
         countrySelected: !!selectedCountryId,
         onEdit: handleOpenEdit,
-        onDelete: handleOpenDelete,
+        onToggleActive: handleToggleActive,
         onEditPricing: handleOpenPricing,
       }),
     [pricingMap, selectedCountryId]
@@ -313,13 +300,6 @@ const [pricingErrors, setPricingErrors] = useState<
         errors={formErrors}
         onSubmit={handleFormSubmit}
         isPending={createMutation.isPending || updateMutation.isPending}
-      />
-      <DeleteVehicleTypeDialog
-        open={isDeleteOpen}
-        onOpenChange={setIsDeleteOpen}
-        vehicleType={selectedVehicleType}
-        onConfirm={handleDeleteConfirm}
-        isPending={deleteMutation.isPending}
       />
       <PricingFormDialog
         open={isPricingOpen}

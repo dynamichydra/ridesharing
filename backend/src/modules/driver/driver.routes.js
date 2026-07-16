@@ -85,7 +85,11 @@ export async function driverRoutes(app) {
     const filters = {
       approvalStatus:     request.query.approvalStatus,
       subscriptionStatus: request.query.subscriptionStatus,
+      registrationStatus: request.query.registrationStatus,
+      countryId:          request.query.countryId,
+      cityId:             request.query.cityId,
       isBlocked:          request.query.isBlocked !== undefined ? request.query.isBlocked === 'true' : undefined,
+      search:             request.query.search,
     };
     const { rows, pagination } = await driverService.listDrivers(filters, page, limit, offset);
     return sendList(reply, rows, pagination);

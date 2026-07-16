@@ -25,6 +25,7 @@ import {
   RequestDocumentsDialog,
   RejectDocumentDialog,
 } from "../components/dialog";
+import { DriverSubscriptionPanel } from "../components/subscription-panel";
 import {
   useDriver,
   useDriverDocuments,
@@ -284,6 +285,8 @@ export default function DriverDetail() {
             )}
           </CardContent>
         </Card>
+
+        <DriverSubscriptionPanel driverId={driverId} />
 
         <Card className="border-border bg-card shadow-sm md:col-span-2">
           <CardHeader>

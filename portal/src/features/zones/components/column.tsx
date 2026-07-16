@@ -1,18 +1,18 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Map, Pencil, Trash2 } from "lucide-react";
+import { Map, Pencil, Ban, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Zone } from "../types";
 
 interface Props {
   countriesMap: Map<string, string>;
   onEdit: (zone: Zone) => void;
-  onDelete: (zone: Zone) => void;
+  onToggleActive: (zone: Zone) => void;
 }
 
 export function getZoneColumns({
   countriesMap,
   onEdit,
-  onDelete,
+  onToggleActive,
 }: Props): ColumnDef<Zone>[] {
   return [
     {
@@ -49,8 +49,22 @@ export function getZoneColumns({
       ),
     },
     {
+      accessorKey: "isActive",
+      header: "Status",
+      cell: ({ row }) =>
+        row.original.isActive ? (
+          <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400 font-medium text-xs">
+            <CheckCircle2 className="h-4 w-4" /> Active
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 text-muted-foreground text-xs">
+            <XCircle className="h-4 w-4" /> Disabled
+          </span>
+        ),
+    },
+    {
       id: "actions",
-      size: 100,
+      size: 120,
       header: () => <div className="w-full text-center">Actions</div>,
       cell: ({ row }) => (
         <div className="w-full flex items-center justify-center gap-2">
@@ -67,16 +81,16 @@ export function getZoneColumns({
             <Pencil className="h-3.5 w-3.5" />
           </Button>
           <Button
-            variant="destructive"
+            variant={row.original.isActive ? "destructive" : "outline"}
             size="icon"
             onClick={(e) => {
               e.stopPropagation();
-              onDelete(row.original);
+              onToggleActive(row.original);
             }}
-            className="h-8 w-8 bg-red-600 hover:bg-red-700 text-white"
-            title="Delete zone"
+            className="h-8 w-8"
+            title={row.original.isActive ? "Disable zone" : "Enable zone"}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Ban className="h-3.5 w-3.5" />
           </Button>
         </div>
       ),

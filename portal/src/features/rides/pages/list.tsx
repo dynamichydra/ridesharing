@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
-import { Car } from "lucide-react";
+import { Car, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/data-table";
+import { downloadCsv } from "@/lib/csv";
 import {
   AutoFilters,
   type FilterSchema,
@@ -9,7 +11,7 @@ import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getRideColumns } from "../components/column";
 import { RideDetailsDialog } from "../components/dialog";
-import { useRideOffers, useRides, useRideTimeline } from "../hooks";
+import { useCancelRideAdmin, useExportRides, useRideOffers, useRides, useRideTimeline } from "../hooks";
 import { rideStatusOptions } from "../schema";
 import type { Ride, Pagination } from "../types";
 
@@ -43,6 +45,8 @@ export default function RideList() {
   });
   const { data: timeline, isLoading: timelineLoading } = useRideTimeline(selectedRide?.id);
   const { data: offers, isLoading: offersLoading } = useRideOffers(selectedRide?.id);
+  const cancelMutation = useCancelRideAdmin();
+  const exportMutation = useExportRides();
 
   const rides = data?.MESSAGE || [];
 
@@ -53,6 +57,36 @@ export default function RideList() {
   const handleOpenDetails = (ride: Ride) => {
     setSelectedRide(ride);
     setIsDetailsOpen(true);
+  };
+
+  const handleExport = () => {
+    exportMutation.mutate(
+      { status: (controller.applied.status as Ride["status"]) || "" },
+      {
+        onSuccess: (res) => {
+          downloadCsv(`rides-${Date.now()}.csv`, res.MESSAGE ?? [], [
+            { header: "ID", accessor: (r: Ride) => r.id },
+            { header: "Status", accessor: (r: Ride) => r.status },
+            { header: "Pickup Address", accessor: (r: Ride) => r.pickupAddress },
+            { header: "Drop Address", accessor: (r: Ride) => r.dropAddress },
+            { header: "Estimated Fare", accessor: (r: Ride) => r.estimatedFare },
+            { header: "Final Fare", accessor: (r: Ride) => r.finalFare },
+            { header: "Distance (km)", accessor: (r: Ride) => r.distanceKm },
+            { header: "Cancelled By", accessor: (r: Ride) => r.cancelledBy },
+            { header: "Cancel Reason", accessor: (r: Ride) => r.cancelReason },
+            { header: "Requested At", accessor: (r: Ride) => r.requestedAt },
+          ]);
+        },
+      },
+    );
+  };
+
+  const handleCancelRide = (reason: string) => {
+    if (!selectedRide) return;
+    cancelMutation.mutate(
+      { rideId: selectedRide.id, reason },
+      { onSuccess: () => setIsDetailsOpen(false) },
+    );
   };
 
   const columns = useMemo(
@@ -78,6 +112,15 @@ export default function RideList() {
             {totalRecords} Total
           </span>
         </div>
+        <Button
+          onClick={handleExport}
+          variant="outline"
+          size="sm"
+          disabled={exportMutation.isPending}
+          className="gap-2 h-8"
+        >
+          <Download className="h-4 w-4" /> Export CSV
+        </Button>
       </div>
 
       <AutoFilters
@@ -110,6 +153,8 @@ export default function RideList() {
         timelineLoading={timelineLoading}
         offers={offers}
         offersLoading={offersLoading}
+        onCancelRide={handleCancelRide}
+        isCancelling={cancelMutation.isPending}
       />
     </div>
   );

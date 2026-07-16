@@ -13,6 +13,8 @@ function buildQuery(params: SubscriptionPlanListParams) {
   const query = new URLSearchParams();
   query.set("page", String(params.page ?? 1));
   query.set("limit", String(params.limit ?? 10));
+  if (params.countryId) query.set("countryId", params.countryId);
+  if (params.isActive !== undefined) query.set("isActive", String(params.isActive));
   return query.toString();
 }
 
@@ -29,8 +31,9 @@ export const subscriptionPlansApi = {
   update: (id: string, payload: UpdateSubscriptionPlanPayload) =>
     apiClient.patch<SubscriptionPlan>(`${BASE_URL}/${id}`, payload),
 
-  // DELETE /subscriptions/plans/:id  (Admin) — soft delete
-  remove: (id: string) => apiClient.delete(`${BASE_URL}/${id}`),
+  // PATCH /subscriptions/plans/:id/enable | /disable  (Admin)
+  setActive: (id: string, isActive: boolean) =>
+    apiClient.patch<SubscriptionPlan>(`${BASE_URL}/${id}/${isActive ? "enable" : "disable"}`, {}),
 };
 
 

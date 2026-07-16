@@ -29,6 +29,9 @@ export interface FareRule {
 export interface FareRuleListParams {
   page?: number;
   limit?: number;
+  ruleType?: FareRuleType | "";
+  isActive?: boolean;
+  countryId?: string;
 }
 
 // Real runtime shape (confirmed via Network tab) — currentPage/itemsPerPage/

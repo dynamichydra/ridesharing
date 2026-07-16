@@ -1,11 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { CheckCircle,Pencil, CreditCard, Trash2, XCircle } from "lucide-react";
+import { CheckCircle, Pencil, CreditCard, Ban, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SubscriptionPlan, LookupOption } from "../types";
 
 interface Props {
   onEdit: (plan: SubscriptionPlan) => void;
-  onDelete: (plan: SubscriptionPlan) => void;
+  onToggleActive: (plan: SubscriptionPlan) => void;
   countries: LookupOption[];
 }
 
@@ -19,7 +19,7 @@ function formatPrice(priceMinor: number, currencyCode: string): string {
 
 export function getSubscriptionPlanColumns({
   onEdit,
-  onDelete,
+  onToggleActive,
   countries,
 }: Props): ColumnDef<SubscriptionPlan>[] {
   return [
@@ -152,15 +152,16 @@ export function getSubscriptionPlanColumns({
           </Button>
 
           <Button
-            variant="destructive"
+            variant={row.original.isActive ? "destructive" : "outline"}
             size="icon"
             onClick={(e) => {
               e.stopPropagation();
-              onDelete(row.original);
+              onToggleActive(row.original);
             }}
             className="h-8 w-8"
+            title={row.original.isActive ? "Disable" : "Enable"}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Ban className="h-3.5 w-3.5" />
           </Button>
         </div>
       ),

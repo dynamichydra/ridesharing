@@ -1,4 +1,4 @@
-import { eq, desc, count, and } from 'drizzle-orm';
+import { eq, desc, count, and, or, ilike } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { drivers, subscriptions, cities } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
@@ -186,6 +186,15 @@ export async function listDrivers(filters, page, limit, offset) {
   if (filters.countryId) conditions.push(eq(drivers.countryId, filters.countryId));
   if (filters.cityId) conditions.push(eq(drivers.cityId, filters.cityId));
   if (filters.isBlocked !== undefined) conditions.push(eq(drivers.isBlocked, filters.isBlocked));
+  if (filters.search) {
+    conditions.push(
+      or(
+        ilike(drivers.name, `%${filters.search}%`),
+        ilike(drivers.email, `%${filters.search}%`),
+        ilike(drivers.phone, `%${filters.search}%`)
+      )
+    );
+  }
 
   const where = conditions.length ? and(...conditions) : undefined;
 

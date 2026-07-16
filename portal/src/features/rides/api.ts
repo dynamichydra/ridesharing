@@ -25,4 +25,8 @@ export const ridesApi = {
   // GET /rides/:id/offers/admin  (Admin) — full broadcast/offer history for any ride
   getOffersAdmin: (rideId: string) =>
     apiClient.get<RideOffer[]>(`${BASE_URL}/${rideId}/offers/admin`),
+
+  // POST /rides/:id/cancel/admin  (Admin) — support/ops cancels a stuck or disputed ride
+  cancelAdmin: (rideId: string, reason?: string) =>
+    apiClient.post<Ride>(`${BASE_URL}/${rideId}/cancel/admin`, { reason }),
 };

@@ -1,6 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Eye, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getSelectionColumn } from "@/components/data-table/selection-column";
 import type { Driver } from "../types";
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 
 export function getDriverColumns({ onViewDetail, onToggleBlock }: Props): ColumnDef<Driver>[] {
   return [
+    getSelectionColumn<Driver>(),
     {
       id: "details",
       header: "Driver details",

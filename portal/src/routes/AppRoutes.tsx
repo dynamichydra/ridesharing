@@ -19,6 +19,8 @@ const ZoneList = lazy(() => import("@/features/zones/pages"));
 const GeoList = lazy(() => import("@/features/geo/pages"));
 const FareRuleList = lazy(() => import("@/features/fare-rules/pages"));
 const SubscriptionPlanList = lazy(() => import("@/features/subscriptions/pages"));
+const AuditLogList = lazy(() => import("@/features/audit-logs/pages"));
+const OnboardingConfigList = lazy(() => import("@/features/onboarding-config/pages"));
 
 const router = createBrowserRouter([
   {
@@ -90,41 +92,71 @@ const router = createBrowserRouter([
       {
         path: "vehicle-types",
         element: (
-          <Suspense fallback={<Loader />}>
-            <VehicleTypeList />
-          </Suspense>
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <VehicleTypeList />
+            </Suspense>
+          </ProtectedRoute>
         ),
       },
       {
         path: "zones",
         element: (
-          <Suspense fallback={<Loader />}>
-            <ZoneList />
-          </Suspense>
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <ZoneList />
+            </Suspense>
+          </ProtectedRoute>
         ),
       },
       {
         path: "locations",
         element: (
-          <Suspense fallback={<Loader />}>
-            <GeoList />
-          </Suspense>
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <GeoList />
+            </Suspense>
+          </ProtectedRoute>
         ),
       },
       {
         path: "fare-rules",
         element: (
-          <Suspense fallback={<Loader />}>
-            <FareRuleList />
-          </Suspense>
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <FareRuleList />
+            </Suspense>
+          </ProtectedRoute>
         ),
       },
       {
         path: "subscription-plans",
         element: (
-          <Suspense fallback={<Loader />}>
-            <SubscriptionPlanList />
-          </Suspense>
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <SubscriptionPlanList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "audit-logs",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <AuditLogList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "onboarding-config",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <OnboardingConfigList />
+            </Suspense>
+          </ProtectedRoute>
         ),
       },
     ],

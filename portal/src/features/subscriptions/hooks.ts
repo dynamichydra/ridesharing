@@ -53,16 +53,17 @@ export function useUpdateSubscriptionPlan() {
   });
 }
 
-export function useDeleteSubscriptionPlan() {
+export function useSetSubscriptionPlanActive() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => subscriptionPlansApi.remove(id),
-    onSuccess: () => {
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      subscriptionPlansApi.setActive(id, isActive),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [SUBSCRIPTION_PLANS_KEY], refetchType: "active" });
-      toast.success("Subscription plan removed!");
+      toast.success(variables.isActive ? "Subscription plan enabled" : "Subscription plan disabled");
     },
     onError: (err: any) => {
-      toast.error(err?.message ?? "Failed to delete plan");
+      toast.error(err?.message ?? "Failed to update plan status");
     },
   });
 }

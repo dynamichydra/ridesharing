@@ -54,16 +54,16 @@ export function useUpdateVehicleType() {
   });
 }
 
-export function useDeleteVehicleType() {
+export function useSetVehicleTypeActive() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => vehicleTypesApi.remove(id),
-    onSuccess: (data) => {
-  console.log("SUCCESS", data);
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      vehicleTypesApi.setActive(id, isActive),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [VEHICLE_TYPES_KEY], refetchType: "active" });
-      toast.success("Vehicle type deleted");
+      toast.success(variables.isActive ? "Vehicle type enabled" : "Vehicle type disabled");
     },
-    onError: (err: any) => toast.error(err.message || "Failed to delete vehicle type"),
+    onError: (err: any) => toast.error(err.message || "Failed to update vehicle type status"),
   });
 }
 

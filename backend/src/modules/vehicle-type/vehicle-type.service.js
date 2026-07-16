@@ -2,6 +2,7 @@ import { eq, asc, count } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { vehicleTypes } from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
+import { publishEvent, TOPICS } from '../../config/kafka.js';
 
 export async function listAll(onlyActive = true) {
   const where = onlyActive ? eq(vehicleTypes.isActive, true) : undefined;
@@ -34,10 +35,14 @@ export async function update(id, data) {
   return vt;
 }
 
-export async function remove(id) {
-  // Soft delete
-  const [vt] = await db.update(vehicleTypes).set({ isActive: false, updatedAt: new Date() })
+export async function setActive(id, isActive, adminId) {
+  const [vt] = await db.update(vehicleTypes).set({ isActive, updatedAt: new Date() })
     .where(eq(vehicleTypes.id, id)).returning();
   if (!vt) throw { statusCode: 404, message: 'Vehicle type not found' };
-  return { deleted: true };
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin',
+    action: isActive ? 'VEHICLE_TYPE_ENABLED' : 'VEHICLE_TYPE_DISABLED',
+    entityType: 'vehicle_type', entityId: id,
+  });
+  return vt;
 }
