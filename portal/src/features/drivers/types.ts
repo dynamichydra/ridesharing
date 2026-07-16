@@ -73,3 +73,71 @@ export interface RequestDocumentsPayload {
   documentTypeCodes: string[];
   note?: string;
 }
+
+export interface DriverVehicle {
+  id: string;
+  driverId: string;
+  vehicleTypeId: string;
+  brand: string | null;
+  model: string;
+  year: string;
+  color: string | null;
+  registrationNumber: string;
+  vin: string | null;
+  seats: number;
+  fuelType: string | null;
+  transmission: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DriverDocumentStatus = "pending" | "approved" | "rejected" | "expired";
+
+export interface DriverDocument {
+  id: string;
+  driverId: string;
+  documentTypeId: string;
+  frontUrl: string | null;
+  backUrl: string | null;
+  pdfUrl: string | null;
+  // Only present from the admin-review endpoint — short-lived signed GET URLs, not the raw S3 keys.
+  frontViewUrl?: string | null;
+  backViewUrl?: string | null;
+  pdfViewUrl?: string | null;
+  documentNumber: string | null;
+  expiryDate: string | null;
+  status: DriverDocumentStatus;
+  rejectionReason: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  uploadedAt: string;
+}
+
+export interface DocumentType {
+  id: string;
+  code: string;
+  requiresFront: boolean;
+  requiresBack: boolean;
+  requiresPdf: boolean;
+  requiresExpiry: boolean;
+  requiresDocNumber: boolean;
+  maxFileSizeMb: number;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+// GET /drivers/:id (Admin) — an aggregated registration-summary view, not a flat Driver.
+export interface DriverDetail {
+  driver: Driver;
+  vehicles: DriverVehicle[];
+  documents: DriverDocument[];
+  answers: unknown[];
+  isComplete: boolean;
+  missing: string[];
+}
+
+export interface VerifyDocumentPayload {
+  approve: boolean;
+  rejectionReason?: string;
+}

@@ -35,11 +35,19 @@ API.interceptors.response.use(
     // Response error handling
     if (error.response) {
       const { status } = error.response;
-      if (status === 401 || status === 403 || status === 405) {
-        // Token expired or unauthorized
-        toast.error(`Session expired or unauthorized access.`);
+
+      // Login/OTP/refresh calls fail with 401/403 when the CREDENTIALS are wrong,
+      // not because an existing session expired — there is no session yet, so never
+      // force-logout for these. Let the caller's own onError show the real message.
+      const isAuthEndpoint = typeof error.config?.url === "string" && error.config.url.includes("/auth/");
+
+      // Only a 401 on an already-authenticated request means "your session is no
+      // longer valid" — 403 is "you're logged in but not allowed to do this one
+      // thing" (shouldn't log you out), and 405 (wrong HTTP method) is a routing/
+      // client bug with nothing to do with auth state at all.
+      if (status === 401 && !isAuthEndpoint) {
+        toast.error("Session expired. Please log in again.");
         LogOut();
-        window.location.href = '/login'
       }
 
       // Optional: You can handle other status codes globally

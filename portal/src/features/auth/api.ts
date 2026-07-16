@@ -24,9 +24,15 @@ export async function Login(loginData: LoginData): Promise<User | null> {
     
     LocalStorage.set("rideshare-admin-user", user);
     return user;
-  } catch (error) {
-    console.error("Login error:", error);
-    throw error;
+  } catch (error: any) {
+    // The axios interceptor rejects with the raw AxiosResponse (not an Error), so
+    // `error.message` is empty here — pull the backend's actual reason out of its
+    // response envelope and surface that instead of a generic fallback.
+    const backendMessage = error?.data?.MESSAGE;
+    console.error("Login error:", backendMessage || error);
+    throw new Error(
+      typeof backendMessage === "string" ? backendMessage : "Invalid email or password",
+    );
   }
 }
 

@@ -1,41 +1,20 @@
 import { useMemo, useState } from "react";
-import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/data-table/data-table";
 import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getDriverColumns } from "../components/column";
-import {
-  DriverDocsDialog,
-  ApproveDriverDialog,
-  RejectDriverDialog,
-  RequestDocumentsDialog,
-} from "../components/dialog";
 import { DriverFilters } from "../components/filters";
-import {
-  useDrivers,
-  useApproveDriver,
-  useRejectDriver,
-  useRequestDriverDocuments,
-  useToggleBlockDriver,
-} from "../hooks";
+import { useDrivers, useToggleBlockDriver } from "../hooks";
 import type { Driver, Pagination } from "../types";
 
 export default function DriverList() {
+  const navigate = useNavigate();
   const controller = useFilterController();
 
   const [search, setSearch] = useState("");
-
-  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
-  const [isDocsOpen, setIsDocsOpen] = useState(false);
-  const [isApproveOpen, setIsApproveOpen] = useState(false);
-  const [isRejectOpen, setIsRejectOpen] = useState(false);
-  const [isRequestDocsOpen, setIsRequestDocsOpen] = useState(false);
-  const [approvalNote, setApprovalNote] = useState("");
-  const [rejectionNote, setRejectionNote] = useState("");
-  const [requestDocCodes, setRequestDocCodes] = useState("");
-  const [requestDocNote, setRequestDocNote] = useState("");
 
   const page = Number(controller.applied.page) || 1;
 
@@ -44,16 +23,12 @@ export default function DriverList() {
     limit: 10,
     approvalStatus: controller.applied.approvalStatus || undefined,
   });
-  const approveMutation = useApproveDriver();
-  const rejectMutation = useRejectDriver();
-  const requestDocsMutation = useRequestDriverDocuments();
   const toggleBlockMutation = useToggleBlockDriver();
 
   const drivers = data?.MESSAGE || [];
 
   const pagination = data?.PAGINATION as unknown as Pagination | undefined;
   const totalPages = pagination?.totalPages || 1;
-  const totalRecords = pagination?.totalItems ?? drivers.length;
 
   const filteredDrivers = drivers.filter((d) => {
     if (!search) return true;
@@ -61,77 +36,18 @@ export default function DriverList() {
     return text.includes(search.toLowerCase());
   });
 
-  const handleOpenDocs = (driver: Driver) => {
-    setSelectedDriver(driver);
-    setIsDocsOpen(true);
+  const handleViewDetail = (driver: Driver) => {
+    navigate(`/drivers/${driver.id}`);
   };
 
   const handleToggleBlock = (driver: Driver) => {
     toggleBlockMutation.mutate({ id: driver.id, isBlocked: driver.isBlocked });
   };
 
-  const handleApproveSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedDriver) return;
-    approveMutation.mutate(
-      { id: selectedDriver.id, note: approvalNote },
-      {
-        onSuccess: () => {
-          setIsApproveOpen(false);
-          setIsDocsOpen(false);
-          setApprovalNote("");
-        },
-      }
-    );
-  };
-
-  const handleRejectSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedDriver) return;
-    if (!rejectionNote.trim()) {
-      toast.error("Rejection note is required");
-      return;
-    }
-    rejectMutation.mutate(
-      { id: selectedDriver.id, note: rejectionNote },
-      {
-        onSuccess: () => {
-          setIsRejectOpen(false);
-          setIsDocsOpen(false);
-          setRejectionNote("");
-        },
-      }
-    );
-  };
-
-  const handleRequestDocsSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedDriver) return;
-    const documentTypeCodes = requestDocCodes
-      .split(",")
-      .map((code) => code.trim())
-      .filter(Boolean);
-    if (documentTypeCodes.length === 0) {
-      toast.error("Enter at least one document type code");
-      return;
-    }
-    requestDocsMutation.mutate(
-      { id: selectedDriver.id, documentTypeCodes, note: requestDocNote || undefined },
-      {
-        onSuccess: () => {
-          setIsRequestDocsOpen(false);
-          setIsDocsOpen(false);
-          setRequestDocCodes("");
-          setRequestDocNote("");
-        },
-      }
-    );
-  };
-
   const columns = useMemo(
     () =>
       getDriverColumns({
-        onOpenDocs: handleOpenDocs,
+        onViewDetail: handleViewDetail,
         onToggleBlock: handleToggleBlock,
       }),
     []
@@ -166,45 +82,11 @@ export default function DriverList() {
           data={filteredDrivers}
           pageIndex={page - 1}
           pageCount={totalPages}
-          totalRecords={totalRecords}
           onPageChange={handlePageChange}
+          isLoading={isLoading}
+          isFetching={isFetching}
         />
       </div>
-
-      <DriverDocsDialog
-        open={isDocsOpen}
-        onOpenChange={setIsDocsOpen}
-        driver={selectedDriver}
-        onApproveClick={() => setIsApproveOpen(true)}
-        onRejectClick={() => setIsRejectOpen(true)}
-        onRequestDocumentsClick={() => setIsRequestDocsOpen(true)}
-      />
-      <ApproveDriverDialog
-        open={isApproveOpen}
-        onOpenChange={setIsApproveOpen}
-        note={approvalNote}
-        setNote={setApprovalNote}
-        onSubmit={handleApproveSubmit}
-        isPending={approveMutation.isPending}
-      />
-      <RejectDriverDialog
-        open={isRejectOpen}
-        onOpenChange={setIsRejectOpen}
-        note={rejectionNote}
-        setNote={setRejectionNote}
-        onSubmit={handleRejectSubmit}
-        isPending={rejectMutation.isPending}
-      />
-      <RequestDocumentsDialog
-        open={isRequestDocsOpen}
-        onOpenChange={setIsRequestDocsOpen}
-        documentTypeCodes={requestDocCodes}
-        setDocumentTypeCodes={setRequestDocCodes}
-        note={requestDocNote}
-        setNote={setRequestDocNote}
-        onSubmit={handleRequestDocsSubmit}
-        isPending={requestDocsMutation.isPending}
-      />
     </div>
   );
 }

@@ -4,11 +4,11 @@ import { Button } from "@/components/ui/button";
 import type { Driver } from "../types";
 
 interface Props {
-  onOpenDocs: (driver: Driver) => void;
+  onViewDetail: (driver: Driver) => void;
   onToggleBlock: (driver: Driver) => void;
 }
 
-export function getDriverColumns({ onOpenDocs, onToggleBlock }: Props): ColumnDef<Driver>[] {
+export function getDriverColumns({ onViewDetail, onToggleBlock }: Props): ColumnDef<Driver>[] {
   return [
     {
       id: "details",
@@ -97,7 +97,7 @@ export function getDriverColumns({ onOpenDocs, onToggleBlock }: Props): ColumnDe
           <Button
             variant="outline"
             size="sm"
-            onClick={() => onOpenDocs(row.original)}
+            onClick={() => onViewDetail(row.original)}
             className="text-xs border-border text-foreground hover:bg-muted font-medium cursor-pointer"
           >
             <Eye className="h-3.5 w-3.5 mr-1" />

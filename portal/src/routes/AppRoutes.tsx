@@ -12,6 +12,7 @@ const Root = lazy(() => import("@/layouts/Root"));
 const Dashboard = lazy(() => import("@/features/dashboard/pages"));
 const UserList = lazy(() => import("@/features/users/pages/list"));
 const DriverList = lazy(() => import("@/features/drivers/pages"));
+const DriverDetail = lazy(() => import("@/features/drivers/pages/Detail"));
 const RideList = lazy(() => import("@/features/rides/pages"));
 const VehicleTypeList = lazy(() => import("@/features/vehicle-types/pages"));
 const ZoneList = lazy(() => import("@/features/zones/pages"));
@@ -67,6 +68,14 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<Loader />}>
             <DriverList />
+          </Suspense>
+        ),
+      },
+      {
+        path: "drivers/:driverId",
+        element: (
+          <Suspense fallback={<Loader />}>
+            <DriverDetail />
           </Suspense>
         ),
       },

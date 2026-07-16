@@ -1,14 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { driversApi } from "./api";
+import { driversApi, documentsApi } from "./api";
 import type {
   DriverListParams,
   ApproveDriverPayload,
   RejectDriverPayload,
   RequestDocumentsPayload,
+  VerifyDocumentPayload,
 } from "./types";
 
 const DRIVERS_KEY = "drivers";
+const DOCUMENT_TYPES_KEY = "document-types";
 
 export function useDrivers(params: DriverListParams) {
   return useQuery({
@@ -66,6 +68,37 @@ export function useRequestDriverDocuments() {
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to request documents");
+    },
+  });
+}
+
+export function useDriverDocuments(driverId: string | undefined) {
+  return useQuery({
+    queryKey: [DRIVERS_KEY, driverId, "documents"],
+    queryFn: () => documentsApi.getForDriver(driverId as string),
+    enabled: !!driverId,
+  });
+}
+
+export function useDocumentTypes() {
+  return useQuery({
+    queryKey: [DOCUMENT_TYPES_KEY],
+    queryFn: () => documentsApi.listTypes(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useVerifyDocument(driverId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ docId, payload }: { docId: string; payload: VerifyDocumentPayload }) =>
+      documentsApi.verify(docId, payload),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY, driverId, "documents"] });
+      toast.success(variables.payload.approve ? "Document approved" : "Document rejected");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to update document status");
     },
   });
 }

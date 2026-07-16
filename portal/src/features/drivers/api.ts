@@ -1,13 +1,18 @@
 import { apiClient } from "@/lib/api-client";
 import type {
   Driver,
+  DriverDetail,
   DriverListParams,
   ApproveDriverPayload,
   RejectDriverPayload,
   RequestDocumentsPayload,
+  DriverDocument,
+  DocumentType,
+  VerifyDocumentPayload,
 } from "./types";
 
 const BASE_URL = "/drivers";
+const DOCUMENTS_BASE_URL = "/documents";
 
 function buildQuery(params: DriverListParams) {
   const query = new URLSearchParams();
@@ -27,8 +32,9 @@ export const driversApi = {
   list: (params: DriverListParams) =>
     apiClient.get<Driver[]>(`${BASE_URL}?${buildQuery(params)}`),
 
-  // GET /drivers/:id  (Admin) — aggregated registration-summary view
-  getById: (id: string) => apiClient.get<Driver>(`${BASE_URL}/${id}`),
+  // GET /drivers/:id  (Admin) — aggregated registration-summary view:
+  // { driver, vehicles, documents, answers, isComplete, missing } — NOT a flat Driver.
+  getById: (id: string) => apiClient.get<DriverDetail>(`${BASE_URL}/${id}`),
 
   // POST /drivers/:id/approve  (Admin)
   approve: (id: string, payload: ApproveDriverPayload) =>
@@ -47,4 +53,18 @@ export const driversApi = {
   // POST /drivers/:id/request-documents  (Admin)
   requestDocuments: (id: string, payload: RequestDocumentsPayload) =>
     apiClient.post(`${BASE_URL}/${id}/request-documents`, payload),
+};
+
+export const documentsApi = {
+  // GET /documents/admin/drivers/:driverId  (Admin) — uploaded docs with short-lived signed preview URLs
+  getForDriver: (driverId: string) =>
+    apiClient.get<DriverDocument[]>(`${DOCUMENTS_BASE_URL}/admin/drivers/${driverId}`),
+
+  // POST /documents/admin/:docId/verify  (Admin) — { approve, rejectionReason? }
+  verify: (docId: string, payload: VerifyDocumentPayload) =>
+    apiClient.post<DriverDocument>(`${DOCUMENTS_BASE_URL}/admin/${docId}/verify`, payload),
+
+  // GET /documents/admin/types  (Admin) — used to label a document's documentTypeId with its code
+  listTypes: () =>
+    apiClient.get<DocumentType[]>(`${DOCUMENTS_BASE_URL}/admin/types?page=1&limit=100`),
 };
