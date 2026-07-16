@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { DollarSign, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/data-table";
 
@@ -90,6 +90,7 @@ function buildPayload(values: FareRuleFormValues): FareRulePayload | UpdateFareR
 export default function FareRuleList() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const [selectedRule, setSelectedRule] = useState<FareRule | null>(null);
   const [isViewOpen, setIsViewOpen] = useState(false);
@@ -97,7 +98,7 @@ export default function FareRuleList() {
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
-  const { data, isLoading } = useFareRules({ page, limit: 10 });
+  const { data, isLoading, isFetching } = useFareRules({ page, limit: pageSize });
   const { data: detailData, isLoading: isDetailLoading } = useFareRule(
     (isViewOpen || (isFormOpen && formMode === "edit")) ? selectedRule?.id : undefined
   );
@@ -198,26 +199,27 @@ export default function FareRuleList() {
     ? ruleToFormValues(detailData.MESSAGE)
     : EMPTY_FORM;
 
-  if (isLoading) {
-    return <div className="py-8 text-center text-muted-foreground">Loading fare rules…</div>;
-  }
-
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h2 className="text-xl font-bold text-foreground">Fare Rule Configurations</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage dynamic pricing rules applied across ride matching and fare calculation.
-          </p>
+      <div className="flex items-center justify-between bg-background/50 backdrop-blur-sm sticky top-0 z-10 py-2 px-1">
+        <div className="flex items-center gap-2">
+          <div className="bg-primary/10 p-1.5 rounded-lg">
+            <DollarSign className="h-5 w-5 text-primary" />
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-foreground uppercase">
+            Fare Rules
+          </h2>
+          <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest bg-accent px-2 py-0.5 rounded-full opacity-70">
+            {totalRecords} Total
+          </span>
         </div>
 
         <Button
           size="sm"
           onClick={handleOpenCreate}
-          className="w-fit gap-2 px-3 shadow-sm font-medium cursor-pointer"
+          className="gap-2 shadow-sm hover:shadow-md transition-all active:scale-[0.98] h-8"
         >
-          <Plus className="h-3.5 w-3.5" />
+          <Plus className="h-4 w-4" />
           Add Fare Rule
         </Button>
       </div>
@@ -227,9 +229,15 @@ export default function FareRuleList() {
           columns={columns}
           data={rules}
           pageIndex={page - 1}
+          pageSize={pageSize}
           pageCount={totalPages}
-          totalRecords={totalRecords}
           onPageChange={handlePageChange}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+          isLoading={isLoading}
+          isFetching={isFetching}
         />
       </div>
 

@@ -1,21 +1,46 @@
 import { useMemo, useState } from "react";
+import { Car } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
+import {
+  AutoFilters,
+  type FilterSchema,
+} from "@/components/filters/AutoFilters";
+import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getRideColumns } from "../components/column";
 import { RideDetailsDialog } from "../components/dialog";
-import { RideFilterForm } from "../components/filters";
 import { useRideOffers, useRides, useRideTimeline } from "../hooks";
-import type { Ride, RideListParams, Pagination } from "../types";
-import type { RideFilterValues } from "../schema";
+import { rideStatusOptions } from "../schema";
+import type { Ride, Pagination } from "../types";
+
+const FILTER_SCHEMA: FilterSchema = {
+  status: {
+    label: "Status",
+    operator: "equals",
+    type: "select",
+    field: "status",
+    placeholder: "All Statuses",
+    options: rideStatusOptions.map((status) => ({
+      label: status.charAt(0).toUpperCase() + status.slice(1),
+      value: status,
+    })),
+  },
+};
 
 export default function RideList() {
-  const [filters, setFilters] = useState<RideListParams>({ status: "" });
-  const [page, setPage] = useState(1);
+  const controller = useFilterController();
 
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
-  const { data, isLoading } = useRides({ ...filters, page, limit: 10 });
+  const page = Number(controller.applied.page) || 1;
+  const limit = Number(controller.applied.limit) || 10;
+
+  const { data, isLoading, isFetching } = useRides({
+    status: (controller.applied.status as Ride["status"]) || "",
+    page,
+    limit,
+  });
   const { data: timeline, isLoading: timelineLoading } = useRideTimeline(selectedRide?.id);
   const { data: offers, isLoading: offersLoading } = useRideOffers(selectedRide?.id);
 
@@ -24,16 +49,6 @@ export default function RideList() {
   const pagination = data?.PAGINATION as unknown as Pagination | undefined;
   const totalPages = pagination?.totalPages || 1;
   const totalRecords = pagination?.totalItems ?? rides.length;
-
-  const handleApplyFilters = (values: RideFilterValues) => {
-    setFilters({ status: values.status || "" });
-    setPage(1);
-  };
-
-  const handleResetFilters = () => {
-    setFilters({ status: "" });
-    setPage(1);
-  };
 
   const handleOpenDetails = (ride: Ride) => {
     setSelectedRide(ride);
@@ -46,19 +61,31 @@ export default function RideList() {
   );
 
   const handlePageChange = (pageIndex: number) => {
-    setPage(pageIndex + 1);
+    controller.apply({ page: pageIndex + 1 });
   };
-
-  if (isLoading) {
-    return <div className="py-8 text-center text-muted-foreground">Loading rides…</div>;
-  }
 
   return (
     <div className="space-y-4">
-      <RideFilterForm
-        defaultValues={{ status: (filters.status as RideFilterValues["status"]) || "" }}
-        onApply={handleApplyFilters}
-        onReset={handleResetFilters}
+      <div className="flex items-center justify-between bg-background/50 backdrop-blur-sm sticky top-0 z-10 py-2 px-1">
+        <div className="flex items-center gap-2">
+          <div className="bg-primary/10 p-1.5 rounded-lg">
+            <Car className="h-5 w-5 text-primary" />
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-foreground uppercase">
+            Rides
+          </h2>
+          <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest bg-accent px-2 py-0.5 rounded-full opacity-70">
+            {totalRecords} Total
+          </span>
+        </div>
+      </div>
+
+      <AutoFilters
+        schema={FILTER_SCHEMA}
+        controller={controller}
+        isFetching={isLoading}
+        compact={true}
+        className="border-none shadow-none bg-accent/20"
       />
 
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
@@ -66,9 +93,12 @@ export default function RideList() {
           columns={columns}
           data={rides}
           pageIndex={page - 1}
+          pageSize={limit}
           pageCount={totalPages}
-          totalRecords={totalRecords}
           onPageChange={handlePageChange}
+          onPageSizeChange={(size) => controller.apply({ limit: size, page: 1 })}
+          isLoading={isLoading}
+          isFetching={isFetching}
         />
       </div>
 

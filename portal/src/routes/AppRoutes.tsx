@@ -11,7 +11,7 @@ const Root = lazy(() => import("@/layouts/Root"));
 // Lazy imports for features
 const Dashboard = lazy(() => import("@/features/dashboard/pages"));
 const UserList = lazy(() => import("@/features/users/pages/list"));
-const DriverList = lazy(() => import("@/features/drivers/pages"));
+const DriverList = lazy(() => import("@/features/drivers/pages/list"));
 const DriverDetail = lazy(() => import("@/features/drivers/pages/Detail"));
 const RideList = lazy(() => import("@/features/rides/pages"));
 const VehicleTypeList = lazy(() => import("@/features/vehicle-types/pages"));

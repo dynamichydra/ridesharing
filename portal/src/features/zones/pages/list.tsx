@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Plus, Navigation } from "lucide-react";
+import { Plus, Navigation, Map as MapIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/data-table";
 import { useFilterController } from "@/components/filters/useFilterController";
@@ -19,7 +19,7 @@ import {
   useCountries,
   useDetectZone,
 } from "../hooks";
-import type { Zone } from "../types";
+import type { Zone, Pagination } from "../types";
 import type { ZoneFormState, ZoneDetectFormState } from "../components/form";
 
 const EMPTY_ZONE_FORM: ZoneFormState = {
@@ -38,6 +38,7 @@ const EMPTY_DETECT_FORM: ZoneDetectFormState = {
 
 export default function ZoneList() {
   const controller = useFilterController();
+  const [pageSize, setPageSize] = useState(10);
 
   // Dialog open/close states
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -50,17 +51,13 @@ export default function ZoneList() {
   const [detectValues, setDetectValues] = useState<ZoneDetectFormState>(EMPTY_DETECT_FORM);
   const [detectedZoneName, setDetectedZoneName] = useState<string | null | undefined>(undefined);
 
-  // FIX 1: Read page exactly from controller.applied just like DriverList does
   const page = Number(controller.applied.page) || 1;
-
-  // FIX 2: Safely extract filter state directly from controller.applied
   const countryId = (controller.applied.countryId as string) || undefined;
 
-  // React Query Hooks
   const { data: countriesData } = useCountries();
-  const { data: zonesResponse, isFetching } = useZones({
+  const { data: zonesResponse, isLoading, isFetching } = useZones({
     page,
-    limit: 10,
+    limit: pageSize,
     countryId,
   });
 
@@ -71,11 +68,9 @@ export default function ZoneList() {
 
   const flatZones: Zone[] = zonesResponse?.MESSAGE || [];
 
-  // FIX 3: Fixed the Pagination type constraint error by bypassing strict interface mapping 
-  // and directly reading fields as returned from the API shape (Screenshot 2)
-  const pagination = zonesResponse?.PAGINATION;
+  const pagination = zonesResponse?.PAGINATION as unknown as Pagination | undefined;
   const totalPages = pagination?.totalPages || 1;
-  const totalItems = pagination?.total || flatZones.length; 
+  const totalItems = pagination?.totalItems ?? flatZones.length;
 
   const countriesMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -83,7 +78,6 @@ export default function ZoneList() {
     return map;
   }, [countriesData]);
 
-  // FIX 4: Update page indices via filter controller actions exactly like DriverList
   const handlePageChange = useCallback((zeroBasedIndex: number) => {
     controller.apply({ page: zeroBasedIndex + 1 });
   }, [controller]);
@@ -149,7 +143,6 @@ export default function ZoneList() {
       lng: parseFloat(detectValues.lng),
     }, {
       onSuccess: (res) => {
-        // FIX 5: Fixes Screenshot 1 error. Mutation resolves directly to the Zone object shape
         setDetectedZoneName(res?.name || null);
       },
     });
@@ -167,37 +160,58 @@ export default function ZoneList() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <ZoneFilters controller={controller} isFetching={isFetching} />
-        <div className="flex items-center gap-2 self-end sm:self-auto">
+      <div className="flex items-center justify-between bg-background/50 backdrop-blur-sm sticky top-0 z-10 py-2 px-1">
+        <div className="flex items-center gap-2">
+          <div className="bg-primary/10 p-1.5 rounded-lg">
+            <MapIcon className="h-5 w-5 text-primary" />
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-foreground uppercase">
+            Zones
+          </h2>
+          <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest bg-accent px-2 py-0.5 rounded-full opacity-70">
+            {totalItems} Total
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
+            size="sm"
             onClick={() => {
               setDetectValues(EMPTY_DETECT_FORM);
               setDetectedZoneName(undefined);
               setIsDetectOpen(true);
             }}
-            className="cursor-pointer gap-2"
+            className="gap-2 h-8"
           >
             <Navigation className="h-4 w-4" /> Detect Zone
           </Button>
           <Button
             onClick={handleAddClick}
-            className="cursor-pointer gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+            size="sm"
+            className="gap-2 shadow-sm hover:shadow-md transition-all active:scale-[0.98] h-8"
           >
             <Plus className="h-4 w-4" /> Add Zone
           </Button>
         </div>
       </div>
 
+      <ZoneFilters controller={controller} isFetching={isLoading} />
+
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
         <DataTable
           columns={columns}
           data={flatZones}
           pageIndex={page - 1}
+          pageSize={pageSize}
           pageCount={totalPages}
-          totalRecords={totalItems}
           onPageChange={handlePageChange}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            controller.apply({ page: 1 });
+          }}
+          isLoading={isLoading}
+          isFetching={isFetching}
         />
       </div>
 

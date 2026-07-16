@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { CarFront, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/data-table";
 import { useFilterController } from "@/components/filters/useFilterController";
@@ -50,6 +50,7 @@ const EMPTY_PRICING_FORM: VehicleTypePricingFormValues = {
 export default function VehicleTypeList() {
   const queryClient = useQueryClient();
   const { draft, applied, setDraftValue, apply, reset } = useFilterController({ page: 1 });
+  const [pageSize, setPageSize] = useState(10);
 
   const [selectedVehicleType, setSelectedVehicleType] = useState<VehicleType | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -77,7 +78,7 @@ const [pricingErrors, setPricingErrors] = useState<
   const { data, isLoading, isFetching } = useVehicleTypes({
     ...vehicleTypeFilterParams,
     page,
-    limit: 10,
+    limit: pageSize,
   });
   const { data: countriesData } = useCountries();
   const { data: pricingData } = useVehicleTypePricingForCountry(selectedCountryId || undefined);
@@ -255,25 +256,35 @@ const [pricingErrors, setPricingErrors] = useState<
     apply({ page: pageIndex + 1 });
   };
 
-  if (isLoading) {
-    return <div className="py-8 text-center text-muted-foreground">Loading vehicle types…</div>;
-  }
-
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between py-2 px-1">
+        <div className="flex items-center gap-2">
+          <div className="bg-primary/10 p-1.5 rounded-lg">
+            <CarFront className="h-5 w-5 text-primary" />
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-foreground uppercase">
+            Vehicle Types
+          </h2>
+          <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest bg-accent px-2 py-0.5 rounded-full opacity-70">
+            {totalRecords} Total
+          </span>
+        </div>
+
+        <Button
+          onClick={handleOpenCreate}
+          size="sm"
+          className="gap-2 shadow-sm hover:shadow-md transition-all active:scale-[0.98] h-8"
+        >
+          <Plus className="h-4 w-4" />
+          Add Vehicle Type
+        </Button>
+      </div>
+
       <VehicleTypeFilters
         controller={{ draft, applied, setDraftValue, apply, reset }}
         isFetching={isFetching}
         countries={countries}
-        actions={
-          <Button
-            onClick={handleOpenCreate}
-            className="bg-primary hover:bg-primary/90 text-white flex items-center gap-2 cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            Add Vehicle Type
-          </Button>
-        }
       />
 
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
@@ -281,9 +292,15 @@ const [pricingErrors, setPricingErrors] = useState<
           columns={columns}
           data={vehicleTypes}
           pageIndex={page - 1}
+          pageSize={pageSize}
           pageCount={totalPages}
-          totalRecords={totalRecords}
           onPageChange={handlePageChange}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            apply({ page: 1 });
+          }}
+          isLoading={isLoading}
+          isFetching={isFetching}
         />
       </div>
 
