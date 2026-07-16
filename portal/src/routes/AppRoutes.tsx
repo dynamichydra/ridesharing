@@ -10,7 +10,7 @@ const Root = lazy(() => import("@/layouts/Root"));
 
 // Lazy imports for features
 const Dashboard = lazy(() => import("@/features/dashboard/pages"));
-const UserList = lazy(() => import("@/features/users/pages"));
+const UserList = lazy(() => import("@/features/users/pages/list"));
 const DriverList = lazy(() => import("@/features/drivers/pages"));
 const RideList = lazy(() => import("@/features/rides/pages"));
 const VehicleTypeList = lazy(() => import("@/features/vehicle-types/pages"));

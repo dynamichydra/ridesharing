@@ -2,16 +2,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { DataTable } from "@/components/data-table/data-table";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { UserPlus } from "lucide-react";
 import { CreateRiderDialog } from "../components/dialog";
 
-import { AutoFilters, type FilterSchema } from "@/components/filters/AutoFilters";
+import {
+  AutoFilters,
+  type FilterSchema,
+} from "@/components/filters/AutoFilters";
 import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getRiderColumns } from "../components/column";
 import { useRiders, useUpdateRider } from "../hooks";
-import type { Rider, Pagination } from "../types";
-
+import type { Rider } from "../types";
+import { Plus, User } from "lucide-react";
 
 const FILTER_SCHEMA: FilterSchema = {
   search: {
@@ -45,7 +47,6 @@ const FILTER_SCHEMA: FilterSchema = {
   },
 };
 
-
 function toBool(value: string | undefined): boolean | undefined {
   if (value === "true") return true;
   if (value === "false") return false;
@@ -54,49 +55,46 @@ function toBool(value: string | undefined): boolean | undefined {
 
 export default function UserList() {
   const queryClient = useQueryClient();
-  const { draft, applied, setDraftValue, apply, reset } = useFilterController();
+  const controller = useFilterController();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const page = Number(applied.page) || 1;
 
   const { data, isLoading, isFetching } = useRiders({
-    search: applied.search,
-    isVerified: toBool(applied.isVerified),
-    isBlocked: toBool(applied.isBlocked),
-    page,
+    search: controller.applied.search,
+    isVerified: toBool(controller.applied.isVerified),
+    isBlocked: toBool(controller.applied.isBlocked),
     limit: 10,
+    page: 1,
   });
   const updateMutation = useUpdateRider();
 
-  const riders = data?.MESSAGE || [];
-  const pagination = data?.PAGINATION as unknown as Pagination | undefined;
-  const totalPages = pagination?.totalPages || 1;
-  const totalRecords = pagination?.totalItems ?? riders.length;
-
   const refreshList = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["riders"], refetchType: "active" });
+    queryClient.invalidateQueries({
+      queryKey: ["riders"],
+      refetchType: "active",
+    });
   }, [queryClient]);
   const handleOpenCreate = () => {
-  setIsCreateOpen(true);
-};
+    setIsCreateOpen(true);
+  };
 
   const handleToggleVerify = useCallback(
     (rider: Rider) => {
       updateMutation.mutate(
         { id: rider.id, payload: { isVerified: !rider.isVerified } },
-        { onSuccess: refreshList }
+        { onSuccess: refreshList },
       );
     },
-    [updateMutation, refreshList]
+    [updateMutation, refreshList],
   );
 
   const handleToggleBlock = useCallback(
     (rider: Rider) => {
       updateMutation.mutate(
         { id: rider.id, payload: { isBlocked: !rider.isBlocked } },
-        { onSuccess: refreshList }
+        { onSuccess: refreshList },
       );
     },
-    [updateMutation, refreshList]
+    [updateMutation, refreshList],
   );
 
   const columns = useMemo(
@@ -105,46 +103,60 @@ export default function UserList() {
         onToggleVerify: handleToggleVerify,
         onToggleBlock: handleToggleBlock,
       }),
-    [handleToggleVerify, handleToggleBlock]
+    [handleToggleVerify, handleToggleBlock],
   );
 
   const handlePageChange = (pageIndex: number) => {
-    apply({ page: pageIndex + 1 });
+    controller.apply({ page: pageIndex + 1 });
   };
 
   return (
-    <div className="space-y-4">
-      <AutoFilters
-  schema={FILTER_SCHEMA}
-  controller={{ draft, setDraftValue, apply, reset }}
-  isFetching={isFetching}
-  actions={
-    <Button
-      onClick={handleOpenCreate}
-      className="bg-primary hover:bg-primary/90 text-white flex items-center gap-2 cursor-pointer"
-    >
-      <UserPlus className="h-4 w-4" />
-      Add User
-    </Button>
-  }
-  
-/>
+    <div className="w-full flex-col p-3 md:p-6 flex gap-4">
+      {/* Ultra Compact Header */}
+      <div className="flex items-center justify-between bg-background/50 backdrop-blur-sm sticky top-0 z-10 py-2 px-1">
+        <div className="flex items-center gap-2">
+          <div className="bg-primary/10 p-1.5 rounded-lg">
+            <User className="h-5 w-5 text-primary" />
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-foreground uppercase">
+            Rider
+          </h2>
+          <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest bg-accent px-2 py-0.5 rounded-full opacity-70">
+            {data?.COUNT ?? 0} Total
+          </span>
+        </div>
 
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-        {isLoading ? (
-          <div className="py-8 text-center text-muted-foreground">Loading users…</div>
-        ) : (
-          <DataTable
-            columns={columns}
-            data={riders}
-            pageIndex={page - 1}
-            pageCount={totalPages}
-            totalRecords={totalRecords}
-            onPageChange={handlePageChange}
-          />
-        )}
+        <Button
+          onClick={() => handleOpenCreate()}
+          size="sm"
+          className="gap-2 shadow-sm hover:shadow-md transition-all active:scale-[0.98] h-8"
+        >
+          <Plus className="h-4 w-4" /> Create Rider
+        </Button>
       </div>
-          <CreateRiderDialog
+
+      {/* Tighter Filter Section */}
+      <AutoFilters
+        schema={FILTER_SCHEMA}
+        controller={controller}
+        isFetching={isLoading}
+        compact={true}
+        className="border-none shadow-none bg-accent/20"
+      />
+
+      <DataTable
+        columns={columns}
+        data={data?.MESSAGE ?? []}
+        pageCount={data?.PAGINATION?.totalPages || 0}
+        pageIndex={(Number(controller.applied.page) || 1) - 1}
+        pageSize={Number(controller.applied.limit) || 10}
+        onPageChange={handlePageChange}
+        onPageSizeChange={(size) => controller.apply({ limit: size, page: 1 })}
+        isLoading={isLoading}
+        isFetching={isFetching}
+      />
+
+      <CreateRiderDialog
         open={isCreateOpen}
         onOpenChange={setIsCreateOpen}
         onSuccess={refreshList}
