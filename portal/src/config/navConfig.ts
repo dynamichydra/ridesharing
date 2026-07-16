@@ -5,6 +5,7 @@ import {
   Car,
   CarFront,
   Map,
+  Globe,
   DollarSign,
   CreditCard,
   type LucideIcon
@@ -64,6 +65,13 @@ export const navItem: NavType[] = [
     title: "Zones Geofence",
     url: "/zones",
     icon: Map,
+    isActive: true,
+    type: "regular",
+  },
+  {
+    title: "Locations",
+    url: "/locations",
+    icon: Globe,
     isActive: true,
     type: "regular",
   },

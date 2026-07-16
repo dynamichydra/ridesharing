@@ -15,6 +15,7 @@ const DriverList = lazy(() => import("@/features/drivers/pages"));
 const RideList = lazy(() => import("@/features/rides/pages"));
 const VehicleTypeList = lazy(() => import("@/features/vehicle-types/pages"));
 const ZoneList = lazy(() => import("@/features/zones/pages"));
+const GeoList = lazy(() => import("@/features/geo/pages"));
 const FareRuleList = lazy(() => import("@/features/fare-rules/pages"));
 const SubscriptionPlanList = lazy(() => import("@/features/subscriptions/pages"));
 
@@ -90,6 +91,14 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<Loader />}>
             <ZoneList />
+          </Suspense>
+        ),
+      },
+      {
+        path: "locations",
+        element: (
+          <Suspense fallback={<Loader />}>
+            <GeoList />
           </Suspense>
         ),
       },
