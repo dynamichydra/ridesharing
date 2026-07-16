@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { zonesApi } from "./api";
-import type { ZoneListParams, ZonePayload, UpdateZonePayload } from "./types";
+import { zonesApi, geoApi } from "./api";
+import type { ZoneListParams, ZonePayload, ZoneDetectPayload } from "./types";
 
 const ZONES_KEY = "zones";
+const COUNTRIES_KEY = "countries";
 
 export function useZones(params: ZoneListParams) {
   return useQuery({
@@ -17,6 +18,14 @@ export function useZone(id: string | undefined) {
     queryKey: [ZONES_KEY, id],
     queryFn: () => zonesApi.getById(id as string),
     enabled: !!id,
+  });
+}
+
+export function useCountries() {
+  return useQuery({
+    queryKey: [COUNTRIES_KEY],
+    queryFn: () => geoApi.listCountries(),
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -37,7 +46,7 @@ export function useCreateZone() {
 export function useUpdateZone() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: UpdateZonePayload }) =>
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<ZonePayload> }) =>
       zonesApi.update(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [ZONES_KEY], refetchType: "active" });
@@ -55,10 +64,19 @@ export function useDeleteZone() {
     mutationFn: (id: string) => zonesApi.remove(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [ZONES_KEY], refetchType: "active" });
-      toast.success("Zone deleted");
+      toast.success("Zone deleted successfully");
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to delete zone");
+    },
+  });
+}
+
+export function useDetectZone() {
+  return useMutation({
+    mutationFn: (payload: ZoneDetectPayload) => zonesApi.detect(payload),
+    onError: (err: any) => {
+      toast.error(err.message || "Coordinates match lookup failed");
     },
   });
 }

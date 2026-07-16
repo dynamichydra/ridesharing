@@ -8,12 +8,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import VehicleTypeForm from "./form";
-import type { VehicleTypeFormValues } from "../schema";
+import PricingForm from "./PricingForm";
+import type { VehicleTypeFormValues, VehicleTypePricingFormValues } from "../schema";
 import type { VehicleType } from "../types";
-
-
-//Create / Edit dialog — same form, different fields/copy by mode     
-
 
 interface VehicleTypeFormDialogProps {
   open: boolean;
@@ -56,10 +53,6 @@ export function VehicleTypeFormDialog({
     </Dialog>
   );
 }
-
-
-// Delete confirmation dialog 
-
 
 interface DeleteVehicleTypeDialogProps {
   open: boolean;
@@ -105,6 +98,51 @@ export function DeleteVehicleTypeDialog({
             Delete Vehicle Type
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface PricingFormDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  vehicleType: VehicleType | null;
+  countryName?: string;
+  values: VehicleTypePricingFormValues;
+  setValues: (v: VehicleTypePricingFormValues) => void;
+  errors: Partial<Record<keyof VehicleTypePricingFormValues, string>>;
+  onSubmit: (e: React.FormEvent) => void;
+  isPending: boolean;
+}
+
+export function PricingFormDialog({
+  open,
+  onOpenChange,
+  vehicleType,
+  countryName,
+  values,
+  setValues,
+  errors,
+  onSubmit,
+  isPending,
+}: PricingFormDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>Edit Pricing — {vehicleType?.name}</DialogTitle>
+          {countryName && (
+            <DialogDescription>Rate card for {countryName}.</DialogDescription>
+          )}
+        </DialogHeader>
+        <PricingForm
+          values={values}
+          setValues={setValues}
+          errors={errors}
+          onSubmit={onSubmit}
+          onCancel={() => onOpenChange(false)}
+          isPending={isPending}
+        />
       </DialogContent>
     </Dialog>
   );

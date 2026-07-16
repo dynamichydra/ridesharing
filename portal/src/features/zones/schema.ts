@@ -1,32 +1,31 @@
 import { z } from "zod";
 
-const polygonJsonSchema = z.string().min(1, "Polygon GeoJSON is required").refine(
-  (value) => {
-    try {
-      const parsed = JSON.parse(value);
-      return (
-        parsed &&
-        parsed.type === "Polygon" &&
-        Array.isArray(parsed.coordinates) &&
-        parsed.coordinates.length > 0
-      );
-    } catch {
-      return false;
-    }
-  },
-  {
-    message:
-      'Must be valid GeoJSON, e.g. { "type": "Polygon", "coordinates": [[[lng,lat], ...]] }',
-  }
-);
-
-export const zoneFormSchema = z.object({
+export const zoneSchema = z.object({
+  countryId: z.string().min(1, "Country is required"),
   name: z.string().min(1, "Zone name is required"),
   type: z.string().min(1, "Zone type is required"),
-  multiplier: z.string().optional(),
+  multiplier: z
+    .string()
+    .min(1, "Multiplier is required")
+    .regex(/^\d+(\.\d+)?$/, "Enter a valid decimal number")
+    .transform((val) => parseFloat(val)),
   description: z.string().optional(),
-  polygonText: polygonJsonSchema,
-  isActive: z.boolean().optional(),
+  polygon: z.string().min(1, "Polygon coordinates are required"),
 });
 
-export type ZoneFormValues = z.infer<typeof zoneFormSchema>;
+export type ZoneFormValues = z.infer<typeof zoneSchema>;
+
+export const zoneDetectSchema = z.object({
+  lat: z
+    .string()
+    .min(1, "Latitude is required")
+    .regex(/^-?\d+(\.\d+)?$/, "Must be a valid latitude decimal")
+    .transform((val) => parseFloat(val)),
+  lng: z
+    .string()
+    .min(1, "Longitude is required")
+    .regex(/^-?\d+(\.\d+)?$/, "Must be a valid longitude decimal")
+    .transform((val) => parseFloat(val)),
+});
+
+export type ZoneDetectFormValues = z.infer<typeof zoneDetectSchema>;

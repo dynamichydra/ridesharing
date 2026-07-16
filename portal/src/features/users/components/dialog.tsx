@@ -27,7 +27,7 @@ export function CreateRiderDialog({ open, onOpenChange, onSuccess }: CreateRider
     defaultValues: emptyRiderFormValues,
   });
 
-  // Reset the form every time the dialog is opened fresh.
+
   useEffect(() => {
     if (open) {
       form.reset(emptyRiderFormValues);

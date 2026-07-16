@@ -7,8 +7,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { SubscriptionPlanForm } from "./form";
-import type { SubscriptionPlanFormValues } from "./schema";
-import type { SubscriptionPlan, VehicleTypeOption } from "./types";
+import type { SubscriptionPlanFormValues } from "../schema";
+import type { SubscriptionPlan, LookupOption } from "../types";
 
 const FORM_ID = "subscription-plan-form";
 
@@ -17,18 +17,17 @@ interface SubscriptionPlanFormDialogProps {
   onOpenChange: (open: boolean) => void;
   selectedPlan: SubscriptionPlan | null;
   defaultValues: SubscriptionPlanFormValues;
-  vehicleTypes: VehicleTypeOption[];
+  countries: LookupOption[];
   isSaving: boolean;
   onSubmit: (values: SubscriptionPlanFormValues) => void;
 }
 
-// All dialogs for the Subscriptions feature live here as separate named exports.
 export function SubscriptionPlanFormDialog({
   open,
   onOpenChange,
   selectedPlan,
   defaultValues,
-  vehicleTypes,
+  countries,
   isSaving,
   onSubmit,
 }: SubscriptionPlanFormDialogProps) {
@@ -37,19 +36,24 @@ export function SubscriptionPlanFormDialog({
       <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {selectedPlan ? "Update Subscription Package" : "Create Onboarding Plan"}
+            {selectedPlan ? "Edit Subscription Plan" : "Create Subscription Plan"}
           </DialogTitle>
         </DialogHeader>
 
         <SubscriptionPlanForm
           formId={FORM_ID}
           defaultValues={defaultValues}
-          vehicleTypes={vehicleTypes}
+          countries={countries}
           onSubmit={onSubmit}
         />
 
         <DialogFooter className="pt-4">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="cursor-pointer"
+          >
             Cancel
           </Button>
           <Button
@@ -58,7 +62,7 @@ export function SubscriptionPlanFormDialog({
             className="bg-primary hover:bg-primary/90 text-white cursor-pointer"
             disabled={isSaving}
           >
-            Save Onboarding Plan
+            Save Plan
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -89,11 +93,16 @@ export function SubscriptionPlanDeleteDialog({
         </DialogHeader>
         <p className="text-sm text-muted-foreground py-2">
           Are you sure you want to delete{" "}
-          <span className="font-semibold text-foreground">{plan?.name}</span>? This will
-          deactivate the plan for drivers.
+          <span className="font-semibold text-foreground">{plan?.name}</span>? This is a soft
+          delete — the plan is deactivated, not permanently removed.
         </p>
         <DialogFooter className="pt-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="cursor-pointer"
+          >
             Cancel
           </Button>
           <Button

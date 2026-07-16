@@ -1,38 +1,35 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import {
-  createSubscriptionPlan,
-  deleteSubscriptionPlan,
-  fetchSubscriptionPlans,
-  fetchVehicleTypeOptions,
-  updateSubscriptionPlan,
-} from "./api";
+import { subscriptionPlansApi, lookupsApi } from "./api";
 import type {
-  CreateSubscriptionPlanPayload,
   SubscriptionPlanListParams,
+  CreateSubscriptionPlanPayload,
   UpdateSubscriptionPlanPayload,
 } from "./types";
 
+const SUBSCRIPTION_PLANS_KEY = "subscription-plans";
+
 export function useSubscriptionPlans(params: SubscriptionPlanListParams) {
   return useQuery({
-    queryKey: ["subscription-plans", params],
-    queryFn: () => fetchSubscriptionPlans(params),
+    queryKey: [SUBSCRIPTION_PLANS_KEY, params],
+    queryFn: () => subscriptionPlansApi.list(params),
   });
 }
 
-export function useVehicleTypeOptions() {
+export function useCountryOptions() {
   return useQuery({
-    queryKey: ["vehicle-types"],
-    queryFn: fetchVehicleTypeOptions,
+    queryKey: [SUBSCRIPTION_PLANS_KEY, "lookup-countries"],
+    queryFn: () => lookupsApi.listCountries(),
+    staleTime: 5 * 60 * 1000,
   });
 }
 
 export function useCreateSubscriptionPlan() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: CreateSubscriptionPlanPayload) => createSubscriptionPlan(payload),
+    mutationFn: (payload: CreateSubscriptionPlanPayload) => subscriptionPlansApi.create(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["subscription-plans"] });
+      queryClient.invalidateQueries({ queryKey: [SUBSCRIPTION_PLANS_KEY], refetchType: "active" });
       toast.success("Subscription plan created!");
     },
     onError: (err: any) => {
@@ -45,9 +42,9 @@ export function useUpdateSubscriptionPlan() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdateSubscriptionPlanPayload }) =>
-      updateSubscriptionPlan(id, payload),
+      subscriptionPlansApi.update(id, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["subscription-plans"] });
+      queryClient.invalidateQueries({ queryKey: [SUBSCRIPTION_PLANS_KEY], refetchType: "active" });
       toast.success("Subscription plan updated!");
     },
     onError: (err: any) => {
@@ -59,9 +56,9 @@ export function useUpdateSubscriptionPlan() {
 export function useDeleteSubscriptionPlan() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteSubscriptionPlan(id),
+    mutationFn: (id: string) => subscriptionPlansApi.remove(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["subscription-plans"] });
+      queryClient.invalidateQueries({ queryKey: [SUBSCRIPTION_PLANS_KEY], refetchType: "active" });
       toast.success("Subscription plan removed!");
     },
     onError: (err: any) => {

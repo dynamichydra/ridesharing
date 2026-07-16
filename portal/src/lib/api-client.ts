@@ -43,6 +43,10 @@ export const apiClient = {
     const response = await API.patch<BackendResponse<T>>(url, data);
     return handleResponse(response);
   },
+  put: async <T>(url: string, data: any) => {
+    const response = await API.put<BackendResponse<T>>(url, data);
+    return handleResponse(response);
+  },
   delete: async <T>(url: string) => {
     const response = await API.delete<BackendResponse<T>>(url);
     return handleResponse(response);

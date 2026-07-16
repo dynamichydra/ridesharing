@@ -5,16 +5,15 @@ import type {
   VehicleTypeListParams,
   CreateVehicleTypePayload,
   UpdateVehicleTypePayload,
+  VehicleTypePricing,
+  SetVehicleTypePricingPayload,
+  Country,
 } from "./types";
 
 const BASE_URL = "/vehicle-types";
+const GEO_BASE_URL = "/geo";
 
 export const vehicleTypesApi = {
-  // GET /vehicle-types?all=true&page=&limit=  (Admin view)
-  // NOTE: the API doc only confirms all/page/limit for this endpoint. Any
-  // extra keys spread in here (name[ILIKE], isActive, from the AutoFilters
-  // schema) are NOT confirmed against the backend contract — verify via
-  // Network tab that the server actually parses them before relying on it.
   list: (params: VehicleTypeListParams = {}) => {
     const { page, limit, ...rest } = params;
     const query = buildQueryString({
@@ -28,14 +27,34 @@ export const vehicleTypesApi = {
 
   getById: (id: string) => apiClient.get<VehicleType>(`${BASE_URL}/${id}`),
 
-  // POST /vehicle-types (Admin) { name, capacity, sortOrder } — catalog only, no rates.
   create: (payload: CreateVehicleTypePayload) =>
     apiClient.post<VehicleType>(BASE_URL, payload),
 
-  // PATCH /vehicle-types/:id (Admin) — only capacity/isActive submitted from the Edit form.
   update: (id: string, payload: UpdateVehicleTypePayload) =>
     apiClient.patch<VehicleType>(`${BASE_URL}/${id}`, payload),
 
-  // DELETE /vehicle-types/:id (Admin) — soft-delete (deactivate)
   remove: (id: string) => apiClient.delete(`${BASE_URL}/${id}`),
+};
+
+export const vehicleTypePricingApi = {
+  // GET /vehicle-types/pricing?countryId=  (Admin) — every vehicle type's rate card in one country
+  listForCountry: (countryId: string) =>
+    apiClient.get<VehicleTypePricing[]>(`${BASE_URL}/pricing?countryId=${countryId}`),
+
+  // GET /vehicle-types/:id/pricing?countryId=  (Public) — 404s if no rate card exists
+  getForVehicleType: (vehicleTypeId: string, countryId: string) =>
+    apiClient.get<VehicleTypePricing>(
+      `${BASE_URL}/${vehicleTypeId}/pricing?countryId=${countryId}`
+    ),
+
+  // PUT /vehicle-types/:id/pricing  (Admin) — upsert
+  set: (vehicleTypeId: string, payload: SetVehicleTypePricingPayload) =>
+    apiClient.put<VehicleTypePricing>(`${BASE_URL}/${vehicleTypeId}/pricing`, payload),
+};
+
+// GET /geo/admin/countries (Admin, paginated) — confirmed base path only.
+// Response envelope/shape below is ASSUMED to follow the same pattern as
+// every other admin list endpoint; verify via Network tab.
+export const countriesApi = {
+  list: () => apiClient.get<Country[]>(`${GEO_BASE_URL}/admin/countries?page=1&limit=100`),
 };

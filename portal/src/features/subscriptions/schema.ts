@@ -1,43 +1,46 @@
 import { z } from "zod";
 
-export const subscriptionPlanTypeOptions = [
-  "monthly",
-  "quarterly",
-  "yearly",
-  "lifetime",
-  "custom",
-] as const;
+export const subscriptionPlanTypeOptions = ["monthly", "quarterly", "yearly", "lifetime"] as const;
 
-// Numeric-ish fields are kept as plain strings here (matching how the inputs
-// bind) and converted to numbers/null in api.ts when building the payload.
-// This avoids the same input/output-divergence issue z.coerce/.optional()
-// combos can cause with zodResolver.
-export const subscriptionPlanSchema = z.object({
-  name: z.string().min(1, "Plan name is required"),
-  type: z.enum(subscriptionPlanTypeOptions),
-  price: z.string().min(1, "Price is required"),
-  durationDays: z.string(),
-  trialDays: z.string(),
-  maxRidesPerDay: z.string(),
-  sortOrder: z.string(),
-  isActive: z.boolean(),
-  razorpayPlanId: z.string(),
-  featuresText: z.string(),
-  vehicleTypeIds: z.array(z.string()),
-});
+
+export const subscriptionPlanSchema = z
+  .object({
+    name: z.string().min(1, { message: "Plan name is required" }),
+    countryId: z.string().min(1, { message: "Country is required" }),
+    type: z.enum(subscriptionPlanTypeOptions, { message: "Plan type is required" }),
+    currencyCode: z.string().min(1, { message: "Currency is required" }),
+    priceMinor: z.coerce
+      .number({ message: "Price is required" })
+      .positive({ message: "Price must be greater than 0" }),
+    durationDays: z.string(),
+    trialDays: z.coerce.number({ message: "Trial days is required" }).min(0, {
+      message: "Trial days can't be negative",
+    }),
+    featuresText: z.string(),
+    maxRidesPerDay: z.string(),
+    sortOrder: z.coerce.number({ message: "Sort order is required" }),
+  })
+  .superRefine((values, ctx) => {
+    if (values.type !== "lifetime" && !values.durationDays.trim()) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Duration is required unless the plan is Lifetime",
+        path: ["durationDays"],
+      });
+    }
+  });
 
 export type SubscriptionPlanFormValues = z.infer<typeof subscriptionPlanSchema>;
 
 export const emptySubscriptionPlanFormValues: SubscriptionPlanFormValues = {
   name: "",
+  countryId: "",
   type: "monthly",
-  price: "",
+  currencyCode: "",
+  priceMinor: 0,
   durationDays: "30",
-  trialDays: "0",
-  maxRidesPerDay: "",
-  sortOrder: "0",
-  isActive: true,
-  razorpayPlanId: "",
+  trialDays: 0,
   featuresText: "",
-  vehicleTypeIds: [],
+  maxRidesPerDay: "",
+  sortOrder: 1,
 };

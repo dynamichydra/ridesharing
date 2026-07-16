@@ -7,26 +7,24 @@ import {
 } from "@/components/ui/card";
 import ZoneList from "./list";
 
-export default function ZoneListPage() {
+export default function ZonesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight text-foreground">
-          Zone Geofencing
-        </h2>
+        <h2 className="text-3xl font-bold tracking-tight text-foreground">Operational Zones</h2>
         <p className="text-muted-foreground mt-1">
-          Configure geo-boundary locations, surge multiplier policies, and service zones.
+          Configure regional geofenced perimeters and dynamic multiplier rules.
         </p>
       </div>
 
       <Card className="border-border bg-card shadow-sm">
         <CardHeader>
-          <CardTitle>Configured Geofences</CardTitle>
+          <CardTitle>Zone Control Management</CardTitle>
           <CardDescription>
-            Define zones to apply region-specific pricing and surge rules.
+            Filter structures or apply target rules across global operational boundaries.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <ZoneList />
         </CardContent>
       </Card>

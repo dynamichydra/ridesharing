@@ -1,23 +1,24 @@
-export type SubscriptionPlanType = "monthly" | "quarterly" | "yearly" | "lifetime" | "custom";
+export type SubscriptionPlanType = "monthly" | "quarterly" | "yearly" | "lifetime";
+
 
 export interface SubscriptionPlan {
   id: string;
   name: string;
   type: SubscriptionPlanType;
-  price: string;
-  durationDays: number | null;
+  countryId: string;
+  currencyCode: string;
+  priceMinor: number;
+  durationDays: number | null; 
   trialDays: number;
   features: string[] | null;
-  vehicleTypeIds: string[] | null;
   maxRidesPerDay: number | null;
   sortOrder: number;
   isActive: boolean;
-  razorpayPlanId: string | null;
-}
-
-export interface VehicleTypeOption {
-  id: string;
-  name: string;
+  createdAt: string;
+  updatedAt: string;
+  vehicleTypeIds?: string[] | null;
+  gateway?: string | null;
+  gatewayPlanId?: string | null;
 }
 
 export interface SubscriptionPlanListParams {
@@ -25,47 +26,30 @@ export interface SubscriptionPlanListParams {
   limit?: number;
 }
 
-// Normalized pagination shape used throughout this feature.
-// Raw API returns { currentPage, itemsPerPage, totalItems, totalPages } —
-// api.ts maps that into this shape.
+
 export interface Pagination {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
-
-export interface SubscriptionPlanListResult {
-  data: SubscriptionPlan[];
-  pagination: Pagination;
-}
-
-export interface CreateSubscriptionPlanPayload {
-  name: string;
-  type: SubscriptionPlanType;
-  price: string;
-  durationDays: number | null;
-  trialDays: number;
-  maxRidesPerDay: number | null;
-  sortOrder: number;
-  isActive: boolean;
-  razorpayPlanId: string | null;
-  features: string[];
-  vehicleTypeIds: string[];
-}
-
-export type UpdateSubscriptionPlanPayload = Partial<CreateSubscriptionPlanPayload>;
-
-export interface RawPagination {
   currentPage: number;
   itemsPerPage: number;
   totalItems: number;
   totalPages: number;
 }
 
-export interface ApiResponse<T> {
-  SUCCESS: boolean;
-  MESSAGE: T;
-  COUNT?: number;
-  PAGINATION?: RawPagination;
+export interface CreateSubscriptionPlanPayload {
+  name: string;
+  countryId: string;
+  type: SubscriptionPlanType;
+  currencyCode: string;
+  priceMinor: number;
+  durationDays: number | null;
+  trialDays: number;
+  features: string[];
+  maxRidesPerDay: number | null;
+  sortOrder: number;
+}
+
+export type UpdateSubscriptionPlanPayload = Partial<CreateSubscriptionPlanPayload>;
+
+export interface LookupOption {
+  id: string;
+  name: string;
 }

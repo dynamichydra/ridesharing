@@ -18,8 +18,8 @@ export type FilterSchema = {
       | { label: string; value: any }[]
       | readonly { label: string; value: any }[];
     placeholder?: string;
-    field?: string; // The actual DB field name (if different from key)
-    defaultValue?: any; // Default value for this filter
+    field?: string;
+    defaultValue?: any;
   };
 };
 
@@ -63,8 +63,8 @@ export function AutoFilters({
   };
 
   return (
-    <div 
-      onKeyDown={onKeyDown} 
+    <div
+      onKeyDown={onKeyDown}
       className={cn(
         "bg-card rounded-lg border shadow-sm transition-all duration-200",
         compact ? "p-2" : "p-4",
@@ -72,16 +72,20 @@ export function AutoFilters({
       )}
     >
       <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1.5">
-        {/* Filter Inputs in the same row */}
         {Object.entries(schema).map(([key, cfg]) => {
           const fieldName = cfg.field || key;
           const paramKey =
-            cfg.operator === "equals" 
-              ? fieldName 
+            cfg.operator === "equals"
+              ? fieldName
               : `${fieldName}[${cfg.operator}]`;
 
           const value = draft[paramKey] ?? "";
           const sharedPlaceholder = cfg.placeholder ?? cfg.label;
+          // For select filters, a supplied `placeholder` becomes the default
+          // ("unselected") option's label instead of the old hardcoded
+          // "All {label}" text. Omitting placeholder keeps prior behavior
+          // exactly as-is for every other feature already using this filter.
+          const noneOptionLabel = cfg.placeholder ?? `All ${cfg.label}`;
 
           return (
             <div key={key} className="w-[180px]">
@@ -96,7 +100,7 @@ export function AutoFilters({
                       compact ? "h-8 text-xs" : "h-9 text-sm"
                     )}
                   >
-                    <NativeSelectOption value="none">All {cfg.label}</NativeSelectOption>
+                    <NativeSelectOption value="none">{noneOptionLabel}</NativeSelectOption>
                     {cfg.options?.map((o) => (
                       <NativeSelectOption key={o.value} value={o.value}>
                         {o.label}
@@ -136,11 +140,10 @@ export function AutoFilters({
           );
         })}
 
-        {/* Button Group for Search & Reset */}
         <div className="flex items-center shrink-0">
-          <Button 
-            onClick={() => apply()} 
-            disabled={isFetching} 
+          <Button
+            onClick={() => apply()}
+            disabled={isFetching}
             size={compact ? "sm" : "default"}
             variant={"outline"}
             className={cn(
@@ -170,7 +173,6 @@ export function AutoFilters({
           </Button>
         </div>
 
-        {/* External Actions */}
         {actions && (
           <div className="flex items-center gap-2 shrink-0 ml-auto border-l pl-2 border-border/50">
             {actions}

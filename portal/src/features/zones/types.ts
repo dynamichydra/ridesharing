@@ -1,18 +1,11 @@
-export type ZoneType = string;
-
-export interface ZonePolygon {
-  type: "Polygon";
-  coordinates: number[][][];
-}
-
-
 export interface Zone {
   id: string;
+  countryId: string;
   name: string;
-  type: ZoneType;
+  type: string;
+  polygon: string; 
+  multiplier: number;
   description: string | null;
-  multiplier: string;
-  polygon: ZonePolygon;
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -21,8 +14,8 @@ export interface Zone {
 export interface ZoneListParams {
   page?: number;
   limit?: number;
+  countryId?: string;
 }
-
 
 export interface Pagination {
   currentPage: number;
@@ -33,11 +26,21 @@ export interface Pagination {
 
 export interface ZonePayload {
   name: string;
-  type: ZoneType;
-  polygon: ZonePolygon;
-  multiplier?: string;
-  description?: string | null;
-  isActive?: boolean;
+  countryId: string;
+  type: string;
+  polygon: string;
+  multiplier?: number;
+  description?: string;
 }
 
-export type UpdateZonePayload = Partial<ZonePayload>;
+export interface ZoneDetectPayload {
+  lat: number;
+  lng: number;
+}
+
+export interface Country {
+  id: string;
+  name: string;
+  isoCode: string;
+  currencyCode: string;
+}

@@ -1,209 +1,223 @@
-import { useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Form,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-  FormMessage,
-} from "@/components/ui/form";
+import { Button } from "@/components/ui/button";
 import { DialogFooter } from "@/components/ui/dialog";
-import { useCreateZone, useUpdateZone } from "../hooks";
-import { zoneFormSchema, type ZoneFormValues } from "../schema";
-import type { Zone } from "../types";
+import type { Country } from "../types";
 
-interface ZoneFormProps {
-  initialData?: Zone | null;
-  onSuccess: () => void;
-  onCancel: () => void;
+export interface ZoneFormState {
+  countryId: string;
+  name: string;
+  type: string;
+  multiplier: string;
+  polygon: string;
+  description: string;
 }
 
-const EMPTY: ZoneFormValues = {
-  name: "",
-  type: "city",
-  multiplier: "1.00",
-  description: "",
-  polygonText: "",
-  isActive: true,
-};
+interface ZoneFormProps {
+  values: ZoneFormState;
+  countries: Country[];
+  onChange: (values: ZoneFormState) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  onCancel: () => void;
+  isPending: boolean;
+  submitLabel: string;
+}
 
-
-export default function ZoneForm({ initialData, onSuccess, onCancel }: ZoneFormProps) {
-  const createMutation = useCreateZone();
-  const updateMutation = useUpdateZone();
-
-  const form = useForm<ZoneFormValues>({
-    resolver: zodResolver(zoneFormSchema),
-    defaultValues: EMPTY,
-  });
-
-  useEffect(() => {
-    if (initialData) {
-      form.reset({
-        name: initialData.name,
-        type: initialData.type,
-        multiplier: initialData.multiplier,
-        description: initialData.description ?? "",
-        polygonText: JSON.stringify(initialData.polygon, null, 2),
-        isActive: initialData.isActive,
-      });
-    } else {
-      form.reset(EMPTY);
-    }
-  }, [initialData, form]);
-
-  const onSubmit = async (values: ZoneFormValues) => {
-    const polygon = JSON.parse(values.polygonText);
-    const payload = {
-      name: values.name,
-      type: values.type,
-      polygon,
-      multiplier: values.multiplier || undefined,
-      description: values.description || undefined,
-      isActive: values.isActive,
-    };
-
-    try {
-      if (initialData) {
-        await updateMutation.mutateAsync({ id: initialData.id, payload });
-      } else {
-        await createMutation.mutateAsync(payload);
-        form.reset(EMPTY);
-      }
-      onSuccess();
-    } catch (error) {
-      console.error("Zone form error:", error);
-    }
-  };
-
-  const isLoading = createMutation.isPending || updateMutation.isPending;
-
+export default function ZoneForm({
+  values,
+  countries,
+  onChange,
+  onSubmit,
+  onCancel,
+  isPending,
+  submitLabel,
+}: ZoneFormProps) {
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-3">
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem className="space-y-2">
-              <FormLabel>
-                Zone Name <span className="text-red-500">*</span>
-              </FormLabel>
-              <FormControl>
-                <Input placeholder="e.g. Kolkata City Centre" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+    <form onSubmit={onSubmit} className="space-y-4 py-3 text-foreground">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="z-country">
+            Country <span className="text-red-500">*</span>
+          </Label>
+          <select
+            id="z-country"
+            className="w-full flex h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            value={values.countryId}
+            onChange={(e) => onChange({ ...values, countryId: e.target.value })}
+            required
+          >
+            <option value="" disabled>Select Country</option>
+            {countries.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="type"
-            render={({ field }) => (
-              <FormItem className="space-y-2">
-                <FormLabel>
-                  Zone Type <span className="text-red-500">*</span>
-                </FormLabel>
-                <FormControl>
-                  <Input placeholder="e.g. city, airport, suburb" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+        <div className="space-y-2">
+          <Label htmlFor="z-name">
+            Zone Name <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="z-name"
+            placeholder="e.g. Downtown Core"
+            value={values.name}
+            onChange={(e) => onChange({ ...values, name: e.target.value })}
+            required
           />
-          <FormField
-            control={form.control}
-            name="multiplier"
-            render={({ field }) => (
-              <FormItem className="space-y-2">
-                <FormLabel>Multiplier</FormLabel>
-                <FormControl>
-                  <Input placeholder="1.00" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="z-type">
+            Zone Type <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="z-type"
+            placeholder="e.g. city, airport, suburb"
+            value={values.type}
+            onChange={(e) => onChange({ ...values, type: e.target.value })}
+            required
           />
         </div>
 
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem className="space-y-2">
-              <FormLabel>Description</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="e.g. Central Kolkata – Park Street, BBD Bagh, Esplanade"
-                  rows={2}
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="polygonText"
-          render={({ field }) => (
-            <FormItem className="space-y-2">
-              <FormLabel>
-                Polygon (GeoJSON) <span className="text-red-500">*</span>
-              </FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder='{ "type": "Polygon", "coordinates": [[[88.34,22.55],[88.38,22.55],[88.38,22.59],[88.34,22.55]]] }'
-                  rows={5}
-                  className="font-mono text-xs"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="flex items-center gap-2">
-          <input
-            id="zone-active"
-            type="checkbox"
-            checked={form.watch("isActive") ?? true}
-            onChange={(e) => form.setValue("isActive", e.target.checked)}
-            className="h-4 w-4 rounded border-border cursor-pointer"
+        <div className="space-y-2">
+          <Label htmlFor="z-multiplier">
+            Multiplier <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="z-multiplier"
+            placeholder="e.g. 1.2"
+            value={values.multiplier}
+            onChange={(e) => onChange({ ...values, multiplier: e.target.value })}
+            required
           />
-          <FormLabel htmlFor="zone-active" className="cursor-pointer font-normal">
-            Active
-          </FormLabel>
         </div>
+      </div>
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onCancel}
-            disabled={isLoading}
-            className="cursor-pointer"
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            disabled={isLoading}
-            className="bg-primary hover:bg-primary/90 text-white cursor-pointer"
-          >
-            {isLoading ? "Saving..." : initialData ? "Save Changes" : "Create Zone"}
-          </Button>
-        </DialogFooter>
-      </form>
-    </Form>
+      <div className="space-y-2">
+        <Label htmlFor="z-polygon">
+          Polygon Coordinates <span className="text-red-500">*</span>
+        </Label>
+        <Textarea
+          id="z-polygon"
+          placeholder="[[lng, lat], [lng, lat], ...]"
+          className="font-mono text-xs border-border bg-background"
+          rows={3}
+          value={values.polygon}
+          onChange={(e) => onChange({ ...values, polygon: e.target.value })}
+          required
+        />
+        <p className="text-xs text-muted-foreground">Coordinates formatted as nested GeoJSON arrays.</p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="z-desc">Description (Optional)</Label>
+        <Textarea
+          id="z-desc"
+          placeholder="e.g. Core commercial region limits"
+          className="border-border bg-background"
+          rows={2}
+          value={values.description}
+          onChange={(e) => onChange({ ...values, description: e.target.value })}
+        />
+      </div>
+
+      <DialogFooter className="pt-2">
+        <Button type="button" variant="outline" onClick={onCancel} className="cursor-pointer">
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          disabled={isPending}
+          className="bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer"
+        >
+          {submitLabel}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+export interface ZoneDetectFormState {
+  lat: string;
+  lng: string;
+}
+
+interface ZoneDetectFormProps {
+  values: ZoneDetectFormState;
+  onChange: (values: ZoneDetectFormState) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  onCancel: () => void;
+  isPending: boolean;
+  detectedZoneName?: string | null;
+}
+
+export function ZoneDetectForm({
+  values,
+  onChange,
+  onSubmit,
+  onCancel,
+  isPending,
+  detectedZoneName,
+}: ZoneDetectFormProps) {
+  return (
+    <form onSubmit={onSubmit} className="space-y-4 py-3 text-foreground">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="d-lat">Latitude</Label>
+          <Input
+            id="d-lat"
+            placeholder="e.g. 40.7128"
+            value={values.lat}
+            onChange={(e) => onChange({ ...values, lat: e.target.value })}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="d-lng">Longitude</Label>
+          <Input
+            id="d-lng"
+            placeholder="e.g. -74.0060"
+            value={values.lng}
+            onChange={(e) => onChange({ ...values, lng: e.target.value })}
+            required
+          />
+        </div>
+      </div>
+
+      {detectedZoneName !== undefined && (
+        <div className="rounded-lg border border-border p-4 bg-muted/40 text-center">
+          <span className="text-xs text-muted-foreground block uppercase font-semibold tracking-wider mb-1">
+            Detection Outcome
+          </span>
+          {detectedZoneName ? (
+            <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+              Matches Inside Zone: <span className="underline">{detectedZoneName}</span>
+            </p>
+          ) : (
+            <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+              Outside all operational zones.
+            </p>
+          )}
+        </div>
+      )}
+
+      <DialogFooter className="pt-2">
+        <Button type="button" variant="outline" onClick={onCancel} className="cursor-pointer">
+          Close
+        </Button>
+        <Button
+          type="submit"
+          disabled={isPending}
+          className="bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer"
+        >
+          {isPending ? "Evaluating..." : "Evaluate Coordinates"}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }

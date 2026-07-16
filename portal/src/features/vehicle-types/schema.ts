@@ -24,10 +24,22 @@ export const vehicleTypeEditSchema = z.object({
 
 export type VehicleTypeEditValues = z.infer<typeof vehicleTypeEditSchema>;
 
-
 export interface VehicleTypeFormValues {
   name: string;
   capacity: number | "";
   sortOrder: number | "";
   isActive: boolean;
 }
+
+// Pricing form — amounts kept as major-unit decimal strings ("15.00") in the
+// UI, converted x100 to minor units on submit. See note in pricingForm.tsx
+// about the 2-decimal-currency assumption.
+export const vehicleTypePricingSchema = z.object({
+  currencyCode: z.string().min(1, { message: "Currency is required" }),
+  baseRate: z.string().min(1, { message: "Base fare is required" }),
+  perKmRate: z.string().min(1, { message: "Per KM rate is required" }),
+  perMinRate: z.string().min(1, { message: "Per minute rate is required" }),
+  minFare: z.string().min(1, { message: "Minimum fare is required" }),
+});
+
+export type VehicleTypePricingFormValues = z.infer<typeof vehicleTypePricingSchema>;

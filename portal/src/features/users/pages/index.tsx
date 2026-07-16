@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { UserPlus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+// import { UserPlus } from "lucide-react";
+// import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -36,7 +36,7 @@ export default function UserListPage() {
         </CardHeader>
         <CardContent className="space-y-4">
 
-  <div className="flex justify-end">
+  {/* <div className="flex justify-end">
     <Button
       size="sm"
       onClick={() => setIsCreateOpen(true)}
@@ -45,7 +45,7 @@ export default function UserListPage() {
       <UserPlus className="h-3.5 w-3.5" />
       Add User
     </Button>
-  </div>
+  </div> */}
 
   <UserList />
 </CardContent>
