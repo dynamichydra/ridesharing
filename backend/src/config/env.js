@@ -4,7 +4,12 @@ const schema = z.object({
   PORT: z.string().default('3000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   API_VERSION: z.string().default('v1'),
-  DATABASE_URL: z.string(),
+  DB_HOST: z.string(),
+  DB_PORT: z.string().default('5432'),
+  DB_NAME: z.string(),
+  DB_USER: z.string(),
+  DB_PASSWORD: z.string(),
+  DB_SSL: z.string().default('false'), // 'true' for managed/cloud Postgres (Aiven, RDS, etc.)
   REDIS_URL: z.string(),
   KAFKA_BROKERS: z.string(),
   KAFKA_CLIENT_ID: z.string().default('rideshare-api'),

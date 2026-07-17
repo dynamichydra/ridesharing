@@ -2,7 +2,7 @@
  * seed.js — Full seed data for RideShare Platform
  *
  * Usage:
- *   cp .env.example .env   (fill DATABASE_URL)
+ *   cp .env.example .env   (fill DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD)
  *   npm run db:migrate
  *   node seed.js
  *
@@ -53,16 +53,14 @@ import {
 } from './drizzle/schema/index.js';
 
 // ── DB connection ─────────────────────────────────────────────────────────────
-// Parse manually so special chars in the password (e.g. @) are properly decoded
-// before being handed to pg — pg's URL parser does NOT decode %40 etc.
 // drizzle v1 RC requires { client: pool } — passing pool directly is silently ignored.
-const _dbUrl = new URL(process.env.DATABASE_URL);
 const pool = new pg.Pool({
-  host:     _dbUrl.hostname,
-  port:     parseInt(_dbUrl.port || '5432', 10),
-  database: _dbUrl.pathname.replace(/^\//, ''),
-  user:     decodeURIComponent(_dbUrl.username),
-  password: decodeURIComponent(_dbUrl.password),
+  host:     process.env.DB_HOST,
+  port:     parseInt(process.env.DB_PORT || '5432', 10),
+  database: process.env.DB_NAME,
+  user:     process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  ssl:      process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
 });
 const db = drizzle({ client: pool });
 
