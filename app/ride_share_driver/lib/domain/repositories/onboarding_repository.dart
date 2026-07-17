@@ -1,8 +1,9 @@
-import '../entities/driver.dart';
+import '../../common/entities/driver_profile.dart';
 import '../entities/geo.dart';
 import '../entities/document.dart';
 import '../entities/vehicle.dart';
 import '../entities/question.dart';
+import '../entities/onboarding_progress.dart';
 
 class UploadUrlResponse {
   final String uploadUrl;
@@ -100,4 +101,6 @@ abstract class OnboardingRepository {
   Future<bool> submitAnswers(List<Map<String, dynamic>> answers);
   Future<RegistrationSummary> getRegistrationSummary();
   Future<DriverProfile> submitApplication();
+  Future<OnboardingProgress> getOnboardingState();
+  Future<String> fetchLegalContent(String url);
 }

@@ -5,7 +5,7 @@ class CustomToast {
   static void show(BuildContext context, String message) {
     // Dismiss any active toasts first
     Fluttertoast.cancel();
-    
+
     Fluttertoast.showToast(
       msg: message,
       toastLength: Toast.LENGTH_SHORT,

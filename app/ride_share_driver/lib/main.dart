@@ -4,7 +4,7 @@ import 'injection_container.dart' as di;
 import 'core/router/app_router.dart';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'presentation/bloc/auth/auth_bloc.dart';
+import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'presentation/bloc/onboarding/onboarding_bloc.dart';
 
 import 'package:flutter_localizations/flutter_localizations.dart';

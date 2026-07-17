@@ -4,14 +4,14 @@ import '../../../style/appcolors.dart';
 import '../../../domain/repositories/onboarding_repository.dart';
 import '../../../injection_container.dart';
 import '../../bloc/onboarding/onboarding_bloc.dart';
-import '../../bloc/auth/auth_bloc.dart';
+import '../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../domain/entities/document.dart';
 
 // Screens
 import 'welcome_screen.dart';
-import '../auth/phone_auth_screen.dart';
-import '../auth/otp_verification_screen.dart';
+import '../../../features/auth/presentation/screens/phone_auth_screen.dart';
+import '../../../features/auth/presentation/screens/otp_verification_screen.dart';
 import 'personal_info_screen.dart';
 import 'terms_legal_screen.dart';
 import 'driving_location_screen.dart';
@@ -19,11 +19,12 @@ import 'vehicle_selection_screen.dart';
 import 'vehicle_form_screen.dart';
 import 'checklist_screen.dart';
 import 'document_upload_screen.dart';
-import '../../widgets/custom_toast.dart';
+import '../../../common/widgets/custom_toast.dart';
 import 'profile_photo_screen.dart';
 import 'bank_details_screen.dart';
 import 'emergency_contact_screen.dart';
 import 'questionnaire_screen.dart';
+import 'registration_status_screen.dart';
 
 class OnboardingWizard extends StatefulWidget {
   final VoidCallback onComplete;
@@ -47,6 +48,12 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
   // Checklist navigation tracking
   bool _enteredFromChecklist = false;
   bool _needsVehicleRental = false;
+
+  // A `rejected` driver actively chose "Edit & Resubmit" from the status
+  // screen — keeps the normal wizard visible instead of the status screen
+  // even though registrationStatus is still 'rejected' server-side until
+  // they actually resubmit.
+  bool _isEditingRejectedApplication = false;
 
   // In-memory mock steps details persistence
   String? _bankHolder;
@@ -112,61 +119,11 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
       child: BlocListener<AuthBloc, AuthState>(
         listener: (context, authState) {
           if (authState is Authenticated) {
-            final status = authState.driver.registrationStatus;
-            if (status == 'under_verification' || status == 'rejected' || status == 'suspended') {
-              String msg = 'This account is under verification.';
-              if (status == 'rejected') {
-                msg = 'This account is rejected.';
-              } else if (status == 'suspended') {
-                msg = 'This account is suspended.';
-              }
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (context) => AlertDialog(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  title: Row(
-                    children: [
-                      const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 28),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Account Status',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  content: Text(
-                    msg,
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 16),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        context.read<AuthBloc>().add(
-                          LogoutRequested(deviceId: 'driver_emulator'),
-                        );
-                        setState(() {
-                          _currentStep = 0;
-                          _phoneNumber = '';
-                          _isLogin = false;
-                          _config = null;
-                          _summary = null;
-                          _needsVehicleRental = false;
-                          _enteredFromChecklist = false;
-                          _simulatedCompletedItems.clear();
-                        });
-                      },
-                      child: const Text('OK', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-              );
-              return;
-            }
-
+            // Blocking statuses (pending_review/under_verification/rejected/
+            // suspended) are now handled by RegistrationStatusScreen in the
+            // builder below instead of a one-shot dialog that used to force
+            // a logout on dismiss — a `rejected` driver needs to be able to
+            // edit and resubmit, not just see a message and get logged out.
             debugPrint(
               '[OnboardingWizard] AuthState transitioned to Authenticated. Fetching configuration.',
             );
@@ -192,6 +149,16 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                 _config = state.config;
               });
               context.read<OnboardingBloc>().add(LoadRegistrationSummary());
+              context.read<OnboardingBloc>().add(LoadOnboardingProgress());
+            } else if (state is OnboardingProgressLoaded) {
+              // An admin published a newer terms/privacy version since this
+              // driver last accepted — interrupt wherever they are and force
+              // them back to the legal step, regardless of registrationStep.
+              if (state.progress.pendingLegalAcceptance && _currentStep != 4) {
+                setState(() {
+                  _currentStep = 4;
+                });
+              }
             } else if (state is RegistrationSummaryLoaded) {
               setState(() {
                 // Merge simulated checklist status values
@@ -336,10 +303,11 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                             _summary = null;
                             _needsVehicleRental = false;
                             _enteredFromChecklist = false;
+                            _isEditingRejectedApplication = false;
                             _simulatedCompletedItems.clear();
                           });
                           context.read<AuthBloc>().add(
-                            LogoutRequested(deviceId: 'driver_emulator'),
+                            LogoutRequested(),
                           );
                         },
                         style: ElevatedButton.styleFrom(
@@ -402,6 +370,40 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
             }
           },
           builder: (context, state) {
+            final authState = context.watch<AuthBloc>().state;
+            if (authState is Authenticated && !_isEditingRejectedApplication) {
+              final status = authState.driver.registrationStatus;
+              const blockingStatuses = {'pending_review', 'under_verification', 'suspended', 'rejected'};
+              if (blockingStatuses.contains(status)) {
+                return RegistrationStatusScreen(
+                  status: status,
+                  note: authState.driver.approvalNote,
+                  onEditAndResubmit: status == 'rejected'
+                      ? () {
+                          setState(() {
+                            _isEditingRejectedApplication = true;
+                            _currentStep = 9; // checklist — shows exactly what's incomplete
+                          });
+                        }
+                      : null,
+                  onLogout: () {
+                    context.read<AuthBloc>().add(LogoutRequested());
+                    setState(() {
+                      _currentStep = 0;
+                      _phoneNumber = '';
+                      _isLogin = false;
+                      _config = null;
+                      _summary = null;
+                      _needsVehicleRental = false;
+                      _enteredFromChecklist = false;
+                      _isEditingRejectedApplication = false;
+                      _simulatedCompletedItems.clear();
+                    });
+                  },
+                );
+              }
+            }
+
             return Scaffold(
               backgroundColor: Colors.white,
               extendBodyBehindAppBar: _currentStep <= 2,
@@ -500,7 +502,6 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
             context.read<AuthBloc>().add(
               StartPhoneAuthentication(
                 phone: phone,
-                deviceId: 'driver_emulator',
                 isLogin: _isLogin,
               ),
             );
@@ -514,7 +515,6 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
               VerifyOtpCode(
                 phone: _phoneNumber,
                 otp: otp,
-                deviceId: 'driver_emulator',
                 isLogin: _isLogin,
               ),
             );
@@ -523,7 +523,6 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
             context.read<AuthBloc>().add(
               StartPhoneAuthentication(
                 phone: _phoneNumber,
-                deviceId: 'driver_emulator',
                 isLogin: _isLogin,
               ),
             );
@@ -557,7 +556,9 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         );
       case 4:
         return TermsLegalScreen(
-          termsContent: '',
+          termsUrl: _config?.termsUrl,
+          privacyUrl: _config?.privacyPolicyUrl,
+          fetchContent: (url) => sl<OnboardingRepository>().fetchLegalContent(url),
           isAlreadyAccepted:
               _summary != null &&
               !_summary!.missing.contains('legalAcceptance'),

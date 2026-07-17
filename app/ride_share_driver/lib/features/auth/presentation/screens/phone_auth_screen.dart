@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../style/appcolors.dart';
-import '../../../core/localization/app_localizations.dart';
+import '../../../../style/appcolors.dart';
+import '../../../../core/localization/app_localizations.dart';
 
 class _CountryCode {
   final String name;
@@ -61,15 +61,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   void _submit() {
     final phone = _phoneController.text.trim();
-    debugPrint(
-      '[PhoneAuthScreen] Submit button clicked. Entered phone: $phone, Country: ${_selectedCountry.dialCode}',
-    );
     if (phone.length == 10 && RegExp(r'^[0-9]+$').hasMatch(phone)) {
       widget.onPhoneSubmitted('${_selectedCountry.dialCode}$phone');
     } else {
-      debugPrint(
-        '[PhoneAuthScreen] Validation failed for phone number: $phone',
-      );
       setState(() {
         _isValid = false;
       });
@@ -253,9 +247,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                             ),
                           ),
                           onChanged: (val) {
-                            debugPrint(
-                              '[PhoneAuthScreen] Phone input changed: $val',
-                            );
                             setState(() {
                               if (!_isValid && val.length == 10) {
                                 _isValid = true;
@@ -269,9 +260,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   const SizedBox(height: 20),
                   GestureDetector(
                     onTap: () {
-                      debugPrint(
-                        '[PhoneAuthScreen] Toggle login/register mode clicked',
-                      );
                       if (widget.onLoginModeChanged != null) {
                         widget.onLoginModeChanged!(!widget.isLogin);
                       }
@@ -290,10 +278,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   ),
                   const SizedBox(height: 28),
                   ElevatedButton(
-                    onPressed: () {
-                      debugPrint('[PhoneAuthScreen] Continue button clicked');
-                      _submit();
-                    },
+                    onPressed: _submit,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,

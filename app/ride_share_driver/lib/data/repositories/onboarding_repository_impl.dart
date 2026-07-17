@@ -1,8 +1,9 @@
-import '../../domain/entities/driver.dart';
+import '../../common/entities/driver_profile.dart';
 import '../../domain/entities/geo.dart';
 import '../../domain/entities/document.dart';
 import '../../domain/entities/vehicle.dart';
 import '../../domain/entities/question.dart';
+import '../../domain/entities/onboarding_progress.dart';
 import '../../domain/repositories/onboarding_repository.dart';
 import '../datasources/onboarding_remote_datasource.dart';
 
@@ -244,5 +245,16 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
   Future<DriverProfile> submitApplication() async {
     final data = await remoteDataSource.submitApplication();
     return DriverProfile.fromJson(data);
+  }
+
+  @override
+  Future<OnboardingProgress> getOnboardingState() async {
+    final data = await remoteDataSource.getOnboardingState();
+    return OnboardingProgress.fromJson(data);
+  }
+
+  @override
+  Future<String> fetchLegalContent(String url) {
+    return remoteDataSource.fetchLegalContent(url);
   }
 }

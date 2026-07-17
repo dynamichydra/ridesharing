@@ -1,10 +1,9 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../domain/entities/driver.dart';
+import '../../../common/entities/driver_profile.dart';
+import '../../../domain/entities/onboarding_progress.dart';
 import '../../../domain/entities/geo.dart';
-import '../../../domain/entities/document.dart';
-import '../../../domain/entities/vehicle.dart';
-import '../../../domain/entities/question.dart';
 import '../../../domain/repositories/onboarding_repository.dart';
+import '../../../services/app_logger.dart';
 
 // ── Events ──────────────────────────────────────────────────────────────────
 abstract class OnboardingEvent {}
@@ -90,6 +89,13 @@ class LoadRegistrationSummary extends OnboardingEvent {}
 
 class SubmitOnboardingApplication extends OnboardingEvent {}
 
+/// Checks `GET /onboarding/state` for `pendingLegalAcceptance` — e.g. an
+/// admin published a new terms/privacy version since this driver last
+/// accepted. Deliberately does not emit [OnboardingLoading] first: this is a
+/// silent background check, not a user-facing action, and shouldn't flash
+/// the wizard's global loading bar.
+class LoadOnboardingProgress extends OnboardingEvent {}
+
 // ── States ──────────────────────────────────────────────────────────────────
 abstract class OnboardingState {}
 
@@ -122,6 +128,11 @@ class RegistrationSummaryLoaded extends OnboardingState {
 class ApplicationSubmitted extends OnboardingState {
   final DriverProfile driver;
   ApplicationSubmitted({required this.driver});
+}
+
+class OnboardingProgressLoaded extends OnboardingState {
+  final OnboardingProgress progress;
+  OnboardingProgressLoaded({required this.progress});
 }
 
 class OnboardingError extends OnboardingState {
@@ -280,6 +291,18 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
         emit(ApplicationSubmitted(driver: driver));
       } catch (e) {
         emit(OnboardingError(message: e.toString()));
+      }
+    });
+
+    on<LoadOnboardingProgress>((event, emit) async {
+      try {
+        final progress = await onboardingRepository.getOnboardingState();
+        emit(OnboardingProgressLoaded(progress: progress));
+      } catch (e) {
+        // Best-effort: a failed background check (e.g. a flaky connection)
+        // shouldn't surface an alarming error toast for something the driver
+        // never asked for. It's retried next time onboarding config loads.
+        AppLogger.w('[OnboardingBloc] LoadOnboardingProgress failed: $e');
       }
     });
   }

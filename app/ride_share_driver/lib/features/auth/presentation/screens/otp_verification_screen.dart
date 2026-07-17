@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otp_autofill/otp_autofill.dart';
-import '../../../style/appcolors.dart';
-import '../../../core/localization/app_localizations.dart';
-import '../../bloc/auth/auth_bloc.dart';
-import '../../widgets/custom_toast.dart';
+import '../../../../style/appcolors.dart';
+import '../../../../core/localization/app_localizations.dart';
+import '../../../../common/widgets/custom_toast.dart';
+import '../../../../services/app_logger.dart';
+import '../bloc/auth_bloc.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   final String phoneNumber;
@@ -82,13 +83,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   void _submit() {
     final otp = _otpController.text.trim();
-    debugPrint(
-      '[OtpVerificationScreen] Submit button clicked. Entered OTP: $otp',
-    );
     if (otp.length == 6 && RegExp(r'^[0-9]+$').hasMatch(otp)) {
       widget.onOtpVerified(otp);
     } else {
-      debugPrint('[OtpVerificationScreen] Validation failed for OTP: $otp');
+      AppLogger.d('[OtpVerificationScreen] Validation failed for entered OTP length ${otp.length}');
       setState(() {
         _isValid = false;
       });
@@ -101,9 +99,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, authState) {
         if (authState is AuthOtpSent) {
-          debugPrint(
-            '[OtpVerificationScreen] AuthOtpSent received, starting countdown timer.',
-          );
           _startTimer();
           CustomToast.show(context, 'OTP resent successfully');
         }
@@ -206,9 +201,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                 border: InputBorder.none,
                               ),
                               onChanged: (val) {
-                                debugPrint(
-                                  '[OtpVerificationScreen] OTP input changed: $val',
-                                );
                                 setState(() {
                                   if (!_isValid && val.length == 6) {
                                     _isValid = true;
@@ -279,9 +271,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       onPressed: _resendCountdown > 0
                           ? null
                           : () {
-                              debugPrint(
-                                '[OtpVerificationScreen] Resend Code link clicked',
-                              );
                               widget.onResendRequested();
                             },
                       child: Text(
@@ -299,12 +288,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton(
-                      onPressed: () {
-                        debugPrint(
-                          '[OtpVerificationScreen] Verify & Continue button clicked',
-                        );
-                        _submit();
-                      },
+                      onPressed: _submit,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,

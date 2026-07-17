@@ -4,7 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../style/appcolors.dart';
 import '../../../domain/entities/document.dart';
-import '../../widgets/custom_toast.dart';
+import '../../../common/widgets/custom_toast.dart';
 
 class DocumentUploadScreen extends StatefulWidget {
   final DocumentType docType;

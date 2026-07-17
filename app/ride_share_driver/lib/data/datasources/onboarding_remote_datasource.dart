@@ -172,6 +172,30 @@ class OnboardingRemoteDataSource {
     throw Exception('Failed to load registration summary');
   }
 
+  Future<Map<String, dynamic>> getOnboardingState() async {
+    final response = await apiClient.dio.get('/onboarding/state');
+    if (response.data['SUCCESS'] == true) {
+      return response.data['MESSAGE'];
+    }
+    throw Exception('Failed to load onboarding state');
+  }
+
+  /// Fetches the raw HTML/text body of a legal document's `contentUrl`.
+  /// Deliberately uses a bare [Dio] instance, NOT [apiClient] — `contentUrl`
+  /// points at an external CDN host, and routing it through the API client
+  /// would attach our backend bearer token to a third-party request.
+  Future<String> fetchLegalContent(String url) async {
+    try {
+      final response = await Dio().get<String>(
+        url,
+        options: Options(responseType: ResponseType.plain),
+      );
+      return response.data ?? '';
+    } catch (_) {
+      throw Exception('Failed to load document content');
+    }
+  }
+
   Future<Map<String, dynamic>> submitApplication() async {
     final response = await apiClient.dio.post('/drivers/submit-application');
     if (response.data['SUCCESS'] == true) {
