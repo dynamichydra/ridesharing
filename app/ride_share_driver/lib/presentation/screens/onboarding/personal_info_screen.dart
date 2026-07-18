@@ -157,7 +157,10 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
         suffixIcon: suffixIcon,
         filled: true,
         fillColor: AppColors.surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -188,7 +191,6 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
         physics: const BouncingScrollPhysics(),
         children: [
           // Header Illustration / Icon Badge
-
           const Text(
             'Personal Details',
             textAlign: TextAlign.center,
@@ -286,7 +288,7 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
               ),
             ),
           ),
-          
+
           // Modern Segmented Gender Selection Chips
           Row(
             children: [
@@ -317,7 +319,7 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
             height: 56,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-             color: AppColors.primary,
+              color: AppColors.primary,
               boxShadow: [
                 BoxShadow(
                   color: AppColors.primary.withOpacity(0.3),
@@ -392,7 +394,9 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
             children: [
               Icon(
                 icon,
-                color: isSelected ? AppColors.secondary : AppColors.textSecondary,
+                color: isSelected
+                    ? AppColors.secondary
+                    : AppColors.textSecondary,
                 size: 24,
               ),
               const SizedBox(height: 6),
@@ -401,7 +405,9 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? AppColors.secondary : AppColors.textSecondary,
+                  color: isSelected
+                      ? AppColors.secondary
+                      : AppColors.textSecondary,
                 ),
               ),
             ],

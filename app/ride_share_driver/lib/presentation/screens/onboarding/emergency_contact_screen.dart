@@ -83,7 +83,10 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
         counterText: counterText,
         filled: true,
         fillColor: AppColors.surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -191,7 +194,7 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
                 debugPrint('[EmergencyContactScreen] Phone changed: $val'),
           ),
           const SizedBox(height: 40),
-          
+
           // Action Buttons
           Row(
             children: [
@@ -203,7 +206,10 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
                       onPressed: widget.onSkip,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.textSecondary,
-                        side: const BorderSide(color: AppColors.border, width: 1.5),
+                        side: const BorderSide(
+                          color: AppColors.border,
+                          width: 1.5,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),

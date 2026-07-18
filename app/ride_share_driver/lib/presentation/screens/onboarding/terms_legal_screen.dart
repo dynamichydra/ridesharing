@@ -57,7 +57,8 @@ class _TermsLegalScreenState extends State<TermsLegalScreen> {
   }
 
   void _handleScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 20) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 20) {
       if (!_scrolledToEnd) {
         setState(() {
           _scrolledToEnd = true;
@@ -125,7 +126,11 @@ class _TermsLegalScreenState extends State<TermsLegalScreen> {
                     if (content.terms != null) ...[
                       const Text(
                         'Terms of Service',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Html(data: content.terms!),
@@ -134,7 +139,11 @@ class _TermsLegalScreenState extends State<TermsLegalScreen> {
                     if (content.privacy != null) ...[
                       const Text(
                         'Privacy Policy',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Html(data: content.privacy!),
@@ -168,7 +177,11 @@ class _TermsLegalScreenState extends State<TermsLegalScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 40),
+            const Icon(
+              Icons.error_outline_rounded,
+              color: AppColors.error,
+              size: 40,
+            ),
             const SizedBox(height: 12),
             Text(
               message,
@@ -179,7 +192,9 @@ class _TermsLegalScreenState extends State<TermsLegalScreen> {
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _retry,
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                ),
                 child: const Text('Retry'),
               ),
             ],

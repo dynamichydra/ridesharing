@@ -54,6 +54,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
   // even though registrationStatus is still 'rejected' server-side until
   // they actually resubmit.
   bool _isEditingRejectedApplication = false;
+  bool _transitionOnSummaryLoad = false;
 
   // In-memory mock steps details persistence
   String? _bankHolder;
@@ -176,73 +177,89 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                   missing: missing,
                 );
 
-                // For newly registered drivers or partially registered returning drivers:
-                // If they are currently at the OTP screen (index 2) but the config has finished loading,
-                // we route them to their actual registration step (e.g., Step 3 for Personal Info).
-                 if (_currentStep == 2) {
-                  _currentStep = 3; // Always open from the first onboarding page (Personal Info)
-                }
-              });
-            } else if (state is OnboardingSuccess) {
-              context.read<OnboardingBloc>().add(LoadRegistrationSummary());
-              setState(() {
-                bool shouldGoBackToChecklist = true;
+                if (_currentStep == 2) {
+                  final regStep = state.summary.driver.registrationStep;
+                  if (regStep < 2) {
+                    _currentStep = 3; // Personal Info
+                  } else if (regStep == 2) {
+                    _currentStep = 4; // Terms / Legal
+                  } else if (regStep == 3) {
+                    _currentStep = 5; // Driving Location
+                  } else if (regStep == 4) {
+                    _currentStep = 6; // Questionnaire
+                  } else if (regStep == 5) {
+                    _currentStep = 7; // Vehicle Selection
+                  } else {
+                    _currentStep = 9; // Checklist
+                  }
+                } else if (_transitionOnSummaryLoad) {
+                  _transitionOnSummaryLoad = false;
+                  bool shouldGoBackToChecklist = true;
 
-                if (_currentStep == 10) {
-                  final docCode = _selectedUploadDocCode;
-                  if (_config != null && _summary != null && docCode != null) {
-                    DocumentType? docReq;
-                    for (final req in _config!.documentRequirements) {
-                      if (req.code == docCode) {
-                        docReq = req;
-                        break;
-                      }
-                    }
-                    if (docReq != null) {
-                      DriverDocument? doc;
-                      for (final d in _summary!.documents) {
-                        if (d.documentTypeId == docReq.id) {
-                          doc = d;
+                  if (_currentStep == 10) {
+                    final docCode = _selectedUploadDocCode;
+                    if (_config != null &&
+                        _summary != null &&
+                        docCode != null) {
+                      DocumentType? docReq;
+                      for (final req in _config!.documentRequirements) {
+                        if (req.code == docCode) {
+                          docReq = req;
                           break;
                         }
                       }
-
-                      if (doc == null) {
-                        final needsMultiple =
-                            docReq.requiresFront && docReq.requiresBack;
-                        if (needsMultiple) {
-                          shouldGoBackToChecklist = false;
+                      if (docReq != null) {
+                        DriverDocument? doc;
+                        for (final d in _summary!.documents) {
+                          if (d.documentTypeId == docReq.id) {
+                            doc = d;
+                            break;
+                          }
                         }
-                      } else {
-                        if (docReq.requiresFront && docReq.requiresBack) {
-                          final hadFront =
-                              doc.frontUrl != null && doc.frontUrl!.isNotEmpty;
-                          final hadBack =
-                              doc.backUrl != null && doc.backUrl!.isNotEmpty;
-                          if (!hadFront || !hadBack) {
+
+                        if (doc == null) {
+                          final needsMultiple =
+                              docReq.requiresFront && docReq.requiresBack;
+                          if (needsMultiple) {
                             shouldGoBackToChecklist = false;
+                          }
+                        } else {
+                          if (docReq.requiresFront && docReq.requiresBack) {
+                            final hadFront =
+                                doc.frontUrl != null &&
+                                doc.frontUrl!.isNotEmpty;
+                            final hadBack =
+                                doc.backUrl != null && doc.backUrl!.isNotEmpty;
+                            if (!hadFront || !hadBack) {
+                              shouldGoBackToChecklist = false;
+                            }
                           }
                         }
                       }
                     }
                   }
-                }
 
-                if (shouldGoBackToChecklist) {
-                  if (_enteredFromChecklist) {
-                    _currentStep = 9;
-                    _enteredFromChecklist = false;
-                  } else if (_currentStep >= 3 && _currentStep < 9) {
-                    _nextStep();
+                  if (shouldGoBackToChecklist) {
+                    if (_enteredFromChecklist) {
+                      _currentStep = 9;
+                      _enteredFromChecklist = false;
+                    } else if (_currentStep >= 3 && _currentStep < 9) {
+                      _nextStep();
+                    } else {
+                      _currentStep = 9;
+                    }
                   } else {
-                    _currentStep = 9;
+                    debugPrint(
+                      '[OnboardingWizard] Remaining side needs upload, staying on step $_currentStep',
+                    );
                   }
-                } else {
-                  debugPrint(
-                    '[OnboardingWizard] Remaining side needs upload, staying on step $_currentStep',
-                  );
                 }
               });
+            } else if (state is OnboardingSuccess) {
+              setState(() {
+                _transitionOnSummaryLoad = true;
+              });
+              context.read<OnboardingBloc>().add(LoadRegistrationSummary());
             } else if (state is ApplicationSubmitted) {
               showDialog(
                 context: context,
@@ -306,9 +323,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                             _isEditingRejectedApplication = false;
                             _simulatedCompletedItems.clear();
                           });
-                          context.read<AuthBloc>().add(
-                            LogoutRequested(),
-                          );
+                          context.read<AuthBloc>().add(LogoutRequested());
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
@@ -331,7 +346,8 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                 ),
               );
             } else if (state is OnboardingError) {
-              final isEmailDuplicate = state.message.toLowerCase().contains('email') ||
+              final isEmailDuplicate =
+                  state.message.toLowerCase().contains('email') ||
                   state.message.toLowerCase().contains('duplicate') ||
                   state.message.toLowerCase().contains('already in use') ||
                   state.message.toLowerCase().contains('already registered');
@@ -344,7 +360,11 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                     ),
                     title: Row(
                       children: [
-                        const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 28),
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: AppColors.error,
+                          size: 28,
+                        ),
                         const SizedBox(width: 12),
                         const Text(
                           'Email in Use',
@@ -354,12 +374,22 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                     ),
                     content: const Text(
                       'This email address is already in use by another account. Please use a different email address.',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 15, height: 1.4),
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 15,
+                        height: 1.4,
+                      ),
                     ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+                        child: const Text(
+                          'OK',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -373,7 +403,12 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
             final authState = context.watch<AuthBloc>().state;
             if (authState is Authenticated && !_isEditingRejectedApplication) {
               final status = authState.driver.registrationStatus;
-              const blockingStatuses = {'pending_review', 'under_verification', 'suspended', 'rejected'};
+              const blockingStatuses = {
+                'pending_review',
+                'under_verification',
+                'suspended',
+                'rejected',
+              };
               if (blockingStatuses.contains(status)) {
                 return RegistrationStatusScreen(
                   status: status,
@@ -382,7 +417,8 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                       ? () {
                           setState(() {
                             _isEditingRejectedApplication = true;
-                            _currentStep = 9; // checklist — shows exactly what's incomplete
+                            _currentStep =
+                                9; // checklist — shows exactly what's incomplete
                           });
                         }
                       : null,
@@ -500,10 +536,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           onPhoneSubmitted: (phone) {
             _phoneNumber = phone;
             context.read<AuthBloc>().add(
-              StartPhoneAuthentication(
-                phone: phone,
-                isLogin: _isLogin,
-              ),
+              StartPhoneAuthentication(phone: phone, isLogin: _isLogin),
             );
           },
         );
@@ -512,19 +545,12 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           phoneNumber: _phoneNumber,
           onOtpVerified: (otp) {
             context.read<AuthBloc>().add(
-              VerifyOtpCode(
-                phone: _phoneNumber,
-                otp: otp,
-                isLogin: _isLogin,
-              ),
+              VerifyOtpCode(phone: _phoneNumber, otp: otp, isLogin: _isLogin),
             );
           },
           onResendRequested: () {
             context.read<AuthBloc>().add(
-              StartPhoneAuthentication(
-                phone: _phoneNumber,
-                isLogin: _isLogin,
-              ),
+              StartPhoneAuthentication(phone: _phoneNumber, isLogin: _isLogin),
             );
           },
         );
@@ -558,7 +584,8 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         return TermsLegalScreen(
           termsUrl: _config?.termsUrl,
           privacyUrl: _config?.privacyPolicyUrl,
-          fetchContent: (url) => sl<OnboardingRepository>().fetchLegalContent(url),
+          fetchContent: (url) =>
+              sl<OnboardingRepository>().fetchLegalContent(url),
           isAlreadyAccepted:
               _summary != null &&
               !_summary!.missing.contains('legalAcceptance'),

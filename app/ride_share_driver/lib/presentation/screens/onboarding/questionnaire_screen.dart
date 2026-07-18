@@ -56,7 +56,9 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
         return actNum != null && expNum != null && actNum < expNum;
       case 'in':
         if (expectedValue is List) {
-          return expectedValue.map((v) => v.toString()).contains(actualValue.toString());
+          return expectedValue
+              .map((v) => v.toString())
+              .contains(actualValue.toString());
         }
         return false;
       default:
@@ -68,7 +70,9 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
     debugPrint('[QuestionnaireScreen] Submit clicked. Answers: $_answers');
 
     // Only validate and submit questions that are currently visible based on prior answers
-    final visibleQuestions = widget.questions.where((q) => _isQuestionVisible(q)).toList();
+    final visibleQuestions = widget.questions
+        .where((q) => _isQuestionVisible(q))
+        .toList();
 
     bool allAnswered = true;
     for (final q in visibleQuestions) {
@@ -98,7 +102,9 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final visibleQuestions = widget.questions.where((q) => _isQuestionVisible(q)).toList();
+    final visibleQuestions = widget.questions
+        .where((q) => _isQuestionVisible(q))
+        .toList();
 
     return Form(
       key: _formKey,
@@ -205,7 +211,10 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
         helperMaxLines: 2,
         filled: true,
         fillColor: AppColors.surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -233,8 +242,8 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
       final bool? currentVal = initialVal is bool
           ? initialVal
           : (initialVal == 'true' || initialVal == 1
-              ? true
-              : (initialVal == 'false' || initialVal == 0 ? false : null));
+                ? true
+                : (initialVal == 'false' || initialVal == 0 ? false : null));
       return Container(
         margin: const EdgeInsets.only(bottom: 24),
         child: Column(
@@ -300,7 +309,10 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                         children: [
                           Icon(Icons.check_circle_outline_rounded, size: 18),
                           SizedBox(width: 6),
-                          Text('Yes', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(
+                            'Yes',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ],
                       ),
                     ),
@@ -345,7 +357,10 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                         children: [
                           Icon(Icons.cancel_outlined, size: 18),
                           SizedBox(width: 6),
-                          Text('No', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(
+                            'No',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ],
                       ),
                     ),
@@ -368,7 +383,9 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
           style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
           decoration: buildModernInputDecoration(
             labelText: q.label,
-            prefixIcon: isHoursField ? Icons.access_time_rounded : Icons.numbers_rounded,
+            prefixIcon: isHoursField
+                ? Icons.access_time_rounded
+                : Icons.numbers_rounded,
             suffixText: isHoursField ? 'hrs' : null,
             helperText: q.description,
           ),

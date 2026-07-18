@@ -62,7 +62,8 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
                 _buildSelectableCard(
                   index: 0,
                   title: 'I have my own vehicle',
-                  subtitle: 'Register your personal cab, auto-rickshaw or motor bike. Minimum requirement: 2019 model or newer.',
+                  subtitle:
+                      'Register your personal cab, auto-rickshaw or motor bike. Minimum requirement: 2019 model or newer.',
                   icon: Icons.directions_car_rounded,
                   color: AppColors.primary,
                 ),
@@ -70,14 +71,15 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
                 _buildSelectableCard(
                   index: 1,
                   title: 'I need a vehicle rental',
-                  subtitle: 'Request a customized lease vehicle. Ryva Ride Express Rent option with maintenance and insurance is coming soon.',
+                  subtitle:
+                      'Request a customized lease vehicle. Ryva Ride Express Rent option with maintenance and insurance is coming soon.',
                   icon: Icons.car_rental_rounded,
                   color: AppColors.secondary,
                 ),
               ],
             ),
           ),
-          
+
           // Continue Button
           AnimatedOpacity(
             duration: const Duration(milliseconds: 200),
@@ -86,7 +88,9 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
               height: 56,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
-                color: hasSelection ? AppColors.primary : AppColors.textSecondary.withOpacity(0.3),
+                color: hasSelection
+                    ? AppColors.primary
+                    : AppColors.textSecondary.withOpacity(0.3),
                 boxShadow: hasSelection
                     ? [
                         BoxShadow(
@@ -114,13 +118,17 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: hasSelection ? Colors.white : AppColors.textSecondary,
+                        color: hasSelection
+                            ? Colors.white
+                            : AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Icon(
                       Icons.arrow_forward_rounded,
-                      color: hasSelection ? Colors.white : AppColors.textSecondary,
+                      color: hasSelection
+                          ? Colors.white
+                          : AppColors.textSecondary,
                       size: 20,
                     ),
                   ],
@@ -162,7 +170,9 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
           ),
           boxShadow: [
             BoxShadow(
-              color: isSelected ? color.withOpacity(0.08) : Colors.black.withOpacity(0.02),
+              color: isSelected
+                  ? color.withOpacity(0.08)
+                  : Colors.black.withOpacity(0.02),
               blurRadius: isSelected ? 20 : 12,
               offset: isSelected ? const Offset(0, 8) : const Offset(0, 4),
             ),

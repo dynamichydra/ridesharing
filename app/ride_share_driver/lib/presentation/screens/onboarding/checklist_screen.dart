@@ -99,37 +99,45 @@ class ChecklistScreen extends StatelessWidget {
     // Add required document list dynamically from documentRequirements
     for (final req in documentRequirements) {
       if (req.code == 'DRIVERS_LICENSE') {
-        todoItems.add(_ChecklistItem(
-          code: 'document:DRIVERS_LICENSE',
-          title: 'Driver\'s licence',
-          description: 'Identity validation and DL proof',
-          icon: Icons.badge_rounded,
-          isCompleted: isDocumentComplete('DRIVERS_LICENSE'),
-        ));
+        todoItems.add(
+          _ChecklistItem(
+            code: 'document:DRIVERS_LICENSE',
+            title: 'Driver\'s licence',
+            description: 'Identity validation and DL proof',
+            icon: Icons.badge_rounded,
+            isCompleted: isDocumentComplete('DRIVERS_LICENSE'),
+          ),
+        );
       } else if (req.code == 'NATIONAL_ID') {
-        todoItems.add(_ChecklistItem(
-          code: 'document:NATIONAL_ID',
-          title: 'Aadhar Card (National ID)',
-          description: 'Aadhar card validation proof',
-          icon: Icons.style_rounded,
-          isCompleted: isDocumentComplete('NATIONAL_ID'),
-        ));
+        todoItems.add(
+          _ChecklistItem(
+            code: 'document:NATIONAL_ID',
+            title: 'Aadhar Card (National ID)',
+            description: 'Aadhar card validation proof',
+            icon: Icons.style_rounded,
+            isCompleted: isDocumentComplete('NATIONAL_ID'),
+          ),
+        );
       } else if (req.code == 'VEHICLE_REGISTRATION' && !needsVehicleRental) {
-        todoItems.add(_ChecklistItem(
-          code: 'document:VEHICLE_REGISTRATION',
-          title: 'Vehicle Registration',
-          description: 'Upload RC Book front side',
-          icon: Icons.assignment_rounded,
-          isCompleted: isDocumentComplete('VEHICLE_REGISTRATION'),
-        ));
+        todoItems.add(
+          _ChecklistItem(
+            code: 'document:VEHICLE_REGISTRATION',
+            title: 'Vehicle Registration',
+            description: 'Upload RC Book front side',
+            icon: Icons.assignment_rounded,
+            isCompleted: isDocumentComplete('VEHICLE_REGISTRATION'),
+          ),
+        );
       } else if (req.code == 'INSURANCE_CERTIFICATE' && !needsVehicleRental) {
-        todoItems.add(_ChecklistItem(
-          code: 'document:INSURANCE_CERTIFICATE',
-          title: 'Insurance Certificate',
-          description: 'Upload valid insurance policy paper',
-          icon: Icons.security_rounded,
-          isCompleted: isDocumentComplete('INSURANCE_CERTIFICATE'),
-        ));
+        todoItems.add(
+          _ChecklistItem(
+            code: 'document:INSURANCE_CERTIFICATE',
+            title: 'Insurance Certificate',
+            description: 'Upload valid insurance policy paper',
+            icon: Icons.security_rounded,
+            isCompleted: isDocumentComplete('INSURANCE_CERTIFICATE'),
+          ),
+        );
       }
     }
 
@@ -190,7 +198,9 @@ class ChecklistScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppColors.secondary.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.secondary.withOpacity(0.2)),
+                  border: Border.all(
+                    color: AppColors.secondary.withOpacity(0.2),
+                  ),
                 ),
                 child: Text(
                   '$completedCount / $totalCount items',
@@ -260,7 +270,9 @@ class ChecklistScreen extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
-                      color: item.isCompleted ? AppColors.textPrimary : AppColors.textPrimary.withOpacity(0.8),
+                      color: item.isCompleted
+                          ? AppColors.textPrimary
+                          : AppColors.textPrimary.withOpacity(0.8),
                     ),
                   ),
                   subtitle: Padding(
@@ -283,7 +295,9 @@ class ChecklistScreen extends StatelessWidget {
                           ? AppColors.primary
                           : AppColors.surface,
                       border: Border.all(
-                        color: item.isCompleted ? AppColors.primary : AppColors.border,
+                        color: item.isCompleted
+                            ? AppColors.primary
+                            : AppColors.border,
                         width: 1.5,
                       ),
                     ),
@@ -292,7 +306,9 @@ class ChecklistScreen extends StatelessWidget {
                           ? Icons.check
                           : Icons.chevron_right_rounded,
                       size: 16,
-                      color: item.isCompleted ? Colors.white : AppColors.textSecondary,
+                      color: item.isCompleted
+                          ? Colors.white
+                          : AppColors.textSecondary,
                     ),
                   ),
                   onTap: () => onItemTap(item.code),
@@ -313,7 +329,9 @@ class ChecklistScreen extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppColors.textSecondary.withOpacity(0.2),
+                  disabledBackgroundColor: AppColors.textSecondary.withOpacity(
+                    0.2,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),

@@ -146,7 +146,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                 padding: const EdgeInsets.all(16),
                 itemCount: _plans!.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, index) => _buildPlanCard(_plans![index]),
+                itemBuilder: (context, index) => _buildPlanCard(_plans![index], index),
               ),
               if (_isProcessing)
                 Container(
@@ -160,27 +160,70 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
     );
   }
 
-  Widget _buildPlanCard(SubscriptionPlan plan) {
+  Widget _buildPlanCard(SubscriptionPlan plan, int index) {
     final priceMajor = plan.priceMinor / 100;
     final unsupportedGateway = plan.gateway != null && plan.gateway != 'razorpay' && plan.gateway != 'stripe';
+
+    // Map plans dynamically to detect premium features
+    final isPremium = plan.name.toLowerCase().contains('premium') ||
+                      plan.name.toLowerCase().contains('pro') ||
+                      plan.name.toLowerCase().contains('unlimited') ||
+                      (plan.durationDays != null && plan.durationDays! > 15) ||
+                      index % 2 == 1;
+
+    // Alternate color mapping role assignments (swap primary and secondary roles)
+    final isEven = index % 2 == 0;
+    final mainColor = isEven ? AppColors.secondary : AppColors.primary;
+    final accentColor = isEven ? AppColors.primary : AppColors.secondary;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: isPremium ? mainColor.withOpacity(0.5) : AppColors.border,
+          width: isPremium ? 1.5 : 1.0,
+        ),
+        boxShadow: isPremium
+            ? [
+                BoxShadow(
+                  color: mainColor.withOpacity(0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (isPremium) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(
+                color: accentColor.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                'RECOMMENDED',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: accentColor,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ],
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(plan.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
               Text(
                 '${plan.currencyCode} ${priceMajor.toStringAsFixed(2)}',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: mainColor),
               ),
             ],
           ),
@@ -195,7 +238,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Row(
                     children: [
-                      const Icon(Icons.check_circle_rounded, size: 16, color: AppColors.primary),
+                      Icon(Icons.check_circle_rounded, size: 16, color: accentColor),
                       const SizedBox(width: 8),
                       Expanded(child: Text(f, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary))),
                     ],
@@ -210,7 +253,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                   ? null
                   : () => _bloc.add(PurchasePlanRequested(planId: plan.id)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: mainColor,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

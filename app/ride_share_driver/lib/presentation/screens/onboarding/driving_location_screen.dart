@@ -173,7 +173,10 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
         suffixIcon: suffixIcon,
         filled: true,
         fillColor: AppColors.surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -189,7 +192,8 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
       );
     }
 
-    final isFormValid = _selectedCountryId != null &&
+    final isFormValid =
+        _selectedCountryId != null &&
         _selectedStateId != null &&
         _selectedCityId != null;
 

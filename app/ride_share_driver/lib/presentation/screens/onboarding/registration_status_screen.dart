@@ -6,7 +6,12 @@ class _StatusConfig {
   final Color color;
   final String title;
   final String message;
-  const _StatusConfig({required this.icon, required this.color, required this.title, required this.message});
+  const _StatusConfig({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.message,
+  });
 }
 
 /// Persistent screen for every `registrationStatus` where the wizard's normal
@@ -35,7 +40,8 @@ class RegistrationStatusScreen extends StatelessWidget {
           icon: Icons.hourglass_top_rounded,
           color: AppColors.info,
           title: 'Application Under Review',
-          message: "We're reviewing your details and documents. We'll notify you as soon as a decision is made.",
+          message:
+              "We're reviewing your details and documents. We'll notify you as soon as a decision is made.",
         );
       case 'under_verification':
         return const _StatusConfig(
@@ -49,14 +55,18 @@ class RegistrationStatusScreen extends StatelessWidget {
           icon: Icons.cancel_rounded,
           color: AppColors.error,
           title: 'Application Rejected',
-          message: (note != null && note!.isNotEmpty) ? note! : 'Your application was rejected. Please contact support for details.',
+          message: (note != null && note!.isNotEmpty)
+              ? note!
+              : 'Your application was rejected. Please contact support for details.',
         );
       case 'suspended':
         return _StatusConfig(
           icon: Icons.block_rounded,
           color: AppColors.error,
           title: 'Account Suspended',
-          message: (note != null && note!.isNotEmpty) ? note! : 'Your account has been suspended. Please contact support.',
+          message: (note != null && note!.isNotEmpty)
+              ? note!
+              : 'Your account has been suspended. Please contact support.',
         );
       default:
         return _StatusConfig(
@@ -84,13 +94,21 @@ class RegistrationStatusScreen extends StatelessWidget {
               Text(
                 config.title,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
               ),
               const SizedBox(height: 12),
               Text(
                 config.message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 15, color: AppColors.textSecondary, height: 1.4),
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
               ),
               const SizedBox(height: 32),
               if (onEditAndResubmit != null) ...[
@@ -102,7 +120,9 @@ class RegistrationStatusScreen extends StatelessWidget {
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       elevation: 0,
                     ),
                     child: const Text('Edit & Resubmit'),
@@ -116,7 +136,9 @@ class RegistrationStatusScreen extends StatelessWidget {
                   onPressed: onLogout,
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   child: const Text('Log Out'),
                 ),

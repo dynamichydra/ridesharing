@@ -124,7 +124,10 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
         suffixIcon: suffixIcon,
         filled: true,
         fillColor: AppColors.surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -234,7 +237,10 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   value: _selectedYear,
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                  ),
                   decoration: buildModernInputDecoration(
                     labelText: 'Year',
                     prefixIcon: Icons.calendar_today_outlined,
@@ -256,7 +262,10 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   value: _selectedColor,
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                  ),
                   decoration: buildModernInputDecoration(
                     labelText: 'Color',
                     prefixIcon: Icons.palette_outlined,
@@ -283,7 +292,9 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
             height: 56,
             child: ElevatedButton(
               onPressed: () {
-                debugPrint('[VehicleFormScreen] Save & Continue button clicked');
+                debugPrint(
+                  '[VehicleFormScreen] Save & Continue button clicked',
+                );
                 _submit();
               },
               style: ElevatedButton.styleFrom(
@@ -299,16 +310,10 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                 children: [
                   Text(
                     'Save & Continue',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   SizedBox(width: 8),
-                  Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 20,
-                  ),
+                  Icon(Icons.arrow_forward_rounded, size: 20),
                 ],
               ),
             ),

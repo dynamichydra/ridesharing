@@ -44,6 +44,21 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
   String? _uploadedBackUrl;
   String? _uploadedPdfUrl;
 
+  bool get _isFullyUploaded {
+    if (widget.existingDoc == null) return false;
+    final doc = widget.existingDoc!;
+    if (widget.docType.requiresFront && (doc.frontUrl == null || doc.frontUrl!.isEmpty)) {
+      return false;
+    }
+    if (widget.docType.requiresBack && (doc.backUrl == null || doc.backUrl!.isEmpty)) {
+      return false;
+    }
+    if (widget.docType.requiresPdf && (doc.pdfUrl == null || doc.pdfUrl!.isEmpty)) {
+      return false;
+    }
+    return true;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -368,7 +383,10 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         suffixIcon: suffixIcon,
         filled: true,
         fillColor: AppColors.surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -420,7 +438,10 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           if (widget.docType.requiresDocNumber) ...[
             TextFormField(
               controller: _numController,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+              ),
               decoration: buildModernInputDecoration(
                 labelText: '$documentName Document Number',
                 prefixIcon: Icons.badge_outlined,
@@ -462,18 +483,25 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
             ),
             const SizedBox(height: 32),
           ],
-          if (widget.existingDoc != null) ...[
+          if (widget.existingDoc != null && _isFullyUploaded) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               margin: const EdgeInsets.only(bottom: 24),
               decoration: BoxDecoration(
                 color: AppColors.primary.withOpacity(0.06),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 1.5),
+                border: Border.all(
+                  color: AppColors.primary.withOpacity(0.2),
+                  width: 1.5,
+                ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.verified_rounded, color: AppColors.primary, size: 24),
+                  const Icon(
+                    Icons.verified_rounded,
+                    color: AppColors.primary,
+                    size: 24,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -600,13 +628,19 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                       },
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.redAccent,
-                        side: const BorderSide(color: Colors.redAccent, width: 1.5),
+                        side: const BorderSide(
+                          color: Colors.redAccent,
+                          width: 1.5,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: const Text('Clear', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: const Text(
+                        'Clear',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -621,7 +655,10 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                         ),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: const Text('Confirm Upload', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: const Text(
+                        'Confirm Upload',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
                 ],
@@ -647,7 +684,10 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                           const SizedBox(height: 8),
                           Text(
                             'Uploaded Document (PDF)',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
                           ),
                         ],
                       ),
@@ -672,7 +712,11 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  const Icon(Icons.verified_rounded, color: Colors.green, size: 20),
+                  const Icon(
+                    Icons.verified_rounded,
+                    color: Colors.green,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   const Text(
                     'Uploaded',

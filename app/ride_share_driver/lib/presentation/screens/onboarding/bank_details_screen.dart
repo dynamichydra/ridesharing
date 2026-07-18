@@ -88,7 +88,10 @@ class _BankDetailsScreenState extends State<BankDetailsScreen> {
         prefixIcon: Icon(prefixIcon, color: AppColors.secondary, size: 22),
         filled: true,
         fillColor: AppColors.surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -207,7 +210,7 @@ class _BankDetailsScreenState extends State<BankDetailsScreen> {
                 debugPrint('[BankDetailsScreen] IFSC changed: $val'),
           ),
           const SizedBox(height: 40),
-          
+
           // Action Buttons
           Row(
             children: [
@@ -219,7 +222,10 @@ class _BankDetailsScreenState extends State<BankDetailsScreen> {
                       onPressed: widget.onSkip,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.textSecondary,
-                        side: const BorderSide(color: AppColors.border, width: 1.5),
+                        side: const BorderSide(
+                          color: AppColors.border,
+                          width: 1.5,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
