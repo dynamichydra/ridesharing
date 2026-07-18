@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/custom_button.dart';
-import '../../../../core/widgets/custom_text_field.dart';
 import '../bloc/auth_bloc.dart';
 
 class OtpPage extends StatefulWidget {
@@ -17,22 +17,34 @@ class OtpPage extends StatefulWidget {
 class _OtpPageState extends State<OtpPage> {
   final _formKey = GlobalKey<FormState>();
   final _otpController = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  bool _isValid = true;
 
   @override
   void dispose() {
     _otpController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
   void _submit() {
-    if (_formKey.currentState!.validate()) {
-      context.read<AuthBloc>().add(OtpSubmitted(_otpController.text.trim()));
+    final otp = _otpController.text.trim();
+    if (otp.length == 6) {
+      setState(() {
+        _isValid = true;
+      });
+      context.read<AuthBloc>().add(OtpSubmitted(otp));
+    } else {
+      setState(() {
+        _isValid = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.background,
@@ -46,7 +58,9 @@ class _OtpPageState extends State<OtpPage> {
       ),
       body: BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
-          if (state is AuthAuthenticated) {
+          if (state is RegistrationDetailsRequired) {
+            context.pushReplacement('/signup');
+          } else if (state is AuthAuthenticated) {
             context.go('/home');
           } else if (state is AuthError) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -77,26 +91,109 @@ class _OtpPageState extends State<OtpPage> {
                     const SizedBox(height: AppSpacing.s),
                     Text(
                       'Enter the 6-digit code sent to ${widget.phoneNumber.isNotEmpty ? widget.phoneNumber : 'your number'}.\n(Hint: Enter 123456)',
-                      style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        height: 1.5,
+                        color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.xxl),
-                    CustomTextField(
-                      controller: _otpController,
-                      labelText: 'Verification Code',
-                      hintText: '123456',
-                      prefixIcon: Icons.phonelink_lock_rounded,
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter the verification code';
-                        }
-                        if (value.length != 6) {
-                          return 'Verification code must be 6 digits';
-                        }
-                        return null;
-                      },
+                    
+                    // Stack for PIN boxes
+                    Stack(
+                      children: [
+                        Opacity(
+                          opacity: 0.0,
+                          child: SizedBox(
+                            height: 56,
+                            child: TextField(
+                              controller: _otpController,
+                              focusNode: _focusNode,
+                              keyboardType: TextInputType.number,
+                              maxLength: 6,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              enableSuggestions: false,
+                              autocorrect: false,
+                              showCursor: false,
+                              decoration: const InputDecoration(
+                                counterText: '',
+                                border: InputBorder.none,
+                              ),
+                              onChanged: (val) {
+                                setState(() {
+                                  if (!_isValid && val.length == 6) {
+                                    _isValid = true;
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            _focusNode.requestFocus();
+                          },
+                           child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: List.generate(6, (index) {
+                              final text = _otpController.text;
+                              String char = '';
+                              if (index < text.length) {
+                                char = text[index];
+                              }
+                              final isFocused = _focusNode.hasFocus && index == text.length;
+                              final hasValue = char.isNotEmpty;
+
+                              return Container(
+                                width: 46,
+                                height: 54,
+                                decoration: BoxDecoration(
+                                  color: hasValue 
+                                      ? AppColors.secondaryBlue.withOpacity(0.08) 
+                                      : isDark ? AppColors.darkSurface : Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: !_isValid
+                                        ? AppColors.errorRed
+                                        : isFocused
+                                            ? AppColors.primaryBlue
+                                            : hasValue
+                                                ? AppColors.secondaryBlue
+                                                : isDark ? AppColors.darkDivider : Colors.grey.shade300,
+                                    width: (isFocused || hasValue) ? 2 : 1.5,
+                                  ),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  char,
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: hasValue
+                                        ? AppColors.secondaryBlue
+                                        : isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+                                  ),
+                                ),
+                              );
+                            }),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: AppSpacing.xl),
+                    if (!_isValid) ...[
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Please enter a valid 6-digit code',
+                        style: TextStyle(
+                          color: AppColors.errorRed,
+                          fontSize: 13,
+                        ),
+                        textAlign: TextAlign.left,
+                      ),
+                    ],
+                    
+                    const SizedBox(height: AppSpacing.xl * 1.5),
                     CustomButton(
                       text: 'Verify & Continue',
                       onPressed: _submit,
@@ -112,10 +209,10 @@ class _OtpPageState extends State<OtpPage> {
                             ),
                           );
                         },
-                        child: Text(
+                        child: const Text(
                           'Resend Code',
                           style: TextStyle(
-                            color: theme.colorScheme.secondary,
+                            color: AppColors.primaryBlue,
                             fontWeight: FontWeight.bold,
                           ),
                         ),

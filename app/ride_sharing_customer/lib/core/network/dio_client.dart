@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:convert';
+import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
 import '../services/storage_service.dart';
 import '../../injection_container.dart';
@@ -35,7 +37,11 @@ class DioClient {
 
   /// Retained mock data fallback for unimplemented APIs
   Future<dynamic> getMockData(String assetPath) async {
-    // Return standard mock data
-    return {};
+    try {
+      final jsonStr = await rootBundle.loadString(assetPath);
+      return json.decode(jsonStr);
+    } catch (e) {
+      return {};
+    }
   }
 }

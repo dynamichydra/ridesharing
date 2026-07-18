@@ -10,9 +10,9 @@ class AuthRepositoryImpl implements AuthRepository {
   AuthRepositoryImpl(this._authDataSource);
 
   @override
-  Future<void> login(String email, String password) async {
+  Future<void> login(String phone) async {
     try {
-      await _authDataSource.login(email, password);
+      await _authDataSource.login(phone);
     } catch (e) {
       throw AuthFailure(e.toString().replaceAll('Exception: ', ''));
     }
@@ -28,9 +28,27 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<void> verifyOtp(String code) async {
+  Future<bool> verifyOtp(String code) async {
     try {
-      await _authDataSource.verifyOtp(code);
+      final result = await _authDataSource.verifyOtp(code);
+      final isNew = result['isNew'] as bool;
+      final user = result['user'] as Map<String, dynamic>?;
+
+      // If name or email are empty/null in backend, they still need to complete details
+      final name = user?['name'] as String?;
+      final email = user?['email'] as String?;
+      final isProfileIncomplete = name == null || name.isEmpty || email == null || email.isEmpty;
+
+      return isNew || isProfileIncomplete;
+    } catch (e) {
+      throw AuthFailure(e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
+  @override
+  Future<void> registerProfileDetails(String name, String email) async {
+    try {
+      await _authDataSource.registerProfileDetails(name, email);
     } catch (e) {
       throw AuthFailure(e.toString().replaceAll('Exception: ', ''));
     }
@@ -52,7 +70,7 @@ class AuthRepositoryImpl implements AuthRepository {
     } catch (_) {}
     final storage = sl<StorageService>();
     await storage.clearAuth();
-    await storage.clearCache(); // Clean local profile cache upon logout
+    await storage.clearCache();
   }
 
   @override

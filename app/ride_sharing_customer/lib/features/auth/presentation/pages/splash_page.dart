@@ -57,17 +57,10 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.l),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(AppRadius.xl),
-                  ),
-                  child: const Icon(
-                    Icons.directions_car_rounded,
-                    color: AppColors.primaryBlue,
-                    size: 64,
-                  ),
+                Image.asset(
+                  'assets/images/ride-share-text-icon.png',
+                  height: 64,
+                  fit: BoxFit.contain,
                 ),
                 const SizedBox(height: AppSpacing.l),
                 const Text(

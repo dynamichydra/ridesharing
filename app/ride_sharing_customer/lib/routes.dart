@@ -63,7 +63,7 @@ class AppRoutes {
       if (!isLoggedIn && !isGoingToAuth) {
         return login;
       }
-      if (isLoggedIn && isGoingToAuth && state.matchedLocation != splash) {
+      if (isLoggedIn && isGoingToAuth && state.matchedLocation != splash && state.matchedLocation != signup) {
         return home;
       }
       return null;

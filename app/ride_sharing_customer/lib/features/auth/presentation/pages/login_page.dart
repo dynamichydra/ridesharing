@@ -15,24 +15,18 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
+  final _phoneController = TextEditingController();
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
   void _submit() {
     if (_formKey.currentState!.validate()) {
       context.read<AuthBloc>().add(
-            LoginSubmitted(
-              _emailController.text.trim(),
-              _passwordController.text,
-            ),
+            LoginSubmitted(_phoneController.text.trim()),
           );
     }
   }
@@ -40,12 +34,15 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.background,
       body: BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
-          if (state is AuthAuthenticated) {
+          if (state is OtpRequired) {
+            context.push('/otp', extra: state.phoneNumber);
+          } else if (state is AuthAuthenticated) {
             context.go('/home');
           } else if (state is AuthError) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -67,115 +64,51 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(height: AppSpacing.xl),
                     Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(AppSpacing.m),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary,
-                          borderRadius: BorderRadius.circular(AppRadius.m),
-                        ),
-                        child: Icon(
-                          Icons.directions_car_rounded,
-                          color: theme.colorScheme.onPrimary,
-                          size: 40,
-                        ),
+                      child: Image.asset(
+                        'assets/images/ride-share-text-icon.png',
+                        height: 48,
+                        fit: BoxFit.contain,
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.l),
+                    const SizedBox(height: AppSpacing.xl * 1.5),
                     Center(
                       child: Text(
-                        'Welcome Back',
+                        'Rider App',
                         style: theme.textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.w900,
+                          color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
                         ),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.s),
                     Center(
                       child: Text(
-                        'Sign in to secure your ride',
-                        style: theme.textTheme.bodyMedium,
+                        'Enter your phone number to get started',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                        ),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.xxl),
                     CustomTextField(
-                      controller: _emailController,
-                      labelText: 'Email Address',
-                      hintText: 'alex.morgan@example.com',
-                      prefixIcon: Icons.email_outlined,
-                      keyboardType: TextInputType.emailAddress,
+                      controller: _phoneController,
+                      labelText: 'Phone Number',
+                      hintText: '+91 98765 43210',
+                      prefixIcon: Icons.phone_android_rounded,
+                      keyboardType: TextInputType.phone,
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Please enter your email';
+                          return 'Please enter your phone number';
                         }
                         return null;
                       },
-                    ),
-                    const SizedBox(height: AppSpacing.m),
-                    CustomTextField(
-                      controller: _passwordController,
-                      labelText: 'Password',
-                      hintText: '••••••••',
-                      prefixIcon: Icons.lock_outline_rounded,
-                      obscureText: _obscurePassword,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                          size: 20,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter your password';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: AppSpacing.s),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () => context.push('/forgot-password'),
-                        child: Text(
-                          'Forgot Password?',
-                          style: TextStyle(
-                            color: theme.colorScheme.secondary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.l),
-                    CustomButton(
-                      text: 'Sign In',
-                      onPressed: _submit,
-                      isLoading: isLoading,
                     ),
                     const SizedBox(height: AppSpacing.xl),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          "Don't have an account? ",
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                        GestureDetector(
-                          onTap: () => context.push('/signup'),
-                          child: Text(
-                            'Sign Up',
-                            style: TextStyle(
-                              color: theme.colorScheme.secondary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
+                    CustomButton(
+                      text: 'Send Verification Code',
+                      onPressed: _submit,
+                      isLoading: isLoading,
                     ),
                   ],
                 ),

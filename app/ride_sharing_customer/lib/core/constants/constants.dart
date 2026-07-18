@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   // Common Colors
-  static const Color primaryBlue = Color(0xFF276EF1); // Electric Blue
-  static const Color successGreen = Color(0xFF05A357); // Green Accent
-  static const Color warningOrange = Color(0xFFFF9900); // Warning/Orange
-  static const Color errorRed = Color(0xFFE11900); // Danger Red
+  static const Color primaryBlue = Color(0xFF01A34D); // Green (#01a34d) as primary brand color
+  static const Color secondaryBlue = Color(0xFF0165B7); // Blue (#0165b7) as secondary brand color
+  static const Color successGreen = Color(0xFF01A34D); // Green Accent
+  static const Color warningOrange = Color(0xFFFFC800); // Yellow/Orange
+  static const Color errorRed = Color(0xFFE53935); // Danger Red
 
   // Light Theme Colors
   static const Color lightPrimary = Color(0xFF0F0F10);
