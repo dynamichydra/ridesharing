@@ -8,7 +8,6 @@ import '../../../../features/ride/presentation/bloc/ride_bloc.dart';
 import '../../../../features/ride/presentation/widgets/ride_offer_overlay.dart';
 import '../../../../features/ride/presentation/screens/active_ride_screen.dart';
 import '../../../../features/ride/domain/entities/active_ride.dart';
-import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
 
 class DriverDashboard extends StatefulWidget {
   final VoidCallback onLogout;
@@ -191,100 +190,186 @@ class _DriverDashboardState extends State<DriverDashboard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Gradient Greeting Card with Integrated Status Switcher
+                  // Greeting Header
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Welcome back,',
+                        style: TextStyle(fontSize: 14, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Arijit Bose',
+                        style: TextStyle(fontSize: 24, color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Integrated Status Switcher Card
                   Container(
-                    padding: const EdgeInsets.all(20),
-                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.secondary, AppColors.primary],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                      color: isOnline ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                      border: Border.all(
+                        color: isOnline ? const Color(0xFFA7F3D0) : const Color(0xFFFEE2E2),
                       ),
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.secondary.withOpacity(0.15),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
+                          color: (isOnline ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withOpacity(0.04),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isOnline ? const Color(0xFFD1FAE5) : const Color(0xFFFEE2E2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            isOnline ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+                            color: isOnline ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 isOnline ? 'You are Online' : 'You are Offline',
-                                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: isOnline ? const Color(0xFF065F46) : const Color(0xFF991B1B),
+                                ),
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 2),
                               Text(
-                                isOnline ? 'Ready to accept ride requests nearby' : 'Go online to start receiving rides',
-                                style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 13),
+                                isOnline ? 'Ready to accept passenger requests' : 'Go online to start receiving rides',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isOnline ? const Color(0xFF047857) : const Color(0xFFB91C1C),
+                                ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        ElevatedButton(
-                          onPressed: isTransitioning
-                              ? null
-                              : () {
-                                  if (isOnline) {
-                                    _driverStatusBloc.add(GoOfflineRequested());
-                                  } else {
-                                    _driverStatusBloc.add(GoOnlineRequested());
-                                  }
-                                },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: isOnline ? AppColors.error : AppColors.secondary,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                            elevation: 2,
+                        if (isTransitioning)
+                          const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          )
+                        else
+                          Switch(
+                            value: isOnline,
+                            activeColor: const Color(0xFF10B981),
+                            activeTrackColor: const Color(0xFFA7F3D0),
+                            inactiveThumbColor: const Color(0xFFEF4444),
+                            inactiveTrackColor: const Color(0xFFFCA5A5),
+                            onChanged: (val) {
+                              if (val) {
+                                _driverStatusBloc.add(GoOnlineRequested());
+                              } else {
+                                _driverStatusBloc.add(GoOfflineRequested());
+                              }
+                            },
                           ),
-                          child: isTransitioning
-                              ? const SizedBox(
-                                  height: 16,
-                                  width: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : Text(
-                                  isOnline ? 'Go Offline' : 'Go Online',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                ),
-                        ),
                       ],
                     ),
                   ),
+                  const SizedBox(height: 16),
 
-                  // Warning banner if offline
-                  if (!isOnline)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.warning.withOpacity(0.08),
-                        border: Border.all(color: AppColors.warning.withOpacity(0.4)),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Row(
+                  // Radar Availability Indicator Box
+                  const Text(
+                    'Live Location Radar',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    height: 220,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A), // Slate 900
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF0F172A).withOpacity(0.12),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Stack(
+                        alignment: Alignment.center,
                         children: [
-                          Icon(Icons.warning_amber_rounded, color: AppColors.warning),
-                          SizedBox(width: 12),
-                          Expanded(
+                          // Concentric circles
+                          Container(
+                            width: 140,
+                            height: 140,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withOpacity(0.05), width: 1.5),
+                            ),
+                          ),
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withOpacity(0.08), width: 1.5),
+                            ),
+                          ),
+                          // Glow center node
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: (isOnline ? AppColors.primary : Colors.grey).withOpacity(0.15),
+                            ),
+                          ),
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isOnline ? AppColors.primary : Colors.grey,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (isOnline ? AppColors.primary : Colors.grey).withOpacity(0.8),
+                                  blurRadius: 8,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 16,
                             child: Text(
-                              'You are currently offline. Change your status above to receive ride requests!',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 13),
+                              isOnline ? 'SCANNING FOR PASSENGERS...' : 'RADAR OFFLINE',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: isOnline ? AppColors.primary.withOpacity(0.9) : Colors.grey.shade500,
+                                letterSpacing: 1.2,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 24),
 
                   // Stats Dashboard Grid
                   GridView.count(
@@ -303,112 +388,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Radar Availability Indicator Box
-                  const Text(
-                    'Live Location Radar',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    height: 250,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A), // Premium Dark Slate background for Radar
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isOnline ? AppColors.primary.withOpacity(0.4) : AppColors.border,
-                        width: isOnline ? 1.5 : 1.0,
-                      ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          // Concentric radar rings
-                          ...List.generate(3, (index) {
-                            final size = (index + 1) * 75.0;
-                            return Container(
-                              width: size,
-                              height: size,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: (isOnline ? AppColors.primary : AppColors.textSecondary).withOpacity(0.08),
-                                  width: 1.5,
-                                ),
-                              ),
-                            );
-                          }),
-                          
-                          // Radar grid crosshairs
-                          Container(width: 200, height: 1, color: Colors.white.withOpacity(0.06)),
-                          Container(width: 1, height: 200, color: Colors.white.withOpacity(0.06)),
-
-                          // Glowing Passenger Dots (Simulated near requests)
-                          if (isOnline) ...[
-                            Positioned(top: 50, left: 70, child: _buildGlowingDot(AppColors.primary)),
-                            Positioned(bottom: 70, right: 60, child: _buildGlowingDot(AppColors.secondary)),
-                            Positioned(top: 130, right: 90, child: _buildGlowingDot(Colors.cyan)),
-                          ],
-
-                          // Scanning sweep layer
-                          if (isOnline)
-                            Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: SweepGradient(
-                                  colors: [
-                                    Colors.transparent,
-                                    AppColors.primary.withOpacity(0.01),
-                                    AppColors.primary.withOpacity(0.04),
-                                    AppColors.primary.withOpacity(0.15),
-                                    Colors.transparent,
-                                  ],
-                                  stops: const [0.0, 0.4, 0.6, 0.9, 1.0],
-                                ),
-                              ),
-                            ),
-
-                          // Center Node
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: (isOnline ? AppColors.secondary : Colors.grey[800]!).withOpacity(0.2),
-                              border: Border.all(color: isOnline ? AppColors.secondary : Colors.grey, width: 1.5),
-                            ),
-                            child: Icon(
-                              Icons.radar_rounded,
-                              size: 28,
-                              color: isOnline ? AppColors.primary : Colors.grey,
-                            ),
-                          ),
-
-                          Positioned(
-                            bottom: 16,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.4),
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              child: Text(
-                                isOnline ? 'SCANNING FOR PASSENGERS...' : 'RADAR OFFLINE',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: isOnline ? AppColors.primary : Colors.grey,
-                                  letterSpacing: 0.8,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
                   // Weekly Performance Summary Chart
                   _buildWeeklyPerformanceChart(),
                 ],
@@ -417,30 +396,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
           ),
         );
       },
-    );
-  }
-
-  Widget _buildGlowingDot(Color color) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Container(
-          width: 18,
-          height: 18,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color.withOpacity(0.3),
-          ),
-        ),
-        Container(
-          width: 7,
-          height: 7,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color,
-          ),
-        ),
-      ],
     );
   }
 
@@ -489,7 +444,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
             children: [
               Text(
                 value,
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: valueColor),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: valueColor),
               ),
               if (subtext != null) ...[
                 const SizedBox(height: 2),
@@ -526,11 +481,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
+            children: const [
               Text(
-                'Weekly Performance',
+                'Weekly Performance Summary',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary),
               ),
               Icon(Icons.analytics_rounded, color: AppColors.secondary, size: 20),
@@ -580,105 +535,207 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   Widget _buildDrawer(BuildContext context) {
-    final authState = context.read<AuthBloc>().state;
-    final driverName = authState is Authenticated ? (authState.driver.name ?? 'Partner Driver') : 'Partner Driver';
-    final driverPhone = authState is Authenticated ? (authState.driver.phone ?? '') : '';
-    final driverPhoto = authState is Authenticated ? authState.driver.profilePhoto : null;
+    return BlocBuilder<DriverStatusBloc, DriverStatusState>(
+      bloc: _driverStatusBloc,
+      builder: (context, state) {
+        final isOnline = state is DriverStatusOnline;
 
-    return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          DrawerHeader(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppColors.secondary, AppColors.primary],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                  child: CircleAvatar(
-                    radius: 30,
-                    backgroundColor: Colors.white,
-                    backgroundImage: driverPhoto != null && driverPhoto.isNotEmpty
-                        ? NetworkImage(driverPhoto)
-                        : null,
-                    child: driverPhoto == null || driverPhoto.isEmpty
-                        ? const Icon(Icons.person, color: AppColors.secondary, size: 30)
-                        : null,
+        return Drawer(
+          backgroundColor: Colors.white,
+          child: Column(
+            children: [
+              // Premium Header
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.only(top: 60, left: 24, right: 24, bottom: 24),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [AppColors.secondary, AppColors.primary],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  driverName,
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Stack(
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: const CircleAvatar(
+                            radius: 32,
+                            backgroundColor: Colors.white,
+                            child: Icon(Icons.person, color: AppColors.secondary, size: 36),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            width: 16,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              color: isOnline ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Arijit Bose',
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
+                        const SizedBox(width: 4),
+                        Text(
+                          '4.88 Rating',
+                          style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13, fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 4,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.5),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isOnline ? 'Online' : 'Offline',
+                          style: TextStyle(
+                            color: isOnline ? const Color(0xFFA7F3D0) : const Color(0xFFFCA5A5),
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                Text(driverPhone.isNotEmpty ? driverPhone : 'Partner Driver', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              ],
-            ),
-          ),
-          ListTile(
-            leading: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppColors.secondary.withOpacity(0.08),
-                shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.dashboard_rounded, color: AppColors.secondary, size: 20),
-            ),
-            title: const Text('Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
-            onTap: () => Navigator.pop(context),
-          ),
-          ListTile(
-            leading: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.08),
-                shape: BoxShape.circle,
+
+              // Drawer Navigation Items
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  children: [
+                    _buildDrawerItem(
+                      icon: Icons.dashboard_rounded,
+                      title: 'Dashboard',
+                      iconColor: AppColors.secondary,
+                      onTap: () => Navigator.pop(context),
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.history_rounded,
+                      title: 'Ride History',
+                      iconColor: AppColors.primary,
+                      onTap: () => Navigator.pop(context),
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.account_balance_wallet_rounded,
+                      title: 'Wallet & Earnings',
+                      iconColor: AppColors.secondary,
+                      onTap: () => Navigator.pop(context),
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.person_rounded,
+                      title: 'Profile Settings',
+                      iconColor: AppColors.primary,
+                      onTap: () => Navigator.pop(context),
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.help_outline_rounded,
+                      title: 'Help & Support',
+                      iconColor: Colors.teal,
+                      onTap: () => Navigator.pop(context),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8.0),
+                      child: Divider(height: 1),
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.logout_rounded,
+                      title: 'Log Out',
+                      iconColor: AppColors.error,
+                      showTrailing: false,
+                      onTap: () {
+                        Navigator.pop(context);
+                        widget.onLogout();
+                      },
+                    ),
+                  ],
+                ),
               ),
-              child: const Icon(Icons.history_rounded, color: AppColors.primary, size: 20),
-            ),
-            title: const Text('Ride History', style: TextStyle(fontWeight: FontWeight.bold)),
-            onTap: () => Navigator.pop(context),
-          ),
-          ListTile(
-            leading: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppColors.secondary.withOpacity(0.08),
-                shape: BoxShape.circle,
+              
+              // Footer version / info
+              Padding(
+                padding: const EdgeInsets.only(bottom: 24.0),
+                child: Text(
+                  'v1.0.2 • Partner App',
+                  style: TextStyle(
+                    color: AppColors.textSecondary.withOpacity(0.5),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
-              child: const Icon(Icons.wallet_rounded, color: AppColors.secondary, size: 20),
-            ),
-            title: const Text('Earnings & Wallet', style: TextStyle(fontWeight: FontWeight.bold)),
-            onTap: () => Navigator.pop(context),
+            ],
           ),
-          const Divider(),
-          ListTile(
-            leading: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppColors.error.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.logout_rounded, color: AppColors.error, size: 20),
-            ),
-            title: const Text('Log Out', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.error)),
-            onTap: () {
-              Navigator.pop(context);
-              widget.onLogout();
-            },
-          )
-        ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDrawerItem({
+    required IconData icon,
+    required String title,
+    required Color iconColor,
+    required VoidCallback onTap,
+    bool showTrailing = true,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        dense: true,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        onTap: onTap,
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: iconColor, size: 20),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        trailing: showTrailing
+            ? Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.textSecondary.withOpacity(0.4),
+                size: 20,
+              )
+            : null,
       ),
     );
   }

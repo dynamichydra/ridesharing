@@ -154,8 +154,11 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
             } else if (state is OnboardingProgressLoaded) {
               // An admin published a newer terms/privacy version since this
               // driver last accepted — interrupt wherever they are and force
-              // them back to the legal step, regardless of registrationStep.
-              if (state.progress.pendingLegalAcceptance && _currentStep != 4) {
+              // them back to the legal step, regardless of registrationStep,
+              // but only if they have completed their personal info (registrationStep >= 2).
+              if (state.progress.pendingLegalAcceptance &&
+                  _currentStep != 4 &&
+                  state.progress.registrationStep >= 2) {
                 setState(() {
                   _currentStep = 4;
                 });
@@ -734,6 +737,8 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           summary: _summary!,
           needsVehicleRental: _needsVehicleRental,
           documentRequirements: _config!.documentRequirements,
+          isBankDetailsCompleted: _bankAccount != null && _bankAccount!.isNotEmpty,
+          isEmergencyContactCompleted: _emergencyPhone != null && _emergencyPhone!.isNotEmpty,
           onItemTap: (code) {
             setState(() {
               _enteredFromChecklist = true;

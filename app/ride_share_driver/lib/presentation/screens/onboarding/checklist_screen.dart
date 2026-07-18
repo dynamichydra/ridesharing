@@ -7,6 +7,8 @@ class ChecklistScreen extends StatelessWidget {
   final RegistrationSummary summary;
   final bool needsVehicleRental;
   final List<DocumentType> documentRequirements;
+  final bool isBankDetailsCompleted;
+  final bool isEmergencyContactCompleted;
   final Function(String itemCode) onItemTap;
   final VoidCallback onSubmit;
 
@@ -15,6 +17,8 @@ class ChecklistScreen extends StatelessWidget {
     required this.summary,
     this.needsVehicleRental = false,
     required this.documentRequirements,
+    required this.isBankDetailsCompleted,
+    required this.isEmergencyContactCompleted,
     required this.onItemTap,
     required this.onSubmit,
   });
@@ -157,21 +161,23 @@ class ChecklistScreen extends StatelessWidget {
         title: 'Direct deposit info',
         description: 'Payout details (account number, IFSC code)',
         icon: Icons.account_balance_rounded,
-        isCompleted: !summary.missing.contains('bank_details'),
+        isCompleted: isBankDetailsCompleted,
       ),
       _ChecklistItem(
         code: 'emergency_contact',
         title: 'Emergency contact',
         description: 'Relative/companion safety phone details',
         icon: Icons.contact_phone_rounded,
-        isCompleted: !summary.missing.contains('emergency_contact'),
+        isCompleted: isEmergencyContactCompleted,
       ),
     ]);
 
     final completedCount = todoItems.where((i) => i.isCompleted).length;
     final totalCount = todoItems.length;
-    // We allow skipping Bank Details and Emergency Contact (2 items)
-    final isButtonEnabled = completedCount >= (totalCount - 2);
+    // We allow skipping Bank Details and Emergency Contact (they are optional)
+    final isButtonEnabled = todoItems
+        .where((i) => i.code != 'bank_details' && i.code != 'emergency_contact')
+        .every((i) => i.isCompleted);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
