@@ -182,7 +182,7 @@ export default function SubscriptionPlanList() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between bg-background/50 backdrop-blur-sm sticky top-0 z-10 py-2 px-1">
+      <div className="flex items-center justify-between py-2 px-1">
         <div className="flex items-center gap-2">
           <div className="bg-primary/10 p-1.5 rounded-lg">
             <CreditCard className="h-5 w-5 text-primary" />

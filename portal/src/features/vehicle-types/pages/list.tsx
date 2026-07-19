@@ -245,28 +245,32 @@ const [pricingErrors, setPricingErrors] = useState<
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between py-2 px-1">
-        <div className="flex items-center gap-2">
-          <div className="bg-primary/10 p-1.5 rounded-lg">
-            <CarFront className="h-5 w-5 text-primary" />
-          </div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground uppercase">
-            Vehicle Types
-          </h2>
-          <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest bg-accent px-2 py-0.5 rounded-full opacity-70">
-            {totalRecords} Total
-          </span>
-        </div>
-
-        <Button
-          onClick={handleOpenCreate}
-          size="sm"
-          className="gap-2 shadow-sm hover:shadow-md transition-all active:scale-[0.98] h-8"
-        >
-          <Plus className="h-4 w-4" />
-          Add Vehicle Type
-        </Button>
+      <div className="rounded-xl border border-border bg-card shadow-sm">
+  <div className="flex items-center justify-between px-4 py-3">
+    <div className="flex items-center gap-2">
+      <div className="bg-primary/10 p-1.5 rounded-lg">
+        <CarFront className="h-5 w-5 text-primary" />
       </div>
+
+      <h2 className="text-xl font-bold tracking-tight text-foreground uppercase">
+        Vehicle Types
+      </h2>
+
+      <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest bg-accent px-2 py-0.5 rounded-full opacity-70">
+        {totalRecords} Total
+      </span>
+    </div>
+
+    <Button
+      onClick={handleOpenCreate}
+      size="sm"
+      className="gap-2 h-8"
+    >
+      <Plus className="h-4 w-4" />
+      Add Vehicle Type
+    </Button>
+  </div>
+</div>
 
       <VehicleTypeFilters
         controller={{ draft, applied, setDraftValue, apply, reset }}
