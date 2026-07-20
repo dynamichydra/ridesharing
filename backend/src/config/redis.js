@@ -38,6 +38,11 @@ export const REDIS_KEYS = {
   // Cache
   fareCache: (key) => `fare:${key}`,                // TTL 120s
 
+  // Hex-zone reverse index (H3 geofencing) — no TTL, rebuilt on zone write, not time-based
+  hexZoneIndex: (resolution, cell) => `hexzone:${resolution}:${cell}`, // SET of zoneIds
+  hexZoneResolutions: 'hexzone:resolutions',            // SET of resolutions currently in use
+  hexZoneCells: (zoneId) => `hexzone:cells:${zoneId}`,      // SET of "res:cell" — this zone's own cached cells, for diffing on rebuild
+
   // Pub/Sub channels
   CHAN: {
     rideAccepted: (rideId) => `chan:ride:accepted:${rideId}`,

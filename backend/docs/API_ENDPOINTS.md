@@ -216,28 +216,39 @@ country. `POST /detect` (used internally by fare calculation) matches across eve
 zones at once — which country a zone belongs to is how a ride's country/currency get resolved
 from a pickup point.
 
+Zones optionally carry an **H3 hex-cell index** (`hexCells`/`resolution`/`priority`) derived from
+their `polygon`, used for O(1) point-in-zone lookups (`resolveHexZones`, see
+`../docs/hex-zone-geofencing.md`) instead of the O(n) polygon scan `detectZone` still does. Both
+mechanisms coexist: `detectZone`/`POST /detect` continues to resolve country/currency for a
+pickup; the hex index is the additive precision layer fare calc uses for overlapping/precedence
+zone rules (airport nested in a city surge zone, etc).
+
 | Method | Path | Auth | Body | Description |
 |---|---|---|---|---|
 | GET | `/` | Public | `?page=&countryId=` (both optional) | List zones, optionally filtered to one country. |
 | GET | `/:id` | Public | — | Get one zone. |
-| POST | `/detect` | Public | `{ lat, lng }` | Find which zone a point falls in (or `null`) — searches across all countries. |
-| POST | `/` | Admin | `{ name, countryId, type, polygon, multiplier?, description? }` | Create a zone. |
-| PATCH | `/:id` | Admin | partial fields | Update a zone. |
+| POST | `/detect` | Public | `{ lat, lng }` | Find which zone a point falls in (or `null`) — searches across all countries. Polygon-based, single match. |
+| POST | `/resolve-hex` | Public | `{ lat, lng }` | Find all H3 hex-zone matches for a point, priority-ordered (most specific first), or `[]`. O(1)-ish hash lookup, not geometry math. |
+| POST | `/` | Admin | `{ name, countryId, type, polygon, multiplier?, description?, resolution? }` | Create a zone. If `resolution` is given, hex cells are generated immediately from `polygon`. |
+| PATCH | `/:id` | Admin | partial fields | Update a zone. If `polygon` and/or `resolution` is included, hex cells are regenerated. |
+| POST | `/:id/generate-hex-cells` | Admin | `{ resolution? }` (defaults to 9) | (Re)derive `hexCells` from the zone's stored `polygon` — re-run any time you change resolution. |
 | DELETE | `/:id` | Admin | — | Delete a zone. |
 
 ## Fare
 
 Base path: `/fare`. Response includes `countryId`, `currencyCode`, `estimatedFareMinor` (integer)
 and `estimatedFare` (major-unit convenience number) — country/currency are resolved from the
-pickup point, never passed in.
+pickup point, never passed in. `breakdown.hexZones` lists every H3 hex-zone the pickup point
+matched (priority-ordered); a `ruleType: 'zone'` fare rule matches if its `zoneId` is either the
+polygon-detected `zone` or any of those hex zones.
 
 | Method | Path | Auth | Body | Description |
 |---|---|---|---|---|
-| POST | `/estimate` | Public | `{ pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId }` | Estimate fare for one vehicle type. 404s if that vehicle type has no rate card in the resolved country. |
-| POST | `/estimate-all` | Public | `{ pickupLat, pickupLng, dropLat, dropLng }` | Estimate fare for every active vehicle type (booking screen) — types with no rate card in the resolved country are silently omitted. |
+| POST | `/estimate` | Public | `{ pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId }` | Estimate fare for one vehicle type. 404s if that vehicle type has no rate card in the resolved country; 422s if a matched zone rule's `allowedVehicleTypeIds` excludes this vehicle type. |
+| POST | `/estimate-all` | Public | `{ pickupLat, pickupLng, dropLat, dropLng }` | Estimate fare for every active vehicle type (booking screen) — types with no rate card, or excluded by a zone rule's `allowedVehicleTypeIds`, are silently omitted. |
 | GET | `/rules` | Admin | — | List fare rules (paginated). |
 | GET | `/rules/:id` | Admin | — | Get one fare rule. |
-| POST | `/rules` | Admin | `{ name, countryId?, ruleType, multiplier, ... }` | Create a fare rule (time/zone/traffic-based surge). `countryId: null` = applies in every country, each evaluated in that country's own local timezone (`countries.timezone`). |
+| POST | `/rules` | Admin | `{ name, countryId?, ruleType, multiplier, zoneId?, flatFareMinor?, allowedVehicleTypeIds?, priority?, ... }` | Create a fare rule (time/zone/traffic-based surge). `countryId: null` = applies in every country, each evaluated in that country's own local timezone (`countries.timezone`). For `ruleType: 'zone'`: `flatFareMinor` overrides the computed fare entirely instead of multiplying (highest-priority match wins if several zone rules match); `allowedVehicleTypeIds` restricts which vehicle types may be booked in that zone. |
 | PATCH | `/rules/:id` | Admin | partial fields | Update a fare rule. |
 | DELETE | `/rules/:id` | Admin | — | Delete a fare rule. |
 

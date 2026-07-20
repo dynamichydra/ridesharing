@@ -26,30 +26,44 @@ const mapsClient = new Client({});
 // ── internal ──────────────────────────────────────────────────────────────────
 
 async function _distancematrix(origin, destination) {
-  const res = await mapsClient.distancematrix({
-    params: {
-      origins: [origin],
-      destinations: [destination],
-      departure_time: 'now',
-      traffic_model: 'best_guess',
-      key: env.GOOGLE_MAPS_KEY,
-    },
-  });
-  return res.data.rows[0].elements[0];
+  try {
+    const res = await mapsClient.distancematrix({
+      params: {
+        origins: [origin],
+        destinations: [destination],
+        departure_time: 'now',
+        traffic_model: 'best_guess',
+        key: env.GOOGLE_MAPS_KEY,
+      },
+    });
+    return res.data.rows[0].elements[0];
+  } catch (error) {
+    console.log(error);
+    throw error;
+    
+  }
+  
 }
 
 async function _directions(origin, destination) {
-  const res = await mapsClient.directions({
-    params: {
-      origin,
-      destination,
-      departure_time: 'now',
-      traffic_model: 'best_guess',
-      key: env.GOOGLE_MAPS_KEY,
-    },
-  });
-  const route = res.data.routes[0];
-  return route || null;
+  try {
+    const res = await mapsClient.directions({
+      params: {
+        origin,
+        destination,
+        departure_time: 'now',
+        traffic_model: 'best_guess',
+        key: env.GOOGLE_MAPS_KEY,
+      },
+    });
+    const route = res.data.routes[0];
+    return route || null;
+  } catch (error) {
+    console.log(error);
+    throw error;
+    
+  }
+  
 }
 
 // ── public ────────────────────────────────────────────────────────────────────
@@ -71,6 +85,8 @@ async function _directions(origin, destination) {
  */
 export async function getRouteData(originLat, originLng, destLat, destLng) {
   if (!env.GOOGLE_MAPS_KEY) {
+    console.log("CALLLLLLLLLLL");
+    
     // Dev fallback — straight-line estimate
     const distanceKm = haversineKm(originLat, originLng, destLat, destLng);
     const durationMin = Math.ceil((distanceKm / 25) * 60); // 25 km/h avg city speed

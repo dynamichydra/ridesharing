@@ -3,6 +3,7 @@ import { db } from '../../config/db.js';
 import { vehicleTypes } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { detectZone } from '../zone/zone.service.js';
+import { resolveHexZones } from '../zone/hex-zone.service.js';
 import { getActiveRulesForVehicle } from './fare-rules.service.js';
 import { getApplicableTaxRules } from './tax-rules.service.js';
 import { getRate } from '../vehicle-type/vehicle-type-pricing.service.js';
@@ -38,6 +39,12 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
   const country    = zone ? await getCountryById(zone.countryId) : await getDefaultCountry();
   const currencyCode = country.currencyCode;
 
+  // 2b. H3 hex-zone matches — additive precision layer alongside the polygon-matched `zone`
+  // above (which only drives country resolution + the flat zoneMultiplier). Priority-ordered,
+  // most specific zone first (e.g. airport before a city-wide surge zone it's nested inside).
+  const hexZones   = await resolveHexZones(parseFloat(pickupLat), parseFloat(pickupLng));
+  const hexZoneIds = new Set(hexZones.map((z) => z.id));
+
   // 3. Country-specific rate card for this vehicle type
   const pricing = await getRate(vehicleTypeId, country.id);
 
@@ -60,6 +67,7 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
   // 7. Dynamic fare rules — evaluated in the country's local time, not server time
   const rules          = await getActiveRulesForVehicle(vehicleTypeId, country.id);
   let   surgeMultiplier = 1.0;
+  let   flatFareMinor   = null; // set by a zone rule's flatFareMinor; highest-priority match wins
   const appliedSurges  = [];
 
   for (const rule of rules) {
@@ -71,15 +79,28 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
       matches = trafficDelayS >= (rule.trafficDelayS ?? 300);
     }
     if (rule.ruleType === 'zone' && rule.zoneId) {
-      matches = zone?.id === rule.zoneId;
+      matches = zone?.id === rule.zoneId || hexZoneIds.has(rule.zoneId);
     }
     if (matches) {
-      surgeMultiplier *= parseFloat(rule.multiplier);
-      appliedSurges.push({ name: rule.name, ruleType: rule.ruleType, multiplier: rule.multiplier });
+      if (rule.allowedVehicleTypeIds?.length && !rule.allowedVehicleTypeIds.includes(vehicleTypeId)) {
+        throw { statusCode: 422, message: `Vehicle type not permitted by zone rule "${rule.name}"` };
+      }
+      // rules are ordered by priority DESC, so the first flat-fare match is the winner
+      if (rule.flatFareMinor != null && flatFareMinor === null) {
+        flatFareMinor = rule.flatFareMinor;
+      } else {
+        surgeMultiplier *= parseFloat(rule.multiplier);
+      }
+      appliedSurges.push({
+        name: rule.name, ruleType: rule.ruleType, multiplier: rule.multiplier,
+        ...(rule.flatFareMinor != null ? { flatFareMinor: rule.flatFareMinor } : {}),
+      });
     }
   }
 
-  const totalBeforeMinMinor = Math.round(subtotalMinor * zoneMultiplier * surgeMultiplier);
+  const totalBeforeMinMinor = flatFareMinor != null
+    ? flatFareMinor
+    : Math.round(subtotalMinor * zoneMultiplier * surgeMultiplier);
   const minFareApplied      = totalBeforeMinMinor < pricing.minFareMinor;
   const preTaxFareMinor     = Math.max(totalBeforeMinMinor, pricing.minFareMinor);
 
@@ -109,7 +130,9 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
       subtotalMinor,
       zone:            zone ? { id: zone.id, name: zone.name, multiplier: zone.multiplier } : null,
       zoneMultiplier,
+      hexZones:        hexZones.map((z) => ({ id: z.id, name: z.name, type: z.type, priority: z.priority })),
       surgeMultiplier: parseFloat(surgeMultiplier.toFixed(4)),
+      flatFareMinor,
       appliedSurges,
       minFareApplied,
       taxMinor,

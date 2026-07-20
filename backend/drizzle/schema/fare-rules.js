@@ -15,6 +15,8 @@ export const fareRules = pgTable('fare_rules', {
   daysOfWeek:    integer('days_of_week').array(),  // [0..6], null = all days
   trafficDelayS: integer('traffic_delay_s'),    // only for ruleType=traffic, threshold in seconds
   multiplier:    decimal('multiplier', { precision: 5, scale: 2 }).notNull(),
+  flatFareMinor: integer('flat_fare_minor'),     // when set, overrides the computed fare entirely instead of multiplying
+  allowedVehicleTypeIds: uuid('allowed_vehicle_type_ids').array(), // restrict which vehicle types may serve this rule's zone; null = no restriction
   priority:      integer('priority').default(1),
   isActive:      boolean('is_active').default(true),
   createdAt:     timestamp('created_at').defaultNow(),
