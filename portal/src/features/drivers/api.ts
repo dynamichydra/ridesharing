@@ -25,6 +25,7 @@ function buildQuery(params: DriverListParams) {
   if (params.subscriptionStatus) query.set("subscriptionStatus", params.subscriptionStatus);
   if (params.registrationStatus) query.set("registrationStatus", params.registrationStatus);
   if (params.countryId) query.set("countryId", params.countryId);
+  if (params.stateId) query.set("stateId", params.stateId);
   if (params.cityId) query.set("cityId", params.cityId);
   if (params.isBlocked !== undefined) query.set("isBlocked", String(params.isBlocked));
   if (params.search) query.set("search", params.search);

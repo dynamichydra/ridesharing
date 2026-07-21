@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { ridersApi } from "./api";
+import { ridersApi, riderSubscriptionsApi } from "./api";
 import type { RiderListParams, CreateRiderPayload, UpdateRiderPayload } from "./types";
 
 const RIDERS_KEY = "riders";
@@ -59,5 +59,37 @@ export function useUpdateRider() {
     onError: (err: any) => {
       toast.error(err.message || "Failed to update user");
     },
+  });
+}
+
+export function useRider(id: string | undefined) {
+  return useQuery({
+    queryKey: [RIDERS_KEY, id],
+    queryFn: () => ridersApi.getById(id as string),
+    enabled: !!id,
+  });
+}
+
+export function useRiderRides(id: string | undefined, page = 1, limit = 5) {
+  return useQuery({
+    queryKey: [RIDERS_KEY, id, "rides", page, limit],
+    queryFn: () => ridersApi.getRides(id as string, page, limit),
+    enabled: !!id,
+  });
+}
+
+export function useRiderSubscriptionHistory(riderId: string | undefined, page = 1, limit = 10) {
+  return useQuery({
+    queryKey: [RIDERS_KEY, riderId, "subscription-history", page, limit],
+    queryFn: () => riderSubscriptionsApi.getHistory(riderId as string, page, limit),
+    enabled: !!riderId,
+  });
+}
+
+export function useRiderSubscriptionPayments(riderId: string | undefined, page = 1, limit = 10) {
+  return useQuery({
+    queryKey: [RIDERS_KEY, riderId, "subscription-payments", page, limit],
+    queryFn: () => riderSubscriptionsApi.getPayments(riderId as string, page, limit),
+    enabled: !!riderId,
   });
 }

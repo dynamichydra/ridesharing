@@ -184,6 +184,7 @@ export async function listDrivers(filters, page, limit, offset) {
   if (filters.subscriptionStatus) conditions.push(eq(drivers.subscriptionStatus, filters.subscriptionStatus));
   if (filters.registrationStatus) conditions.push(eq(drivers.registrationStatus, filters.registrationStatus));
   if (filters.countryId) conditions.push(eq(drivers.countryId, filters.countryId));
+  if (filters.stateId) conditions.push(eq(drivers.stateId, filters.stateId));
   if (filters.cityId) conditions.push(eq(drivers.cityId, filters.cityId));
   if (filters.isBlocked !== undefined) conditions.push(eq(drivers.isBlocked, filters.isBlocked));
   if (filters.search) {

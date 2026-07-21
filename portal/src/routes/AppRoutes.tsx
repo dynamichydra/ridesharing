@@ -11,6 +11,7 @@ const Root = lazy(() => import("@/layouts/Root"));
 // Lazy imports for features
 const Dashboard = lazy(() => import("@/features/dashboard/pages"));
 const UserList = lazy(() => import("@/features/users/pages/list"));
+const RiderDetail = lazy(() => import("@/features/users/pages/Detail"));
 const DriverList = lazy(() => import("@/features/drivers/pages/list"));
 const DriverDetail = lazy(() => import("@/features/drivers/pages/Detail"));
 const RideList = lazy(() => import("@/features/rides/pages"));
@@ -19,6 +20,8 @@ const ZoneList = lazy(() => import("@/features/zones/pages"));
 const GeoList = lazy(() => import("@/features/geo/pages"));
 const FareRuleList = lazy(() => import("@/features/fare-rules/pages"));
 const SubscriptionPlanList = lazy(() => import("@/features/subscriptions/pages"));
+const RiderPlanList = lazy(() => import("@/features/rider-plans/pages"));
+const WalletList = lazy(() => import("@/features/wallets/pages"));
 const RidePaymentList = lazy(() => import("@/features/ride-payments/pages"));
 const AuditLogList = lazy(() => import("@/features/audit-logs/pages"));
 const OnboardingConfigList = lazy(() => import("@/features/onboarding-config/pages"));
@@ -63,6 +66,14 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<Loader />}>
             <UserList />
+          </Suspense>
+        ),
+      },
+      {
+        path: "users/:riderId",
+        element: (
+          <Suspense fallback={<Loader />}>
+            <RiderDetail />
           </Suspense>
         ),
       },
@@ -144,6 +155,26 @@ const router = createBrowserRouter([
           <ProtectedRoute allowedRoles={["super_admin"]}>
             <Suspense fallback={<Loader />}>
               <SubscriptionPlanList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "rider-plans",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <RiderPlanList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "wallets",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <WalletList />
             </Suspense>
           </ProtectedRoute>
         ),

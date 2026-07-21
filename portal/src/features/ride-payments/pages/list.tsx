@@ -6,9 +6,10 @@ import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getRidePaymentColumns } from "../components/column";
 import { useRidePayments } from "../hooks";
+import { useCountryOptions } from "@/features/geo/hooks";
 import type { RidePaymentListParams, Pagination } from "../types";
 
-const FILTER_SCHEMA: FilterSchema = {
+const BASE_FILTER_SCHEMA: FilterSchema = {
   status: {
     label: "Status",
     operator: "equals",
@@ -50,6 +51,21 @@ const FILTER_SCHEMA: FilterSchema = {
 export default function RidePaymentList() {
   const controller = useFilterController();
 
+  // Payments only carry a country — no state/city — so this is a single-level country
+  // filter, not the full cascading useGeoFilterSchema.
+  const { data: countriesData } = useCountryOptions();
+  const FILTER_SCHEMA: FilterSchema = {
+    ...BASE_FILTER_SCHEMA,
+    countryId: {
+      label: "Country",
+      operator: "equals",
+      type: "select",
+      field: "countryId",
+      placeholder: "All Countries",
+      options: (countriesData?.MESSAGE ?? []).map((c) => ({ label: c.name, value: c.id })),
+    },
+  };
+
   const page = Number(controller.applied.page) || 1;
   const limit = Number(controller.applied.limit) || 10;
 
@@ -57,6 +73,11 @@ export default function RidePaymentList() {
     status: (controller.applied.status as RidePaymentListParams["status"]) || "",
     paymentMethod: (controller.applied.paymentMethod as RidePaymentListParams["paymentMethod"]) || "",
     gateway: (controller.applied.gateway as RidePaymentListParams["gateway"]) || "",
+    countryId: controller.applied.countryId || undefined,
+    // Not shown in the visible filter bar — read from the URL so the "View all payments"
+    // deep link from a rider/driver's detail page (?riderId=/?driverId=) pre-filters this list.
+    riderId: controller.applied.riderId || undefined,
+    driverId: controller.applied.driverId || undefined,
     page,
     limit,
   });

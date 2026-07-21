@@ -58,6 +58,7 @@ export interface RideListParams {
   status?: RideStatus | "";
   driverId?: string;
   riderId?: string;
+  countryId?: string;
 }
 
 export interface Pagination {

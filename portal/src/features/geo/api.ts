@@ -83,6 +83,18 @@ export const statesApi = {
     ),
 };
 
+// Public, unpaginated, active-only cascading picker — used for filter dropdowns across
+// other features (riders/drivers/rides/ride-payments/wallets/rider-plans) rather than the
+// paginated admin endpoints above, which are for the Countries/States/Cities management pages.
+export const geoLookupApi = {
+  // GET /geo/countries  (Public)
+  listCountries: () => apiClient.get<Country[]>(`${BASE_URL}/countries`),
+  // GET /geo/countries/:countryId/states  (Public)
+  listStates: (countryId: string) => apiClient.get<State[]>(`${BASE_URL}/countries/${countryId}/states`),
+  // GET /geo/states/:stateId/cities  (Public)
+  listCities: (stateId: string) => apiClient.get<City[]>(`${BASE_URL}/states/${stateId}/cities`),
+};
+
 export const citiesApi = {
   // GET /geo/admin/cities?countryId=&stateId=&search=&page=&limit=  (Admin)
   list: (params: CityListParams) =>

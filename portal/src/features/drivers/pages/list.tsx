@@ -12,10 +12,11 @@ import { getDriverColumns } from "../components/column";
 import { useDrivers, useToggleBlockDriver, useExportDrivers, useApproveDriver } from "../hooks";
 import type { Driver } from "../types";
 import { AutoFilters, type FilterSchema } from "@/components/filters/AutoFilters";
+import { useGeoFilterSchema } from "@/features/geo/hooks";
 import { downloadCsv } from "@/lib/csv";
 
 
-export const driverFilterSchema: FilterSchema = {
+export const driverBaseFilterSchema: FilterSchema = {
   approvalStatus: {
     label: "Verification Status",
     operator: "equals",
@@ -34,6 +35,8 @@ export default function DriverList() {
     limit: 10,
     page: 1,
   });
+  const geoFilterSchema = useGeoFilterSchema(controller);
+  const driverFilterSchema: FilterSchema = { ...driverBaseFilterSchema, ...geoFilterSchema };
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const page = Number(controller.applied.page) || 1;
@@ -42,6 +45,9 @@ export default function DriverList() {
     page,
     limit: 10,
     approvalStatus: controller.applied.approvalStatus || undefined,
+    countryId: controller.applied.countryId || undefined,
+    stateId: controller.applied.stateId || undefined,
+    cityId: controller.applied.cityId || undefined,
   });
   const toggleBlockMutation = useToggleBlockDriver();
   const exportMutation = useExportDrivers();

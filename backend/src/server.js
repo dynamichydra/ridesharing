@@ -19,6 +19,8 @@ import { fareRoutes } from './modules/fare/fare.routes.js';
 import { rideRoutes } from './modules/ride/ride.routes.js';
 import { ridePaymentRoutes } from './modules/ride-payment/ride-payment.routes.js';
 import { subscriptionRoutes } from './modules/subscription/subscription.routes.js';
+import { riderSubscriptionRoutes } from './modules/rider-subscription/rider-subscription.routes.js';
+import { walletRoutes } from './modules/wallet/wallet.routes.js';
 import { adminRoutes } from './modules/admin/admin.routes.js';
 import { trackingRoutes } from './modules/tracking/tracking.routes.js';
 import { geoRoutes } from './modules/geo/geo.routes.js';
@@ -59,6 +61,8 @@ async function build() {
   await app.register(ridePaymentRoutes, { prefix: `${PREFIX}/ride-payments` });
   await app.register(trackingRoutes, { prefix: `${PREFIX}/tracking` });
   await app.register(subscriptionRoutes, { prefix: `${PREFIX}/subscriptions` });
+  await app.register(riderSubscriptionRoutes, { prefix: `${PREFIX}/rider-plans` });
+  await app.register(walletRoutes, { prefix: `${PREFIX}/wallets` });
   await app.register(adminRoutes, { prefix: `${PREFIX}/admin` });
   await app.register(geoRoutes, { prefix: `${PREFIX}/geo` });
   await app.register(documentsRoutes, { prefix: `${PREFIX}/documents` });

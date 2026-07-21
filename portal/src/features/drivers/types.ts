@@ -49,6 +49,7 @@ export interface DriverListParams {
   subscriptionStatus?: string;
   registrationStatus?: string;
   countryId?: string;
+  stateId?: string;
   cityId?: string;
   isBlocked?: boolean;
   search?: string;

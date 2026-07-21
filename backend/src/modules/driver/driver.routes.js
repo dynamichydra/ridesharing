@@ -87,6 +87,7 @@ export async function driverRoutes(app) {
       subscriptionStatus: request.query.subscriptionStatus,
       registrationStatus: request.query.registrationStatus,
       countryId:          request.query.countryId,
+      stateId:            request.query.stateId,
       cityId:             request.query.cityId,
       isBlocked:          request.query.isBlocked !== undefined ? request.query.isBlocked === 'true' : undefined,
       search:             request.query.search,

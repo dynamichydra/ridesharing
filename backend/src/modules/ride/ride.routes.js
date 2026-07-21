@@ -120,6 +120,7 @@ export async function rideRoutes(app) {
       status: request.query.status,
       driverId: request.query.driverId,
       riderId: request.query.riderId,
+      countryId: request.query.countryId,
     };
     const { rows, pagination } = await rideService.listAllRides(filters, page, limit, offset);
     return sendList(reply, rows, pagination);

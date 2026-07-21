@@ -1,4 +1,7 @@
 import { pgTable, uuid, varchar, boolean, timestamp, decimal, text } from 'drizzle-orm/pg-core';
+import { countries } from './countries.js';
+import { states } from './states.js';
+import { cities } from './cities.js';
 
 export const users = pgTable('users', {
   id:          uuid('id').primaryKey().defaultRandom(),
@@ -11,6 +14,10 @@ export const users = pgTable('users', {
   isBlocked:   boolean('is_blocked').default(false),
   rating:      decimal('rating', { precision: 3, scale: 2 }).default('5.00'),
   totalRides:  varchar('total_rides').default('0'),
+  // ── Location (admin-settable, mirrors drivers.countryId/stateId/cityId) ─────
+  countryId:   uuid('country_id').references(() => countries.id),
+  stateId:     uuid('state_id').references(() => states.id),
+  cityId:      uuid('city_id').references(() => cities.id),
   createdAt:   timestamp('created_at').defaultNow(),
   updatedAt:   timestamp('updated_at').defaultNow(),
 });

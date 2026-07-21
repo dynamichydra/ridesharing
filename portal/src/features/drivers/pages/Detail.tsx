@@ -6,6 +6,7 @@ import {
   Truck,
   FileText,
   ShieldCheck,
+  MapPin,
   Check,
   X,
   FilePlus2,
@@ -26,6 +27,8 @@ import {
   RejectDocumentDialog,
 } from "../components/dialog";
 import { DriverSubscriptionPanel } from "../components/subscription-panel";
+import { WalletPanel } from "@/features/wallets/components/wallet-panel";
+import { useCountryOptions, useStateOptions, useCityOptions } from "@/features/geo/hooks";
 import {
   useDriver,
   useDriverDocuments,
@@ -59,6 +62,13 @@ export default function DriverDetail() {
   const summary = data?.MESSAGE;
   const driver = summary?.driver;
   const vehicles = summary?.vehicles ?? [];
+
+  const { data: countriesData } = useCountryOptions();
+  const { data: statesData } = useStateOptions(driver?.countryId || undefined);
+  const { data: citiesData } = useCityOptions(driver?.stateId || undefined);
+  const countryName = countriesData?.MESSAGE?.find((c) => c.id === driver?.countryId)?.name;
+  const stateName = statesData?.MESSAGE?.find((s) => s.id === driver?.stateId)?.name;
+  const cityName = citiesData?.MESSAGE?.find((c) => c.id === driver?.cityId)?.name;
 
   const { data: documentsData, isLoading: isLoadingDocuments } = useDriverDocuments(driverId);
   const documents = documentsData?.MESSAGE ?? [];
@@ -232,6 +242,31 @@ export default function DriverDetail() {
             )}
           </CardContent>
         </Card>
+
+        <Card className="border-border bg-card shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <MapPin className="h-4 w-4 text-primary" /> Location
+            </CardTitle>
+            <CardDescription>Driving location set during onboarding.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div>
+              <span className="text-xs text-muted-foreground block">Country</span>
+              <span className="font-medium text-foreground">{countryName || "—"}</span>
+            </div>
+            <div>
+              <span className="text-xs text-muted-foreground block">State</span>
+              <span className="font-medium text-foreground">{stateName || "—"}</span>
+            </div>
+            <div>
+              <span className="text-xs text-muted-foreground block">City</span>
+              <span className="font-medium text-foreground">{cityName || "—"}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <WalletPanel ownerType="driver" ownerId={driverId} />
 
         <Card className="border-border bg-card shadow-sm md:col-span-2">
           <CardHeader>

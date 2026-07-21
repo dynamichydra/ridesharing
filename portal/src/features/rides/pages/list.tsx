@@ -16,8 +16,9 @@ import { rideStatusOptions } from "../schema";
 import type { Ride, Pagination } from "../types";
 import { RidePaymentHistoryDialog } from "@/features/ride-payments/components/history-dialog";
 import { useDownloadRideInvoice } from "@/features/ride-payments/hooks";
+import { useCountryOptions } from "@/features/geo/hooks";
 
-const FILTER_SCHEMA: FilterSchema = {
+const BASE_FILTER_SCHEMA: FilterSchema = {
   status: {
     label: "Status",
     operator: "equals",
@@ -34,6 +35,21 @@ const FILTER_SCHEMA: FilterSchema = {
 export default function RideList() {
   const controller = useFilterController();
 
+  // Rides only carry a country (resolved from the pickup point) — no state/city — so this
+  // is a single-level country filter, not the full cascading useGeoFilterSchema.
+  const { data: countriesData } = useCountryOptions();
+  const FILTER_SCHEMA: FilterSchema = {
+    ...BASE_FILTER_SCHEMA,
+    countryId: {
+      label: "Country",
+      operator: "equals",
+      type: "select",
+      field: "countryId",
+      placeholder: "All Countries",
+      options: (countriesData?.MESSAGE ?? []).map((c) => ({ label: c.name, value: c.id })),
+    },
+  };
+
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [paymentsRideId, setPaymentsRideId] = useState<string | null>(null);
@@ -46,6 +62,11 @@ export default function RideList() {
     status: (controller.applied.status as Ride["status"]) || "",
     page,
     limit,
+    countryId: controller.applied.countryId || undefined,
+    // Not shown in the visible filter bar — read from the URL so the "View all rides" deep
+    // link from a rider/driver's detail page (?riderId=/?driverId=) pre-filters this list.
+    riderId: controller.applied.riderId || undefined,
+    driverId: controller.applied.driverId || undefined,
   });
   const { data: timeline, isLoading: timelineLoading } = useRideTimeline(selectedRide?.id);
   const { data: offers, isLoading: offersLoading } = useRideOffers(selectedRide?.id);

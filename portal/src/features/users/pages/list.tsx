@@ -1,16 +1,18 @@
 import { useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 import { DataTable } from "@/components/data-table/data-table";
 import { useCallback, useMemo, useState } from "react";
 import type { RowSelectionState } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
-import { CreateRiderDialog } from "../components/dialog";
+import { RiderFormDialog } from "../components/dialog";
 
 import {
   AutoFilters,
   type FilterSchema,
 } from "@/components/filters/AutoFilters";
 import { useFilterController } from "@/components/filters/useFilterController";
+import { useGeoFilterSchema } from "@/features/geo/hooks";
 
 import { getRiderColumns } from "../components/column";
 import { useRiders, useUpdateRider, useExportRiders } from "../hooks";
@@ -18,7 +20,7 @@ import type { Rider } from "../types";
 import { Ban, Download, Plus, User, UserCheck } from "lucide-react";
 import { downloadCsv } from "@/lib/csv";
 
-const FILTER_SCHEMA: FilterSchema = {
+const BASE_FILTER_SCHEMA: FilterSchema = {
   search: {
     label: "Search",
     operator: "equals",
@@ -57,8 +59,11 @@ function toBool(value: string | undefined): boolean | undefined {
 }
 
 export default function UserList() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const controller = useFilterController();
+  const geoFilterSchema = useGeoFilterSchema(controller);
+  const FILTER_SCHEMA: FilterSchema = { ...BASE_FILTER_SCHEMA, ...geoFilterSchema };
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
@@ -66,6 +71,9 @@ export default function UserList() {
     search: controller.applied.search,
     isVerified: toBool(controller.applied.isVerified),
     isBlocked: toBool(controller.applied.isBlocked),
+    countryId: controller.applied.countryId,
+    stateId: controller.applied.stateId,
+    cityId: controller.applied.cityId,
     limit: Number(controller.applied.limit) || 10,
     page: Number(controller.applied.page) || 1,
   });
@@ -130,6 +138,11 @@ export default function UserList() {
     [updateMutation, refreshList],
   );
 
+  const handleViewDetail = useCallback(
+    (rider: Rider) => navigate(`/users/${rider.id}`),
+    [navigate],
+  );
+
   const handleBulkAction = async (action: "block" | "unblock") => {
     const targets = selectedRiders.filter((r) => (action === "block" ? !r.isBlocked : r.isBlocked));
     const results = await Promise.allSettled(
@@ -150,10 +163,11 @@ export default function UserList() {
   const columns = useMemo(
     () =>
       getRiderColumns({
+        onViewDetail: handleViewDetail,
         onToggleVerify: handleToggleVerify,
         onToggleBlock: handleToggleBlock,
       }),
-    [handleToggleVerify, handleToggleBlock],
+    [handleViewDetail, handleToggleVerify, handleToggleBlock],
   );
 
   const handlePageChange = (pageIndex: number) => {
@@ -246,9 +260,10 @@ export default function UserList() {
         onRowSelectionChange={setRowSelection}
       />
 
-      <CreateRiderDialog
+      <RiderFormDialog
         open={isCreateOpen}
         onOpenChange={setIsCreateOpen}
+        rider={null}
         onSuccess={refreshList}
       />
     </div>

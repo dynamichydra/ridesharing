@@ -10,11 +10,12 @@ function buildQuery(params: RideListParams) {
   if (params.status) query.set("status", params.status);
   if (params.driverId) query.set("driverId", params.driverId);
   if (params.riderId) query.set("riderId", params.riderId);
+  if (params.countryId) query.set("countryId", params.countryId);
   return query.toString();
 }
 
 export const ridesApi = {
-  // GET /rides  (Admin) — Filters: status, driverId, riderId
+  // GET /rides  (Admin) — Filters: status, driverId, riderId, countryId
   list: (params: RideListParams = {}) =>
     apiClient.get<Ride[]>(`${BASE_URL}?${buildQuery(params)}`),
 

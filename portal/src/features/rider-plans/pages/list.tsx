@@ -1,0 +1,242 @@
+import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { CreditCard, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table/data-table";
+import { AutoFilters, type FilterSchema } from "@/components/filters/AutoFilters";
+import { useFilterController } from "@/components/filters/useFilterController";
+
+import { getRiderPlanColumns } from "../components/column";
+import { RiderPlanFormDialog } from "../components/dialog";
+import {
+  useRiderPlans,
+  useCountryOptions,
+  useCreateRiderPlan,
+  useUpdateRiderPlan,
+  useSetRiderPlanActive,
+} from "../hooks";
+import { emptyRiderPlanFormValues, type RiderPlanFormValues } from "../schema";
+import type {
+  RiderPlan,
+  CreateRiderPlanPayload,
+  UpdateRiderPlanPayload,
+  Pagination,
+} from "../types";
+
+const RIDER_PLANS_KEY = "rider-plans";
+
+function planToFormValues(plan: RiderPlan): RiderPlanFormValues {
+  return {
+    name: plan.name,
+    countryId: plan.countryId,
+    type: plan.type,
+    currencyCode: plan.currencyCode,
+    priceMinor: plan.priceMinor,
+    durationDays: plan.durationDays?.toString() ?? "",
+    trialDays: plan.trialDays,
+    featuresText: plan.features?.join(", ") ?? "",
+    sortOrder: plan.sortOrder,
+  };
+}
+
+function buildPayload(
+  values: RiderPlanFormValues
+): CreateRiderPlanPayload | UpdateRiderPlanPayload {
+  return {
+    name: values.name,
+    countryId: values.countryId,
+    type: values.type,
+    currencyCode: values.currencyCode,
+    priceMinor: Number(values.priceMinor),
+    durationDays: values.type === "lifetime" ? null : values.durationDays ? Number(values.durationDays) : null,
+    trialDays: Number(values.trialDays) || 0,
+    features: values.featuresText
+      .split(",")
+      .map((f) => f.trim())
+      .filter(Boolean),
+    sortOrder: Number(values.sortOrder),
+  };
+}
+
+function toBool(value: string | undefined): boolean | undefined {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return undefined;
+}
+
+export default function RiderPlanList() {
+  const queryClient = useQueryClient();
+  const controller = useFilterController({ page: 1, limit: 10 });
+  const page = Number(controller.applied.page) || 1;
+  const pageSize = Number(controller.applied.limit) || 10;
+
+  const [selectedPlan, setSelectedPlan] = useState<RiderPlan | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+
+  const { data: countriesData } = useCountryOptions();
+  const countries = countriesData?.MESSAGE || [];
+
+  const { data, isLoading, isFetching } = useRiderPlans({
+    page,
+    limit: pageSize,
+    countryId: controller.applied.countryId || undefined,
+    isActive: toBool(controller.applied.isActive),
+  });
+
+  const createMutation = useCreateRiderPlan();
+  const updateMutation = useUpdateRiderPlan();
+  const setActiveMutation = useSetRiderPlanActive();
+
+  const plans = data?.MESSAGE || [];
+
+  const pagination = data?.PAGINATION as unknown as Pagination | undefined;
+  const totalPages = pagination?.totalPages || 1;
+  const totalRecords = pagination?.totalItems ?? plans.length;
+
+  const refreshList = () => {
+    queryClient.invalidateQueries({ queryKey: [RIDER_PLANS_KEY], refetchType: "active" });
+  };
+
+  const handleOpenCreate = () => {
+    setSelectedPlan(null);
+    setIsFormOpen(true);
+  };
+
+  const handleOpenEdit = (plan: RiderPlan) => {
+    setSelectedPlan(plan);
+    setIsFormOpen(true);
+  };
+
+  const handleToggleActive = (plan: RiderPlan) => {
+    setActiveMutation.mutate({ id: plan.id, isActive: !plan.isActive });
+  };
+
+  const defaultValues: RiderPlanFormValues = selectedPlan
+    ? planToFormValues(selectedPlan)
+    : emptyRiderPlanFormValues;
+
+  const handleSubmit = (values: RiderPlanFormValues) => {
+    const payload = buildPayload(values);
+
+    if (selectedPlan) {
+      updateMutation.mutate(
+        { id: selectedPlan.id, payload: payload as UpdateRiderPlanPayload },
+        {
+          onSuccess: () => {
+            setIsFormOpen(false);
+            setSelectedPlan(null);
+            refreshList();
+          },
+        }
+      );
+    } else {
+      createMutation.mutate(payload as CreateRiderPlanPayload, {
+        onSuccess: () => {
+          setIsFormOpen(false);
+          refreshList();
+        },
+      });
+    }
+  };
+
+  const columns = useMemo(
+    () =>
+      getRiderPlanColumns({
+        onEdit: handleOpenEdit,
+        onToggleActive: handleToggleActive,
+        countries,
+      }),
+    [countries]
+  );
+
+  const filterSchema: FilterSchema = useMemo(
+    () => ({
+      countryId: {
+        label: "Country",
+        operator: "equals",
+        type: "select",
+        field: "countryId",
+        placeholder: "All Countries",
+        options: countries.map((c) => ({ label: c.name, value: c.id })),
+      },
+      isActive: {
+        label: "Status",
+        operator: "equals",
+        type: "select",
+        field: "isActive",
+        placeholder: "All Statuses",
+        options: [
+          { label: "Active", value: "true" },
+          { label: "Inactive", value: "false" },
+        ],
+      },
+    }),
+    [countries]
+  );
+
+  const handlePageChange = (pageIndex: number) => {
+    controller.apply({ page: pageIndex + 1 });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between py-2 px-1">
+        <div className="flex items-center gap-2">
+          <div className="bg-primary/10 p-1.5 rounded-lg">
+            <CreditCard className="h-5 w-5 text-primary" />
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-foreground uppercase">
+            Rider Plans
+          </h2>
+          <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest bg-accent px-2 py-0.5 rounded-full opacity-70">
+            {totalRecords} Total
+          </span>
+        </div>
+
+        <Button
+          onClick={handleOpenCreate}
+          size="sm"
+          className="gap-2 shadow-sm hover:shadow-md transition-all active:scale-[0.98] h-8"
+        >
+          <Plus className="h-4 w-4" />
+          Add Plan
+        </Button>
+      </div>
+
+      <AutoFilters
+        schema={filterSchema}
+        controller={controller}
+        isFetching={isLoading}
+        compact={true}
+        className="border-none shadow-none bg-accent/20"
+      />
+
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        <DataTable
+          columns={columns}
+          data={plans}
+          pageIndex={page - 1}
+          pageSize={pageSize}
+          pageCount={totalPages}
+          onPageChange={handlePageChange}
+          onPageSizeChange={(size) => controller.apply({ limit: size, page: 1 })}
+          isLoading={isLoading}
+          isFetching={isFetching}
+        />
+      </div>
+
+      <RiderPlanFormDialog
+        open={isFormOpen}
+        onOpenChange={(open) => {
+          setIsFormOpen(open);
+          if (!open) setSelectedPlan(null);
+        }}
+        selectedPlan={selectedPlan}
+        defaultValues={defaultValues}
+        countries={countries}
+        isSaving={createMutation.isPending || updateMutation.isPending}
+        onSubmit={handleSubmit}
+      />
+    </div>
+  );
+}

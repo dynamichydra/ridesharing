@@ -1,15 +1,16 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Ban, CheckCircle, UserCheck, XCircle } from "lucide-react";
+import { Ban, CheckCircle, Eye, UserCheck, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getSelectionColumn } from "@/components/data-table/selection-column";
 import type { Rider } from "../types";
 
 interface Props {
+  onViewDetail: (rider: Rider) => void;
   onToggleVerify: (rider: Rider) => void;
   onToggleBlock: (rider: Rider) => void;
 }
 
-export function getRiderColumns({ onToggleVerify, onToggleBlock }: Props): ColumnDef<Rider>[] {
+export function getRiderColumns({ onViewDetail, onToggleVerify, onToggleBlock }: Props): ColumnDef<Rider>[] {
   return [
     getSelectionColumn<Rider>(),
     {
@@ -75,9 +76,9 @@ export function getRiderColumns({ onToggleVerify, onToggleBlock }: Props): Colum
     },
     {
   id: "actions",
-  size: 180,
-  minSize: 180,
-  maxSize: 180,
+  size: 270,
+  minSize: 270,
+  maxSize: 270,
 
   header: () => (
     <div className="w-full flex justify-center">
@@ -87,6 +88,19 @@ export function getRiderColumns({ onToggleVerify, onToggleBlock }: Props): Colum
 
   cell: ({ row }) => (
     <div className="w-full flex items-center justify-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          onViewDetail(row.original);
+        }}
+        className="h-8 border-border text-xs font-medium hover:bg-muted cursor-pointer"
+      >
+        <Eye className="mr-1 h-3.5 w-3.5" />
+        View
+      </Button>
+
       <Button
         variant="outline"
         size="sm"

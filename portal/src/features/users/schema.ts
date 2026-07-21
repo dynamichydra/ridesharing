@@ -15,6 +15,10 @@ export const riderSchema = z.object({
   ]),
 
   isVerified: z.boolean(),
+
+  countryId: z.string().optional(),
+  stateId: z.string().optional(),
+  cityId: z.string().optional(),
 });
 
 export type RiderFormValues = z.infer<typeof riderSchema>;
@@ -24,4 +28,7 @@ export const emptyRiderFormValues: RiderFormValues = {
   phone: "",
   email: "",
   isVerified: false,
+  countryId: "",
+  stateId: "",
+  cityId: "",
 };

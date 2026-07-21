@@ -455,6 +455,7 @@ export async function listAllRides(filters, page, limit, offset) {
   if (filters.status) conditions.push(eq(rides.status, filters.status));
   if (filters.driverId) conditions.push(eq(rides.driverId, filters.driverId));
   if (filters.riderId) conditions.push(eq(rides.riderId, filters.riderId));
+  if (filters.countryId) conditions.push(eq(rides.countryId, filters.countryId));
   const where = conditions.length ? and(...conditions) : undefined;
 
   const [{ total }] = await db.select({ total: count() }).from(rides).where(where);
