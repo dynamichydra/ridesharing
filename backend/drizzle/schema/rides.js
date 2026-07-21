@@ -25,6 +25,9 @@ export const rides = pgTable('rides', {
   polyline:       text('polyline'),               // encoded Google route
   status:         varchar('status').default('requested'),
   // requested | searching | accepted | arriving | started | completed | cancelled | expired
+  paymentMethod:  varchar('payment_method', { length: 10 }),   // online | cash — set once a payment action is taken
+  paymentStatus:  varchar('payment_status', { length: 20 }).default('pending'),
+  // pending | processing | paid | failed
   cancelledBy:    varchar('cancelled_by'),        // rider | driver | system
   cancelReason:   text('cancel_reason'),
   riderRating:    smallint('rider_rating'),       // driver rates rider

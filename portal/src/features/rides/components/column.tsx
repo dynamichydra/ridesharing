@@ -1,10 +1,12 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Info } from "lucide-react";
+import { Info, Banknote, CreditCard, Wallet, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Ride } from "../types";
 
 interface Props {
   onViewDetails: (ride: Ride) => void;
+  onViewPayments: (ride: Ride) => void;
+  onDownloadInvoice: (ride: Ride) => void;
 }
 
 const statusColorMap: Record<string, string> = {
@@ -18,7 +20,14 @@ function getStatusColor(status: string): string {
   return statusColorMap[status] ?? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
 }
 
-export function getRideColumns({ onViewDetails }: Props): ColumnDef<Ride>[] {
+const paymentStatusColorMap: Record<string, string> = {
+  paid: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+  processing: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+  pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+};
+
+export function getRideColumns({ onViewDetails, onViewPayments, onDownloadInvoice }: Props): ColumnDef<Ride>[] {
   return [
     {
       id: "details",
@@ -74,24 +83,75 @@ export function getRideColumns({ onViewDetails }: Props): ColumnDef<Ride>[] {
       ),
     },
     {
+      id: "payment",
+      header: "Payment",
+      cell: ({ row }) => {
+        const { paymentMethod, paymentStatus } = row.original;
+        return (
+          <div className="flex flex-col gap-1">
+            <span
+              className={`w-fit px-2 py-0.5 text-xs font-semibold rounded-full capitalize ${
+                paymentStatusColorMap[paymentStatus] ?? paymentStatusColorMap.pending
+              }`}
+            >
+              {paymentStatus}
+            </span>
+            {paymentMethod && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground capitalize">
+                {paymentMethod === "cash" ? (
+                  <Banknote className="h-3 w-3" />
+                ) : (
+                  <CreditCard className="h-3 w-3" />
+                )}
+                {paymentMethod}
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       id: "actions",
-      size: 120,
-      minSize: 120,
-      maxSize: 120,
-      header: () => <div className="w-full text-center">Telemetry</div>,
-      cell: ({ row }) => (
-        <div className="w-full flex items-center justify-center">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onViewDetails(row.original)}
-            className="text-xs border-border text-foreground hover:bg-muted font-medium cursor-pointer"
-          >
-            <Info className="h-3.5 w-3.5 mr-1" />
-            View Logs
-          </Button>
-        </div>
-      ),
+      size: 160,
+      minSize: 160,
+      maxSize: 160,
+      header: () => <div className="w-full text-center">Actions</div>,
+      cell: ({ row }) => {
+        const isCompleted = row.original.status === "completed";
+        return (
+          <div className="w-full flex items-center justify-center gap-1.5">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => onViewDetails(row.original)}
+              className="h-8 w-8"
+              title="View Logs"
+            >
+              <Info className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              disabled={!isCompleted}
+              onClick={() => onViewPayments(row.original)}
+              className="h-8 w-8"
+              title="Payment History"
+            >
+              <Wallet className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              disabled={!isCompleted}
+              onClick={() => onDownloadInvoice(row.original)}
+              className="h-8 w-8"
+              title="Download Invoice"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        );
+      },
     },
   ];
 }

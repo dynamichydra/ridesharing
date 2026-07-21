@@ -8,6 +8,7 @@ import {
   Globe,
   DollarSign,
   CreditCard,
+  Wallet,
   ScrollText,
   ClipboardList,
   type LucideIcon
@@ -53,6 +54,13 @@ export const navItem: NavType[] = [
     title: "Rides Management",
     url: "/rides",
     icon: Car,
+    isActive: true,
+    type: "regular",
+  },
+  {
+    title: "Ride Payments",
+    url: "/ride-payments",
+    icon: Wallet,
     isActive: true,
     type: "regular",
   },

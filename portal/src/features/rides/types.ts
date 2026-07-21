@@ -24,6 +24,8 @@ export interface Ride {
   distanceKm: string | null;
   durationMin: number | null;
   status: RideStatus;
+  paymentMethod: "online" | "cash" | null;
+  paymentStatus: "pending" | "processing" | "paid" | "failed";
   cancelledBy: string | null;
   cancelReason: string | null;
   requestedAt: string;

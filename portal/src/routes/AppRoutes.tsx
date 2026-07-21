@@ -19,6 +19,7 @@ const ZoneList = lazy(() => import("@/features/zones/pages"));
 const GeoList = lazy(() => import("@/features/geo/pages"));
 const FareRuleList = lazy(() => import("@/features/fare-rules/pages"));
 const SubscriptionPlanList = lazy(() => import("@/features/subscriptions/pages"));
+const RidePaymentList = lazy(() => import("@/features/ride-payments/pages"));
 const AuditLogList = lazy(() => import("@/features/audit-logs/pages"));
 const OnboardingConfigList = lazy(() => import("@/features/onboarding-config/pages"));
 
@@ -86,6 +87,14 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<Loader />}>
             <RideList />
+          </Suspense>
+        ),
+      },
+      {
+        path: "ride-payments",
+        element: (
+          <Suspense fallback={<Loader />}>
+            <RidePaymentList />
           </Suspense>
         ),
       },

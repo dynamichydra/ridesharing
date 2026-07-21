@@ -1,0 +1,271 @@
+import { eq, and, desc, count, isNotNull } from 'drizzle-orm';
+import { db } from '../../config/db.js';
+import { rides, payments, users, drivers } from '../../../drizzle/schema/index.js';
+import { publishEvent, TOPICS } from '../../config/kafka.js';
+import { paginate } from '../../utils/response.js';
+import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
+import { formatMoney } from '../../utils/money.js';
+
+// ── Rider — pay online ─────────────────────────────────────────────────────────
+
+export async function initiateRidePayment(riderId, rideId) {
+  const ride = await _loadPayableRide(and(eq(rides.id, rideId), eq(rides.riderId, riderId)));
+
+  const gateway = gatewayForCurrency(ride.currencyCode);
+  if (!gateway) {
+    // Dev mode — this currency's gateway has no keys configured, mark paid directly
+    return _markRidePaid(ride, {
+      method: 'online', gateway: 'none', gatewayPaymentId: 'dev_payment_' + Date.now(), gatewayOrderId: null,
+    });
+  }
+
+  const order = await gateway.createOrder({
+    amountMinor: ride.finalFareMinor,
+    currencyCode: ride.currencyCode,
+    metadata: { rideId, riderId },
+  });
+
+  const [payment] = await db.insert(payments).values({
+    rideId, subscriptionId: null,
+    countryId: _requireCountryId(ride),
+    gateway: gateway.name,
+    currencyCode: ride.currencyCode,
+    amountMinor: ride.finalFareMinor,
+    status: 'created',
+    gatewayOrderId: order.gatewayOrderId,
+  }).returning();
+
+  await db.update(rides).set({ paymentMethod: 'online', paymentStatus: 'processing' }).where(eq(rides.id, rideId));
+
+  return { ...order, paymentAttemptId: payment.id };
+}
+
+export async function verifyRidePayment(riderId, rideId, orderRef, paymentRef, signature) {
+  const ride = await _loadPayableRide(and(eq(rides.id, rideId), eq(rides.riderId, riderId)));
+
+  const gateway = gatewayForCurrency(ride.currencyCode);
+  if (!gateway) {
+    return _markRidePaid(ride, {
+      method: 'online', gateway: 'none', gatewayPaymentId: paymentRef, gatewayOrderId: orderRef,
+    });
+  }
+
+  const verified = await gateway.verifyPayment({ orderRef, paymentRef, signature });
+  if (!verified) throw { statusCode: 400, message: 'Payment verification failed' };
+
+  const [attempt] = await db.select().from(payments)
+    .where(and(eq(payments.gatewayOrderId, orderRef), eq(payments.rideId, rideId))).limit(1);
+
+  return _markRidePaid(ride, {
+    method: 'online', gateway: gateway.name, gatewayPaymentId: paymentRef, gatewayOrderId: orderRef,
+    paymentAttemptId: attempt?.id,
+  });
+}
+
+// ── Driver — record cash collection ────────────────────────────────────────────
+
+export async function recordCashCollection(driverId, rideId) {
+  const ride = await _loadPayableRide(and(eq(rides.id, rideId), eq(rides.driverId, driverId)));
+
+  const [payment] = await db.insert(payments).values({
+    rideId, subscriptionId: null,
+    countryId: _requireCountryId(ride),
+    gateway: 'cash',
+    currencyCode: ride.currencyCode,
+    amountMinor: ride.finalFareMinor,
+    status: 'captured',
+    gatewayOrderId: null,
+    gatewayPaymentId: null,
+  }).returning();
+
+  const updated = await _markRidePaid(ride, { method: 'cash', gateway: 'cash', paymentAttemptId: payment.id });
+
+  // Fire after the state-changing write lands — an audit-log hiccup shouldn't leave the
+  // payments row captured while the ride is still stuck showing unpaid.
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: driverId, actorType: 'driver',
+    action: 'RIDE_CASH_COLLECTED', entityType: 'ride', entityId: rideId,
+  });
+
+  return updated;
+}
+
+// ── Gateway webhook ─────────────────────────────────────────────────────────────
+
+export async function handleWebhook(gatewayName, rawBody, signature) {
+  const gateway = getGateway(gatewayName);
+  if (!gateway.isConfigured) {
+    console.log(`[RidePayment] ${gatewayName} webhook received but not configured — ignoring.`);
+    return { received: true };
+  }
+  if (!gateway.verifyWebhookSignature(rawBody, signature)) {
+    throw { statusCode: 400, message: 'Invalid webhook signature' };
+  }
+
+  const event = gateway.parseWebhookEvent(rawBody, signature);
+  if (event) {
+    const { rideId } = event.metadata || {};
+    if (rideId) {
+      const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+      if (ride && ride.paymentStatus !== 'paid') {
+        const [attempt] = await db.select().from(payments)
+          .where(and(eq(payments.gatewayOrderId, event.orderRef), eq(payments.rideId, rideId))).limit(1);
+        await _markRidePaid(ride, {
+          method: 'online', gateway: gateway.name, gatewayPaymentId: event.paymentRef, gatewayOrderId: event.orderRef,
+          paymentAttemptId: attempt?.id,
+        });
+      }
+    }
+  }
+  return { received: true };
+}
+
+// ── Reads ─────────────────────────────────────────────────────────────────────
+
+export async function getRidePaymentStatus(rideId, requester) {
+  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+
+  if (requester.role === 'rider' && ride.riderId !== requester.id) throw { statusCode: 403, message: 'Not your ride' };
+  if (requester.role === 'driver' && ride.driverId !== requester.id) throw { statusCode: 403, message: 'Not your ride' };
+
+  const [payment] = await db.select().from(payments)
+    .where(eq(payments.rideId, rideId)).orderBy(desc(payments.createdAt)).limit(1);
+
+  return {
+    rideId: ride.id, status: ride.status,
+    finalFareMinor: ride.finalFareMinor, currencyCode: ride.currencyCode,
+    paymentMethod: ride.paymentMethod, paymentStatus: ride.paymentStatus,
+    payment: payment || null,
+  };
+}
+
+// Full billing document for one ride — rider/driver see their own, admin sees any.
+// Only available once a ride is completed (finalFareMinor is only known at that point).
+export async function getRideInvoice(rideId, requester) {
+  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+
+  if (requester.role === 'rider' && ride.riderId !== requester.id) throw { statusCode: 403, message: 'Not your ride' };
+  if (requester.role === 'driver' && ride.driverId !== requester.id) throw { statusCode: 403, message: 'Not your ride' };
+  if (ride.status !== 'completed') throw { statusCode: 409, message: 'Invoice is only available for completed rides' };
+
+  const [rider] = await db.select({ name: users.name, phone: users.phone })
+    .from(users).where(eq(users.id, ride.riderId)).limit(1);
+  const [driver] = ride.driverId
+    ? await db.select({ name: drivers.name, phone: drivers.phone }).from(drivers).where(eq(drivers.id, ride.driverId)).limit(1)
+    : [null];
+  const [payment] = await db.select().from(payments)
+    .where(eq(payments.rideId, rideId)).orderBy(desc(payments.createdAt)).limit(1);
+
+  return {
+    invoiceNumber: `INV-${ride.id.slice(0, 8).toUpperCase()}`,
+    ride: {
+      id: ride.id, pickupAddress: ride.pickupAddress, dropAddress: ride.dropAddress,
+      requestedAt: ride.requestedAt, completedAt: ride.completedAt,
+      distanceKm: ride.distanceKm, durationMin: ride.durationMin,
+    },
+    rider: rider || null,
+    driver: driver || null,
+    currencyCode: ride.currencyCode,
+    fareBreakdown: ride.fareSnapshot?.breakdown || {},
+    estimatedFareMinor: ride.estimatedFareMinor,
+    finalFareMinor: ride.finalFareMinor,
+    payment: {
+      method: ride.paymentMethod, status: ride.paymentStatus,
+      gateway: payment?.gateway ?? null, gatewayPaymentId: payment?.gatewayPaymentId ?? null,
+      paidAt: payment?.status === 'captured' ? payment.updatedAt : null,
+    },
+  };
+}
+
+export async function getMyRidePayments(riderId, page, limit, offset) {
+  const where = and(eq(rides.riderId, riderId), isNotNull(payments.rideId));
+  const [{ total }] = await db.select({ total: count() }).from(payments)
+    .innerJoin(rides, eq(payments.rideId, rides.id)).where(where);
+  const rows = await db.select({ payment: payments, ride: rides })
+    .from(payments)
+    .innerJoin(rides, eq(payments.rideId, rides.id))
+    .where(where)
+    .orderBy(desc(payments.createdAt)).limit(limit).offset(offset);
+  return { rows, pagination: paginate(page, limit, total) };
+}
+
+export async function listRidePaymentsAdmin(filters, page, limit, offset) {
+  const conditions = [isNotNull(payments.rideId)];
+  if (filters.rideId) conditions.push(eq(payments.rideId, filters.rideId));
+  if (filters.status) conditions.push(eq(payments.status, filters.status));
+  if (filters.gateway) conditions.push(eq(payments.gateway, filters.gateway));
+  if (filters.countryId) conditions.push(eq(payments.countryId, filters.countryId));
+  if (filters.paymentMethod) conditions.push(eq(rides.paymentMethod, filters.paymentMethod));
+  if (filters.riderId) conditions.push(eq(rides.riderId, filters.riderId));
+  if (filters.driverId) conditions.push(eq(rides.driverId, filters.driverId));
+  const where = and(...conditions);
+
+  const [{ total }] = await db.select({ total: count() }).from(payments)
+    .innerJoin(rides, eq(payments.rideId, rides.id)).where(where);
+  const rows = await db.select({ payment: payments, ride: rides })
+    .from(payments)
+    .innerJoin(rides, eq(payments.rideId, rides.id))
+    .where(where)
+    .orderBy(desc(payments.createdAt)).limit(limit).offset(offset);
+  return { rows, pagination: paginate(page, limit, total) };
+}
+
+// ── Internals ───────────────────────────────────────────────────────────────────
+
+function _requireCountryId(ride) {
+  if (!ride.countryId) throw { statusCode: 422, message: 'Ride has no resolved country — cannot record payment' };
+  return ride.countryId;
+}
+
+async function _loadPayableRide(ownershipCondition) {
+  const [ride] = await db.select().from(rides).where(ownershipCondition).limit(1);
+  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+  if (ride.status !== 'completed') throw { statusCode: 409, message: 'Ride is not completed yet' };
+  if (ride.paymentStatus === 'paid') throw { statusCode: 409, message: 'Ride has already been paid for' };
+  return ride;
+}
+
+async function _markRidePaid(ride, paymentInfo) {
+  if (paymentInfo.paymentAttemptId) {
+    await db.update(payments)
+      .set({ status: 'captured', gatewayPaymentId: paymentInfo.gatewayPaymentId, updatedAt: new Date() })
+      .where(eq(payments.id, paymentInfo.paymentAttemptId));
+  } else {
+    await db.insert(payments).values({
+      rideId: ride.id, subscriptionId: null,
+      countryId: _requireCountryId(ride),
+      gateway: paymentInfo.gateway,
+      currencyCode: ride.currencyCode,
+      amountMinor: ride.finalFareMinor,
+      status: 'captured',
+      gatewayOrderId: paymentInfo.gatewayOrderId,
+      gatewayPaymentId: paymentInfo.gatewayPaymentId,
+    });
+  }
+
+  const [updated] = await db.update(rides)
+    .set({ paymentMethod: paymentInfo.method, paymentStatus: 'paid' })
+    .where(eq(rides.id, ride.id)).returning();
+
+  await publishEvent(TOPICS.PAYMENT_SUCCESS, {
+    id: ride.id, rideId: ride.id, riderId: ride.riderId, driverId: ride.driverId,
+    amountMinor: ride.finalFareMinor, currencyCode: ride.currencyCode, method: paymentInfo.method,
+  });
+  const amountLabel = formatMoney(ride.finalFareMinor, ride.currencyCode);
+  await publishEvent(TOPICS.NOTIF_PUSH, {
+    userType: 'rider', userId: ride.riderId,
+    type: 'PAYMENT_SUCCESS', title: 'Payment received',
+    body: `Your payment of ${amountLabel} for this ride has been recorded.`,
+  });
+  if (ride.driverId) {
+    await publishEvent(TOPICS.NOTIF_PUSH, {
+      userType: 'driver', userId: ride.driverId,
+      type: 'PAYMENT_SUCCESS', title: 'Payment received',
+      body: `Payment of ${amountLabel} (${paymentInfo.method}) recorded for your ride.`,
+    });
+  }
+
+  return updated;
+}

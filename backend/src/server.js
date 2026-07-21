@@ -17,6 +17,7 @@ import { vehicleTypeRoutes } from './modules/vehicle-type/vehicle-type.routes.js
 import { zoneRoutes } from './modules/zone/zone.routes.js';
 import { fareRoutes } from './modules/fare/fare.routes.js';
 import { rideRoutes } from './modules/ride/ride.routes.js';
+import { ridePaymentRoutes } from './modules/ride-payment/ride-payment.routes.js';
 import { subscriptionRoutes } from './modules/subscription/subscription.routes.js';
 import { adminRoutes } from './modules/admin/admin.routes.js';
 import { trackingRoutes } from './modules/tracking/tracking.routes.js';
@@ -55,6 +56,7 @@ async function build() {
   await app.register(zoneRoutes, { prefix: `${PREFIX}/zones` });
   await app.register(fareRoutes, { prefix: `${PREFIX}/fare` });
   await app.register(rideRoutes, { prefix: `${PREFIX}/rides` });
+  await app.register(ridePaymentRoutes, { prefix: `${PREFIX}/ride-payments` });
   await app.register(trackingRoutes, { prefix: `${PREFIX}/tracking` });
   await app.register(subscriptionRoutes, { prefix: `${PREFIX}/subscriptions` });
   await app.register(adminRoutes, { prefix: `${PREFIX}/admin` });

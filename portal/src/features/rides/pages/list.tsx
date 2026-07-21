@@ -14,6 +14,8 @@ import { RideDetailsDialog } from "../components/dialog";
 import { useCancelRideAdmin, useExportRides, useRideOffers, useRides, useRideTimeline } from "../hooks";
 import { rideStatusOptions } from "../schema";
 import type { Ride, Pagination } from "../types";
+import { RidePaymentHistoryDialog } from "@/features/ride-payments/components/history-dialog";
+import { useDownloadRideInvoice } from "@/features/ride-payments/hooks";
 
 const FILTER_SCHEMA: FilterSchema = {
   status: {
@@ -34,6 +36,8 @@ export default function RideList() {
 
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [paymentsRideId, setPaymentsRideId] = useState<string | null>(null);
+  const [isPaymentsOpen, setIsPaymentsOpen] = useState(false);
 
   const page = Number(controller.applied.page) || 1;
   const limit = Number(controller.applied.limit) || 10;
@@ -47,6 +51,7 @@ export default function RideList() {
   const { data: offers, isLoading: offersLoading } = useRideOffers(selectedRide?.id);
   const cancelMutation = useCancelRideAdmin();
   const exportMutation = useExportRides();
+  const downloadInvoiceMutation = useDownloadRideInvoice();
 
   const rides = data?.MESSAGE || [];
 
@@ -57,6 +62,15 @@ export default function RideList() {
   const handleOpenDetails = (ride: Ride) => {
     setSelectedRide(ride);
     setIsDetailsOpen(true);
+  };
+
+  const handleViewPayments = (ride: Ride) => {
+    setPaymentsRideId(ride.id);
+    setIsPaymentsOpen(true);
+  };
+
+  const handleDownloadInvoice = (ride: Ride) => {
+    downloadInvoiceMutation.mutate(ride.id);
   };
 
   const handleExport = () => {
@@ -90,7 +104,12 @@ export default function RideList() {
   };
 
   const columns = useMemo(
-    () => getRideColumns({ onViewDetails: handleOpenDetails }),
+    () =>
+      getRideColumns({
+        onViewDetails: handleOpenDetails,
+        onViewPayments: handleViewPayments,
+        onDownloadInvoice: handleDownloadInvoice,
+      }),
     []
   );
 
@@ -155,6 +174,12 @@ export default function RideList() {
         offersLoading={offersLoading}
         onCancelRide={handleCancelRide}
         isCancelling={cancelMutation.isPending}
+      />
+
+      <RidePaymentHistoryDialog
+        open={isPaymentsOpen}
+        onOpenChange={setIsPaymentsOpen}
+        rideId={paymentsRideId}
       />
     </div>
   );
