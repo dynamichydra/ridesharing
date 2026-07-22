@@ -25,7 +25,9 @@ class _LoginPageState extends State<LoginPage> {
     super.initState();
     try {
       final savedCode = sl<StorageService>().getCountryCode();
-      final index = CountryConfig.supportedCountries.indexWhere((c) => c.isoCode == savedCode);
+      final index = CountryConfig.supportedCountries.indexWhere(
+        (c) => c.isoCode == savedCode,
+      );
       if (index != -1) {
         _selectedCountry = CountryConfig.supportedCountries[index];
       }
@@ -49,9 +51,8 @@ class _LoginPageState extends State<LoginPage> {
         }
         phone = '${_selectedCountry.dialCode}$digits';
       }
-      context.read<AuthBloc>().add(
-            LoginSubmitted(phone),
-          );
+      // Bypass AuthBloc API call and go directly to OTP page
+      context.push('/otp', extra: phone);
     }
   }
 
@@ -82,11 +83,14 @@ class _LoginPageState extends State<LoginPage> {
 
           return SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.l, vertical: AppSpacing.xl),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.l,
+                vertical: AppSpacing.xl,
+              ),
               child: Form(
                 key: _formKey,
                 child: Column(
-                   crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Center(
                       child: Image.asset(
@@ -101,7 +105,9 @@ class _LoginPageState extends State<LoginPage> {
                         'Rider App',
                         style: theme.textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.w900,
-                          color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+                          color: isDark
+                              ? AppColors.darkTextPrimary
+                              : AppColors.lightTextPrimary,
                         ),
                       ),
                     ),
@@ -110,7 +116,9 @@ class _LoginPageState extends State<LoginPage> {
                       child: Text(
                         'Enter your phone number to get started',
                         style: theme.textTheme.bodyMedium?.copyWith(
-                          color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                          color: isDark
+                              ? AppColors.darkTextSecondary
+                              : AppColors.lightTextSecondary,
                         ),
                       ),
                     ),
@@ -119,7 +127,10 @@ class _LoginPageState extends State<LoginPage> {
                       value: _selectedCountry,
                       decoration: InputDecoration(
                         labelText: 'Select Country',
-                        prefixIcon: const Icon(Icons.public_rounded, color: AppColors.primaryBlue),
+                        prefixIcon: const Icon(
+                          Icons.public_rounded,
+                          color: AppColors.primaryBlue,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(AppRadius.m),
                         ),
@@ -147,7 +158,9 @@ class _LoginPageState extends State<LoginPage> {
                     CustomTextField(
                       controller: _phoneController,
                       labelText: 'Phone Number',
-                      hintText: _selectedCountry.isoCode == 'IN' ? '98765 43210' : '555-0199',
+                      hintText: _selectedCountry.isoCode == 'IN'
+                          ? '98765 43210'
+                          : '555-0199',
                       prefixIcon: Icons.phone_android_rounded,
                       keyboardType: TextInputType.phone,
                       validator: (value) {

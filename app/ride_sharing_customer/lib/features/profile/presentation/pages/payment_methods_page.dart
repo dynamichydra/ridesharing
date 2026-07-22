@@ -13,17 +13,21 @@ class PaymentMethodsPage extends StatefulWidget {
 }
 
 class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
+  String _selectedMethodId = 'cash'; // Default selected method
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Scaffold(
-      backgroundColor: theme.colorScheme.background,
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Payment Methods'),
+        title: const Text(
+          'Payment Methods',
+          style: TextStyle(color: Color(0xFF021B47), fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
           onPressed: () => context.pop(),
         ),
       ),
@@ -33,439 +37,161 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
             return const LoadingView();
           }
 
-          if (state is ProfileLoaded) {
-            final profile = state.userProfile;
-            final rawMethods = profile['payment_methods'] as List? ?? [];
-            final methods = rawMethods.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          return Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _buildPaymentMethodItem(
+                      id: 'cash',
+                      icon: Icons.payments_outlined,
+                      title: 'Cash',
+                      subtitle: 'Pay with cash',
+                      iconColor: const Color(0xFF01A34D),
+                    ),
+                    _buildPaymentMethodItem(
+                      id: 'upi',
+                      icon: Icons.qr_code_scanner_rounded,
+                      title: 'UPI',
+                      subtitle: 'Pay using any UPI app',
+                      iconColor: const Color(0xFF0165B7),
+                    ),
+                    _buildPaymentMethodItem(
+                      id: 'cards',
+                      icon: Icons.credit_card_rounded,
+                      title: 'Cards',
+                      subtitle: 'Visa, MasterCard, RuPay',
+                      iconColor: Colors.deepPurple,
+                    ),
+                    _buildPaymentMethodItem(
+                      id: 'wallet',
+                      icon: Icons.account_balance_wallet_outlined,
+                      title: 'Wallet',
+                      subtitle: 'Ryva Wallet',
+                      iconColor: const Color(0xFF01A34D),
+                    ),
+                    _buildPaymentMethodItem(
+                      id: 'netbanking',
+                      icon: Icons.account_balance_rounded,
+                      title: 'Net Banking',
+                      subtitle: 'All major banks',
+                      iconColor: Colors.amber.shade800,
+                    ),
+                  ],
+                ),
+              ),
 
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.m),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Saved Accounts',
-                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: AppSpacing.m),
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: methods.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.s),
-                    itemBuilder: (context, index) {
-                      final pm = methods[index];
-                      final isDefault = pm['is_default'] as bool? ?? false;
-
-                      IconData icon = Icons.credit_card_rounded;
-                      if (pm['type'] == 'apple_pay') icon = Icons.apple_rounded;
-                      if (pm['type'] == 'cash') icon = Icons.money_rounded;
-
-                      String title = pm['brand'] as String;
-                      if (pm['last_4'].toString().isNotEmpty) {
-                        title += ' •••• ${pm['last_4']}';
-                      }
-
-                      return Card(
-                        child: ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(AppSpacing.s),
-                            decoration: BoxDecoration(
-                              color: isDark ? Colors.grey[850] : Colors.grey[100],
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(icon, color: AppColors.primaryBlue),
-                          ),
-                          title: Text(
-                            title,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(isDefault ? 'Default Payment Method' : 'Tap to set as default'),
-                          trailing: isDefault
-                              ? const Icon(Icons.check_circle_rounded, color: AppColors.successGreen)
-                              : null,
-                          onTap: () {
-                            if (!isDefault) {
-                              final updated = methods.map((e) {
-                                return {
-                                  ...e,
-                                  'is_default': e['id'] == pm['id'],
-                                };
-                              }).toList();
-                              
-                              // Save back in ProfileBloc
-                              context.read<ProfileBloc>().add(UpdatePaymentMethods(updated));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('$title is now default.')),
-                              );
-                            }
-                          },
-                        ),
+              // Add Payment Method Button
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, bottom: 24),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Add payment method flow triggered')),
                       );
                     },
-                  ),
-                  const SizedBox(height: AppSpacing.xxl),
-                  Text(
-                    'Add Payment Option',
-                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: AppSpacing.m),
-                  Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.add_rounded, color: AppColors.primaryBlue),
-                      title: const Text('Add Credit or Debit Card'),
-                      subtitle: const Text('Secure payment processing'),
-                      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-                      onTap: () {
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.transparent,
-                          builder: (sheetContext) => BlocProvider.value(
-                            value: context.read<ProfileBloc>(),
-                            child: const _AddCardBottomSheet(),
-                          ),
-                        );
-                      },
+                    icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF01A34D)),
+                    label: const Text(
+                      'Add Payment Method',
+                      style: TextStyle(
+                        color: Color(0xFF021B47),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFE2E7E9)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
-                ],
+                ),
               ),
-            );
-          }
-
-          return const Center(child: CircularProgressIndicator());
+            ],
+          );
         },
       ),
     );
   }
-}
 
-class _AddCardBottomSheet extends StatefulWidget {
-  const _AddCardBottomSheet();
+  Widget _buildPaymentMethodItem({
+    required String id,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color iconColor,
+  }) {
+    final isSelected = _selectedMethodId == id;
 
-  @override
-  State<_AddCardBottomSheet> createState() => _AddCardBottomSheetState();
-}
-
-class _AddCardBottomSheetState extends State<_AddCardBottomSheet> {
-  final _formKey = GlobalKey<FormState>();
-  final _cardNumberController = TextEditingController();
-  final _expiryController = TextEditingController();
-  final _cvvController = TextEditingController();
-  final _nameController = TextEditingController();
-  String _cardBrand = 'Card';
-
-  @override
-  void dispose() {
-    _cardNumberController.dispose();
-    _expiryController.dispose();
-    _cvvController.dispose();
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  void _submit(BuildContext context) {
-    if (_formKey.currentState!.validate()) {
-      final bloc = context.read<ProfileBloc>();
-      final state = bloc.state;
-      if (state is ProfileLoaded) {
-        final rawMethods = state.userProfile['payment_methods'] as List? ?? [];
-        final currentMethods = rawMethods.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-
-        final cardNo = _cardNumberController.text.replaceAll(' ', '');
-        final last4 = cardNo.length >= 4 ? cardNo.substring(cardNo.length - 4) : '0000';
-
-        final newMethod = {
-          'id': 'pm_${DateTime.now().millisecondsSinceEpoch}',
-          'type': 'credit_card',
-          'brand': _cardBrand,
-          'last_4': last4,
-          'expiry': _expiryController.text,
-          'is_default': currentMethods.isEmpty,
-        };
-
-        final updated = [...currentMethods, newMethod];
-        bloc.add(UpdatePaymentMethods(updated));
-        
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$_cardBrand ending in $last4 added successfully!'),
-            backgroundColor: AppColors.successGreen,
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedMethodId = id;
+        });
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF01A34D) : const Color(0xFFE2E7E9),
+            width: isSelected ? 1.5 : 1,
           ),
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : Colors.white,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(AppRadius.xl),
-          topRight: Radius.circular(AppRadius.xl),
         ),
-      ),
-      padding: EdgeInsets.only(
-        left: AppSpacing.l,
-        right: AppSpacing.l,
-        top: AppSpacing.l,
-        bottom: AppSpacing.l + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey[700] : Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.08),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(height: AppSpacing.m),
-              Text(
-                'Add Credit or Debit Card',
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: AppSpacing.m),
-
-              // Visual Premium Card
-              Container(
-                width: double.infinity,
-                height: 170,
-                padding: const EdgeInsets.all(AppSpacing.l),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: isDark 
-                        ? [const Color(0xFF2C2C35), const Color(0xFF1E1E24)] 
-                        : [AppColors.primaryBlue, const Color(0xFF1E50C5)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(AppRadius.l),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Icon(Icons.nfc_rounded, color: Colors.white70, size: 28),
-                        Text(
-                          _cardBrand.toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      _cardNumberController.text.isNotEmpty 
-                          ? _cardNumberController.text 
-                          : '•••• •••• •••• ••••',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        letterSpacing: 2,
-                        fontFamily: 'monospace',
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'CARDHOLDER',
-                              style: TextStyle(color: Colors.white54, fontSize: 8, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _nameController.text.isNotEmpty 
-                                  ? _nameController.text.toUpperCase() 
-                                  : 'YOUR NAME',
-                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'EXPIRES',
-                              style: TextStyle(color: Colors.white54, fontSize: 8, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _expiryController.text.isNotEmpty 
-                                  ? _expiryController.text 
-                                  : 'MM/YY',
-                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.l),
-
-              // Fields
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Cardholder Name',
-                  prefixIcon: Icon(Icons.person_outline_rounded),
-                ),
-                textCapitalization: TextCapitalization.characters,
-                validator: (val) => val == null || val.isEmpty ? 'Please enter cardholder name' : null,
-                onChanged: (val) => setState(() {}),
-              ),
-              const SizedBox(height: AppSpacing.s),
-              TextFormField(
-                controller: _cardNumberController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Card Number',
-                  prefixIcon: Icon(Icons.credit_card_rounded),
-                  hintText: '4111 2222 3333 4444',
-                ),
-                validator: (val) {
-                  if (val == null || val.replaceAll(' ', '').length < 16) {
-                    return 'Please enter 16 digits';
-                  }
-                  return null;
-                },
-                onChanged: (value) {
-                  String clean = value.replaceAll(' ', '');
-                  if (clean.length > 16) clean = clean.substring(0, 16);
-                  
-                  String formatted = '';
-                  for (int i = 0; i < clean.length; i++) {
-                    if (i > 0 && i % 4 == 0) {
-                      formatted += ' ';
-                    }
-                    formatted += clean[i];
-                  }
-                  
-                  if (formatted != value) {
-                    _cardNumberController.value = TextEditingValue(
-                      text: formatted,
-                      selection: TextSelection.collapsed(offset: formatted.length),
-                    );
-                  }
-                  
-                  setState(() {
-                    if (clean.startsWith('4')) {
-                      _cardBrand = 'Visa';
-                    } else if (clean.startsWith('5')) {
-                      _cardBrand = 'Mastercard';
-                    } else if (clean.startsWith('3')) {
-                      _cardBrand = 'Amex';
-                    } else {
-                      _cardBrand = 'Card';
-                    }
-                  });
-                },
-              ),
-              const SizedBox(height: AppSpacing.s),
-              Row(
+              child: Icon(icon, color: iconColor, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _expiryController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Expiry Date',
-                        prefixIcon: Icon(Icons.calendar_today_rounded),
-                        hintText: 'MM/YY',
-                      ),
-                      validator: (val) {
-                        if (val == null || !val.contains('/') || val.length < 5) {
-                          return 'Enter MM/YY';
-                        }
-                        return null;
-                      },
-                      onChanged: (value) {
-                        String clean = value.replaceAll('/', '');
-                        if (clean.length > 4) clean = clean.substring(0, 4);
-                        
-                        String formatted = '';
-                        for (int i = 0; i < clean.length; i++) {
-                          if (i == 2) {
-                            formatted += '/';
-                          }
-                          formatted += clean[i];
-                        }
-                        
-                        if (formatted != value) {
-                          _expiryController.value = TextEditingValue(
-                            text: formatted,
-                            selection: TextSelection.collapsed(offset: formatted.length),
-                          );
-                        }
-                        setState(() {});
-                      },
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF021B47),
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.s),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _cvvController,
-                      keyboardType: TextInputType.number,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'CVV',
-                        prefixIcon: Icon(Icons.lock_outline_rounded),
-                        hintText: '•••',
-                      ),
-                      validator: (val) => val == null || val.length < 3 ? 'Enter CVV' : null,
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF8A94A6),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: AppSpacing.l),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: theme.colorScheme.primary,
-                    foregroundColor: theme.colorScheme.onPrimary,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  onPressed: () => _submit(context),
-                  child: const Text('Add Card', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            // Custom Radio Circle Indicator
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? const Color(0xFF01A34D) : Colors.grey.shade300,
+                  width: isSelected ? 6 : 2,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

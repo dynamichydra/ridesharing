@@ -19,41 +19,52 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  int _currentIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    // Load current position and saved places
     context.read<HomeBloc>().add(LoadHomeData());
+  }
+
+  void _onBottomNavTapped(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
+    if (index == 1) {
+      context.push('/ride-history');
+    } else if (index == 2) {
+      context.push('/wallet');
+    } else if (index == 3) {
+      context.push('/profile');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       key: _scaffoldKey,
       drawer: const AppNavigationDrawer(),
+      backgroundColor: Colors.white,
       body: BlocBuilder<HomeBloc, HomeState>(
         builder: (context, state) {
           if (state is HomeLoading) {
-            return const Scaffold(body: LoadingView());
+            return const LoadingView();
           }
 
           if (state is HomeError) {
-            return Scaffold(
-              body: ErrorView(
-                message: state.message,
-                onRetry: () => context.read<HomeBloc>().add(LoadHomeData()),
-              ),
+            return ErrorView(
+              message: state.message,
+              onRetry: () => context.read<HomeBloc>().add(LoadHomeData()),
             );
           }
 
           if (state is HomeLoaded) {
             return Stack(
               children: [
-                // 1. Interactive Map fallbacks
+                // 1. Map Background
                 Positioned.fill(
                   child: AppMapView(
                     pickup: state.currentPosition,
@@ -62,17 +73,17 @@ class _HomePageState extends State<HomePage> {
 
                 // 2. Floating Top Header
                 Positioned(
-                  top: MediaQuery.of(context).padding.top + AppSpacing.s,
-                  left: AppSpacing.m,
-                  right: AppSpacing.m,
+                  top: MediaQuery.of(context).padding.top + 8,
+                  left: 16,
+                  right: 16,
                   child: Container(
                     height: 56,
                     decoration: BoxDecoration(
-                      color: isDark ? AppColors.darkSurface : Colors.white,
-                      borderRadius: BorderRadius.circular(AppRadius.m),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withOpacity(0.06),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -81,164 +92,196 @@ class _HomePageState extends State<HomePage> {
                     child: Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.menu_rounded),
+                          icon: const Icon(Icons.menu_rounded, color: Colors.black87),
                           onPressed: () {
                             _scaffoldKey.currentState?.openDrawer();
                           },
                         ),
                         Expanded(
-                          child: GestureDetector(
-                            onTap: () => context.push('/select-location'),
-                            child: Text(
-                              'Where to?',
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
-                                fontWeight: FontWeight.w600,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              Text(
+                                'Current Location',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF021B47),
+                                ),
                               ),
-                            ),
+                              SizedBox(width: 4),
+                              Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF01A34D), size: 18),
+                            ],
                           ),
                         ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: AppSpacing.m),
-                          child: Icon(Icons.search_rounded, color: AppColors.primaryBlue),
+                        IconButton(
+                          icon: const Icon(Icons.notifications_none_rounded, color: Colors.black87),
+                          onPressed: () => context.push('/notifications'),
                         ),
                       ],
                     ),
                   ),
                 ),
 
-                // 3. Bottom sheet overlay for Saved Places
+                // 3. Floating Bottom Search and Suggestions Card
                 Positioned(
                   bottom: 0,
                   left: 0,
                   right: 0,
                   child: Container(
-                    padding: const EdgeInsets.all(AppSpacing.l),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.darkSurface : Colors.white,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(AppRadius.xl),
-                        topRight: Radius.circular(AppRadius.xl),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(24),
+                        topRight: Radius.circular(24),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
-                          blurRadius: 15,
-                          offset: const Offset(0, -4),
+                          color: Colors.black12,
+                          blurRadius: 12,
+                          offset: Offset(0, -4),
                         ),
                       ],
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Center(
-                          child: Container(
-                            width: 40,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: isDark ? Colors.grey[700] : Colors.grey[300],
-                              borderRadius: BorderRadius.circular(2),
-                            ),
+                        const SizedBox(height: 12),
+                        // Handle bar
+                        Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(2),
                           ),
                         ),
-                        const SizedBox(height: AppSpacing.l),
-                        Text(
-                          'Suggestions',
-                          style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: AppSpacing.m),
-                        // Quick Action Buttons (Home, Work)
-                        IntrinsicHeight(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: state.savedPlaces.map((place) {
-                              IconData placeIcon = Icons.star_border_rounded;
-                              if (place['type'] == 'home') placeIcon = Icons.home_rounded;
-                              if (place['type'] == 'work') placeIcon = Icons.work_rounded;
-
-                              return Expanded(
-                                child: Card(
-                                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                                  child: InkWell(
-                                    onTap: () {
-                                      final pickup = state.currentPosition;
-                                      final dest = LatLng(place['latitude'] as double, place['longitude'] as double);
-
-                                      // Set pickup and destination in BookingBloc
-                                      context.read<BookingBloc>().add(
-                                        SetRideLocations(
-                                          pickup: pickup,
-                                          pickupName: 'Current Location',
-                                          pickupAddress: 'UB City, Bengaluru, KA',
-                                          destination: dest,
-                                          destinationName: place['name'] as String,
-                                          destinationAddress: place['address'] as String,
-                                        ),
-                                      );
-                                      context.push('/ride-options');
-                                    },
-                                    borderRadius: BorderRadius.circular(AppRadius.l),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(AppSpacing.m),
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(placeIcon, color: AppColors.primaryBlue),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            place['name'] as String,
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(fontWeight: FontWeight.bold),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            place['type'].toString().toUpperCase(),
-                                            style: theme.textTheme.bodyMedium?.copyWith(fontSize: 10),
-                                          ),
-                                        ],
+                        const SizedBox(height: 16),
+                        
+                        // Search bar input card
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: InkWell(
+                            onTap: () => context.push('/select-location'),
+                            borderRadius: BorderRadius.circular(16),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFFE2E7E9)),
+                              ),
+                              child: Row(
+                                children: const [
+                                  Icon(Icons.search_rounded, color: Color(0xFF01A34D), size: 22),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      'Where are you going?',
+                                      style: TextStyle(
+                                        color: Color(0xFF8A94A6),
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.l),
-                        // Search trigger bar
-                        InkWell(
-                          onTap: () => context.push('/select-location'),
-                          child: Container(
-                            padding: const EdgeInsets.all(AppSpacing.m),
-                            decoration: BoxDecoration(
-                              color: isDark ? AppColors.darkBackground : AppColors.lightBackground,
-                              borderRadius: BorderRadius.circular(AppRadius.m),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.history_rounded, color: Colors.grey),
-                                const SizedBox(width: AppSpacing.m),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Kempegowda International Airport (BLR)',
-                                        style: TextStyle(fontWeight: FontWeight.bold),
-                                      ),
-                                      Text(
-                                        'KIAL Rd, Devanahalli, Bengaluru, Karnataka',
-                                        style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
-                              ],
+                                  Icon(Icons.star_border_rounded, color: Colors.grey, size: 20),
+                                ],
+                              ),
                             ),
                           ),
                         ),
+                        const SizedBox(height: 16),
+
+                        // Suggestions / Shortcuts row
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _buildShortcutItem(
+                                icon: Icons.home_filled,
+                                label: 'Home',
+                                subtext: 'Add home',
+                                color: const Color(0xFF0165B7),
+                                onTap: () => context.push('/select-location'),
+                              ),
+                              _buildShortcutItem(
+                                icon: Icons.work_rounded,
+                                label: 'Work',
+                                subtext: 'Add work',
+                                color: const Color(0xFF01A34D),
+                                onTap: () => context.push('/select-location'),
+                              ),
+                              _buildShortcutItem(
+                                icon: Icons.flight_takeoff_rounded,
+                                label: 'Airport',
+                                subtext: 'Add place',
+                                color: Colors.amber.shade700,
+                                onTap: () => context.push('/select-location'),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Popular Rides Section
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Popular Rides',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF021B47),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () => context.push('/select-location'),
+                                child: const Text(
+                                  'View all',
+                                  style: TextStyle(color: Color(0xFF0165B7), fontSize: 13, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // List of popular rides
+                        SizedBox(
+                          height: 84,
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            children: [
+                              _buildPopularRideItem(
+                                type: 'Ryva Go',
+                                time: '2 min away',
+                                capacity: 4,
+                                price: '₹125',
+                                asset: 'assets/images/onboarding_driver.png', // Fallback local image
+                              ),
+                              _buildPopularRideItem(
+                                type: 'Ryva Share',
+                                time: '3 min away',
+                                capacity: 3,
+                                price: '₹90',
+                                asset: 'assets/images/onboarding_driver.png',
+                              ),
+                              _buildPopularRideItem(
+                                type: 'Ryva XL',
+                                time: '4 min away',
+                                capacity: 4,
+                                price: '₹200',
+                                asset: 'assets/images/onboarding_driver.png',
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                       ],
                     ),
                   ),
@@ -247,8 +290,140 @@ class _HomePageState extends State<HomePage> {
             );
           }
 
-          return const Scaffold(body: LoadingView());
+          return const LoadingView();
         },
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: _onBottomNavTapped,
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF01A34D),
+          unselectedItemColor: const Color(0xFF8A94A6),
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_filled),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.directions_car_filled_rounded),
+              label: 'My Rides',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.account_balance_wallet_rounded),
+              label: 'Wallet',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_rounded),
+              label: 'Profile',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShortcutItem({
+    required IconData icon,
+    required String label,
+    required String subtext,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.28,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE2E7E9)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtext,
+              style: const TextStyle(fontSize: 10, color: Color(0xFF8A94A6)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPopularRideItem({
+    required String type,
+    required String time,
+    required int capacity,
+    required String price,
+    required String asset,
+  }) {
+    return Container(
+      width: 180,
+      margin: const EdgeInsets.symmetric(horizontal: 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E7E9)),
+      ),
+      child: Row(
+        children: [
+          // Vehicle Image/Icon fallback
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFF01A34D).withOpacity(0.06),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.directions_car_filled_rounded, color: Color(0xFF01A34D), size: 26),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  type,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$time • 👤$capacity',
+                  style: const TextStyle(fontSize: 10, color: Color(0xFF8A94A6)),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            price,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+          ),
+        ],
       ),
     );
   }

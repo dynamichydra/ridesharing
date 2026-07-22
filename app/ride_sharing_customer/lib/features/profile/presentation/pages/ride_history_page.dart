@@ -13,25 +13,49 @@ class RideHistoryPage extends StatefulWidget {
   State<RideHistoryPage> createState() => _RideHistoryPageState();
 }
 
-class _RideHistoryPageState extends State<RideHistoryPage> {
+class _RideHistoryPageState extends State<RideHistoryPage> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     context.read<ProfileBloc>().add(LoadRideHistoryEvent());
   }
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: theme.colorScheme.background,
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Ride History'),
+        title: const Text(
+          'My Rides',
+          style: TextStyle(color: Color(0xFF021B47), fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
           onPressed: () => context.pop(),
+        ),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: const Color(0xFF01A34D),
+          indicatorSize: TabBarIndicatorSize.tab,
+          labelColor: const Color(0xFF01A34D),
+          unselectedLabelColor: const Color(0xFF8A94A6),
+          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+          tabs: const [
+            Tab(text: 'Upcoming'),
+            Tab(text: 'History'),
+          ],
         ),
       ),
       body: BlocBuilder<ProfileBloc, ProfileState>(
@@ -43,105 +67,113 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
           if (state is ProfileLoaded) {
             final rides = state.rideHistory;
 
-            if (rides.isEmpty) {
-              return const EmptyView(
-                title: 'No Rides Booked',
-                message: 'Your past rides will appear here.',
-                icon: Icons.directions_car_rounded,
-              );
-            }
+            return TabBarView(
+              controller: _tabController,
+              children: [
+                // 1. Upcoming list (Empty state mockup)
+                const EmptyView(
+                  title: 'No Upcoming Rides',
+                  message: 'Your scheduled rides will appear here.',
+                  icon: Icons.calendar_today_rounded,
+                ),
 
-            return ListView.separated(
-              itemCount: rides.length,
-              padding: const EdgeInsets.all(AppSpacing.m),
-              separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.s),
-              itemBuilder: (context, index) {
-                final ride = rides[index];
-                final status = ride['status'] as String;
-                final isCompleted = status == 'completed';
-                final dateStr = ride['date'].toString().split('T')[0];
+                // 2. History list
+                rides.isEmpty
+                    ? const EmptyView(
+                        title: 'No Past Rides',
+                        message: 'Your completed rides will appear here.',
+                        icon: Icons.directions_car_rounded,
+                      )
+                    : ListView.builder(
+                        itemCount: rides.length,
+                        padding: const EdgeInsets.all(16),
+                        itemBuilder: (context, index) {
+                          final ride = rides[index];
+                          final status = ride['status'] as String;
+                          final isCompleted = status == 'completed';
 
-                // Ride Icons Mapping
-                String vehicleIcon = '🚗';
-                if (ride['vehicle_type'] == 'standard') vehicleIcon = '🚙';
-                if (ride['vehicle_type'] == 'premium') vehicleIcon = '🚕';
-                if (ride['vehicle_type'] == 'xl') vehicleIcon = '🚐';
-
-                return Card(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: 8),
-                    leading: Container(
-                      padding: const EdgeInsets.all(AppSpacing.s),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.grey[850] : Colors.grey[100],
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        vehicleIcon,
-                        style: const TextStyle(fontSize: 24),
-                      ),
-                    ),
-                    title: Text(
-                      ride['destination_name'] as String,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 2),
-                        Text(
-                          'To: ${ride['destination_address']}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Text(
-                              dateStr,
-                              style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 8),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFFE2E7E9)),
                             ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: isCompleted
-                                    ? AppColors.successGreen.withOpacity(0.12)
-                                    : theme.colorScheme.error.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                status.toUpperCase(),
-                                style: TextStyle(
-                                  color: isCompleted ? AppColors.successGreen : theme.colorScheme.error,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.bold,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Locations Pins
+                                Row(
+                                  children: [
+                                    Column(
+                                      children: [
+                                        const Icon(Icons.circle, color: Color(0xFF01A34D), size: 10),
+                                        Container(height: 18, width: 1, color: Colors.grey.shade300),
+                                        const Icon(Icons.location_on_rounded, color: Color(0xFFE53935), size: 12),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            ride['pickup_name'] != null ? ride['pickup_name'] as String : 'Kormangala, Bengaluru',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          Text(
+                                            ride['destination_name'] as String,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          '₹${(ride['fare'] as num).toDouble().toStringAsFixed(0)}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF021B47)),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        const Text(
+                                          'Cash',
+                                          style: TextStyle(color: Color(0xFF8A94A6), fontSize: 11),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                              ),
+                                const Divider(height: 24),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Today, 10:30 AM',
+                                      style: TextStyle(fontSize: 12, color: Color(0xFF8A94A6)),
+                                    ),
+                                    Text(
+                                      isCompleted ? 'Completed' : 'Cancelled',
+                                      style: TextStyle(
+                                        color: isCompleted ? const Color(0xFF01A34D) : const Color(0xFFE53935),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          '${AppConstants.currencySymbol}${(ride['fare'] as num).toDouble().toStringAsFixed(2)}',
-                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-                        ),
-                        const SizedBox(height: 4),
-                        const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Colors.grey),
-                      ],
-                    ),
-                    onTap: () {
-                      context.push('/ride-detail', extra: ride);
-                    },
-                  ),
-                );
-              },
+                          );
+                        },
+                      ),
+              ],
             );
           }
 

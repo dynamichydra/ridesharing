@@ -3,163 +3,133 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
-import '../../../profile/presentation/bloc/profile_bloc.dart';
 
 class AppNavigationDrawer extends StatelessWidget {
   const AppNavigationDrawer({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Drawer(
-      backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+      backgroundColor: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Custom Modern Header
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top + AppSpacing.l,
-              left: AppSpacing.l,
-              right: AppSpacing.l,
-              bottom: AppSpacing.l,
-            ),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1E52C9), AppColors.primaryBlue],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: const BorderRadius.only(
-                bottomRight: Radius.circular(AppRadius.xl),
-              ),
-            ),
-            child: BlocBuilder<ProfileBloc, ProfileState>(
-              builder: (context, state) {
-                String userName = 'Guest';
-                String? userImage;
-
-                if (state is ProfileInitial) {
-                  // Trigger loading details automatically
-                  context.read<ProfileBloc>().add(LoadProfile());
-                } else if (state is ProfileLoaded) {
-                  userName = state.userProfile['name'] as String? ?? 'User';
-                  userImage = state.userProfile['profile_picture'] as String?;
-                }
-
-                return Row(
-                  children: [
-                    // Avatar with white boundary
-                    Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                      child: CircleAvatar(
-                        radius: 28,
-                        backgroundColor: Colors.white,
-                        backgroundImage: userImage != null
-                            ? NetworkImage(userImage)
-                            : const NetworkImage(
-                                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-                              ),
+          // Ryva Ride Brand Header Logo
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              child: Row(
+                children: [
+                  // Ryva Ride Logo Symbol
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF01A34D).withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'R',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF01A34D),
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.m),
-                    // Details
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            userName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 18,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Gold Member',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.white.withOpacity(0.8),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
+                  ),
+                  const SizedBox(width: 12),
+                  Row(
+                    children: const [
+                      Text(
+                        'Ryva ',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF01A34D),
+                        ),
                       ),
-                    ),
-                  ],
-                );
-              },
+                      Text(
+                        'Ride',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF0165B7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: AppSpacing.m),
+          const Divider(height: 1),
+
           // Drawer Navigation List
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               children: [
                 _buildDrawerItem(
                   context,
-                  icon: Icons.home_rounded,
+                  icon: Icons.home_outlined,
                   title: 'Home',
                   route: '/home',
-                  iconColor: AppColors.primaryBlue,
                 ),
                 _buildDrawerItem(
                   context,
-                  icon: Icons.account_balance_wallet_rounded,
+                  icon: Icons.directions_car_outlined,
+                  title: 'My Rides',
+                  route: '/ride-history',
+                ),
+                _buildDrawerItem(
+                  context,
+                  icon: Icons.account_balance_wallet_outlined,
                   title: 'Wallet',
                   route: '/wallet',
-                  iconColor: AppColors.successGreen,
                 ),
                 _buildDrawerItem(
                   context,
-                  icon: Icons.history_rounded,
-                  title: 'Ride History',
-                  route: '/ride-history',
-                  iconColor: AppColors.primaryBlue,
+                  icon: Icons.location_on_outlined,
+                  title: 'My Addresses',
+                  route: '/saved-places',
                 ),
                 _buildDrawerItem(
                   context,
-                  icon: Icons.notifications_rounded,
-                  title: 'Notifications',
-                  route: '/notifications',
-                  iconColor: AppColors.warningOrange,
+                  icon: Icons.card_giftcard_rounded,
+                  title: 'Refer & Earn',
+                  route: '/profile', // Fallback route
+                  badgeText: 'Get ₹100',
                 ),
                 _buildDrawerItem(
                   context,
-                  icon: Icons.person_rounded,
-                  title: 'Profile Settings',
-                  route: '/profile',
-                  iconColor: AppColors.primaryBlue,
-                ),
-                _buildDrawerItem(
-                  context,
-                  icon: Icons.help_rounded,
+                  icon: Icons.help_outline_rounded,
                   title: 'Help & Support',
                   route: '/help',
-                  iconColor: Colors.teal,
                 ),
+                _buildDrawerItem(
+                  context,
+                  icon: Icons.settings_outlined,
+                  title: 'Settings',
+                  route: '/settings',
+                ),
+                
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 8.0),
                   child: Divider(height: 1),
                 ),
-                _buildDrawerItem(
-                  context,
-                  icon: Icons.logout_rounded,
-                  title: 'Log Out',
-                  route: '/login',
-                  iconColor: AppColors.errorRed,
-                  showTrailing: false,
+                
+                // Logout Menu Button
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  leading: const Icon(Icons.logout_rounded, color: Color(0xFFE53935), size: 20),
+                  title: const Text(
+                    'Logout',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFE53935),
+                    ),
+                  ),
                   onTap: () {
                     context.read<AuthBloc>().add(LoggedOut());
                     context.go('/login');
@@ -168,14 +138,15 @@ class AppNavigationDrawer extends StatelessWidget {
               ],
             ),
           ),
+
           // Footer
-          Padding(
-            padding: const EdgeInsets.only(bottom: 24.0, left: 24.0),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 24.0, left: 28.0),
             child: Text(
               'v1.0.2 • Rider App',
               style: TextStyle(
-                color: (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary).withOpacity(0.5),
-                fontSize: 12,
+                color: Color(0xFF8A94A6),
+                fontSize: 11,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -190,50 +161,33 @@ class AppNavigationDrawer extends StatelessWidget {
     required IconData icon,
     required String title,
     required String route,
-    required Color iconColor,
-    bool showTrailing = true,
-    VoidCallback? onTap,
+    String? badgeText,
   }) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.m),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-        dense: true,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m)),
-        onTap: onTap ?? () {
-          context.pop(); // Close drawer
-          context.push(route);
-        },
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: iconColor.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: iconColor, size: 20),
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      leading: Icon(icon, color: const Color(0xFF021B47), size: 20),
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF021B47),
         ),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
-          ),
-        ),
-        trailing: showTrailing
-            ? Icon(
-                Icons.chevron_right_rounded,
-                color: (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary).withOpacity(0.4),
-                size: 20,
-              )
-            : null,
       ),
+      trailing: badgeText != null
+          ? Text(
+              badgeText,
+              style: const TextStyle(
+                color: Color(0xFF01A34D),
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            )
+          : null,
+      onTap: () {
+        context.pop(); // Close drawer
+        context.push(route);
+      },
     );
   }
 }

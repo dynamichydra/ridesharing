@@ -22,13 +22,17 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Account Details'),
+        title: const Text(
+          'Profile',
+          style: TextStyle(color: Color(0xFF021B47), fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
           onPressed: () => context.pop(),
         ),
       ),
@@ -49,81 +53,117 @@ class _ProfilePageState extends State<ProfilePage> {
             final profile = state.userProfile;
 
             return SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.m),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Column(
                 children: [
-                  // 1. Profile Summary Card
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.l),
-                      child: Column(
-                        children: [
-                          CircleAvatar(
-                            radius: 50,
-                            backgroundImage: NetworkImage(
-                              profile['profile_picture'] as String? ??
-                                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+                  // 1. Profile Summary Row (Avatar + Info + Edit Icon)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFFE2E7E9), width: 1.5),
+                            image: const DecorationImage(
+                              image: AssetImage('assets/images/onboarding_driver.png'),
+                              fit: BoxFit.cover,
                             ),
                           ),
-                          const SizedBox(height: AppSpacing.m),
-                          Text(
-                            profile['name'] as String? ?? 'Alex Morgan',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                profile['name'] as String? ?? 'Rahul Sharma',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF021B47),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                profile['phone'] as String? ?? '+91 98765 43210',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF8A94A6),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            profile['email'] as String? ?? 'alex.morgan@example.com',
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                          const SizedBox(height: 8),
-                        ],
-                      ),
+                        ),
+                        // Green edit icon
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, color: Color(0xFF01A34D)),
+                          onPressed: () => context.push('/edit-profile'),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.xl),
+                  const SizedBox(height: 16),
 
                   // 2. Menu Links
-                  _buildMenuCard(
-                    context,
+                  _buildProfileMenuItem(
                     icon: Icons.person_outline_rounded,
-                    title: 'Edit Profile',
-                    subtitle: 'Modify name, email, and phone details',
-                    route: '/edit-profile',
+                    title: 'Personal Information',
+                    onTap: () => context.push('/edit-profile'),
                   ),
-                  _buildMenuCard(
-                    context,
-                    icon: Icons.place_outlined,
-                    title: 'Saved Places',
-                    subtitle: 'Manage Home, Work, and favorite venues',
-                    route: '/saved-places',
-                  ),
-                  _buildMenuCard(
-                    context,
+                  _buildProfileMenuItem(
                     icon: Icons.payment_rounded,
                     title: 'Payment Methods',
-                    subtitle: 'Manage credit cards and secure wallets',
-                    route: '/payment-methods',
+                    onTap: () => context.push('/payment-methods'),
                   ),
-                  _buildMenuCard(
-                    context,
-                    icon: Icons.history_rounded,
-                    title: 'Ride History',
-                    subtitle: 'View past trips and invoice breakdowns',
-                    route: '/ride-history',
+                  _buildProfileMenuItem(
+                    icon: Icons.location_on_outlined,
+                    title: 'My Addresses',
+                    onTap: () => context.push('/saved-places'),
                   ),
-                  _buildMenuCard(
-                    context,
-                    icon: Icons.settings_outlined,
-                    title: 'App Settings',
-                    subtitle: 'Toggle dark mode and system preferences',
-                    route: '/settings',
+                  _buildProfileMenuItem(
+                    icon: Icons.card_giftcard_rounded,
+                    title: 'Refer & Earn',
+                    badgeText: 'Get ₹100',
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Refer & Earn flow triggered')),
+                      );
+                    },
                   ),
-                  _buildMenuCard(
-                    context,
+                  _buildProfileMenuItem(
+                    icon: Icons.directions_car_outlined,
+                    title: 'Ride Preferences',
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Ride preferences opened')),
+                      );
+                    },
+                  ),
+                  _buildProfileMenuItem(
                     icon: Icons.help_outline_rounded,
                     title: 'Help & Support',
-                    subtitle: 'View FAQs and reach out to team support',
-                    route: '/help',
+                    onTap: () => context.push('/help'),
+                  ),
+                  _buildProfileMenuItem(
+                    icon: Icons.settings_outlined,
+                    title: 'Settings',
+                    onTap: () => context.push('/settings'),
+                  ),
+                  
+                  // Logout item
+                  _buildProfileMenuItem(
+                    icon: Icons.logout_rounded,
+                    title: 'Logout',
+                    titleColor: const Color(0xFFE53935),
+                    onTap: () {
+                      // Perform logout
+                      context.go('/login');
+                    },
+                    showDivider: false,
                   ),
                 ],
               ),
@@ -136,38 +176,60 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildMenuCard(
-    BuildContext context, {
+  Widget _buildProfileMenuItem({
     required IconData icon,
     required String title,
-    required String subtitle,
-    required String route,
+    required VoidCallback onTap,
+    String? badgeText,
+    Color titleColor = const Color(0xFF021B47),
+    bool showDivider = true,
   }) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: AppSpacing.s),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(AppSpacing.s),
-          decoration: BoxDecoration(
-            color: isDark ? Colors.grey[850] : Colors.grey[100],
-            shape: BoxShape.circle,
+    return Column(
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: titleColor.withOpacity(0.06),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: titleColor, size: 20),
           ),
-          child: Icon(icon, color: AppColors.primaryBlue),
+          title: Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+              color: titleColor,
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (badgeText != null) ...[
+                Text(
+                  badgeText,
+                  style: const TextStyle(
+                    color: Color(0xFF01A34D),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+            ],
+          ),
+          onTap: onTap,
         ),
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
-        ),
-        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
-        onTap: () => context.push(route),
-      ),
+        if (showDivider)
+          Divider(
+            height: 1,
+            indent: 52,
+            color: Colors.grey.shade100,
+          ),
+      ],
     );
   }
 }

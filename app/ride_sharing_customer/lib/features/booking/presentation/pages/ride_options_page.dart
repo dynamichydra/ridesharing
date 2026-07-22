@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/app_map_view.dart';
-import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../../../../core/widgets/error_view.dart';
 import '../../../../core/utils/location_helper.dart';
@@ -16,13 +15,18 @@ class RideOptionsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Select Ride'),
+        title: const Text(
+          'Ride Options',
+          style: TextStyle(color: Color(0xFF021B47), fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
           onPressed: () {
             context.read<BookingBloc>().add(ClearBooking());
             context.pop();
@@ -32,7 +36,6 @@ class RideOptionsPage extends StatelessWidget {
       body: BlocConsumer<BookingBloc, BookingState>(
         listener: (context, state) {
           if (state is BookingConfirmed) {
-            // Initialize the RideTrackingBloc with the booked details
             context.read<RideTrackingBloc>().add(
                   StartRideTracking(
                     pickup: state.pickup,
@@ -43,7 +46,6 @@ class RideOptionsPage extends StatelessWidget {
                     fare: state.fare,
                   ),
                 );
-            // Navigate to tracking
             context.go('/ride-tracking');
           } else if (state is BookingError) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -75,7 +77,7 @@ class RideOptionsPage extends StatelessWidget {
 
             return Stack(
               children: [
-                // 1. Map displaying path between points
+                // 1. Map path view
                 Positioned.fill(
                   child: AppMapView(
                     pickup: state.pickup,
@@ -84,162 +86,302 @@ class RideOptionsPage extends StatelessWidget {
                   ),
                 ),
 
-                // 2. Bottom Options Sheet
+                // 2. Floating Top Route Pins Card
+                Positioned(
+                  top: 12,
+                  left: 16,
+                  right: 16,
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.06),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        // Pin Dotted Line Column
+                        Column(
+                          children: [
+                            const Icon(Icons.circle, color: Color(0xFF01A34D), size: 12),
+                            Container(
+                              height: 24,
+                              width: 1,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            const Icon(Icons.location_on_rounded, color: Color(0xFFE53935), size: 14),
+                          ],
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                state.pickupName.isNotEmpty ? state.pickupName : 'Pickup Location',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF021B47),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              Text(
+                                state.destinationName.isNotEmpty ? state.destinationName : 'Destination Location',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF021B47),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Swap button
+                        const Icon(Icons.swap_vert_rounded, color: Colors.grey),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // 3. Bottom Sheet
                 Positioned(
                   bottom: 0,
                   left: 0,
                   right: 0,
                   child: Container(
-                    padding: const EdgeInsets.only(
-                      top: AppSpacing.m,
-                      left: AppSpacing.m,
-                      right: AppSpacing.m,
-                      bottom: AppSpacing.l,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.darkSurface : Colors.white,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(AppRadius.xl),
-                        topRight: Radius.circular(AppRadius.xl),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(24),
+                        topRight: Radius.circular(24),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 15,
-                          offset: const Offset(0, -4),
+                          color: Colors.black12,
+                          blurRadius: 12,
+                          offset: Offset(0, -4),
                         ),
                       ],
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        const SizedBox(height: 12),
                         Container(
                           width: 40,
                           height: 4,
-                          margin: const EdgeInsets.only(bottom: AppSpacing.m),
                           decoration: BoxDecoration(
-                            color: isDark ? Colors.grey[700] : Colors.grey[300],
+                            color: Colors.grey.shade300,
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
-                        // List of Vehicles
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: state.vehicles.length,
-                          itemBuilder: (context, index) {
-                            final vehicle = state.vehicles[index];
-                            final isSelected = state.selectedVehicle.id == vehicle.id;
-                            final price = state.calculatedFares[vehicle.id] ?? 0.0;
-
-                            // Vehicle Icons Mapping
-                            String icon = '🚗';
-                            final typeLower = vehicle.type.toLowerCase();
-                            final nameLower = vehicle.name.toLowerCase();
-
-                            if (typeLower.contains('bike')) {
-                              icon = '🏍️';
-                            } else if (typeLower.contains('auto')) {
-                              icon = '🛺';
-                            } else if (typeLower.contains('hatchback')) {
-                              icon = '🚗';
-                            } else if (typeLower.contains('sedan') || typeLower == 'standard') {
-                              icon = '🚙';
-                            } else if (typeLower.contains('premium') || typeLower.contains('luxury') || typeLower.contains('cab')) {
-                              icon = '🚕';
-                            } else if (typeLower.contains('suv') || typeLower == 'xl') {
-                              icon = '🚐';
-                            } else if (typeLower.contains('electric') || nameLower.contains('electric')) {
-                              icon = '⚡';
-                            } else if (typeLower.contains('shared') || nameLower.contains('shared')) {
-                              icon = '👥';
-                            }
-
-                            return Container(
-                              margin: const EdgeInsets.symmetric(vertical: 4),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? AppColors.primaryBlue.withOpacity(isDark ? 0.15 : 0.08)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(AppRadius.l),
-                                border: Border.all(
-                                  color: isSelected ? AppColors.primaryBlue : Colors.transparent,
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: ListTile(
-                                leading: Container(
-                                  padding: const EdgeInsets.all(AppSpacing.s),
-                                  decoration: BoxDecoration(
-                                    color: isDark ? Colors.grey[850] : Colors.grey[100],
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Text(
-                                    icon,
-                                    style: const TextStyle(fontSize: 28),
-                                  ),
-                                ),
-                                title: Row(
-                                  children: [
-                                    Text(
-                                      vehicle.name,
-                                      style: const TextStyle(fontWeight: FontWeight.bold),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Icon(Icons.person_rounded, size: 14, color: Colors.grey[500]),
-                                    Text(
-                                      '${vehicle.capacity}',
-                                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                                subtitle: Text('${vehicle.etaMinutes} min away • ${vehicle.description}'),
-                                trailing: Text(
-                                  '${AppConstants.currencySymbol}$price',
-                                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-                                ),
-                                onTap: () {
-                                  context.read<BookingBloc>().add(SelectVehicle(vehicle));
-                                },
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: AppSpacing.m),
-                        // Payment Method Row
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: 8),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: isDark ? AppColors.darkDivider : AppColors.lightDivider),
-                            borderRadius: BorderRadius.circular(AppRadius.m),
-                          ),
+                        const SizedBox(height: 16),
+                        
+                        // "Recommended" Title
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Row(
-                                children: [
-                                  Icon(Icons.credit_card_rounded, color: AppColors.primaryBlue),
-                                  SizedBox(width: AppSpacing.s),
-                                  Text(
-                                    'Visa •••• 4242',
-                                    style: TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                              TextButton(
-                                onPressed: () => context.push('/payment-methods'),
-                                child: const Text('Change'),
+                            children: const [
+                              Text(
+                                'Recommended',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF021B47),
+                                ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: AppSpacing.m),
-                        // CTA Booking Button
-                        CustomButton(
-                          text: 'Confirm ${state.selectedVehicle.name}',
-                          onPressed: () {
-                            context.read<BookingBloc>().add(ConfirmRideBooking());
-                          },
+                        const SizedBox(height: 12),
+
+                        // List of Vehicles
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            children: state.vehicles.map((vehicle) {
+                              final isSelected = state.selectedVehicle.id == vehicle.id;
+                              final price = state.calculatedFares[vehicle.id] ?? 0.0;
+
+                              return InkWell(
+                                onTap: () {
+                                  context.read<BookingBloc>().add(SelectVehicle(vehicle));
+                                },
+                                child: Container(
+                                  margin: const EdgeInsets.symmetric(vertical: 6),
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: isSelected ? const Color(0xFF01A34D) : const Color(0xFFE2E7E9),
+                                      width: isSelected ? 2 : 1,
+                                    ),
+                                    boxShadow: isSelected
+                                        ? [
+                                            BoxShadow(
+                                              color: const Color(0xFF01A34D).withOpacity(0.04),
+                                              blurRadius: 10,
+                                              offset: const Offset(0, 4),
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      // Vehicle icon fallback
+                                      Container(
+                                        width: 50,
+                                        height: 50,
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? const Color(0xFF01A34D).withOpacity(0.06)
+                                              : Colors.grey.shade100,
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Icon(
+                                          Icons.directions_car_filled_rounded,
+                                          color: isSelected ? const Color(0xFF01A34D) : const Color(0xFF0165B7),
+                                          size: 28,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  vehicle.name,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 15,
+                                                    color: Color(0xFF021B47),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                const Icon(Icons.person_rounded, size: 14, color: Colors.grey),
+                                                Text(
+                                                  ' ${vehicle.capacity}',
+                                                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '${vehicle.etaMinutes} min away • Drop in 15 min',
+                                              style: const TextStyle(fontSize: 11, color: Color(0xFF8A94A6)),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        children: [
+                                          Text(
+                                            '${AppConstants.currencySymbol}${price.toStringAsFixed(0)}',
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF021B47),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Payment section Row
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: InkWell(
+                            onTap: () => context.push('/payment-methods'),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: const Color(0xFFE2E7E9)),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Payment',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                                  ),
+                                  Row(
+                                    children: const [
+                                      Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF01A34D), size: 18),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Cash',
+                                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                                      ),
+                                      SizedBox(width: 6),
+                                      Icon(Icons.keyboard_arrow_down_rounded, color: Colors.grey),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Action Confirm Button
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 20),
+                          child: SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                context.read<BookingBloc>().add(ConfirmRideBooking());
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF01A34D),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 0,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const SizedBox(width: 24),
+                                  Text(
+                                    'Confirm ${state.selectedVehicle.name}',
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  ),
+                                  Text(
+                                    '${AppConstants.currencySymbol}${(state.calculatedFares[state.selectedVehicle.id] ?? 0.0).toStringAsFixed(0)}',
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -249,7 +391,7 @@ class RideOptionsPage extends StatelessWidget {
             );
           }
 
-          return const Scaffold(body: LoadingView());
+          return const LoadingView();
         },
       ),
     );

@@ -7,125 +7,159 @@ class HelpPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    final List<Map<String, String>> faqs = [
-      {
-        'q': 'How do I request a ride?',
-        'a': 'Simply enter your destination on the home screen, select the ride category that fits your needs, verify your payment card, and click Confirm.'
-      },
-      {
-        'q': 'How do I add funds to my wallet?',
-        'a': 'Go to the Wallet screen in the side drawer, click "+ Add Funds", select or enter your desired amount, choose your payment method, and complete the top up.'
-      },
-      {
-        'q': 'What vehicle categories are available?',
-        'a': 'Auto offers cheap daily rickshaw trips. Mini provides hatchbacks for everyday travel. Sedan offers comfortable sedan rides, and SUV supports groups of up to 6.'
-      },
-      {
-        'q': 'Is my payment secure?',
-        'a': 'Absolutely! All payments are processed using industry-standard tokens and encrypted locally in your secure keychain.'
-      }
-    ];
-
     return Scaffold(
-      backgroundColor: theme.colorScheme.background,
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Help & Support'),
+        title: const Text(
+          'Help & Support',
+          style: TextStyle(color: Color(0xFF021B47), fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
           onPressed: () => context.pop(),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.m),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // FAQs header
-            Text(
-              'Frequently Asked Questions',
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: AppSpacing.m),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: faqs.length,
-              itemBuilder: (context, index) {
-                final faq = faqs[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: AppSpacing.s),
-                  child: ExpansionTile(
-                    title: Text(
-                      faq['q']!,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-                        child: Text(
-                          faq['a']!,
-                          style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
-                        ),
-                      )
-                    ],
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                const Text(
+                  'How can we help you?',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF021B47),
                   ),
-                );
-              },
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            
-            // Support contact cards
-            Text(
-              'Contact Support',
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: AppSpacing.m),
-            Card(
-              child: ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(AppSpacing.s),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey[850] : Colors.grey[100],
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.support_agent_rounded, color: AppColors.primaryBlue),
                 ),
-                title: const Text('Live Chat Support'),
-                subtitle: const Text('Average response: 2 minutes'),
-                trailing: const Icon(Icons.chat_bubble_outline_rounded, color: AppColors.primaryBlue),
-                onTap: () {
+                const SizedBox(height: 8),
+                const Text(
+                  'Select a topic to get started',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF8A94A6),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Help Topics
+                _buildHelpTopicCard(
+                  icon: Icons.directions_car_filled_outlined,
+                  title: 'Ride Issues',
+                  subtitle: 'I had an issue with my ride',
+                ),
+                _buildHelpTopicCard(
+                  icon: Icons.payments_outlined,
+                  title: 'Payments',
+                  subtitle: 'I have a payment related issue',
+                ),
+                _buildHelpTopicCard(
+                  icon: Icons.account_circle_outlined,
+                  title: 'Account & Profile',
+                  subtitle: 'Update your account information',
+                ),
+                _buildHelpTopicCard(
+                  icon: Icons.shield_outlined,
+                  title: 'Safety & Security',
+                  subtitle: 'Report a safety concern',
+                ),
+                _buildHelpTopicCard(
+                  icon: Icons.info_outline_rounded,
+                  title: 'General Queries',
+                  subtitle: 'Other issues and queries',
+                ),
+              ],
+            ),
+          ),
+
+          // Bottom Chat with Support button
+          Padding(
+            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 24),
+            child: SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: OutlinedButton.icon(
+                onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Starting Live Chat support instance (Mocked).')),
+                    const SnackBar(content: Text('Chat with Support session opened.')),
                   );
                 },
-              ),
-            ),
-            const SizedBox(height: AppSpacing.s),
-            Card(
-              child: ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(AppSpacing.s),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey[850] : Colors.grey[100],
-                    shape: BoxShape.circle,
+                icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF01A34D)),
+                label: const Text(
+                  'Chat with Support',
+                  style: TextStyle(
+                    color: Color(0xFF01A34D),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
                   ),
-                  child: const Icon(Icons.email_outlined, color: AppColors.primaryBlue),
                 ),
-                title: const Text('Email Support'),
-                subtitle: const Text('support@ridesharing.com'),
-                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Composing support email (Mocked).')),
-                  );
-                },
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF01A34D)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHelpTopicCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E7E9)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF01A34D).withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: const Color(0xFF01A34D), size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF021B47),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF8A94A6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+        ],
       ),
     );
   }
