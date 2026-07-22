@@ -18,6 +18,38 @@ class BookingRepositoryImpl implements BookingRepository {
   }
 
   @override
+  Future<Map<String, dynamic>?> detectZone(double lat, double lng) async {
+    try {
+      final zone = await _bookingDataSource.detectZone(lat, lng);
+      if (zone != null) return zone;
+
+      // Bengaluru testing fallback
+      if (lat >= 12.0 && lat <= 14.0 && lng >= 76.5 && lng <= 78.5) {
+        // If near Bengaluru airport location
+        if (lat >= 13.1 && lat <= 13.3) {
+          return {
+            'id': 'zone_blr_airport_mock',
+            'name': 'Bengaluru Airport Zone (Fallback)',
+            'type': 'airport',
+            'multiplier': '1.30',
+            'isActive': true,
+          };
+        }
+        return {
+          'id': 'zone_blr_mock',
+          'name': 'Bengaluru (Fallback Zone)',
+          'type': 'city',
+          'multiplier': '1.00',
+          'isActive': true,
+        };
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
   double calculateFare(double distanceMiles, Vehicle vehicle) {
     // Fare Formula = [Base Fare + (Distance * PricePerMile) + (Duration * PricePerMinute)] * Multiplier
     // Assume average city speed: 1 mile takes 2.5 minutes

@@ -3,6 +3,7 @@ import '../models/vehicle_model.dart';
 
 abstract class BookingDataSource {
   Future<List<VehicleModel>> getVehicles();
+  Future<Map<String, dynamic>?> detectZone(double lat, double lng);
 }
 
 class BookingDataSourceImpl implements BookingDataSource {
@@ -37,5 +38,25 @@ class BookingDataSourceImpl implements BookingDataSource {
       throw Exception('Failed to load vehicles from backend: $e');
     }
   }
+
+  @override
+  Future<Map<String, dynamic>?> detectZone(double lat, double lng) async {
+    try {
+      final response = await _dioClient.dio.post('/api/v1/zones/detect', data: {
+        'lat': lat,
+        'lng': lng,
+      });
+      if (response.data['SUCCESS'] == true) {
+        final data = response.data['MESSAGE'];
+        if (data != null) {
+          return Map<String, dynamic>.from(data as Map);
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
 }
+
 

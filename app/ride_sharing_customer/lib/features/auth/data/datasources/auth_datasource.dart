@@ -25,8 +25,13 @@ class AuthDataSourceImpl implements AuthDataSource {
     }
     _pendingPhone = phone;
 
-    // Simulate network delay
-    await Future.delayed(const Duration(milliseconds: 800));
+    final response = await _dioClient.dio.post('/api/v1/auth/rider/send-otp', data: {
+      'phone': phone,
+    });
+
+    if (response.data['SUCCESS'] != true) {
+      throw Exception(response.data['MESSAGE'] ?? 'Failed to send OTP.');
+    }
   }
 
   @override
@@ -41,30 +46,52 @@ class AuthDataSourceImpl implements AuthDataSource {
 
   @override
   Future<Map<String, dynamic>> verifyOtp(String code) async {
-    final phone = _pendingPhone ?? '+919876543210';
+    final phone = _pendingPhone ?? '';
+    if (phone.isEmpty) {
+      throw Exception('Phone number not found. Please log in again.');
+    }
 
-    await Future.delayed(const Duration(milliseconds: 800));
+    final response = await _dioClient.dio.post('/api/v1/auth/rider/verify-otp', data: {
+      'phone': phone,
+      'otp': code,
+    });
 
-    final token = 'mock_access_token_12345';
-    final userId = 'usr_mock_customer_99';
+    if (response.data['SUCCESS'] == true) {
+      final data = response.data['MESSAGE'];
+      final token = data['accessToken'] ?? '';
+      final user = data['user'] ?? {};
+      final userId = user['id'] ?? '';
+      final isNew = data['isNew'] ?? false;
 
-    await _storageService.saveToken(token);
-    await _storageService.saveUserId(userId);
+      if (token.isNotEmpty) {
+        await _storageService.saveToken(token);
+      }
+      if (userId.isNotEmpty) {
+        await _storageService.saveUserId(userId);
+      }
 
-    return {
-      'isNew': true,
-      'user': {
-        'id': userId,
-        'name': '',
-        'email': '',
-        'phone': phone,
-      },
-    };
+      // If user has empty name or email, treat as new/incomplete registration
+      final nameEmpty = (user['name'] ?? '').toString().trim().isEmpty;
+      final emailEmpty = (user['email'] ?? '').toString().trim().isEmpty;
+
+      return {
+        'isNew': isNew || nameEmpty || emailEmpty,
+        'user': user,
+      };
+    } else {
+      throw Exception(response.data['MESSAGE'] ?? 'Invalid OTP code.');
+    }
   }
 
   @override
   Future<void> registerProfileDetails(String name, String email) async {
-    await Future.delayed(const Duration(milliseconds: 800));
+    final response = await _dioClient.dio.patch('/api/v1/rider/profile', data: {
+      'name': name,
+      'email': email,
+    });
+    if (response.data['SUCCESS'] != true) {
+      throw Exception(response.data['MESSAGE'] ?? 'Failed to complete profile registration.');
+    }
   }
 
   @override
@@ -77,7 +104,9 @@ class AuthDataSourceImpl implements AuthDataSource {
     try {
       await _dioClient.dio.post('/api/v1/auth/logout');
     } catch (_) {}
+    await _storageService.clearAuth();
   }
 }
+
 
 

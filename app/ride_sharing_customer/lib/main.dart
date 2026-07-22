@@ -4,6 +4,8 @@ import 'package:responsive_framework/responsive_framework.dart';
 import 'injection_container.dart' as di;
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_bloc.dart';
+import 'core/services/storage_service.dart';
+import 'core/constants/constants.dart';
 import 'routes.dart';
 
 // Import Blocs
@@ -18,8 +20,15 @@ import 'features/profile/presentation/bloc/profile_bloc.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await di.init();
+
+  // Set currency code from storage
+  final storageService = di.sl<StorageService>();
+  final code = storageService.getCountryCode();
+  AppConstants.currencySymbol = code == 'CA' ? '\$' : '₹';
+
   runApp(const MyApp());
 }
+
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});

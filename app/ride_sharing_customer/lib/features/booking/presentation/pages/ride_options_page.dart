@@ -134,9 +134,26 @@ class RideOptionsPage extends StatelessWidget {
 
                             // Vehicle Icons Mapping
                             String icon = '🚗';
-                            if (vehicle.type == 'standard') icon = '🚙';
-                            if (vehicle.type == 'premium') icon = '🚕';
-                            if (vehicle.type == 'xl') icon = '🚐';
+                            final typeLower = vehicle.type.toLowerCase();
+                            final nameLower = vehicle.name.toLowerCase();
+
+                            if (typeLower.contains('bike')) {
+                              icon = '🏍️';
+                            } else if (typeLower.contains('auto')) {
+                              icon = '🛺';
+                            } else if (typeLower.contains('hatchback')) {
+                              icon = '🚗';
+                            } else if (typeLower.contains('sedan') || typeLower == 'standard') {
+                              icon = '🚙';
+                            } else if (typeLower.contains('premium') || typeLower.contains('luxury') || typeLower.contains('cab')) {
+                              icon = '🚕';
+                            } else if (typeLower.contains('suv') || typeLower == 'xl') {
+                              icon = '🚐';
+                            } else if (typeLower.contains('electric') || nameLower.contains('electric')) {
+                              icon = '⚡';
+                            } else if (typeLower.contains('shared') || nameLower.contains('shared')) {
+                              icon = '👥';
+                            }
 
                             return Container(
                               margin: const EdgeInsets.symmetric(vertical: 4),

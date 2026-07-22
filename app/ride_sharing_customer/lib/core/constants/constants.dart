@@ -51,7 +51,43 @@ class AppMockAssets {
   static const String vehicles = 'assets/mock/vehicles.json';
 }
 
+class CountryConfig {
+  final String name;
+  final String isoCode;
+  final String dialCode;
+  final String currencySymbol;
+  final String currencyCode;
+  final String distanceUnit;
+
+  const CountryConfig({
+    required this.name,
+    required this.isoCode,
+    required this.dialCode,
+    required this.currencySymbol,
+    required this.currencyCode,
+    this.distanceUnit = 'km',
+  });
+
+  static const List<CountryConfig> supportedCountries = [
+    CountryConfig(
+      name: 'India',
+      isoCode: 'IN',
+      dialCode: '+91',
+      currencySymbol: '₹',
+      currencyCode: 'INR',
+    ),
+    CountryConfig(
+      name: 'Canada',
+      isoCode: 'CA',
+      dialCode: '+1',
+      currencySymbol: '\$',
+      currencyCode: 'CAD',
+    ),
+  ];
+}
+
 class AppConstants {
-  static const String currencySymbol = '₹';
+  static String currencySymbol = '₹';
   static const String distanceUnit = 'km';
 }
+

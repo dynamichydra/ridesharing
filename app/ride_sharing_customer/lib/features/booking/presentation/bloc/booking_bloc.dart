@@ -173,6 +173,22 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   Future<void> _onSetRideLocations(SetRideLocations event, Emitter<BookingState> emit) async {
     emit(BookingLoading());
     try {
+      // 1. Detect Pickup and Destination Zones
+      final pickupZone = await _bookingRepository.detectZone(event.pickup.latitude, event.pickup.longitude);
+      final destZone = await _bookingRepository.detectZone(event.destination.latitude, event.destination.longitude);
+
+      if (pickupZone == null) {
+        throw Exception("Pickup location is out of our service area.");
+      }
+      if (destZone == null) {
+        throw Exception("Destination location is out of our service area.");
+      }
+
+      // Check for restricted areas
+      if (pickupZone['type'] == 'restricted' || destZone['type'] == 'restricted') {
+        throw Exception("Booking is temporarily restricted in this zone.");
+      }
+
       final distance = LocationHelper.calculateDistance(
         event.pickup.latitude,
         event.pickup.longitude,
@@ -182,9 +198,19 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
 
       final vehiclesList = await _bookingRepository.getVehicles();
       
+      final zoneMultiplier = double.tryParse(pickupZone['multiplier']?.toString() ?? '1.00') ?? 1.00;
+      
+      // Calculate Airport Surcharge if either zone is an airport
+      double airportSurcharge = 0.0;
+      if (pickupZone['type'] == 'airport' || destZone['type'] == 'airport') {
+        airportSurcharge = 150.00; // Flat INR 150.00 (or equivalent base unit)
+      }
+
       final Map<String, double> fares = {};
       for (final vehicle in vehiclesList) {
-        fares[vehicle.id] = _bookingRepository.calculateFare(distance, vehicle);
+        final rawFare = _bookingRepository.calculateFare(distance, vehicle);
+        final finalFare = (rawFare * zoneMultiplier) + airportSurcharge;
+        fares[vehicle.id] = double.parse(finalFare.toStringAsFixed(2));
       }
 
       emit(BookingVehicleOptionsLoaded(
@@ -197,10 +223,10 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
         distanceMiles: distance,
         vehicles: vehiclesList,
         calculatedFares: fares,
-        selectedVehicle: vehiclesList.first,
+        selectedVehicle: vehiclesList.isNotEmpty ? vehiclesList.first : vehiclesList.first, // fallback safe
       ));
     } catch (e) {
-      emit(BookingError(e.toString()));
+      emit(BookingError(e.toString().replaceAll('Exception: ', '')));
     }
   }
 

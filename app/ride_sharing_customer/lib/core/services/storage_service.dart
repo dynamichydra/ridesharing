@@ -51,6 +51,17 @@ class StorageService {
     await box.put(_themeModeKey, isDark);
   }
 
+  // Country Settings Hive
+  String getCountryCode() {
+    final box = Hive.box(_themeBox);
+    return box.get('selected_country_code', defaultValue: 'IN') as String;
+  }
+
+  Future<void> setCountryCode(String code) async {
+    final box = Hive.box(_themeBox);
+    await box.put('selected_country_code', code);
+  }
+
   // Generic Cache helper (maps, strings, lists)
   Future<void> cacheData(String key, dynamic value) async {
     final box = Hive.box(_appCacheBox);

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
+import '../../../../core/services/storage_service.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
+import '../../../../injection_container.dart';
 import '../bloc/auth_bloc.dart';
 
 class LoginPage extends StatefulWidget {
@@ -16,6 +18,19 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
+  CountryConfig _selectedCountry = CountryConfig.supportedCountries.first;
+
+  @override
+  void initState() {
+    super.initState();
+    try {
+      final savedCode = sl<StorageService>().getCountryCode();
+      final index = CountryConfig.supportedCountries.indexWhere((c) => c.isoCode == savedCode);
+      if (index != -1) {
+        _selectedCountry = CountryConfig.supportedCountries[index];
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -25,8 +40,17 @@ class _LoginPageState extends State<LoginPage> {
 
   void _submit() {
     if (_formKey.currentState!.validate()) {
+      final input = _phoneController.text.trim();
+      String phone = input;
+      if (!phone.startsWith('+')) {
+        String digits = input.replaceAll(RegExp(r'\D'), '');
+        if (digits.startsWith('0')) {
+          digits = digits.substring(1);
+        }
+        phone = '${_selectedCountry.dialCode}$digits';
+      }
       context.read<AuthBloc>().add(
-            LoginSubmitted(_phoneController.text.trim()),
+            LoginSubmitted(phone),
           );
     }
   }
@@ -62,7 +86,7 @@ class _LoginPageState extends State<LoginPage> {
               child: Form(
                 key: _formKey,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Center(
                       child: Image.asset(
@@ -91,10 +115,39 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.xxl),
+                    DropdownButtonFormField<CountryConfig>(
+                      value: _selectedCountry,
+                      decoration: InputDecoration(
+                        labelText: 'Select Country',
+                        prefixIcon: const Icon(Icons.public_rounded, color: AppColors.primaryBlue),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.m),
+                        ),
+                      ),
+                      items: CountryConfig.supportedCountries.map((c) {
+                        return DropdownMenuItem<CountryConfig>(
+                          value: c,
+                          child: Text('${c.name} (${c.dialCode})'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedCountry = val;
+                          });
+                          try {
+                            final storage = sl<StorageService>();
+                            storage.setCountryCode(val.isoCode);
+                            AppConstants.currencySymbol = val.currencySymbol;
+                          } catch (_) {}
+                        }
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.m),
                     CustomTextField(
                       controller: _phoneController,
                       labelText: 'Phone Number',
-                      hintText: '+91 98765 43210',
+                      hintText: _selectedCountry.isoCode == 'IN' ? '98765 43210' : '555-0199',
                       prefixIcon: Icons.phone_android_rounded,
                       keyboardType: TextInputType.phone,
                       validator: (value) {
