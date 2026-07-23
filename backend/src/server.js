@@ -21,6 +21,12 @@ import { ridePaymentRoutes } from './modules/ride-payment/ride-payment.routes.js
 import { subscriptionRoutes } from './modules/subscription/subscription.routes.js';
 import { riderSubscriptionRoutes } from './modules/rider-subscription/rider-subscription.routes.js';
 import { walletRoutes } from './modules/wallet/wallet.routes.js';
+import { ledgerRoutes } from './modules/ledger/ledger.routes.js';
+import { refundRoutes } from './modules/refund/refund.routes.js';
+import { reconciliationRoutes } from './modules/reconciliation/reconciliation.routes.js';
+import { disputeRoutes } from './modules/dispute/dispute.routes.js';
+import { payoutAccountRoutes } from './modules/payout-account/payout-account.routes.js';
+import { payoutRoutes } from './modules/payout/payout.routes.js';
 import { adminRoutes } from './modules/admin/admin.routes.js';
 import { trackingRoutes } from './modules/tracking/tracking.routes.js';
 import { geoRoutes } from './modules/geo/geo.routes.js';
@@ -64,6 +70,12 @@ async function build() {
   await app.register(subscriptionRoutes, { prefix: `${PREFIX}/subscriptions` });
   await app.register(riderSubscriptionRoutes, { prefix: `${PREFIX}/rider-plans` });
   await app.register(walletRoutes, { prefix: `${PREFIX}/wallets` });
+  await app.register(ledgerRoutes, { prefix: `${PREFIX}/ledger` });
+  await app.register(refundRoutes, { prefix: `${PREFIX}/refunds` });
+  await app.register(reconciliationRoutes, { prefix: `${PREFIX}/reconciliation` });
+  await app.register(disputeRoutes, { prefix: `${PREFIX}/disputes` });
+  await app.register(payoutAccountRoutes, { prefix: `${PREFIX}/payout-accounts` });
+  await app.register(payoutRoutes, { prefix: `${PREFIX}/payouts` });
   await app.register(adminRoutes, { prefix: `${PREFIX}/admin` });
   await app.register(geoRoutes, { prefix: `${PREFIX}/geo` });
   await app.register(documentsRoutes, { prefix: `${PREFIX}/documents` });

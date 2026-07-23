@@ -4,6 +4,7 @@ import { wallets, walletTransactions, drivers, users, countries } from '../../..
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
 import { getDefaultCountry } from '../geo/geo.service.js';
+import { postTransaction, getOrCreateSystemAccount, getOrCreateWalletAccount } from '../ledger/ledger.service.js';
 
 const OWNER_COLUMN = { driver: wallets.driverId, rider: wallets.riderId };
 const OWNER_TABLE = { driver: drivers, rider: users };
@@ -53,44 +54,53 @@ export async function listTransactions(walletId, page, limit, offset) {
   return { rows, pagination: paginate(page, limit, total) };
 }
 
+// Posts through the ledger (Dr/Cr against a system 'wallet_adjustment_expense' account)
+// instead of hand-rolling the lock+insert — ledgerService.postTransaction owns the
+// SELECT...FOR UPDATE + balance update + wallet_transactions insert now, shared with every
+// other ledger poster. External signature/response shape is unchanged for wallet.routes.js.
 export async function adminAdjustWallet(ownerType, ownerId, { type, amountMinor, reason, description }, adminId) {
   if (!['credit', 'debit'].includes(type)) throw { statusCode: 400, message: 'type must be credit or debit' };
   if (!Number.isInteger(amountMinor) || amountMinor <= 0) throw { statusCode: 400, message: 'amountMinor must be a positive integer' };
   if (!reason) throw { statusCode: 400, message: 'reason is required' };
 
-  await getOrCreateWallet(ownerType, ownerId); // ensures a row exists before we lock it below
+  const wallet = await getOrCreateWallet(ownerType, ownerId);
+  const currencyCode = wallet.currencyCode;
 
-  return db.transaction(async (tx) => {
-    const [wallet] = await tx.select().from(wallets)
-      .where(eq(ownerColumn(ownerType), ownerId)).for('update').limit(1);
+  const [walletAccount, expenseAccount] = await Promise.all([
+    getOrCreateWalletAccount(wallet.id, currencyCode),
+    getOrCreateSystemAccount('wallet_adjustment_expense', currencyCode),
+  ]);
 
-    const delta = type === 'credit' ? amountMinor : -amountMinor;
-    const newBalance = wallet.balanceMinor + delta;
-    if (newBalance < 0) throw { statusCode: 422, message: 'Insufficient wallet balance for this debit' };
+  // Credit the wallet -> Dr the platform expense account, Cr the wallet.
+  // Debit the wallet  -> Dr the wallet, Cr the platform expense account.
+  const entries = type === 'credit'
+    ? [
+        { accountId: expenseAccount.id, direction: 'debit',  amountMinor, currencyCode },
+        { accountId: walletAccount.id,  direction: 'credit', amountMinor, currencyCode, reason, description, createdBy: adminId },
+      ]
+    : [
+        { accountId: walletAccount.id,  direction: 'debit',  amountMinor, currencyCode, reason, description, createdBy: adminId },
+        { accountId: expenseAccount.id, direction: 'credit', amountMinor, currencyCode },
+      ];
 
-    const [updated] = await tx.update(wallets)
-      .set({ balanceMinor: newBalance, updatedAt: new Date() })
-      .where(eq(wallets.id, wallet.id)).returning();
-
-    const [txnRow] = await tx.insert(walletTransactions).values({
-      walletId: wallet.id, type, amountMinor,
-      balanceAfterMinor: newBalance,
-      currencyCode: wallet.currencyCode,
-      reason, description,
-      referenceType: 'manual',
-      createdBy: adminId,
-    }).returning();
-
-    return { wallet: updated, transaction: txnRow };
-  }).then(async (result) => {
-    await publishEvent(TOPICS.AUDIT_LOG, {
-      actorId: adminId, actorType: 'admin',
-      action: type === 'credit' ? 'WALLET_CREDITED' : 'WALLET_DEBITED',
-      entityType: 'wallet', entityId: result.wallet.id,
-      meta: { ownerType, ownerId, amountMinor, reason },
-    });
-    return result;
+  const { walletUpdates } = await postTransaction({
+    businessType: 'wallet_admin_adjustment',
+    referenceType: 'manual',
+    referenceId: null,
+    metadata: { ownerType, ownerId, adminId },
+    entries,
   });
+
+  const walletUpdate = walletUpdates.find((u) => u.wallet.id === wallet.id);
+  const result = { wallet: walletUpdate.wallet, transaction: walletUpdate.walletTransaction };
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin',
+    action: type === 'credit' ? 'WALLET_CREDITED' : 'WALLET_DEBITED',
+    entityType: 'wallet', entityId: result.wallet.id,
+    meta: { ownerType, ownerId, amountMinor, reason },
+  });
+  return result;
 }
 
 // ── Admin — global wallet list across drivers + riders ──────────────────────

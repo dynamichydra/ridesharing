@@ -1,6 +1,7 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
 import { authenticateDriver, authenticateAdmin } from '../../middleware/authenticate.js';
 import * as subService from './subscription.service.js';
+import { receiveWebhookEvent } from '../../jobs/webhook-processing.job.js';
 
 export async function subscriptionRoutes(app) {
 
@@ -13,10 +14,14 @@ export async function subscriptionRoutes(app) {
   });
 
   // POST /api/v1/subscriptions/initiate
+  // Requires an Idempotency-Key header so a retried/double-submitted request returns the
+  // original gateway order instead of creating a second charge attempt.
   app.post('/initiate', { preHandler: [authenticateDriver] }, async (request, reply) => {
     const { planId } = request.body;
     if (!planId) return sendError(reply, 'planId is required');
-    const data = await subService.initiateSubscription(request.user.id, planId);
+    const idempotencyKey = request.headers['idempotency-key'];
+    if (!idempotencyKey) return sendError(reply, 'Idempotency-Key header is required', 400);
+    const data = await subService.initiateSubscription(request.user.id, planId, idempotencyKey);
     return sendSuccess(reply, data);
   });
 
@@ -49,14 +54,18 @@ export async function subscriptionRoutes(app) {
   });
 
   // POST /api/v1/subscriptions/webhook/razorpay
+  // Verifies+parses synchronously (rejects bad signatures outright), then hands off to the
+  // async webhook-processing job — see jobs/webhook-processing.job.js. Deduped by
+  // (gateway, eventId, domain) so a processor redelivery is a no-op.
   app.post('/webhook/razorpay', {
     config: { rawBody: true }, // need raw body for HMAC
   }, async (request, reply) => {
     const signature = request.headers['x-razorpay-signature'];
     if (!signature) return sendError(reply, 'Missing signature', 400);
     const raw = request.rawBody || JSON.stringify(request.body);
-    const data = await subService.handleWebhook('razorpay', raw, signature);
-    return sendSuccess(reply, data);
+    const event = subService.parseAndVerifyWebhook('razorpay', raw, signature);
+    await receiveWebhookEvent({ gatewayName: 'razorpay', domain: 'driver_subscription', rawBody: raw, event });
+    return sendSuccess(reply, { received: true });
   });
 
   // POST /api/v1/subscriptions/webhook/stripe
@@ -66,8 +75,9 @@ export async function subscriptionRoutes(app) {
     const signature = request.headers['stripe-signature'];
     if (!signature) return sendError(reply, 'Missing signature', 400);
     const raw = request.rawBody || JSON.stringify(request.body);
-    const data = await subService.handleWebhook('stripe', raw, signature);
-    return sendSuccess(reply, data);
+    const event = subService.parseAndVerifyWebhook('stripe', raw, signature);
+    await receiveWebhookEvent({ gatewayName: 'stripe', domain: 'driver_subscription', rawBody: raw, event });
+    return sendSuccess(reply, { received: true });
   });
 
   // ── Admin — plan management ───────────────────────────────────────────────

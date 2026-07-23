@@ -5,39 +5,49 @@ import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
 import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
 import { formatMoney } from '../../utils/money.js';
+import { withIdempotency } from '../../utils/idempotency.js';
+import { postTransaction, getOrCreateSystemAccount, getOrCreateWalletAccount } from '../ledger/ledger.service.js';
+import { getOrCreateWallet } from '../wallet/wallet.service.js';
+import { handleDisputeEvent } from '../dispute/dispute.service.js';
 
 // ── Rider — pay online ─────────────────────────────────────────────────────────
 
-export async function initiateRidePayment(riderId, rideId) {
-  const ride = await _loadPayableRide(and(eq(rides.id, rideId), eq(rides.riderId, riderId)));
+// idempotencyKey comes from the client's Idempotency-Key header (required — see
+// ride-payment.routes.js) so a retried/double-submitted initiate request returns the
+// original gateway order instead of creating a second one.
+export async function initiateRidePayment(riderId, rideId, idempotencyKey) {
+  return withIdempotency('ride_payment_initiate', idempotencyKey, riderId, async () => {
+    const ride = await _loadPayableRide(and(eq(rides.id, rideId), eq(rides.riderId, riderId)));
 
-  const gateway = gatewayForCurrency(ride.currencyCode);
-  if (!gateway) {
-    // Dev mode — this currency's gateway has no keys configured, mark paid directly
-    return _markRidePaid(ride, {
-      method: 'online', gateway: 'none', gatewayPaymentId: 'dev_payment_' + Date.now(), gatewayOrderId: null,
+    const gateway = gatewayForCurrency(ride.currencyCode);
+    if (!gateway) {
+      // Dev mode — this currency's gateway has no keys configured, mark paid directly
+      return _markRidePaid(ride, {
+        method: 'online', gateway: 'none', gatewayPaymentId: 'dev_payment_' + Date.now(), gatewayOrderId: null,
+      });
+    }
+
+    const order = await gateway.createOrder({
+      amountMinor: ride.finalFareMinor,
+      currencyCode: ride.currencyCode,
+      metadata: { rideId, riderId },
+      idempotencyKey,
     });
-  }
 
-  const order = await gateway.createOrder({
-    amountMinor: ride.finalFareMinor,
-    currencyCode: ride.currencyCode,
-    metadata: { rideId, riderId },
+    const [payment] = await db.insert(payments).values({
+      rideId, subscriptionId: null,
+      countryId: _requireCountryId(ride),
+      gateway: gateway.name,
+      currencyCode: ride.currencyCode,
+      amountMinor: ride.finalFareMinor,
+      status: 'created',
+      gatewayOrderId: order.gatewayOrderId,
+    }).returning();
+
+    await db.update(rides).set({ paymentMethod: 'online', paymentStatus: 'processing' }).where(eq(rides.id, rideId));
+
+    return { ...order, paymentAttemptId: payment.id };
   });
-
-  const [payment] = await db.insert(payments).values({
-    rideId, subscriptionId: null,
-    countryId: _requireCountryId(ride),
-    gateway: gateway.name,
-    currencyCode: ride.currencyCode,
-    amountMinor: ride.finalFareMinor,
-    status: 'created',
-    gatewayOrderId: order.gatewayOrderId,
-  }).returning();
-
-  await db.update(rides).set({ paymentMethod: 'online', paymentStatus: 'processing' }).where(eq(rides.id, rideId));
-
-  return { ...order, paymentAttemptId: payment.id };
 }
 
 export async function verifyRidePayment(riderId, rideId, orderRef, paymentRef, signature) {
@@ -91,33 +101,41 @@ export async function recordCashCollection(driverId, rideId) {
 }
 
 // ── Gateway webhook ─────────────────────────────────────────────────────────────
+// Split in two so the route can verify+parse synchronously (reject bad signatures outright)
+// while the actual business logic runs asynchronously via the webhook-processing job — see
+// ride-payment.routes.js and jobs/webhook-processing.job.js.
 
-export async function handleWebhook(gatewayName, rawBody, signature) {
+// Rejects unsigned/invalid webhooks outright — never queues something we can't verify.
+export function parseAndVerifyWebhook(gatewayName, rawBody, signature) {
   const gateway = getGateway(gatewayName);
   if (!gateway.isConfigured) {
     console.log(`[RidePayment] ${gatewayName} webhook received but not configured — ignoring.`);
-    return { received: true };
+    return null;
   }
   if (!gateway.verifyWebhookSignature(rawBody, signature)) {
     throw { statusCode: 400, message: 'Invalid webhook signature' };
   }
-
   const event = gateway.parseWebhookEvent(rawBody, signature);
-  if (event) {
-    const { rideId } = event.metadata || {};
-    if (rideId) {
-      const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
-      if (ride && ride.paymentStatus !== 'paid') {
-        const [attempt] = await db.select().from(payments)
-          .where(and(eq(payments.gatewayOrderId, event.orderRef), eq(payments.rideId, rideId))).limit(1);
-        await _markRidePaid(ride, {
-          method: 'online', gateway: gateway.name, gatewayPaymentId: event.paymentRef, gatewayOrderId: event.orderRef,
-          paymentAttemptId: attempt?.id,
-        });
-      }
-    }
+  return event ? { ...event, gatewayName } : null;
+}
+
+export async function processWebhookEvent(event) {
+  // Dispute events can land on any of the three webhook routes — dispatch by looking up the
+  // disputed payment, not by which route received it. See dispute.service.js.
+  if (event.kind === 'dispute') return handleDisputeEvent(event);
+
+  const { rideId } = event.metadata || {};
+  if (!rideId) return;
+
+  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  if (ride && ride.paymentStatus !== 'paid') {
+    const [attempt] = await db.select().from(payments)
+      .where(and(eq(payments.gatewayOrderId, event.orderRef), eq(payments.rideId, rideId))).limit(1);
+    await _markRidePaid(ride, {
+      method: 'online', gateway: event.gatewayName, gatewayPaymentId: event.paymentRef, gatewayOrderId: event.orderRef,
+      paymentAttemptId: attempt?.id,
+    });
   }
-  return { received: true };
 }
 
 // ── Reads ─────────────────────────────────────────────────────────────────────
@@ -227,6 +245,52 @@ async function _loadPayableRide(ownershipCondition) {
   return ride;
 }
 
+// Online fares: Dr the gateway's processor-clearing account, Cr the driver's wallet — this
+// is what actually makes an online fare payable to the driver (previously nothing did).
+// Cash fares: a net-zero memo posting (driver already holds the cash, wallet untouched) —
+// records that revenue was recognized without the platform custodying funds. `idempotencyKey`
+// is per-ride so a duplicate call (e.g. verify + webhook both landing) posts once, not twice.
+async function _postRideFareLedger(ride, paymentInfo) {
+  const currencyCode = ride.currencyCode;
+
+  if (paymentInfo.method === 'online') {
+    if (!ride.driverId) return; // no driver to credit — shouldn't happen for a completed ride
+    const driverWallet = await getOrCreateWallet('driver', ride.driverId);
+    const [clearingAccount, driverWalletAccount] = await Promise.all([
+      getOrCreateSystemAccount(`processor_clearing:${paymentInfo.gateway}`, currencyCode),
+      getOrCreateWalletAccount(driverWallet.id, currencyCode),
+    ]);
+    await postTransaction({
+      businessType: 'ride_fare_online',
+      idempotencyKey: `ride_fare_online:${ride.id}`,
+      referenceType: 'ride',
+      referenceId: ride.id,
+      entries: [
+        { accountId: clearingAccount.id, direction: 'debit', amountMinor: ride.finalFareMinor, currencyCode },
+        {
+          accountId: driverWalletAccount.id, direction: 'credit', amountMinor: ride.finalFareMinor, currencyCode,
+          reason: 'ride_fare_online', description: `Fare for ride ${ride.id}`,
+        },
+      ],
+    });
+  } else if (paymentInfo.method === 'cash') {
+    const [cashMemo, revenueMemo] = await Promise.all([
+      getOrCreateSystemAccount('cash_collected_memo', currencyCode),
+      getOrCreateSystemAccount('driver_fare_revenue_memo', currencyCode),
+    ]);
+    await postTransaction({
+      businessType: 'ride_fare_cash',
+      idempotencyKey: `ride_fare_cash:${ride.id}`,
+      referenceType: 'ride',
+      referenceId: ride.id,
+      entries: [
+        { accountId: cashMemo.id, direction: 'debit', amountMinor: ride.finalFareMinor, currencyCode },
+        { accountId: revenueMemo.id, direction: 'credit', amountMinor: ride.finalFareMinor, currencyCode },
+      ],
+    });
+  }
+}
+
 async function _markRidePaid(ride, paymentInfo) {
   if (paymentInfo.paymentAttemptId) {
     await db.update(payments)
@@ -244,6 +308,8 @@ async function _markRidePaid(ride, paymentInfo) {
       gatewayPaymentId: paymentInfo.gatewayPaymentId,
     });
   }
+
+  await _postRideFareLedger(ride, paymentInfo);
 
   const [updated] = await db.update(rides)
     .set({ paymentMethod: paymentInfo.method, paymentStatus: 'paid' })

@@ -1,14 +1,19 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
 import { authenticateRider, authenticateDriver, authenticateAdmin, authenticateAny } from '../../middleware/authenticate.js';
 import * as ridePaymentService from './ride-payment.service.js';
+import { receiveWebhookEvent } from '../../jobs/webhook-processing.job.js';
 
 export async function ridePaymentRoutes(app) {
 
   // ── Rider — online payment ───────────────────────────────────────────────────
 
   // POST /api/v1/ride-payments/:rideId/initiate
+  // Requires an Idempotency-Key header so a retried/double-submitted request returns the
+  // original gateway order instead of creating a second charge attempt.
   app.post('/:rideId/initiate', { preHandler: [authenticateRider] }, async (request, reply) => {
-    const data = await ridePaymentService.initiateRidePayment(request.user.id, request.params.rideId);
+    const idempotencyKey = request.headers['idempotency-key'];
+    if (!idempotencyKey) return sendError(reply, 'Idempotency-Key header is required', 400);
+    const data = await ridePaymentService.initiateRidePayment(request.user.id, request.params.rideId, idempotencyKey);
     return sendSuccess(reply, data);
   });
 
@@ -55,14 +60,18 @@ export async function ridePaymentRoutes(app) {
   // ── Gateway webhook ───────────────────────────────────────────────────────────
 
   // POST /api/v1/ride-payments/webhook/razorpay
+  // Verifies+parses synchronously (rejects bad signatures outright), then hands off to the
+  // async webhook-processing job — see jobs/webhook-processing.job.js. Deduped by
+  // (gateway, eventId, domain) so a processor redelivery is a no-op.
   app.post('/webhook/razorpay', {
     config: { rawBody: true }, // need raw body for HMAC
   }, async (request, reply) => {
     const signature = request.headers['x-razorpay-signature'];
     if (!signature) return sendError(reply, 'Missing signature', 400);
     const raw = request.rawBody || JSON.stringify(request.body);
-    const data = await ridePaymentService.handleWebhook('razorpay', raw, signature);
-    return sendSuccess(reply, data);
+    const event = ridePaymentService.parseAndVerifyWebhook('razorpay', raw, signature);
+    await receiveWebhookEvent({ gatewayName: 'razorpay', domain: 'ride_payment', rawBody: raw, event });
+    return sendSuccess(reply, { received: true });
   });
 
   // ── Admin ─────────────────────────────────────────────────────────────────────

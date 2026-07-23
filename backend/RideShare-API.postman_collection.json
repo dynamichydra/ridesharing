@@ -177,6 +177,68 @@
       "key": "entity_id",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "payment_id",
+      "value": "",
+      "type": "string",
+      "description": "A ride-payments payment row id — used by Refunds"
+    },
+    {
+      "key": "wallet_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refund_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "reconciliation_run_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "mismatch_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "dispute_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payout_account_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payout_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payout_batch_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "rider_plan_id",
+      "value": "",
+      "type": "string",
+      "description": "Rider subscription plan id (distinct from plan_id, which is the driver subscription plan)"
+    },
+    {
+      "key": "rider_subscription_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ledger_transaction_id",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -4223,6 +4285,10 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{driver_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
               }
             ],
             "body": {
@@ -4241,7 +4307,7 @@
                 "initiate"
               ]
             },
-            "description": "Gateway is resolved server-side from the plan's currencyCode (see src/modules/payment/payment.service.js's currency->gateway map — INR->Razorpay, CAD->Stripe). If that gateway has no keys configured (dev mode), the subscription activates directly. Otherwise the response shape depends on the gateway: Razorpay returns { gateway, gatewayOrderId, amount, currency, keyId } for Razorpay Checkout; Stripe returns { gateway, gatewayOrderId, clientSecret, amount, currency, publishableKey } for Stripe Elements/PaymentSheet."
+            "description": "Requires Idempotency-Key (a retried request returns the original result instead of a second charge attempt — {{$guid}} generates a fresh one per send). Gateway is resolved server-side from the plan's currencyCode (see src/modules/payment/payment.service.js's currency->gateway map — INR->Razorpay, CAD->Stripe). If that gateway has no keys configured (dev mode), the subscription activates directly. Otherwise the response shape depends on the gateway: Razorpay returns { gateway, gatewayOrderId, amount, currency, keyId } for Razorpay Checkout; Stripe returns { gateway, gatewayOrderId, clientSecret, amount, currency, publishableKey } for Stripe Elements/PaymentSheet."
           },
           "response": []
         },
@@ -6117,6 +6183,1875 @@
                   "value": "{{ride_id}}",
                   "disabled": true
                 }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🚕 Ride Payments",
+      "item": [
+        {
+          "name": "Initiate Ride Payment (Rider)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS) {",
+                  "  if (res.MESSAGE.gatewayOrderId) pm.collectionVariables.set('gateway_order_id', res.MESSAGE.gatewayOrderId);",
+                  "  console.log('✅ initiate response:', JSON.stringify(res.MESSAGE));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{rider_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-payments/{{ride_id}}/initiate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "ride-payments",
+                "{{ride_id}}",
+                "initiate"
+              ]
+            },
+            "description": "Requires Idempotency-Key (required since Phase 1 of the ledger rework — a retried request returns the original result instead of creating a second charge attempt). {{$guid}} generates a fresh key per send; hardcode a fixed value here to test the replay behavior instead. In dev mode (no gateway keys configured) this marks the ride paid directly and returns the updated ride; otherwise it returns { gateway, gatewayOrderId, ... , paymentAttemptId }."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Ride Payment (Rider)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{rider_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderRef\": \"{{gateway_order_id}}\",\n  \"paymentRef\": \"pay_dev_test_001\",\n  \"signature\": \"dev_signature\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-payments/{{ride_id}}/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "ride-payments",
+                "{{ride_id}}",
+                "verify"
+              ]
+            },
+            "description": "Gateway-neutral field names — see subscriptions/verify for the same convention."
+          },
+          "response": []
+        },
+        {
+          "name": "My Ride Payments (Rider)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{rider_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-payments/mine?page=1&limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "ride-payments",
+                "mine"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cash Collect (Driver)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-payments/{{ride_id}}/cash-collect",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "ride-payments",
+                "{{ride_id}}",
+                "cash-collect"
+              ]
+            },
+            "description": "Driver marks a cash fare as collected — posts a net-zero memo ledger entry (the driver already has the cash; the wallet is untouched)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Ride Payment Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.payment && res.MESSAGE.payment.id) {",
+                  "  pm.collectionVariables.set('payment_id', res.MESSAGE.payment.id);",
+                  "  console.log('✅ payment_id saved:', res.MESSAGE.payment.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{rider_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-payments/{{ride_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "ride-payments",
+                "{{ride_id}}"
+              ]
+            },
+            "description": "Rider/driver see their own ride; admin can view any. Auto-saves payment_id — used by Refunds below."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Ride Invoice",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{rider_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-payments/{{ride_id}}/invoice",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "ride-payments",
+                "{{ride_id}}",
+                "invoice"
+              ]
+            },
+            "description": "Only available once the ride is completed."
+          },
+          "response": []
+        },
+        {
+          "name": "Razorpay Webhook (simulated)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-razorpay-signature",
+                "value": "TEST_SIGNATURE"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"payment.captured\",\n  \"payload\": {\n    \"payment\": {\n      \"entity\": {\n        \"id\": \"pay_test_ride_webhook_001\",\n        \"order_id\": \"order_test_ride_001\",\n        \"notes\": {\n          \"rideId\":  \"{{ride_id}}\",\n          \"riderId\": \"{{rider_id}}\"\n        }\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-payments/webhook/razorpay",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "ride-payments",
+                "webhook",
+                "razorpay"
+              ]
+            },
+            "description": "Needs a real RAZORPAY_WEBHOOK_SECRET and a genuinely-signed payload to pass verification once configured; in dev mode it's acknowledged without verification. Since Phase 2, this only synchronously verifies+parses — the actual business logic (marking the ride paid) runs asynchronously via the webhook-processing job, deduped by (gateway, eventId, domain) so re-sending this exact request is a no-op the second time."
+          },
+          "response": []
+        },
+        {
+          "name": "List Ride Payments — Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-payments?page=1&limit=20&status=&gateway=&paymentMethod=&countryId=&riderId=&driverId=&rideId=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "ride-payments"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "status", "value": "", "disabled": true },
+                { "key": "gateway", "value": "", "disabled": true },
+                { "key": "paymentMethod", "value": "", "disabled": true },
+                { "key": "countryId", "value": "", "disabled": true },
+                { "key": "riderId", "value": "", "disabled": true },
+                { "key": "driverId", "value": "", "disabled": true },
+                { "key": "rideId", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🎫 Rider Plans (Rider Subscriptions)",
+      "item": [
+        {
+          "name": "List Active Rider Plans (Public)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.length > 0) {",
+                  "  pm.collectionVariables.set('rider_plan_id', res.MESSAGE[0].id);",
+                  "  console.log('✅ rider_plan_id saved:', res.MESSAGE[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/rider-plans/plans?countryId={{country_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "rider-plans",
+                "plans"
+              ],
+              "query": [
+                { "key": "countryId", "value": "{{country_id}}" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List All Rider Plans — Admin (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/rider-plans/plans/all?page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "rider-plans",
+                "plans",
+                "all"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Rider Plan — Monthly",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS) {",
+                  "  pm.collectionVariables.set('rider_plan_id', res.MESSAGE.id);",
+                  "  console.log('✅ rider_plan_id saved:', res.MESSAGE.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Rider Monthly Plan\",\n  \"countryId\": \"{{country_id}}\",\n  \"type\": \"monthly\",\n  \"currencyCode\": \"INR\",\n  \"priceMinor\": 19900,\n  \"durationDays\": 30,\n  \"trialDays\": 0,\n  \"features\": [\"Priority matching\", \"Fare discounts\"],\n  \"maxRidesPerDay\": null,\n  \"sortOrder\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/rider-plans/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "rider-plans",
+                "plans"
+              ]
+            },
+            "description": "Same shape/behavior as driver subscription plans, but for riders — a separate plan/subscription system with its own tables (rider_subscription_plans, rider_subscriptions)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Rider Plan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceMinor\": 17900\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/rider-plans/plans/{{rider_plan_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "rider-plans",
+                "plans",
+                "{{rider_plan_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Enable Rider Plan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/rider-plans/plans/{{rider_plan_id}}/enable",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "rider-plans",
+                "plans",
+                "{{rider_plan_id}}",
+                "enable"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Disable Rider Plan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/rider-plans/plans/{{rider_plan_id}}/disable",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "rider-plans",
+                "plans",
+                "{{rider_plan_id}}",
+                "disable"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Initiate Rider Subscription",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.gatewayOrderId) {",
+                  "  pm.collectionVariables.set('gateway_order_id', res.MESSAGE.gatewayOrderId);",
+                  "  console.log('✅ gateway:', res.MESSAGE.gateway, '| gatewayOrderId:', res.MESSAGE.gatewayOrderId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{rider_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"planId\": \"{{rider_plan_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/rider-plans/initiate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "rider-plans",
+                "initiate"
+              ]
+            },
+            "description": "Requires Idempotency-Key — same reasoning as ride-payments/initiate and subscriptions/initiate."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify & Activate Rider Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{rider_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"planId\": \"{{rider_plan_id}}\",\n  \"orderRef\": \"{{gateway_order_id}}\",\n  \"paymentRef\": \"pay_dev_test_001\",\n  \"signature\": \"dev_signature\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/rider-plans/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "rider-plans",
+                "verify"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Rider Subscription",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE && res.MESSAGE.subscription) {",
+                  "  pm.collectionVariables.set('rider_subscription_id', res.MESSAGE.subscription.id);",
+                  "  console.log('✅ rider_subscription_id saved:', res.MESSAGE.subscription.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{rider_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/rider-plans/mine",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "rider-plans",
+                "mine"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Rider Subscription History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{rider_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/rider-plans/history?page=1&limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "rider-plans",
+                "history"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Razorpay Webhook (simulated)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-razorpay-signature",
+                "value": "TEST_SIGNATURE"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"payment.captured\",\n  \"payload\": {\n    \"payment\": {\n      \"entity\": {\n        \"id\": \"pay_test_rider_plan_001\",\n        \"order_id\": \"order_test_rider_plan_001\",\n        \"notes\": {\n          \"riderId\": \"{{rider_id}}\",\n          \"planId\":  \"{{rider_plan_id}}\"\n        }\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/rider-plans/webhook/razorpay",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "rider-plans",
+                "webhook",
+                "razorpay"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Stripe Webhook (simulated)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "stripe-signature",
+                "value": "TEST_SIGNATURE"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"payment_intent.succeeded\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"pi_test_rider_plan_001\",\n      \"metadata\": {\n        \"riderId\": \"{{rider_id}}\",\n        \"planId\":  \"{{rider_plan_id}}\"\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/rider-plans/webhook/stripe",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "rider-plans",
+                "webhook",
+                "stripe"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Rider Subscription History — Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/rider-plans/admin/riders/{{rider_id}}/history?page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "rider-plans",
+                "admin",
+                "riders",
+                "{{rider_id}}",
+                "history"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Rider Payments — Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/rider-plans/admin/riders/{{rider_id}}/payments?page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "rider-plans",
+                "admin",
+                "riders",
+                "{{rider_id}}",
+                "payments"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "👛 Wallets",
+      "item": [
+        {
+          "name": "List Wallets — Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.length > 0) {",
+                  "  pm.collectionVariables.set('wallet_id', res.MESSAGE[0].id);",
+                  "  console.log('✅ wallet_id saved:', res.MESSAGE[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/wallets?page=1&limit=20&ownerType=&countryId=&stateId=&cityId=&search=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "wallets"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "ownerType", "value": "", "disabled": true, "description": "driver|rider" },
+                { "key": "countryId", "value": "", "disabled": true },
+                { "key": "stateId", "value": "", "disabled": true },
+                { "key": "cityId", "value": "", "disabled": true },
+                { "key": "search", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get/Create Driver Wallet — Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE) {",
+                  "  pm.collectionVariables.set('wallet_id', res.MESSAGE.id);",
+                  "  console.log('✅ wallet_id saved:', res.MESSAGE.id, '| balanceMinor:', res.MESSAGE.balanceMinor);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/wallets/driver/{{driver_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "wallets",
+                "driver",
+                "{{driver_id}}"
+              ]
+            },
+            "description": "Auto-creates a zero-balance wallet if the driver doesn't have one yet."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Rider Wallet — Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/wallets/rider/{{rider_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "wallets",
+                "rider",
+                "{{rider_id}}"
+              ]
+            },
+            "description": "Returns null (not a 404) if the rider has no wallet yet — riders don't get one until an admin explicitly credits them."
+          },
+          "response": []
+        },
+        {
+          "name": "Wallet Transactions — Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/wallets/{{wallet_id}}/transactions?page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "wallets",
+                "{{wallet_id}}",
+                "transactions"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "description": "The append-only ledger of this wallet's balance movements — includes ride-fare credits, admin adjustments, refund/dispute debits, and payouts, since Phase 1 the ledger service posts through here for every wallet-linked entry."
+          },
+          "response": []
+        },
+        {
+          "name": "Adjust Driver Wallet — Credit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"credit\",\n  \"amountMinor\": 5000,\n  \"reason\": \"referral_bonus\",\n  \"description\": \"Referral bonus — manual admin credit\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/wallets/driver/{{driver_id}}/adjust",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "wallets",
+                "driver",
+                "{{driver_id}}",
+                "adjust"
+              ]
+            },
+            "description": "Posts through the double-entry ledger (Dr wallet_adjustment_expense, Cr the driver's wallet) — see ledger.service.js postTransaction."
+          },
+          "response": []
+        },
+        {
+          "name": "Adjust Driver Wallet — Debit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"debit\",\n  \"amountMinor\": 1000,\n  \"reason\": \"policy_violation\",\n  \"description\": \"Penalty — manual admin debit\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/wallets/driver/{{driver_id}}/adjust",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "wallets",
+                "driver",
+                "{{driver_id}}",
+                "adjust"
+              ]
+            },
+            "description": "A debit that would drive the wallet negative is rejected (422) unless it's a refund/dispute reversal — plain admin debits always require sufficient balance."
+          },
+          "response": []
+        },
+        {
+          "name": "Adjust Rider Wallet — Credit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"credit\",\n  \"amountMinor\": 2000,\n  \"reason\": \"goodwill_credit\",\n  \"description\": \"Service issue goodwill credit\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/wallets/rider/{{rider_id}}/adjust",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "wallets",
+                "rider",
+                "{{rider_id}}",
+                "adjust"
+              ]
+            },
+            "description": "Creates the rider's wallet on first adjustment if it doesn't exist yet."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🧾 Ledger (Admin, read-only)",
+      "item": [
+        {
+          "name": "List Ledger Transactions — Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.length > 0) {",
+                  "  pm.collectionVariables.set('ledger_transaction_id', res.MESSAGE[0].id);",
+                  "  console.log('✅ ledger_transaction_id saved:', res.MESSAGE[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ledger/transactions?page=1&limit=20&businessType=&referenceType=&referenceId=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "ledger",
+                "transactions"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "businessType", "value": "", "disabled": true, "description": "e.g. ride_fare_online, driver_subscription_charge, driver_payout, dispute_hold" },
+                { "key": "referenceType", "value": "", "disabled": true, "description": "ride | subscription | rider_subscription | dispute | payout | manual" },
+                { "key": "referenceId", "value": "", "disabled": true }
+              ]
+            },
+            "description": "The double-entry ledger's system-of-record view — every business event that moved money since Phase 1, one row per balanced transaction."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Ledger Transaction (with entries) — Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ledger/transactions/{{ledger_transaction_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "ledger",
+                "transactions",
+                "{{ledger_transaction_id}}"
+              ]
+            },
+            "description": "Returns { transaction, entries } — the entries always sum to zero per currency."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "💸 Refunds",
+      "item": [
+        {
+          "name": "Initiate Refund — Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.refund) {",
+                  "  pm.collectionVariables.set('refund_id', res.MESSAGE.refund.id);",
+                  "  console.log('✅ refund_id saved:', res.MESSAGE.refund.id, '| fullyRefunded:', res.MESSAGE.fullyRefunded);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentId\": \"{{payment_id}}\",\n  \"amountMinor\": 1000,\n  \"reason\": \"Customer requested refund\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/refunds",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "refunds"
+              ]
+            },
+            "description": "amountMinor can be less than the full payment (partial refund — payments.status stays 'captured' until cumulative refunds equal the original amount). Requires Idempotency-Key. Posts reversing ledger entries — for an online ride fare this debits the driver's wallet (allowed to go negative — see ledger.service.js)."
+          },
+          "response": []
+        },
+        {
+          "name": "List Refunds — Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/refunds?page=1&limit=20&paymentId=&status=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "refunds"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "paymentId", "value": "", "disabled": true },
+                { "key": "status", "value": "", "disabled": true, "description": "pending|completed|failed" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Refund — Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/refunds/{{refund_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "refunds",
+                "{{refund_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔄 Reconciliation",
+      "item": [
+        {
+          "name": "List Reconciliation Runs — Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.length > 0) {",
+                  "  pm.collectionVariables.set('reconciliation_run_id', res.MESSAGE[0].id);",
+                  "  console.log('✅ reconciliation_run_id saved:', res.MESSAGE[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/reconciliation/runs?page=1&limit=20&gateway=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "reconciliation",
+                "runs"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "gateway", "value": "", "disabled": true, "description": "razorpay|stripe" }
+              ]
+            },
+            "description": "reconciliation-batch.job.js runs daily at 02:00, comparing our payments records against the processor's own transaction list for the prior day — no-ops per gateway when it isn't configured, so this list is empty until a real Razorpay/Stripe account is connected."
+          },
+          "response": []
+        },
+        {
+          "name": "List Mismatches — Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.length > 0) {",
+                  "  pm.collectionVariables.set('mismatch_id', res.MESSAGE[0].id);",
+                  "  console.log('✅ mismatch_id saved:', res.MESSAGE[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/reconciliation/mismatches?page=1&limit=20&runId={{reconciliation_run_id}}&status=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "reconciliation",
+                "mismatches"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "runId", "value": "{{reconciliation_run_id}}", "disabled": true },
+                { "key": "status", "value": "", "disabled": true, "description": "open|resolved|ignored" }
+              ]
+            },
+            "description": "Four finding types: missing_internal (processor has it, we don't), missing_external (we have it, processor doesn't), amount_mismatch, duplicate_internal. Never auto-corrected."
+          },
+          "response": []
+        },
+        {
+          "name": "Resolve Mismatch — Admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"resolved\",\n  \"notes\": \"Verified against processor dashboard manually — timing difference, both sides now agree.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/reconciliation/mismatches/{{mismatch_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "reconciliation",
+                "mismatches",
+                "{{mismatch_id}}"
+              ]
+            },
+            "description": "status must be 'resolved' or 'ignored' — a human decision, never applied automatically to any other table."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "⚖️ Disputes",
+      "item": [
+        {
+          "name": "List Disputes — Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.length > 0) {",
+                  "  pm.collectionVariables.set('dispute_id', res.MESSAGE[0].id);",
+                  "  console.log('✅ dispute_id saved:', res.MESSAGE[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/disputes?page=1&limit=20&status=&gateway=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "disputes"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "status", "value": "", "disabled": true, "description": "raw processor status — e.g. Stripe: needs_response|under_review|won|lost; Razorpay: unverified from installed SDK" },
+                { "key": "gateway", "value": "", "disabled": true }
+              ]
+            },
+            "description": "Ingested from processor webhooks (Stripe charge.dispute.created/closed — fully verified; Razorpay payment.dispute.* — best-effort pattern match, unverified event names). Read/triage only — accepting or contesting a dispute with the processor is out of scope."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Dispute — Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/disputes/{{dispute_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "disputes",
+                "{{dispute_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Dispute Notes — Admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"adminNotes\": \"Escalated to finance for evidence review.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/disputes/{{dispute_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "disputes",
+                "{{dispute_id}}"
+              ]
+            },
+            "description": "Triage notes only — never touches the processor."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🏦 Payout Accounts",
+      "item": [
+        {
+          "name": "Start Stripe Onboarding (Driver)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/payout-accounts/stripe/onboarding-link",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "payout-accounts",
+                "stripe",
+                "onboarding-link"
+              ]
+            },
+            "description": "Creates a Stripe Express connected account (if none exists) and returns a hosted onboarding URL — Stripe collects and verifies the driver's bank details and identity itself; this backend never sees a raw bank account number. Requires STRIPE_SECRET_KEY configured and the driver to have an email on file. There's no driver app yet, so open the returned url in a browser to walk through Stripe's test-mode onboarding manually."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Payout Account (Driver)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/payout-accounts/mine",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "payout-accounts",
+                "mine"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Stripe Onboarding Refresh (placeholder redirect)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/payout-accounts/stripe/onboarding-refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "payout-accounts",
+                "stripe",
+                "onboarding-refresh"
+              ]
+            },
+            "description": "Placeholder — no driver-facing app exists yet to redirect back into; this just acknowledges the redirect landed. Point this at a real screen once a driver app exists."
+          },
+          "response": []
+        },
+        {
+          "name": "Stripe Onboarding Return (placeholder redirect)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/payout-accounts/stripe/onboarding-return",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "payout-accounts",
+                "stripe",
+                "onboarding-return"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Stripe Connect Webhook (simulated)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "stripe-signature",
+                "value": "TEST_SIGNATURE"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"evt_test_connect_001\",\n  \"type\": \"account.updated\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"acct_test_001\",\n      \"payouts_enabled\": true,\n      \"details_submitted\": true\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/payout-accounts/webhook/stripe",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "payout-accounts",
+                "webhook",
+                "stripe"
+              ]
+            },
+            "description": "Separate webhook endpoint/secret (STRIPE_CONNECT_WEBHOOK_SECRET) from the payment webhooks — Connect account events are configured separately in Stripe's dashboard. Syncs stripeDetailsSubmitted/stripePayoutsEnabled only — never bypasses the admin approval gate below."
+          },
+          "response": []
+        },
+        {
+          "name": "List Payout Accounts — Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.length > 0) {",
+                  "  pm.collectionVariables.set('payout_account_id', res.MESSAGE[0].id);",
+                  "  console.log('✅ payout_account_id saved:', res.MESSAGE[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/payout-accounts?page=1&limit=20&status=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "payout-accounts"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "status", "value": "", "disabled": true, "description": "pending|approved|rejected" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Payout Account — Admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approve\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/payout-accounts/{{payout_account_id}}/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "payout-accounts",
+                "{{payout_account_id}}",
+                "verify"
+              ]
+            },
+            "description": "Same admin-review convention as Documents → Verify Document. approve:false requires a rejectionReason field. This is the hard gate — a payout can only run against an 'approved' row, regardless of what Stripe's own payoutsEnabled signal says."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "💵 Payouts",
+      "item": [
+        {
+          "name": "Instant Payout — Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.payoutId) {",
+                  "  pm.collectionVariables.set('payout_id', res.MESSAGE.payoutId);",
+                  "  console.log('✅ payout result:', JSON.stringify(res.MESSAGE));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"driverId\": \"{{driver_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/payouts/instant",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "payouts",
+                "instant"
+              ]
+            },
+            "description": "Pays out the driver's full current wallet balance. Rejected (422) before any gateway call if the driver has no positive balance, no approved payout account, or the account's gateway doesn't support payouts yet (razorpay — see razorpay.gateway.js). Requires Idempotency-Key."
+          },
+          "response": []
+        },
+        {
+          "name": "Run Payout Batch (Stripe) — Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/payouts/batch/stripe",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "payouts",
+                "batch",
+                "stripe"
+              ]
+            },
+            "description": "Manual trigger alongside the scheduled weekly job (Mondays 03:00) — pays out every approved Stripe payout account with a positive balance. Try 'razorpay' here too — it no-ops with a log line since RazorpayX payout execution isn't implemented yet (see razorpay.gateway.js payout())."
+          },
+          "response": []
+        },
+        {
+          "name": "List Payouts — Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.length > 0) {",
+                  "  pm.collectionVariables.set('payout_id', res.MESSAGE[0].id);",
+                  "  console.log('✅ payout_id saved:', res.MESSAGE[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/payouts?page=1&limit=20&driverId=&status=&batchId=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "payouts"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "driverId", "value": "", "disabled": true },
+                { "key": "status", "value": "", "disabled": true, "description": "pending|processing|completed|failed" },
+                { "key": "batchId", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Payout Batches — Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.length > 0) {",
+                  "  pm.collectionVariables.set('payout_batch_id', res.MESSAGE[0].id);",
+                  "  console.log('✅ payout_batch_id saved:', res.MESSAGE[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/payouts/batches?page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "payouts",
+                "batches"
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
               ]
             }
           },

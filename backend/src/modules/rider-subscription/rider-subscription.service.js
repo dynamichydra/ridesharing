@@ -6,6 +6,9 @@ import { addDays } from '../../utils/time.js';
 import { paginate } from '../../utils/response.js';
 import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
 import { getApplicableTaxRules } from '../fare/tax-rules.service.js';
+import { withIdempotency } from '../../utils/idempotency.js';
+import { postTransaction, getOrCreateSystemAccount } from '../ledger/ledger.service.js';
+import { handleDisputeEvent } from '../dispute/dispute.service.js';
 
 // ── Plans (admin) ─────────────────────────────────────────────────────────────
 
@@ -76,42 +79,48 @@ export async function setPlanActive(id, isActive, adminId) {
 
 // ── Rider subscription flow ────────────────────────────────────────────────────
 
-export async function initiateSubscription(riderId, planId) {
-  const [plan] = await db.select().from(riderSubscriptionPlans)
-    .where(and(eq(riderSubscriptionPlans.id, planId), eq(riderSubscriptionPlans.isActive, true))).limit(1);
-  if (!plan) throw { statusCode: 404, message: 'Plan not found or inactive' };
+// idempotencyKey comes from the client's Idempotency-Key header (required — see
+// rider-subscription.routes.js) so a retried/double-submitted initiate request returns the
+// original gateway order instead of creating a second charge attempt.
+export async function initiateSubscription(riderId, planId, idempotencyKey) {
+  return withIdempotency('rider_subscription_initiate', idempotencyKey, riderId, async () => {
+    const [plan] = await db.select().from(riderSubscriptionPlans)
+      .where(and(eq(riderSubscriptionPlans.id, planId), eq(riderSubscriptionPlans.isActive, true))).limit(1);
+    if (!plan) throw { statusCode: 404, message: 'Plan not found or inactive' };
 
-  const gateway = gatewayForCurrency(plan.currencyCode);
-  const totalMinor = await addPlanTax(plan.countryId, plan.priceMinor);
+    const gateway = gatewayForCurrency(plan.currencyCode);
+    const totalMinor = await addPlanTax(plan.countryId, plan.priceMinor);
 
-  if (!gateway) {
-    // Dev mode — this currency's gateway has no keys configured, activate directly
-    return _activateSubscription(riderId, planId, plan, totalMinor, {
-      gateway: 'none', gatewayPaymentId: 'dev_payment_' + Date.now(), gatewayOrderId: null,
+    if (!gateway) {
+      // Dev mode — this currency's gateway has no keys configured, activate directly
+      return _activateSubscription(riderId, planId, plan, totalMinor, {
+        gateway: 'none', gatewayPaymentId: 'dev_payment_' + Date.now(), gatewayOrderId: null,
+      });
+    }
+
+    const order = await gateway.createOrder({
+      amountMinor: totalMinor,
+      currencyCode: plan.currencyCode,
+      metadata: { riderId, planId },
+      idempotencyKey,
     });
-  }
 
-  const order = await gateway.createOrder({
-    amountMinor: totalMinor,
-    currencyCode: plan.currencyCode,
-    metadata: { riderId, planId },
+    const [payment] = await db.insert(payments).values({
+      riderSubscriptionId: null, // filled in on activation — this row tracks the pending attempt via gatewayOrderId until then
+      countryId: plan.countryId,
+      gateway: gateway.name,
+      currencyCode: plan.currencyCode,
+      amountMinor: totalMinor,
+      status: 'created',
+      gatewayOrderId: order.gatewayOrderId,
+    }).returning();
+
+    return {
+      ...order,
+      paymentAttemptId: payment.id,
+      plan: { id: plan.id, name: plan.name, type: plan.type, durationDays: plan.durationDays },
+    };
   });
-
-  const [payment] = await db.insert(payments).values({
-    riderSubscriptionId: null, // filled in on activation — this row tracks the pending attempt via gatewayOrderId until then
-    countryId: plan.countryId,
-    gateway: gateway.name,
-    currencyCode: plan.currencyCode,
-    amountMinor: totalMinor,
-    status: 'created',
-    gatewayOrderId: order.gatewayOrderId,
-  }).returning();
-
-  return {
-    ...order,
-    paymentAttemptId: payment.id,
-    plan: { id: plan.id, name: plan.name, type: plan.type, durationDays: plan.durationDays },
-  };
 }
 
 export async function verifyAndActivate(riderId, planId, orderRef, paymentRef, signature) {
@@ -121,7 +130,7 @@ export async function verifyAndActivate(riderId, planId, orderRef, paymentRef, s
   const gateway = gatewayForCurrency(plan.currencyCode);
   if (!gateway) {
     const totalMinor = await addPlanTax(plan.countryId, plan.priceMinor);
-    return _activateSubscription(riderId, planId, plan, totalMinor, {
+    return _activateSubscriptionIdempotent(riderId, planId, plan, totalMinor, {
       gateway: 'none', gatewayPaymentId: paymentRef, gatewayOrderId: orderRef,
     });
   }
@@ -133,7 +142,7 @@ export async function verifyAndActivate(riderId, planId, orderRef, paymentRef, s
     .where(eq(payments.gatewayOrderId, orderRef)).limit(1);
   const totalMinor = attempt?.amountMinor ?? await addPlanTax(plan.countryId, plan.priceMinor);
 
-  return _activateSubscription(riderId, planId, plan, totalMinor, {
+  return _activateSubscriptionIdempotent(riderId, planId, plan, totalMinor, {
     gateway: gateway.name, gatewayPaymentId: paymentRef, gatewayOrderId: orderRef, paymentAttemptId: attempt?.id,
   });
 }
@@ -143,6 +152,15 @@ async function addPlanTax(countryId, priceMinor) {
   const exclusiveRate = rules.filter((r) => !r.isInclusive)
     .reduce((sum, r) => sum + parseFloat(r.rate), 0);
   return priceMinor + Math.round(priceMinor * exclusiveRate);
+}
+
+// Same double-activation race as subscription.service.js — verifyAndActivate and
+// handleWebhook can both fire for the same order; keying on gatewayOrderId means whichever
+// arrives first wins. Dev mode (no orderRef) never races, so it skips the wrapper.
+async function _activateSubscriptionIdempotent(riderId, planId, plan, amountMinor, paymentInfo) {
+  if (!paymentInfo.gatewayOrderId) return _activateSubscription(riderId, planId, plan, amountMinor, paymentInfo);
+  return withIdempotency('rider_subscription_activation', paymentInfo.gatewayOrderId, riderId, () =>
+    _activateSubscription(riderId, planId, plan, amountMinor, paymentInfo));
 }
 
 async function _activateSubscription(riderId, planId, plan, amountMinor, paymentInfo) {
@@ -180,6 +198,19 @@ async function _activateSubscription(riderId, planId, plan, amountMinor, payment
       gatewayPaymentId: paymentInfo.gatewayPaymentId,
     });
   }
+
+  const clearingAccount = await getOrCreateSystemAccount(`processor_clearing:${paymentInfo.gateway}`, plan.currencyCode);
+  const revenueAccount = await getOrCreateSystemAccount('platform_revenue:rider_subscriptions', plan.currencyCode);
+  await postTransaction({
+    businessType: 'rider_subscription_charge',
+    idempotencyKey: `rider_subscription_charge:${sub.id}`,
+    referenceType: 'rider_subscription',
+    referenceId: sub.id,
+    entries: [
+      { accountId: clearingAccount.id, direction: 'debit', amountMinor, currencyCode: plan.currencyCode },
+      { accountId: revenueAccount.id, direction: 'credit', amountMinor, currencyCode: plan.currencyCode },
+    ],
+  });
 
   await publishEvent(TOPICS.SUBSCRIPTION_ACTIVATED, { id: sub.id, riderId, planId, endDate, ownerType: 'rider' });
   await publishEvent(TOPICS.NOTIF_PUSH, {
@@ -230,34 +261,41 @@ export async function getPaymentsForRider(riderId, page, limit, offset) {
 }
 
 // ── Gateway webhooks ────────────────────────────────────────────────────────
+// Split in two so the route can verify+parse synchronously (reject bad signatures outright)
+// while the actual business logic runs asynchronously via the webhook-processing job — see
+// rider-subscription.routes.js and jobs/webhook-processing.job.js.
 
-export async function handleWebhook(gatewayName, rawBody, signature) {
+export function parseAndVerifyWebhook(gatewayName, rawBody, signature) {
   const gateway = getGateway(gatewayName);
   if (!gateway.isConfigured) {
     console.log(`[RiderSubscription] ${gatewayName} webhook received but not configured — ignoring.`);
-    return { received: true };
+    return null;
   }
   if (!gateway.verifyWebhookSignature(rawBody, signature)) {
     throw { statusCode: 400, message: 'Invalid webhook signature' };
   }
-
   const event = gateway.parseWebhookEvent(rawBody, signature);
-  if (event) {
-    const { riderId, planId } = event.metadata || {};
-    if (riderId && planId) {
-      const [plan] = await db.select().from(riderSubscriptionPlans).where(eq(riderSubscriptionPlans.id, planId)).limit(1);
-      if (plan) {
-        const [attempt] = await db.select().from(payments)
-          .where(eq(payments.gatewayOrderId, event.orderRef)).limit(1);
-        const totalMinor = attempt?.amountMinor ?? await addPlanTax(plan.countryId, plan.priceMinor);
-        await _activateSubscription(riderId, planId, plan, totalMinor, {
-          gateway: gateway.name, gatewayPaymentId: event.paymentRef, gatewayOrderId: event.orderRef,
-          paymentAttemptId: attempt?.id,
-        });
-      }
-    }
-  }
-  return { received: true };
+  return event ? { ...event, gatewayName } : null;
+}
+
+export async function processWebhookEvent(event) {
+  // Dispute events can land on any of the three webhook routes — dispatch by looking up the
+  // disputed payment, not by which route received it. See dispute.service.js.
+  if (event.kind === 'dispute') return handleDisputeEvent(event);
+
+  const { riderId, planId } = event.metadata || {};
+  if (!riderId || !planId) return;
+
+  const [plan] = await db.select().from(riderSubscriptionPlans).where(eq(riderSubscriptionPlans.id, planId)).limit(1);
+  if (!plan) return;
+
+  const [attempt] = await db.select().from(payments)
+    .where(eq(payments.gatewayOrderId, event.orderRef)).limit(1);
+  const totalMinor = attempt?.amountMinor ?? await addPlanTax(plan.countryId, plan.priceMinor);
+  await _activateSubscriptionIdempotent(riderId, planId, plan, totalMinor, {
+    gateway: event.gatewayName, gatewayPaymentId: event.paymentRef, gatewayOrderId: event.orderRef,
+    paymentAttemptId: attempt?.id,
+  });
 }
 
 // ── Expiry checker (called by BullMQ job) ─────────────────────────────────────

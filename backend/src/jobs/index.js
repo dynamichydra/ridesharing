@@ -2,6 +2,10 @@ import { Queue, Worker } from 'bullmq';
 import { redis } from '../config/redis.js';
 import { expireOverdueSubscriptions } from '../modules/subscription/subscription.service.js';
 import { flushRidePings, listActiveGpsRides } from '../modules/trip-gps/gps-ping.service.js';
+import { runLedgerVerification } from './ledger-verification.job.js';
+import { scheduleReconciliation } from './reconciliation.job.js';
+import { schedulePayoutBatch } from './payout-batch.job.js';
+import './webhook-processing.job.js'; // side-effect import — registers its own Queue/Worker
 
 const connection = redis;
 
@@ -86,8 +90,40 @@ gpsFlushWorker.on('failed', (job, err) => {
   console.error('[Job] gps-ping-flush failed:', err.message);
 });
 
+// ── Ledger verification job ───────────────────────────────────────────────────
+// Audit backstop — re-derives balance invariants ledgerService.postTransaction already
+// enforces atomically at write time, and flags (doesn't auto-correct) any mismatch.
+
+const ledgerVerificationQueue = new Queue('ledger-verification', { connection });
+
+export async function scheduleLedgerVerification() {
+  await ledgerVerificationQueue.obliterate({ force: true }).catch(() => { });
+  await ledgerVerificationQueue.add('verify', {}, { repeat: { pattern: '0 * * * *' } }); // hourly
+  console.log('✅ Ledger verification job scheduled (hourly)');
+}
+
+const ledgerVerificationWorker = new Worker(
+  'ledger-verification',
+  async () => {
+    const result = await runLedgerVerification();
+    if (result.unbalancedCount > 0 || result.walletMismatchCount > 0) {
+      console.warn('[Job] Ledger verification found mismatches:', result);
+    } else {
+      console.log('[Job] Ledger verification OK');
+    }
+  },
+  { connection },
+);
+
+ledgerVerificationWorker.on('failed', (job, err) => {
+  console.error('[Job] ledger-verification failed:', err.message);
+});
+
 export async function startJobs() {
   await scheduleSubscriptionExpiry();
   await scheduleGpsFlush();
+  await scheduleLedgerVerification();
+  await scheduleReconciliation();
+  await schedulePayoutBatch();
   console.log('✅ BullMQ workers running');
 }
