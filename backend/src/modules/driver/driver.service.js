@@ -178,6 +178,44 @@ export async function updateFcmToken(driverId, fcmToken) {
 
 // ── Admin facing ─────────────────────────────────────────────────────────────
 
+export async function adminRegisterDriver(adminId, data) {
+  const { name, phone, email } = data;
+  if (!name) throw { statusCode: 400, message: 'name is required' };
+  if (!phone && !email) throw { statusCode: 400, message: 'phone or email is required' };
+
+  if (phone) {
+    const [existing] = await db.select({ id: drivers.id }).from(drivers).where(eq(drivers.phone, phone)).limit(1);
+    if (existing) throw { statusCode: 409, code: 'PHONE_TAKEN', message: 'A driver with this phone already exists' };
+  }
+  if (email) {
+    const [existing] = await db.select({ id: drivers.id }).from(drivers).where(eq(drivers.email, email)).limit(1);
+    if (existing) throw { statusCode: 409, code: 'EMAIL_TAKEN', message: 'A driver with this email already exists' };
+  }
+
+  const [driver] = await db.insert(drivers).values({
+    name, phone, email,
+    dateOfBirth: data.dateOfBirth,
+    gender: data.gender,
+    preferredLanguageCode: data.preferredLanguageCode,
+    countryId: data.countryId,
+    stateId: data.stateId,
+    cityId: data.cityId,
+    vehicleTypeId: data.vehicleTypeId,
+    vehicleNumber: data.vehicleNumber,
+    vehicleModel: data.vehicleModel,
+    vehicleYear: data.vehicleYear,
+    registrationStatus: 'registration_in_progress',
+    registrationStep: REGISTRATION_STEP.PERSONAL_INFO,
+    approvalStatus: 'pending',
+  }).returning();
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin',
+    action: 'DRIVER_REGISTERED_BY_ADMIN', entityType: 'driver', entityId: driver.id,
+  });
+  return driver;
+}
+
 export async function listDrivers(filters, page, limit, offset) {
   const conditions = [];
   if (filters.approvalStatus) conditions.push(eq(drivers.approvalStatus, filters.approvalStatus));

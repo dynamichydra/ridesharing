@@ -80,6 +80,14 @@ export async function driverRoutes(app) {
 
   // ── Admin ────────────────────────────────────────────────────────────────────
 
+  app.post('/', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { name, phone, email } = request.body;
+    if (!name) return sendError(reply, 'name is required');
+    if (!phone && !email) return sendError(reply, 'phone or email is required');
+    const data = await driverService.adminRegisterDriver(request.user.id, request.body);
+    return sendSuccess(reply, data, 201);
+  });
+
   app.get('/', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);
     const filters = {
