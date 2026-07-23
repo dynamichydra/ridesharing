@@ -69,4 +69,14 @@ flutter:
   assets:
     - assets/mock/
     - assets/images/
+    - assets/logos/
+  fonts:
+    - family: SF Pro Display
+      fonts:
+        - asset: assets/fonts/sf-pro-display/SFPRODISPLAYREGULAR.OTF
+        - asset: assets/fonts/sf-pro-display/SFPRODISPLAYMEDIUM.OTF
+          weight: 500
+        - asset: assets/fonts/sf-pro-display/SFPRODISPLAYBOLD.OTF
+          weight: 700
+
 

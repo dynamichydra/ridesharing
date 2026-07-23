@@ -5,6 +5,7 @@ class AppTheme {
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
+      fontFamily: 'SF Pro Display',
       brightness: Brightness.light,
       colorScheme: const ColorScheme.light(
         primary: AppColors.primaryBlue,
@@ -98,6 +99,7 @@ class AppTheme {
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
+      fontFamily: 'SF Pro Display',
       brightness: Brightness.dark,
       colorScheme: const ColorScheme.dark(
         primary: AppColors.primaryBlue,

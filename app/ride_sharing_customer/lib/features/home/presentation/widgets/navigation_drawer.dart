@@ -19,46 +19,9 @@ class AppNavigationDrawer extends StatelessWidget {
             bottom: false,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-              child: Row(
-                children: [
-                  // Ryva Ride Logo Symbol
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF01A34D).withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'R',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF01A34D),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Row(
-                    children: const [
-                      Text(
-                        'Ryva ',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF01A34D),
-                        ),
-                      ),
-                      Text(
-                        'Ride',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF0165B7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              child: Image.asset(
+                  'assets/logos/main-logo.jpeg', 
+                  height: 60,
               ),
             ),
           ),
@@ -136,19 +99,6 @@ class AppNavigationDrawer extends StatelessWidget {
                   },
                 ),
               ],
-            ),
-          ),
-
-          // Footer
-          const Padding(
-            padding: EdgeInsets.only(bottom: 24.0, left: 28.0),
-            child: Text(
-              'v1.0.2 • Rider App',
-              style: TextStyle(
-                color: Color(0xFF8A94A6),
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
             ),
           ),
         ],

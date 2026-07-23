@@ -3,6 +3,7 @@ import 'core/services/storage_service.dart';
 import 'injection_container.dart';
 
 // Import Pages
+import 'features/home/presentation/pages/main_layout.dart';
 import 'features/auth/presentation/pages/splash_page.dart';
 import 'features/auth/presentation/pages/onboarding_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
@@ -96,9 +97,63 @@ class AppRoutes {
         path: forgotPassword,
         builder: (context, state) => const ForgotPasswordPage(),
       ),
-      GoRoute(
-        path: home,
-        builder: (context, state) => const HomePage(),
+      ShellRoute(
+        builder: (context, state, child) {
+          return MainLayout(child: child);
+        },
+        routes: [
+          GoRoute(
+            path: home,
+            builder: (context, state) => const HomePage(),
+          ),
+          GoRoute(
+            path: rideHistory,
+            builder: (context, state) => const RideHistoryPage(),
+          ),
+          GoRoute(
+            path: rideDetail,
+            builder: (context, state) {
+              final ride = Map<String, dynamic>.from(state.extra as Map);
+              return RideDetailPage(ride: ride);
+            },
+          ),
+          GoRoute(
+            path: wallet,
+            builder: (context, state) => const WalletPage(),
+          ),
+          GoRoute(
+            path: addFunds,
+            builder: (context, state) => const AddFundsPage(),
+          ),
+          GoRoute(
+            path: transactions,
+            builder: (context, state) => const TransactionsPage(),
+          ),
+          GoRoute(
+            path: profile,
+            builder: (context, state) => const ProfilePage(),
+          ),
+          GoRoute(
+            path: editProfile,
+            builder: (context, state) => const EditProfilePage(),
+          ),
+          GoRoute(
+            path: savedPlaces,
+            builder: (context, state) => const SavedPlacesPage(),
+          ),
+          GoRoute(
+            path: paymentMethods,
+            builder: (context, state) => const PaymentMethodsPage(),
+          ),
+          GoRoute(
+            path: help,
+            builder: (context, state) => const HelpPage(),
+          ),
+          GoRoute(
+            path: settings,
+            builder: (context, state) => const SettingsPage(),
+          ),
+        ],
       ),
       GoRoute(
         path: selectLocation,
@@ -113,55 +168,8 @@ class AppRoutes {
         builder: (context, state) => const RideTrackingPage(),
       ),
       GoRoute(
-        path: wallet,
-        builder: (context, state) => const WalletPage(),
-      ),
-      GoRoute(
-        path: addFunds,
-        builder: (context, state) => const AddFundsPage(),
-      ),
-      GoRoute(
         path: notifications,
         builder: (context, state) => const NotificationsPage(),
-      ),
-      GoRoute(
-        path: profile,
-        builder: (context, state) => const ProfilePage(),
-      ),
-      GoRoute(
-        path: editProfile,
-        builder: (context, state) => const EditProfilePage(),
-      ),
-      GoRoute(
-        path: savedPlaces,
-        builder: (context, state) => const SavedPlacesPage(),
-      ),
-      GoRoute(
-        path: paymentMethods,
-        builder: (context, state) => const PaymentMethodsPage(),
-      ),
-      GoRoute(
-        path: help,
-        builder: (context, state) => const HelpPage(),
-      ),
-      GoRoute(
-        path: settings,
-        builder: (context, state) => const SettingsPage(),
-      ),
-      GoRoute(
-        path: rideHistory,
-        builder: (context, state) => const RideHistoryPage(),
-      ),
-      GoRoute(
-        path: rideDetail,
-        builder: (context, state) {
-          final ride = Map<String, dynamic>.from(state.extra as Map);
-          return RideDetailPage(ride: ride);
-        },
-      ),
-      GoRoute(
-        path: transactions,
-        builder: (context, state) => const TransactionsPage(),
       ),
     ],
   );

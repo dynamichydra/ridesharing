@@ -18,8 +18,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  int _currentIndex = 0;
 
   @override
   void initState() {
@@ -27,26 +25,11 @@ class _HomePageState extends State<HomePage> {
     context.read<HomeBloc>().add(LoadHomeData());
   }
 
-  void _onBottomNavTapped(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
-    if (index == 1) {
-      context.push('/ride-history');
-    } else if (index == 2) {
-      context.push('/wallet');
-    } else if (index == 3) {
-      context.push('/profile');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Scaffold(
-      key: _scaffoldKey,
-      drawer: const AppNavigationDrawer(),
       backgroundColor: Colors.white,
       body: BlocBuilder<HomeBloc, HomeState>(
         builder: (context, state) {
@@ -94,7 +77,7 @@ class _HomePageState extends State<HomePage> {
                         IconButton(
                           icon: const Icon(Icons.menu_rounded, color: Colors.black87),
                           onPressed: () {
-                            _scaffoldKey.currentState?.openDrawer();
+                            context.findRootAncestorStateOfType<ScaffoldState>()?.openDrawer();
                           },
                         ),
                         Expanded(
@@ -292,46 +275,6 @@ class _HomePageState extends State<HomePage> {
 
           return const LoadingView();
         },
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: _onBottomNavTapped,
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFF01A34D),
-          unselectedItemColor: const Color(0xFF8A94A6),
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_filled),
-              label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.directions_car_filled_rounded),
-              label: 'My Rides',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.account_balance_wallet_rounded),
-              label: 'Wallet',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_rounded),
-              label: 'Profile',
-            ),
-          ],
-        ),
       ),
     );
   }
