@@ -1,0 +1,96 @@
+%% RideShare Platform — Core Ride Lifecycle Sequence
+%% Covers: fare estimate -> request -> matching -> accept -> tracking -> complete -> GPS reconciliation -> payment
+
+sequenceDiagram
+    autonumber
+    actor Rider
+    participant FareSvc as fare.service
+    participant RideSvc as ride.service
+    participant Matching as matching.service
+    participant GeoIdx as driver-geo-index (Redis/H3)
+    participant Lock as driver-lock.service
+    actor Driver
+    participant OfferSvc as ride_offer.service
+    participant Track as tracking.service
+    participant GpsSvc as gps-ping.service
+    participant FinalizeJob as finalize-trip.job
+    participant Flagged as flagged-trip.service
+    participant PaySvc as ride-payment.service
+    participant Gateway as Razorpay/Stripe
+    participant Kafka
+    participant Socket as Socket.IO
+
+    Rider->>FareSvc: POST /fare/estimate-all
+    FareSvc-->>Rider: fares per vehicle type
+
+    Rider->>RideSvc: POST /rides (vehicleType, pickup, drop)
+    RideSvc->>RideSvc: snapshot fare, insert ride (status=requested)
+    RideSvc->>Kafka: publish RIDE_REQUESTED
+    RideSvc->>Matching: startMatchingProcess(ride) [fire-and-forget]
+    RideSvc-->>Rider: 201 ride created (status=searching)
+
+    loop Expanding ring 5km -> 10km -> 15km (~25s each)
+        Matching->>GeoIdx: getCandidateDriverIds(pickup, radius)
+        Matching->>Matching: scoreDrivers (distance/rating/acceptance weights)
+        Matching->>OfferSvc: createOffersForRing(candidates)
+        OfferSvc->>Kafka: publish NOTIF_PUSH (new ride offer)
+        Kafka->>Socket: ride-socket-bridge emits to driver room
+        Socket-->>Driver: ride:new_request
+    end
+
+    Driver->>Lock: acquireLock(driverId, rideId)
+    Driver->>RideSvc: POST /rides/:id/accept
+    RideSvc->>Matching: validateDriverCanAccept
+    RideSvc->>OfferSvc: acceptOffer (supersede other offers)
+    RideSvc->>GeoIdx: removeDriverFromIndex(driverId)
+    RideSvc->>Kafka: publish RIDE_ACCEPTED
+    Kafka->>Socket: ride-socket-bridge emits
+    Socket-->>Rider: ride:driver_assigned
+
+    RideSvc->>Track: computeApproachRoute(ride, driver)
+    Track->>Kafka: publish DRIVER_LOCATION (phase=approach)
+    Kafka->>Socket: bridge emits driver:location
+    Socket-->>Rider: live driver position
+
+    Driver->>RideSvc: POST /rides/:id/arriving
+    Driver->>RideSvc: POST /rides/:id/start
+    RideSvc->>Track: initTripTracking(ride)
+    RideSvc->>Kafka: publish RIDE_STARTED
+
+    loop During trip
+        Driver->>Socket: location_update
+        Socket->>RideSvc: handleDriverLocationUpdate
+        RideSvc->>Track: updateTripProgress
+        RideSvc->>GpsSvc: bufferGpsPing (Redis RPUSH)
+        Track->>Kafka: publish DRIVER_LOCATION (phase=trip)
+    end
+
+    Note over GpsSvc: BullMQ gps-ping-flush job (every 60s)<br/>flushRidePings: classify noise/gap, bulk insert trip_gps_pings
+
+    Driver->>RideSvc: POST /rides/:id/complete
+    RideSvc->>RideSvc: recompute final fare from actual duration
+    RideSvc->>Kafka: publish RIDE_COMPLETED
+    RideSvc->>FinalizeJob: finalizeTripDistance(rideId) [fire-and-forget]
+
+    FinalizeJob->>GpsSvc: flush remaining pings
+    FinalizeJob->>FinalizeJob: computeCumulativeTripDistance + recomputeActualFare
+    alt deviation within threshold (<=20%)
+        FinalizeJob->>PaySvc: auto-bill recomputed actual fare
+    else deviation exceeds threshold (>20%)
+        FinalizeJob->>Flagged: insert flagged_trips (status=pending_review)
+        Note over Flagged: held for manual admin approve/adjust
+    end
+
+    Rider->>PaySvc: POST /ride-payments/:rideId/initiate
+    PaySvc->>Gateway: createOrder / PaymentIntent
+    Gateway-->>Rider: payment UI (checkout)
+    Rider->>PaySvc: POST /ride-payments/:rideId/verify
+    PaySvc->>Gateway: verifyPayment (HMAC / intent status)
+    Gateway->>PaySvc: webhook (payment.captured / payment_intent.succeeded)
+    PaySvc->>PaySvc: markRidePaid
+    PaySvc->>Kafka: publish PAYMENT_SUCCESS
+    Kafka->>Socket: notification-service consumer sends FCM push
+    Socket-->>Rider: ride:completed + payment confirmation
+
+    Rider->>RideSvc: POST /rides/:id/rate
+    RideSvc->>RideSvc: update driver rolling rating average

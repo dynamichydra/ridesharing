@@ -1,6 +1,7 @@
 import { Queue, Worker } from 'bullmq';
 import { redis } from '../config/redis.js';
 import { expireOverdueSubscriptions } from '../modules/subscription/subscription.service.js';
+import { flushRidePings, listActiveGpsRides } from '../modules/trip-gps/gps-ping.service.js';
 
 const connection = redis;
 
@@ -53,7 +54,40 @@ rideTimeoutWorker.on('failed', (job, err) => {
   console.error('[Job] ride-timeout failed:', err.message);
 });
 
+// ── GPS ping flush job ────────────────────────────────────────────────────────
+// Periodically drains every in-progress trip's Redis ping buffer into
+// trip_gps_pings, so a long-running trip's buffer doesn't grow unbounded in
+// Redis and billing-relevant data survives a mid-trip restart. The trip-end
+// finalize job (trip-gps/finalize-trip.job.js) does one last flush of its own
+// to catch anything buffered since the last periodic run.
+
+const gpsFlushQueue = new Queue('gps-ping-flush', { connection });
+
+export async function scheduleGpsFlush() {
+  await gpsFlushQueue.obliterate({ force: true }).catch(() => { });
+  await gpsFlushQueue.add('flush-active-trips', {}, { repeat: { every: 60_000 } }); // every 60s
+  console.log('✅ GPS ping flush job scheduled (every 60s)');
+}
+
+const gpsFlushWorker = new Worker(
+  'gps-ping-flush',
+  async () => {
+    const rideIds = await listActiveGpsRides();
+    for (const rideId of rideIds) {
+      await flushRidePings(rideId).catch((err) =>
+        console.error(`[Job] flushRidePings failed for ride ${rideId}:`, err.message),
+      );
+    }
+  },
+  { connection },
+);
+
+gpsFlushWorker.on('failed', (job, err) => {
+  console.error('[Job] gps-ping-flush failed:', err.message);
+});
+
 export async function startJobs() {
   await scheduleSubscriptionExpiry();
+  await scheduleGpsFlush();
   console.log('✅ BullMQ workers running');
 }

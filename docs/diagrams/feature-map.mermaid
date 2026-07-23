@@ -1,0 +1,203 @@
+%% RideShare Platform — Full Feature Map
+%% Every backend module, every portal feature, every mobile feature.
+
+mindmap
+  root((RideShare<br/>Platform))
+    (Backend API)
+      [Auth]
+        Rider phone OTP login
+        Driver mobile OTP + device sessions
+        Driver email OTP
+        JWT access + Redis refresh tokens
+        Admin login
+        Device revoke / list
+      [Driver]
+        Profile get/update
+        Driving location update
+        Profile photo upload
+        Registration summary + submit application
+        Go online / offline
+        Location ping + FCM token
+        Admin: list/detail/approve/reject
+        Admin: request more documents
+        Admin: block/unblock
+      [Rider]
+        Profile get/update
+        Ride history
+        FCM token
+        Admin: list/create/update/detail
+      [Onboarding]
+        Dynamic conditional questionnaire
+        Question/option admin CRUD + reorder
+        Answers submit + fetch mine
+        Legal docs versioning + acceptance
+        Multi-language translations
+        Onboarding config bundle endpoint
+      [Documents - KYC]
+        Document type catalog
+        Country/city/vehicle-type requirement scoping
+        Presigned upload URL
+        Driver confirm upload
+        Admin verify approve/reject
+      [Vehicle]
+        Driver vehicle CRUD
+        Single-active-vehicle policy
+        Mirrors to drivers table
+      [Vehicle Type]
+        Global vehicle type catalog
+        Per-country versioned rate cards
+        3-tier rate resolution: exact/category/global
+      [Geo]
+        Countries/states/cities cascading CRUD
+        Public lookup endpoints
+        Default country resolution
+      [Zone]
+        Geofenced polygons
+        H3 hex cell generation
+        Point-in-polygon detect
+        Zone precedence sorting
+      [Fare]
+        Fare estimate single + all vehicle types
+        Time/traffic/zone/demand fare rules
+        Tax rules per country/state
+        Redis-cached calculation
+      [Matching - internal]
+        Expanding ring search 5/10/15km
+        Distance+rating+acceptance scoring
+        Redis H3 driver geo-index
+        Driver lock service
+        Configurable matching weights
+      [Ride]
+        Request/accept/arrive/start/complete/cancel
+        Rider rating of driver
+        Ride offers per ring, status history
+        Admin list + admin cancel
+      [Ride Payment]
+        Online initiate/verify via gateway
+        Cash collection by driver
+        Webhook handling
+        Invoice generation
+      [Tracking]
+        Approach-phase route + ETA
+        Trip-phase progress percentage
+        Redis-backed live state
+      [Trip GPS]
+        GPS ping buffering in Redis
+        Noise/gap classification
+        Actual distance/fare recomputation
+        Fare deviation flagging
+        Admin flagged-trip review approve/adjust
+      [Subscription - driver]
+        Plan catalog per country
+        Initiate/verify payment
+        Auto-expiry daily job
+        Gates driver go-online
+      [Rider Subscription]
+        Rider membership plan catalog
+        Initiate/verify payment
+        Auto-expiry daily job
+      [Wallet]
+        Driver + rider balance ledger
+        Admin credit/debit adjustment
+        Transaction history
+      [Admin]
+        Dashboard aggregate stats
+        Ride/subscription stats
+        Audit log viewer
+      [Payment - internal]
+        Razorpay gateway adapter
+        Stripe gateway adapter
+        Currency-to-gateway mapping
+      [Notification - internal]
+        FCM push single + multicast
+        Console fallback in dev
+      [Infra]
+        Kafka 18 topics event bus
+        BullMQ scheduled jobs
+        Socket.IO driver/rider namespaces
+        Prometheus metrics endpoint
+        S3-compatible file storage
+        Google Maps routing + ETA
+    (Admin Portal)
+      [Dashboard]
+        Stat tiles
+        Ride analytics chart
+      [Users - Riders]
+        List/search/filter/export
+        Bulk block/unblock
+        Detail: wallet + subscription + rides
+      [Drivers Approval]
+        List/search/filter/export
+        Bulk approve
+        Approve/reject/block/unblock
+        Document review approve/reject
+        Request more documents
+      [Rides Management]
+        List/filter/export
+        Details: timeline + offers/bids
+        Admin cancel with reason
+      [Ride Payments]
+        List/filter by status/gateway/method
+        Payment history per ride
+        Invoice download
+      [Vehicle Types]
+        CRUD + enable/disable
+        Per-country pricing form
+      [Zones Geofence]
+        CRUD + enable/disable
+        Detect-zone tool
+      [Locations]
+        Countries/states/cities tabs
+        Cascading dropdowns reused platform-wide
+      [Fare Rules]
+        CRUD dynamic by rule type
+        View details dialog
+      [Subscription Plans]
+        Driver plan CRUD
+      [Rider Plans]
+        Rider plan CRUD
+      [Wallets]
+        List all wallets
+        Adjust balance dialog
+      [Audit Log]
+        Read-only filterable log
+      [Onboarding Config]
+        Document types + requirements
+        Questions + options + conditions
+        Legal document publishing
+      [Shared Infra]
+        AutoFilters URL-synced filters
+        Generic DataTable
+        Global Cmd+K search
+        CSV export
+        Idle-timeout auto logout
+    (Rider Mobile App)
+      [Auth]
+        Splash/onboarding carousel
+        Phone login + OTP
+        Signup + forgot password
+      [Home]
+        Map landing screen
+        Place search
+        Navigation drawer
+      [Booking]
+        Pickup/destination selection
+        Vehicle options + fare calc
+        Ride confirmation
+      [Ride Tracking]
+        Simulated driver approach
+        Trip-in-progress map
+        Cancel ride
+      [Wallet]
+        Balance + transactions
+        Add funds
+      [Profile]
+        View/edit profile
+        Ride history + receipts
+        Saved places
+        Payment methods
+        Settings incl dark mode
+        Help/FAQ
+      [Notifications]
+        Inbox list
+        Mark read / delete

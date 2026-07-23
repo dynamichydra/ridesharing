@@ -32,3 +32,7 @@ export * from './ride_offers.js';
 export * from './ride_status_history.js';
 export * from './admins.js';
 export * from './audit-logs.js';
+export * from './matching-weights.js';
+export * from './driver-rider-blocks.js';
+export * from './trip-gps-pings.js';
+export * from './flagged-trips.js';

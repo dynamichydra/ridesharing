@@ -3,6 +3,7 @@ import { users } from './users.js';
 import { drivers } from './drivers.js';
 import { vehicleTypes } from './vehicle-types.js';
 import { countries } from './countries.js';
+import { vehicleTypePricing } from './vehicle-type-pricing.js';
 
 export const rides = pgTable('rides', {
   id:             uuid('id').primaryKey().defaultRandom(),
@@ -18,10 +19,16 @@ export const rides = pgTable('rides', {
   dropLng:        decimal('drop_lng', { precision: 11, scale: 8 }).notNull(),
   dropAddress:    text('drop_address'),
   fareSnapshot:   jsonb('fare_snapshot'),         // full breakdown stored at ride time
+  ratePricingId:  uuid('rate_pricing_id').references(() => vehicleTypePricing.id), // exact rate-card row/version resolved at request time — traceable even after the card is later superseded
+  appliedFareRuleIds: text('applied_fare_rule_ids').array(), // fare_rules ids applied at request time (surge/zone/time/traffic)
   estimatedFareMinor: integer('estimated_fare_minor'),
   finalFareMinor:     integer('final_fare_minor'),
   distanceKm:     decimal('distance_km',    { precision: 8, scale: 3 }),
   durationMin:    integer('duration_min'),
+  actualDistanceKm:       decimal('actual_distance_km', { precision: 8, scale: 3 }), // GPS-derived, from trip_gps_pings
+  actualDurationMin:      integer('actual_duration_min'),
+  gpsPingCount:           integer('gps_ping_count'),
+  gpsNoiseRejectedCount:  integer('gps_noise_rejected_count'),
   polyline:       text('polyline'),               // encoded Google route
   status:         varchar('status').default('requested'),
   // requested | searching | accepted | arriving | started | completed | cancelled | expired

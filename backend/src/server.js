@@ -28,6 +28,7 @@ import { documentsRoutes } from './modules/documents/documents.routes.js';
 import { vehicleRoutes } from './modules/vehicle/vehicle.routes.js';
 import { onboardingRoutes } from './modules/onboarding/onboarding.routes.js';
 import { devStorageRoutes } from './modules/dev-storage/dev-storage.routes.js';
+import { flaggedTripRoutes } from './modules/trip-gps/flagged-trip.routes.js';
 
 const PREFIX = `/api/${env.API_VERSION}`;
 
@@ -69,6 +70,7 @@ async function build() {
   await app.register(vehicleRoutes, { prefix: `${PREFIX}/vehicles` });
   await app.register(onboardingRoutes, { prefix: `${PREFIX}/onboarding` });
   await app.register(devStorageRoutes, { prefix: `${PREFIX}/dev-storage` });
+  await app.register(flaggedTripRoutes, { prefix: `${PREFIX}/flagged-trips` });
 
   app.get('/health', async () => ({
     SUCCESS: true,

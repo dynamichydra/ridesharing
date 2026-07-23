@@ -1,7 +1,9 @@
-import { eq, and, inArray, asc, desc, count } from 'drizzle-orm';
+import { eq, and, inArray, asc, desc, count, sql } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { rideOffers } from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
+import { redis, REDIS_KEYS } from '../../config/redis.js';
+import { releaseLocks } from '../matching/driver-lock.service.js';
 
 /**
  * Creates one `pending` ride_offer row per candidate driver for a given ring.
@@ -38,6 +40,12 @@ export async function createOffersForRing(rideId, candidates, ring, radiusKm, ex
  * Returns the accepted offer row, or null if the offer was no longer pending
  * (already accepted by someone else / expired) — caller should treat that
  * as a race-condition failure.
+ *
+ * Also releases the per-driver offer lock (driver-lock.service.js) for the
+ * winner and every superseded driver — this is the only correct place to do
+ * so, since the matching ring loop never resumes after a win and can't release
+ * the other candidates' locks itself. Releasing here (rather than waiting out
+ * the lock TTL) lets the losing candidates become offerable again immediately.
  */
 export async function acceptOffer(rideId, driverId) {
     // Atomic: only succeeds if this exact offer is still pending
@@ -53,19 +61,26 @@ export async function acceptOffer(rideId, driverId) {
     if (!accepted) return null; // offer expired or already responded to
 
     // Supersede every other pending offer for this ride (any ring, any driver)
-    await db.update(rideOffers).set({
+    const superseded = await db.update(rideOffers).set({
         status: 'superseded',
         respondedAt: new Date(),
     }).where(and(
         eq(rideOffers.rideId, rideId),
         eq(rideOffers.status, 'pending'),
-    ));
+    )).returning();
+
+    await releaseLocks(
+        [driverId, ...superseded.map((o) => o.driverId)],
+        rideId,
+    ).catch((err) => console.error('[RideOffer] releaseLocks (accept) failed:', err.message));
 
     return accepted;
 }
 
 /**
  * Driver explicitly declines an offer (optional UX — "Decline" button).
+ * Releases that driver's lock immediately so they're offerable again before
+ * the ring's TTL expires.
  */
 export async function rejectOffer(rideId, driverId, reason) {
     const [rejected] = await db.update(rideOffers).set({
@@ -77,7 +92,36 @@ export async function rejectOffer(rideId, driverId, reason) {
         eq(rideOffers.driverId, driverId),
         eq(rideOffers.status, 'pending'),
     )).returning();
+
+    if (rejected) {
+        await releaseLocks([driverId], rideId)
+            .catch((err) => console.error('[RideOffer] releaseLocks (reject) failed:', err.message));
+    }
     return rejected || null;
+}
+
+/**
+ * Acceptance rate over a driver's offer history — used by scoring.service.js.
+ * Cached in Redis (short TTL) since it's read on every ring for every candidate.
+ * New drivers with too little history (<5 offers) get a neutral prior instead
+ * of being penalized for having no track record yet.
+ */
+export async function getAcceptanceRate(driverId) {
+    const cacheKey = REDIS_KEYS.driverAcceptanceRate(driverId);
+    const cached = await redis.get(cacheKey);
+    if (cached) return parseFloat(cached);
+
+    const [row] = await db.select({
+        total: count(),
+        accepted: sql`count(*) filter (where ${rideOffers.status} = 'accepted')`,
+    }).from(rideOffers).where(eq(rideOffers.driverId, driverId));
+
+    const total = Number(row?.total ?? 0);
+    const accepted = Number(row?.accepted ?? 0);
+    const rate = total < 5 ? 0.8 : accepted / total;
+
+    await redis.setex(cacheKey, 300, String(rate));
+    return rate;
 }
 
 /**

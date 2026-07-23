@@ -21,6 +21,26 @@ export const REDIS_KEYS = {
   driverLocation: (id) => `driver:loc:${id}`,          // TTL 30s  {lat,lng}
   driverRideActive: (id) => `driver:ride:${id}`,          // TTL 7200s {rideId, riderId}
 
+  // Driver H3 availability index (matching) — no TTL, actively maintained on
+  // go_online/go_offline/location_update/disconnect/accept, not time-based
+  driverHexIndex: (resolution, cell) => `driver:hex:${resolution}:${cell}`, // SET of available driverIds
+  driverHexCurrent: (driverId) => `driver:hex:current:${driverId}`,     // {resolution,cell,updatedAt} JSON
+  driverHexResolutions: 'driver:hex:resolutions',                 // SET of resolutions in use
+
+  // Per-driver distributed offer lock — prevents a driver being offered two
+  // concurrent rides. TTL = ring accept-timeout window.
+  driverOfferLock: (driverId) => `driver:lock:${driverId}`,       // value = rideId holding the lock
+
+  // Acceptance-rate cache (derived from ride_offers, not a separate counter)
+  driverAcceptanceRate: (driverId) => `driver:acceptrate:${driverId}`, // TTL 300s
+
+  // Matching weights config cache
+  matchingWeights: 'matching:weights:active',              // TTL 300s
+
+  // GPS ping buffer — batch-flushed to Postgres by a BullMQ worker
+  gpsPingBuffer: (rideId) => `ride:gps:buffer:${rideId}`,          // Redis LIST, no TTL (drained then deleted)
+  gpsActiveRides: 'ride:gps:active',                       // SET of rideIds currently buffering pings — periodic worker's scan list
+
   // Ride
   rideRequest: (id) => `ride:req:${id}`,             // TTL = ring window + 5s
   rideProgress: (id) => `ride:progress:${id}`,        // TTL 7200s live progress snapshot

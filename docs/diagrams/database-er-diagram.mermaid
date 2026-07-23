@@ -1,0 +1,666 @@
+%% RideShare Platform — Full Database ER Diagram
+%% Every table in backend/drizzle/schema/, every column, every relationship.
+%% NOTE: Postgres has no native enum types in this schema — all "enum-like" columns
+%% are varchar with allowed values documented as comments in this diagram.
+%% Generated from backend/drizzle/schema/*.js — keep in sync when schema changes.
+
+erDiagram
+
+    %% ===================== GEO / LOCALIZATION =====================
+
+    countries {
+        uuid id PK
+        varchar name
+        varchar iso_code UK "ISO 3166-1 alpha-2"
+        varchar dial_code
+        varchar currency_code "ISO 4217"
+        varchar default_language_code
+        varchar timezone "default UTC"
+        integer rounding_increment_minor
+        boolean is_default
+        boolean is_active
+        integer sort_order
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    states {
+        uuid id PK
+        uuid country_id FK
+        varchar name
+        varchar code
+        boolean is_active
+        timestamp created_at
+    }
+
+    cities {
+        uuid id PK
+        uuid state_id FK
+        uuid country_id FK
+        varchar name
+        varchar timezone
+        boolean is_active
+        integer sort_order
+        uuid created_by
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    zones {
+        uuid id PK
+        uuid country_id FK
+        varchar name
+        varchar type "city surge airport highway metro restricted custom"
+        jsonb polygon "GeoJSON, source of truth"
+        text_array hex_cells "derived H3 cell ids"
+        integer resolution "H3 resolution"
+        integer priority "overlap precedence"
+        decimal multiplier
+        varchar description
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    languages {
+        varchar code PK
+        varchar name
+        varchar native_name
+        boolean is_rtl
+        boolean is_active
+        boolean is_default
+    }
+
+    translations {
+        uuid id PK
+        varchar entity_type "polymorphic"
+        uuid entity_id "polymorphic, no FK"
+        varchar field_name "label description placeholder"
+        varchar language_code FK
+        text value
+        timestamp updated_at
+    }
+
+    %% ===================== USERS / DRIVERS / ADMINS =====================
+
+    users {
+        uuid id PK
+        varchar phone UK
+        varchar name
+        varchar email UK
+        text avatar
+        text fcm_token
+        boolean is_verified
+        boolean is_blocked
+        decimal rating "default 5.00"
+        varchar total_rides
+        uuid country_id FK
+        uuid state_id FK
+        uuid city_id FK
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    drivers {
+        uuid id PK
+        varchar phone UK
+        varchar name
+        varchar email UK
+        text profile_photo
+        date date_of_birth
+        varchar gender
+        varchar referral_code
+        uuid referred_by_driver_id "self-ref, no FK constraint"
+        varchar preferred_language_code
+        uuid country_id FK
+        uuid state_id FK
+        uuid city_id FK
+        varchar registration_status "new..approved..active"
+        integer registration_step "0-12"
+        varchar license_number
+        text license_doc
+        varchar aadhar_number
+        text aadhar_doc
+        uuid vehicle_type_id FK "mirror of active vehicle"
+        varchar vehicle_number
+        varchar vehicle_model
+        text vehicle_photo
+        varchar vehicle_year
+        varchar approval_status "pending approved rejected"
+        text approval_note
+        uuid approved_by
+        timestamp approved_at
+        boolean is_online
+        boolean is_blocked
+        decimal current_lat
+        decimal current_lng
+        timestamp last_location_at
+        text fcm_token
+        decimal rating "default 5.00"
+        smallint total_ratings
+        integer total_rides
+        varchar subscription_status "active inactive expired"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    admins {
+        uuid id PK
+        varchar email UK
+        text password "bcrypt hash"
+        varchar name
+        varchar role "admin super_admin"
+        boolean is_active
+        timestamp last_login_at
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    driver_devices {
+        uuid id PK
+        uuid driver_id FK
+        varchar device_id "client fingerprint, unique w/ driver_id"
+        varchar platform "ios android"
+        text fcm_token
+        varchar ip
+        timestamp last_login_at
+        boolean is_revoked
+        timestamp created_at
+    }
+
+    %% ===================== DRIVER ONBOARDING & DOCUMENTS =====================
+
+    onboarding_questions {
+        uuid id PK
+        varchar code UK
+        varchar question_type "single_choice multiple_choice dropdown yes_no rating text number date"
+        boolean is_required
+        integer sort_order
+        boolean is_active
+        uuid country_id FK "null = global"
+        integer min_value
+        integer max_value
+        uuid depends_on_question_id FK "self-referential"
+        varchar depends_on_operator "equals not_equals in gt lt"
+        jsonb depends_on_value
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    onboarding_question_options {
+        uuid id PK
+        uuid question_id FK
+        varchar code "stable value key"
+        integer sort_order
+        boolean is_active
+    }
+
+    driver_onboarding_answers {
+        uuid id PK
+        uuid driver_id FK
+        uuid question_id FK
+        jsonb answer_value "unique w/ driver_id+question_id"
+        timestamp answered_at
+    }
+
+    document_types {
+        uuid id PK
+        varchar code UK
+        boolean requires_front
+        boolean requires_back
+        boolean requires_pdf
+        boolean requires_expiry
+        boolean requires_doc_number
+        integer max_file_size_mb
+        boolean is_active
+        integer sort_order
+    }
+
+    document_type_requirements {
+        uuid id PK
+        uuid document_type_id FK
+        uuid country_id FK "null = all countries"
+        uuid city_id FK "null = all cities"
+        uuid vehicle_type_id FK "null = all vehicle types"
+        boolean is_required
+    }
+
+    driver_documents {
+        uuid id PK
+        uuid driver_id FK
+        uuid document_type_id FK
+        text front_url
+        text back_url
+        text pdf_url
+        varchar document_number
+        timestamp expiry_date
+        varchar status "pending approved rejected expired"
+        text rejection_reason
+        uuid verified_by FK
+        timestamp verified_at
+        timestamp uploaded_at
+    }
+
+    legal_documents {
+        uuid id PK
+        varchar type "terms privacy_policy"
+        varchar version
+        uuid country_id FK "null = global default"
+        text content_url
+        timestamp effective_from
+        boolean is_active
+        timestamp created_at
+    }
+
+    driver_legal_acceptances {
+        uuid id PK
+        uuid driver_id FK
+        uuid legal_document_id FK
+        timestamp accepted_at
+        varchar ip
+        text user_agent
+    }
+
+    %% ===================== VEHICLES & PRICING =====================
+
+    vehicle_types {
+        uuid id PK
+        varchar name "Bike Auto Cab"
+        varchar slug UK
+        text icon
+        integer capacity
+        integer sort_order
+        boolean is_active
+        uuid created_by
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    driver_vehicles {
+        uuid id PK
+        uuid driver_id FK
+        uuid vehicle_type_id FK
+        varchar brand
+        varchar model
+        varchar year
+        varchar color
+        varchar registration_number UK
+        varchar vin
+        integer seats
+        varchar fuel_type "petrol diesel electric hybrid cng"
+        varchar transmission "manual automatic"
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    vehicle_type_pricing {
+        uuid id PK
+        uuid vehicle_type_id FK
+        uuid country_id FK
+        varchar fuel_type "nullable, category fallback"
+        integer version "versioned rate card"
+        varchar currency_code
+        integer base_rate_minor
+        integer per_km_rate_minor
+        integer per_min_rate_minor
+        integer min_fare_minor
+        boolean is_active
+        timestamp effective_from
+        timestamp effective_to "null = currently active"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    fare_rules {
+        uuid id PK
+        varchar name
+        uuid country_id FK "null = every country"
+        uuid vehicle_type_id FK "null = all types"
+        uuid zone_id FK "null = all zones"
+        varchar rule_type "time traffic zone demand"
+        time start_time
+        time end_time
+        integer_array days_of_week "0-6, null = all days"
+        integer traffic_delay_s
+        decimal multiplier
+        integer flat_fare_minor "overrides computed fare"
+        uuid_array allowed_vehicle_type_ids
+        integer priority
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    tax_rules {
+        uuid id PK
+        uuid country_id FK
+        uuid state_id FK "null = whole country"
+        varchar name "GST HST PST"
+        varchar applies_to "fare subscription both"
+        decimal rate "0.1300 = 13pct"
+        boolean is_inclusive
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    %% ===================== RIDES / MATCHING / GPS / SAFETY =====================
+
+    rides {
+        uuid id PK
+        uuid rider_id FK
+        uuid driver_id FK "nullable until matched"
+        uuid vehicle_type_id FK
+        uuid country_id FK
+        varchar currency_code
+        decimal pickup_lat
+        decimal pickup_lng
+        text pickup_address
+        decimal drop_lat
+        decimal drop_lng
+        text drop_address
+        jsonb fare_snapshot "full breakdown at ride time"
+        uuid rate_pricing_id FK "exact rate-card row used"
+        text_array applied_fare_rule_ids "logical ref, no FK"
+        integer estimated_fare_minor
+        integer final_fare_minor
+        decimal distance_km
+        integer duration_min
+        decimal actual_distance_km "GPS-derived"
+        integer actual_duration_min
+        integer gps_ping_count
+        integer gps_noise_rejected_count
+        text polyline "encoded Google route"
+        varchar status "requested searching accepted arriving started completed cancelled expired"
+        varchar payment_method "online cash"
+        varchar payment_status "pending processing paid failed"
+        varchar cancelled_by "rider driver system"
+        text cancel_reason
+        smallint rider_rating
+        smallint driver_rating
+        text rider_review
+        text driver_review
+        timestamp requested_at
+        timestamp accepted_at
+        timestamp started_at
+        timestamp completed_at
+        timestamp cancelled_at
+    }
+
+    ride_offers {
+        uuid id PK
+        uuid ride_id FK
+        uuid driver_id FK "nullable until matched"
+        varchar status "pending accepted rejected expired superseded"
+        integer ring "matching ring number"
+        decimal radius_km
+        decimal distance_km "driver to pickup at offer time"
+        decimal driver_rating_at_offer
+        decimal score "matching score at offer time"
+        timestamp offered_at
+        timestamp responded_at
+        timestamp expires_at
+        text reject_reason
+        timestamp created_at
+    }
+
+    ride_status_history {
+        uuid id PK
+        uuid ride_id FK
+        varchar from_status
+        varchar to_status
+        varchar changed_by "actor type"
+        uuid changed_by_id "polymorphic actor id"
+        text reason
+        jsonb meta
+        timestamp created_at
+    }
+
+    matching_weights {
+        uuid id PK
+        varchar name
+        decimal distance_weight "default 0.500"
+        decimal rating_weight "default 0.300"
+        decimal acceptance_rate_weight "default 0.200"
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    driver_rider_blocks {
+        uuid id PK
+        uuid rider_id FK
+        uuid driver_id FK
+        text reason "unique w/ rider_id+driver_id"
+        timestamp created_at
+    }
+
+    trip_gps_pings {
+        uuid id PK
+        uuid ride_id FK
+        uuid driver_id FK
+        decimal lat
+        decimal lng
+        decimal accuracy "meters"
+        decimal speed_kmh
+        timestamp recorded_at "client capture time"
+        timestamp received_at "server receipt time"
+        boolean is_noise "failed accuracy/speed filter"
+        boolean gap_flag "time gap since prior ping"
+        timestamp created_at
+    }
+
+    flagged_trips {
+        uuid id PK
+        uuid ride_id FK
+        varchar reason "e.g. fare_deviation"
+        integer estimated_fare_minor
+        integer actual_fare_minor
+        decimal deviation_pct
+        varchar status "pending_review approved adjusted"
+        integer adjusted_fare_minor "admin manual adjustment"
+        text review_note
+        uuid reviewed_by FK
+        timestamp reviewed_at
+        timestamp created_at
+    }
+
+    %% ===================== SUBSCRIPTIONS / PAYMENTS / WALLETS =====================
+
+    subscription_plans {
+        uuid id PK
+        uuid country_id FK
+        varchar name
+        varchar type "monthly quarterly yearly lifetime custom"
+        varchar currency_code
+        integer price_minor
+        integer duration_days "null = lifetime"
+        integer trial_days
+        jsonb features "string array"
+        jsonb vehicle_type_ids "logical ref, not FK"
+        integer max_rides_per_day "null = unlimited"
+        integer sort_order
+        boolean is_active
+        varchar gateway "razorpay stripe"
+        varchar gateway_plan_id
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    subscriptions {
+        uuid id PK
+        uuid driver_id FK
+        uuid plan_id FK
+        varchar status "active expired cancelled trial"
+        timestamp start_date
+        timestamp end_date "null = lifetime"
+        varchar currency_code
+        integer amount_minor "charge snapshot"
+        timestamp cancelled_at
+        varchar cancel_note
+        timestamp created_at
+    }
+
+    rider_subscription_plans {
+        uuid id PK
+        uuid country_id FK
+        varchar name
+        varchar type
+        varchar currency_code
+        integer price_minor
+        integer duration_days "null = lifetime"
+        integer trial_days
+        jsonb features
+        integer sort_order
+        boolean is_active
+        varchar gateway "razorpay stripe"
+        varchar gateway_plan_id
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    rider_subscriptions {
+        uuid id PK
+        uuid rider_id FK
+        uuid plan_id FK
+        varchar status "active expired cancelled trial"
+        timestamp start_date
+        timestamp end_date "null = lifetime"
+        varchar currency_code
+        integer amount_minor
+        timestamp cancelled_at
+        varchar cancel_note
+        timestamp created_at
+    }
+
+    payments {
+        uuid id PK
+        uuid subscription_id FK "nullable"
+        uuid rider_subscription_id FK "nullable"
+        uuid ride_id FK "nullable"
+        uuid country_id FK
+        varchar gateway "razorpay stripe cash"
+        varchar currency_code
+        integer amount_minor
+        varchar status "created captured failed refunded"
+        varchar gateway_order_id
+        varchar gateway_payment_id
+        jsonb metadata
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    wallets {
+        uuid id PK
+        uuid driver_id FK "unique, one of driver/rider set"
+        uuid rider_id FK "unique, one of driver/rider set"
+        integer balance_minor
+        varchar currency_code
+        varchar status "active frozen"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    wallet_transactions {
+        uuid id PK
+        uuid wallet_id FK
+        varchar type "credit debit"
+        integer amount_minor
+        integer balance_after_minor "ledger snapshot"
+        varchar currency_code
+        varchar reason "admin_adjustment ride_refund bonus penalty topup"
+        varchar reference_type "ride subscription manual"
+        uuid reference_id "polymorphic, no FK"
+        text description
+        uuid created_by "admin id, no FK"
+        timestamp created_at
+    }
+
+    %% ===================== ADMIN / AUDIT =====================
+
+    audit_logs {
+        uuid id PK
+        uuid actor_id "polymorphic, no FK"
+        varchar actor_type "admin driver rider system"
+        varchar action
+        varchar entity_type
+        uuid entity_id "polymorphic, no FK"
+        jsonb meta
+        varchar ip
+        text user_agent
+        timestamp created_at
+    }
+
+    %% ===================== RELATIONSHIPS =====================
+
+    countries ||--o{ states : "has"
+    states ||--o{ cities : "has"
+    countries ||--o{ cities : "denormalized"
+    languages ||--o{ translations : "localized as"
+
+    countries ||--o{ drivers : "based in"
+    states ||--o{ drivers : "based in"
+    cities ||--o{ drivers : "based in"
+    countries ||--o{ users : "based in"
+    states ||--o{ users : "based in"
+    cities ||--o{ users : "based in"
+    drivers ||--o{ driver_devices : "logs in from"
+
+    countries ||--o{ onboarding_questions : "scoped to"
+    onboarding_questions ||--o{ onboarding_questions : "depends on"
+    onboarding_questions ||--o{ onboarding_question_options : "offers"
+    drivers ||--o{ driver_onboarding_answers : "answers"
+    onboarding_questions ||--o{ driver_onboarding_answers : "answered via"
+
+    document_types ||--o{ document_type_requirements : "scoped by"
+    countries ||--o{ document_type_requirements : "scopes"
+    cities ||--o{ document_type_requirements : "scopes"
+    vehicle_types ||--o{ document_type_requirements : "scopes"
+    drivers ||--o{ driver_documents : "uploads"
+    document_types ||--o{ driver_documents : "typed as"
+    admins ||--o{ driver_documents : "verifies"
+    countries ||--o{ legal_documents : "published for"
+    drivers ||--o{ driver_legal_acceptances : "accepts"
+    legal_documents ||--o{ driver_legal_acceptances : "accepted via"
+
+    vehicle_types ||--o{ drivers : "primary vehicle type"
+    drivers ||--o{ driver_vehicles : "registers"
+    vehicle_types ||--o{ driver_vehicles : "categorized as"
+    vehicle_types ||--o{ vehicle_type_pricing : "priced as"
+    countries ||--o{ vehicle_type_pricing : "priced in"
+    countries ||--o{ fare_rules : "applies in"
+    vehicle_types ||--o{ fare_rules : "applies to"
+    zones ||--o{ fare_rules : "applies in"
+    countries ||--o{ zones : "contains"
+    countries ||--o{ tax_rules : "taxes"
+    states ||--o{ tax_rules : "taxes"
+
+    users ||--o{ rides : "requests"
+    drivers ||--o{ rides : "drives"
+    vehicle_types ||--o{ rides : "requested as"
+    countries ||--o{ rides : "occurs in"
+    vehicle_type_pricing ||--o{ rides : "rate card used"
+    rides ||--o{ ride_offers : "offered to drivers via"
+    drivers ||--o{ ride_offers : "receives"
+    rides ||--o{ ride_status_history : "transitions logged in"
+    users ||--o{ driver_rider_blocks : "blocks"
+    drivers ||--o{ driver_rider_blocks : "blocked by"
+    rides ||--o{ trip_gps_pings : "tracked via"
+    drivers ||--o{ trip_gps_pings : "reports"
+    rides ||--o{ flagged_trips : "flagged as"
+    admins ||--o{ flagged_trips : "reviews"
+
+    countries ||--o{ subscription_plans : "sold in"
+    drivers ||--o{ subscriptions : "subscribes to"
+    subscription_plans ||--o{ subscriptions : "purchased as"
+    countries ||--o{ rider_subscription_plans : "sold in"
+    users ||--o{ rider_subscriptions : "subscribes to"
+    rider_subscription_plans ||--o{ rider_subscriptions : "purchased as"
+    subscriptions ||--o{ payments : "paid via"
+    rider_subscriptions ||--o{ payments : "paid via"
+    rides ||--o{ payments : "paid via"
+    countries ||--o{ payments : "processed in"
+    drivers ||--o{ wallets : "owns"
+    users ||--o{ wallets : "owns"
+    wallets ||--o{ wallet_transactions : "ledger of"

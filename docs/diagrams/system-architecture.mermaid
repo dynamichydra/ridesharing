@@ -1,0 +1,100 @@
+%% RideShare Platform — System Architecture & Data-Flow
+%% Clients, backend modules, and infra (Postgres/Redis/Kafka/BullMQ/Socket.IO/S3/Maps/Payment gateways)
+
+flowchart TB
+
+    subgraph CLIENTS["Client Applications"]
+        MOBILE["Flutter Rider App<br/>(app/ride_sharing_customer)"]
+        PORTAL["React Admin Portal<br/>(portal/)"]
+        DRIVERSOCK["Driver client<br/>(Socket.IO /driver ns)<br/>no dedicated driver app yet"]
+    end
+
+    subgraph API["Fastify REST API — backend/src (mounted at /api/{version})"]
+        direction TB
+        AUTH["auth — OTP login, JWT issue/refresh, admin login, device sessions"]
+        DRIVERMOD["driver — profile, registration, go-online/offline, admin approve/block"]
+        RIDERMOD["rider — profile, ride history, admin CRUD"]
+        ONBOARD["onboarding — dynamic questionnaire, legal docs, translations"]
+        DOCS["documents — KYC upload, admin verify"]
+        VEHICLE["vehicle / vehicle-type — driver vehicles, type catalog, rate cards"]
+        GEO["geo — countries/states/cities cascading CRUD"]
+        ZONE["zone — geofence polygons, H3 hex index, detect"]
+        FARE["fare — fare estimate engine, fare-rules, tax-rules"]
+        RIDE["ride — request/accept/start/complete/cancel/rate lifecycle"]
+        MATCH["matching (internal) — ring search, scoring, geo-index, driver locks"]
+        TRACK["tracking — approach & trip-phase live location"]
+        GPS["trip-gps (internal) — ping buffering, noise/gap filter, fare reconciliation, flagged-trips admin review"]
+        RIDEPAY["ride-payment — per-ride online/cash payment + invoice"]
+        SUB["subscription — driver membership plans (core monetization)"]
+        RSUB["rider-subscription — rider membership plans"]
+        WALLET["wallet — driver/rider balances, admin adjustments"]
+        ADMIN["admin — dashboard stats, audit log viewer"]
+        PAYINT["payment (internal) — gateway abstraction"]
+        NOTIFINT["notification (internal) — FCM push sender"]
+    end
+
+    subgraph INFRA["Infrastructure"]
+        PG[("PostgreSQL<br/>Drizzle ORM<br/>37 tables")]
+        REDIS[("Redis<br/>OTP, sessions, rate-limit,<br/>geo-index, locks, caches,<br/>GPS ping buffer, BullMQ")]
+        KAFKA{{"Kafka<br/>18 topics (TOPICS enum)"}}
+        BULLMQ["BullMQ Jobs<br/>subscription-expiry (daily)<br/>ride-timeout (safety net)<br/>gps-ping-flush (60s)"]
+        SOCKETIO["Socket.IO<br/>/driver and /rider namespaces"]
+    end
+
+    subgraph EXTERNAL["External Services"]
+        S3["S3-compatible storage<br/>presigned PUT/GET"]
+        MAPS["Google Maps API<br/>Distance Matrix / Directions<br/>(haversine fallback)"]
+        RAZORPAY["Razorpay gateway"]
+        STRIPE["Stripe gateway"]
+        TWILIO["Twilio SMS<br/>(console-log fallback in dev)"]
+        FCM["Firebase Cloud Messaging"]
+    end
+
+    MOBILE -- "REST" --> API
+    MOBILE -- "planned Socket.IO /rider" --> SOCKETIO
+    PORTAL -- "REST (admin JWT)" --> API
+    DRIVERSOCK -- "go_online / location_update / ride:accept" --> SOCKETIO
+
+    RIDE --> MATCH
+    RIDE --> GPS
+    RIDE --> TRACK
+    MATCH -- "candidate lookup" --> REDIS
+    TRACK -- "route cache, position" --> REDIS
+    GPS -- "ping buffer (RPUSH)" --> REDIS
+    GPS -- "flush every 60s" --> BULLMQ
+    GPS -- "recompute + flag" --> RIDEPAY
+
+    AUTH -- "OTP store, refresh tokens" --> REDIS
+    DOCS --> S3
+    DRIVERMOD -- "profile photo" --> S3
+    FARE -- "route/ETA" --> MAPS
+    TRACK -- "route/ETA" --> MAPS
+    MATCH -- "ETA scoring" --> MAPS
+    RIDEPAY --> PAYINT
+    SUB --> PAYINT
+    RSUB --> PAYINT
+    PAYINT --> RAZORPAY
+    PAYINT --> STRIPE
+    AUTH -- "SMS OTP" --> TWILIO
+    NOTIFINT --> FCM
+
+    API -- "Drizzle ORM" --> PG
+
+    RIDE -- "publish RIDE_REQUESTED/ACCEPTED/STARTED/COMPLETED/CANCELLED" --> KAFKA
+    MATCH -- "publish RIDE_MATCHED, NOTIF_PUSH" --> KAFKA
+    DRIVERMOD -- "publish DRIVER_REGISTRATION_SUBMITTED, DRIVER_STATUS_CHANGED, DRIVER_LOCATION" --> KAFKA
+    RIDEPAY -- "publish PAYMENT_SUCCESS" --> KAFKA
+    SUB -- "publish SUBSCRIPTION_ACTIVATED/EXPIRED" --> KAFKA
+    RSUB -- "publish SUBSCRIPTION_ACTIVATED/EXPIRED" --> KAFKA
+    ADMIN -. "AUDIT_LOG consumer writes audit_logs" .-> KAFKA
+
+    KAFKA -- "notification-service consumer" --> NOTIFINT
+    KAFKA -- "audit-service consumer" --> ADMIN
+    KAFKA -- "ride-socket-bridge consumer" --> SOCKETIO
+    KAFKA -. "subscription-service consumer (logging placeholder)" .-> SUB
+
+    SOCKETIO -- "ride:new_request, ride:taken, driver:location,<br/>ride:driver_assigned, ride:started,<br/>ride:completed, ride:cancelled" --> MOBILE
+    SOCKETIO -- "driver location, offer push" --> DRIVERSOCK
+
+    BULLMQ -- "expireOverdueSubscriptions()" --> SUB
+    BULLMQ -- "expireOverdueSubscriptions()" --> RSUB

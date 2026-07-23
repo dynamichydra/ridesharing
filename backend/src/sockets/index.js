@@ -15,6 +15,7 @@ import { redis, REDIS_KEYS } from '../config/redis.js';
 import { publishEvent, TOPICS } from '../config/kafka.js';
 import { setSocketIO } from '../kafka/consumers/index.js';
 import { handleDriverLocationUpdate } from '../modules/ride/ride.service.js';
+import { upsertDriverCell, removeDriverFromIndex } from '../modules/matching/driver-geo-index.service.js';
 
 function verifyJwt(app, token) {
   try { return app.jwt.verify(token); } catch { return null; }
@@ -58,6 +59,7 @@ export function initSocketIO(fastifyServer, app) {
           lastLocationAt: new Date(),
         }).where(eq(drivers.id, driverId));
         await redis.setex(REDIS_KEYS.driverLocation(driverId), 30, JSON.stringify({ lat, lng }));
+        await upsertDriverCell(driverId, lat, lng);
         await publishEvent(TOPICS.DRIVER_STATUS_CHANGED, { driverId, isOnline: true, lat, lng });
         socket.emit('status', { isOnline: true });
       } catch (err) {
@@ -70,6 +72,7 @@ export function initSocketIO(fastifyServer, app) {
     socket.on('go_offline', async () => {
       await db.update(drivers).set({ isOnline: false }).where(eq(drivers.id, driverId));
       await redis.del(REDIS_KEYS.driverLocation(driverId));
+      await removeDriverFromIndex(driverId);
       await publishEvent(TOPICS.DRIVER_STATUS_CHANGED, { driverId, isOnline: false });
       socket.emit('status', { isOnline: false });
     });
@@ -77,14 +80,15 @@ export function initSocketIO(fastifyServer, app) {
     // ── location_update ────────────────────────────────────────────────────
     // Bug 3 fix: attach rideId + riderId from Redis so Kafka consumer can
     //            route this to the correct rider without a DB lookup.
-    socket.on('location_update', async ({ lat, lng }) => {
+    socket.on('location_update', async ({ lat, lng, accuracy, speedKmh, recordedAt }) => {
       try {
         // Always update Redis live position (TTL 30s)
         await redis.setex(REDIS_KEYS.driverLocation(driverId), 30, JSON.stringify({ lat, lng }));
+        await upsertDriverCell(driverId, lat, lng);
 
         // Bug 3 fix: handleDriverLocationUpdate reads {rideId,riderId} from Redis
         //            and calls the correct tracking phase (approach or trip)
-        await handleDriverLocationUpdate(driverId, lat, lng);
+        await handleDriverLocationUpdate(driverId, lat, lng, { accuracy, speedKmh, recordedAt });
 
         // Also write to DB every ~30s by letting Redis expire as the signal
         // (a BullMQ job can batch-flush; here we just keep Redis fresh)
@@ -129,6 +133,7 @@ export function initSocketIO(fastifyServer, app) {
       if (reason !== 'transport error' && reason !== 'ping timeout') {
         await db.update(drivers).set({ isOnline: false }).where(eq(drivers.id, driverId));
         await redis.del(REDIS_KEYS.driverLocation(driverId));
+        await removeDriverFromIndex(driverId);
       }
     });
   });

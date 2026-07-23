@@ -26,6 +26,21 @@ import {
 } from './ride_status_history.service.js';
 import { paginate } from '../../utils/response.js';
 import { fromMinor, formatMoney } from '../../utils/money.js';
+import { removeDriverFromIndex, upsertDriverCell } from '../matching/driver-geo-index.service.js';
+import { bufferGpsPing } from '../trip-gps/gps-ping.service.js';
+import { finalizeTripDistance } from '../trip-gps/finalize-trip.job.js';
+
+/** Re-adds a driver to the available geo-index if they're still online — called
+ * after a ride ends (completed / cancelled-by-driver / cancelled-by-rider/admin
+ * while a driver was already assigned) so they go back to receiving offers. */
+async function reAddToGeoIndexIfOnline(driverId) {
+  const [driver] = await db.select({
+    isOnline: drivers.isOnline, currentLat: drivers.currentLat, currentLng: drivers.currentLng,
+  }).from(drivers).where(eq(drivers.id, driverId)).limit(1);
+  if (driver?.isOnline && driver.currentLat != null && driver.currentLng != null) {
+    await upsertDriverCell(driverId, parseFloat(driver.currentLat), parseFloat(driver.currentLng));
+  }
+}
 
 // ── Rider actions ──────────────────────────────────────────────────────────────
 
@@ -64,6 +79,8 @@ export async function requestRide({
     durationMin: fareData.durationInTrafficMin,
     polyline: fareData.polyline,
     fareSnapshot: fareData,
+    ratePricingId: fareData.ratePricingId,
+    appliedFareRuleIds: fareData.appliedFareRuleIds,
     status: 'searching',
   }).returning();
 
@@ -113,6 +130,8 @@ export async function cancelRideByRider(rideId, riderId, reason) {
     await db.update(drivers).set({ isOnline: true }).where(eq(drivers.id, ride.driverId));
     // Bug 2 fix: driverRideActive now stores JSON, not bare string
     await redis.del(REDIS_KEYS.driverRideActive(ride.driverId));
+    await reAddToGeoIndexIfOnline(ride.driverId)
+      .catch((err) => console.error('[Ride] reAddToGeoIndexIfOnline failed:', err.message));
     await publishEvent(TOPICS.NOTIF_PUSH, {
       userType: 'driver', userId: ride.driverId,
       type: 'RIDE_CANCELLED_BY_RIDER',
@@ -190,6 +209,11 @@ export async function acceptRide(rideId, driverId) {
     JSON.stringify({ rideId, riderId: ride.riderId }),
   );
   await redis.del(REDIS_KEYS.rideRequest(rideId));
+
+  // Driver → on_trip: remove from the available-driver geo-index so they stop
+  // surfacing as a match candidate for other rides.
+  await removeDriverFromIndex(driverId)
+    .catch((err) => console.error('[Ride] removeDriverFromIndex failed:', err.message));
 
   // Driver details for rider notification
   const [driver] = await db.select({
@@ -320,6 +344,17 @@ export async function completeRide(rideId, driverId) {
   await cleanupRideTracking(rideId);
   await db.update(drivers).set({ totalRides: sql`total_rides + 1` })
     .where(eq(drivers.id, driverId));
+  await reAddToGeoIndexIfOnline(driverId)
+    .catch((err) => console.error('[Ride] reAddToGeoIndexIfOnline failed:', err.message));
+
+  // Fire-and-forget (same pattern as computeApproachRoute/initTripTracking above):
+  // recomputes the fare from actual GPS-derived distance/time using the SAME
+  // rate-card version + zone/surge rules stamped on the ride at request time,
+  // and flags the trip for manual review instead of auto-billing if actual
+  // exceeds the estimate by more than the configured deviation tolerance.
+  finalizeTripDistance(rideId).catch((err) =>
+    console.error('[Ride] finalizeTripDistance failed:', err.message),
+  );
 
   await publishEvent(TOPICS.RIDE_COMPLETED, {
     id: rideId, rideId, driverId, riderId: ride.riderId,
@@ -356,6 +391,8 @@ export async function cancelRideByDriver(rideId, driverId, reason) {
 
   await redis.del(REDIS_KEYS.driverRideActive(driverId));
   await cleanupRideTracking(rideId);
+  await reAddToGeoIndexIfOnline(driverId)
+    .catch((err) => console.error('[Ride] reAddToGeoIndexIfOnline failed:', err.message));
 
   // Re-trigger matching from scratch (new ring sweep)
   const [freshRide] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
@@ -374,7 +411,7 @@ export async function cancelRideByDriver(rideId, driverId, reason) {
  * Called by Socket.IO location_update handler.
  * Routes to the correct tracking phase based on current ride status.
  */
-export async function handleDriverLocationUpdate(driverId, lat, lng) {
+export async function handleDriverLocationUpdate(driverId, lat, lng, gpsMeta = {}) {
   // Bug 2 fix: driverRideActive stores {rideId, riderId} JSON
   const raw = await redis.get(REDIS_KEYS.driverRideActive(driverId));
   if (!raw) return; // driver not on a ride — skip
@@ -395,6 +432,12 @@ export async function handleDriverLocationUpdate(driverId, lat, lng) {
     await updateApproachProgress(rideId, riderId, driverId, lat, lng);
   } else if (status === 'started') {
     await updateTripProgress(rideId, riderId, driverId, lat, lng);
+    // Buffer for billing/audit — separate from the live progress display above.
+    // Buffered in Redis and batch-flushed by a BullMQ worker (see trip-gps/
+    // gps-ping.service.js) rather than inserted per-ping, matching this same
+    // handler's original comment about avoiding a DB write on every tick.
+    await bufferGpsPing(rideId, driverId, lat, lng, gpsMeta)
+      .catch((err) => console.error('[Ride] bufferGpsPing failed:', err.message));
   }
   // If status is searching/completed/cancelled — no-op
 }
@@ -494,6 +537,8 @@ export async function cancelRideByAdmin(rideId, adminId, reason) {
   if (ride.driverId) {
     await db.update(drivers).set({ isOnline: true }).where(eq(drivers.id, ride.driverId));
     await redis.del(REDIS_KEYS.driverRideActive(ride.driverId));
+    await reAddToGeoIndexIfOnline(ride.driverId)
+      .catch((err) => console.error('[Ride] reAddToGeoIndexIfOnline failed:', err.message));
     await publishEvent(TOPICS.NOTIF_PUSH, {
       userType: 'driver', userId: ride.driverId,
       type: 'RIDE_CANCELLED_BY_ADMIN',

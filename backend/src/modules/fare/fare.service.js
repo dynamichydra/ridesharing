@@ -6,7 +6,7 @@ import { detectZone } from '../zone/zone.service.js';
 import { resolveHexZones } from '../zone/hex-zone.service.js';
 import { getActiveRulesForVehicle } from './fare-rules.service.js';
 import { getApplicableTaxRules } from './tax-rules.service.js';
-import { getRate } from '../vehicle-type/vehicle-type-pricing.service.js';
+import { resolveRateCard } from '../vehicle-type/vehicle-type-pricing.service.js';
 import { getDefaultCountry, getCountryById } from '../geo/geo.service.js';
 import { isTimeInRange } from '../../utils/time.js';
 import { getRouteData } from '../../utils/maps.js';      // shared — no duplicate Client
@@ -45,8 +45,12 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
   const hexZones   = await resolveHexZones(parseFloat(pickupLat), parseFloat(pickupLng));
   const hexZoneIds = new Set(hexZones.map((z) => z.id));
 
-  // 3. Country-specific rate card for this vehicle type
-  const pricing = await getRate(vehicleTypeId, country.id);
+  // 3. Country-specific rate card for this vehicle type. fuelType is always null
+  // here — the specific vehicle (and its fuel type) isn't known until a driver is
+  // matched after this quote, so only the category-level tier is reachable today;
+  // the fuelType-exact tier is schema-ready for a future rider-facing selection
+  // feature (see vehicle-type-pricing.service.js's resolveRateCard doc comment).
+  const pricing = await resolveRateCard(vehicleTypeId, country.id, null);
 
   // 4. Route data (shared utility)
   const route = await getRouteData(
@@ -69,6 +73,7 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
   let   surgeMultiplier = 1.0;
   let   flatFareMinor   = null; // set by a zone rule's flatFareMinor; highest-priority match wins
   const appliedSurges  = [];
+  const appliedFareRuleIds = []; // ride audit trail — traces to the exact fare_rules rows applied
 
   for (const rule of rules) {
     let matches = false;
@@ -95,6 +100,7 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
         name: rule.name, ruleType: rule.ruleType, multiplier: rule.multiplier,
         ...(rule.flatFareMinor != null ? { flatFareMinor: rule.flatFareMinor } : {}),
       });
+      appliedFareRuleIds.push(rule.id);
     }
   }
 
@@ -118,6 +124,9 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
     vehicleTypeName: vt.name,
     countryId:   country.id,
     currencyCode,
+    ratePricingId: pricing.id,       // exact rate-card row/version resolved — stamped onto rides.ratePricingId
+    ratePricingTier: pricing.resolutionTier, // exact | category | global — see resolveRateCard's fallback chain
+    appliedFareRuleIds,              // stamped onto rides.appliedFareRuleIds
     distanceKm:      parseFloat(distanceKm.toFixed(3)),
     durationMin,
     durationInTrafficMin,

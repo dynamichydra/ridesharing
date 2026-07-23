@@ -9,6 +9,7 @@ import swaggerUI from '@fastify/swagger-ui';
 import { env } from '../config/env.js';
 import { redis } from '../config/redis.js';
 import fastifyRawBody from 'fastify-raw-body';
+import { registerMetrics } from './metrics.js';
 
 export async function registerPlugins(app) {
   // Raw body — must be registered before JSON parser (needed for Razorpay webhook HMAC)
@@ -56,6 +57,8 @@ export async function registerPlugins(app) {
     },
   });
   await app.register(swaggerUI, { routePrefix: '/docs' });
+
+  await registerMetrics(app);
 
   app.setErrorHandler((error, request, reply) => {
     app.log.error(error);

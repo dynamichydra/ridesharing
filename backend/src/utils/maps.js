@@ -20,8 +20,13 @@
 import { Client } from '@googlemaps/google-maps-services-js';
 import { haversineKm } from './geo.js';
 import { env } from '../config/env.js';
+import { metrics } from './metrics.js';
 
 const mapsClient = new Client({});
+
+// Google Distance Matrix's per-request destination cap — callers of getEtaMatrix
+// must keep their candidate pool at or below this.
+export const ETA_MATRIX_MAX_DESTINATIONS = 25;
 
 // ── internal ──────────────────────────────────────────────────────────────────
 
@@ -85,8 +90,8 @@ async function _directions(origin, destination) {
  */
 export async function getRouteData(originLat, originLng, destLat, destLng) {
   if (!env.GOOGLE_MAPS_KEY) {
-    console.log("CALLLLLLLLLLL");
-    
+    metrics.routingFallbackTotal.inc({ source: 'route' });
+
     // Dev fallback — straight-line estimate
     const distanceKm = haversineKm(originLat, originLng, destLat, destLng);
     const durationMin = Math.ceil((distanceKm / 25) * 60); // 25 km/h avg city speed
@@ -129,6 +134,69 @@ export async function getRouteData(originLat, originLng, destLat, destLng) {
   const bounds = route?.bounds ?? null;
 
   return { distanceKm, durationMin, durationInTrafficMin, trafficDelayS, polyline, decodedPath, bounds };
+}
+
+/**
+ * Real, traffic-aware ETA to multiple candidate drivers in a SINGLE Distance
+ * Matrix call (one origin, many destinations) — used by matching's scoring step
+ * instead of straight-line distance. This keeps routing cost at one API call per
+ * matching ring regardless of candidate count, rather than one call per candidate,
+ * which would multiply cost by up to MAX_CANDIDATES-buffer at hyper-scale volume.
+ *
+ * Falls back to a Haversine+flat-speed estimate per destination (same degraded
+ * path as getRouteData) when GOOGLE_MAPS_KEY is unset — logged as degraded so
+ * matching quality regressions in that mode are visible, not silent.
+ *
+ * @param {Array<{lat:number,lng:number}>} destinations — capped to ETA_MATRIX_MAX_DESTINATIONS
+ * @returns {Promise<Array<{etaMin:number, distanceKm:number, degraded:boolean}>>} same order as `destinations`
+ */
+export async function getEtaMatrix(originLat, originLng, destinations) {
+  if (destinations.length > ETA_MATRIX_MAX_DESTINATIONS) {
+    throw new Error(`getEtaMatrix: ${destinations.length} destinations exceeds cap of ${ETA_MATRIX_MAX_DESTINATIONS}`);
+  }
+  if (destinations.length === 0) return [];
+
+  if (!env.GOOGLE_MAPS_KEY) {
+    console.warn('[Maps] getEtaMatrix degraded: GOOGLE_MAPS_KEY unset, using Haversine+flat-speed fallback');
+    metrics.routingFallbackTotal.inc({ source: 'eta_matrix' }, destinations.length);
+    return destinations.map((d) => {
+      const distanceKm = haversineKm(originLat, originLng, d.lat, d.lng);
+      return { etaMin: Math.ceil((distanceKm / 25) * 60), distanceKm, degraded: true };
+    });
+  }
+
+  try {
+    const res = await mapsClient.distancematrix({
+      params: {
+        origins: [`${originLat},${originLng}`],
+        destinations: destinations.map((d) => `${d.lat},${d.lng}`),
+        departure_time: 'now',
+        traffic_model: 'best_guess',
+        key: env.GOOGLE_MAPS_KEY,
+      },
+    });
+    const elements = res.data.rows[0].elements;
+    return elements.map((el, i) => {
+      if (el.status !== 'OK') {
+        metrics.routingFallbackTotal.inc({ source: 'eta_matrix' });
+        const distanceKm = haversineKm(originLat, originLng, destinations[i].lat, destinations[i].lng);
+        return { etaMin: Math.ceil((distanceKm / 25) * 60), distanceKm, degraded: true };
+      }
+      const durationS = el.duration_in_traffic?.value ?? el.duration.value;
+      return {
+        etaMin: Math.ceil(durationS / 60),
+        distanceKm: el.distance.value / 1000,
+        degraded: false,
+      };
+    });
+  } catch (error) {
+    console.error('[Maps] getEtaMatrix failed, falling back to Haversine for entire batch:', error.message);
+    metrics.routingFallbackTotal.inc({ source: 'eta_matrix' }, destinations.length);
+    return destinations.map((d) => {
+      const distanceKm = haversineKm(originLat, originLng, d.lat, d.lng);
+      return { etaMin: Math.ceil((distanceKm / 25) * 60), distanceKm, degraded: true };
+    });
+  }
 }
 
 /**
@@ -187,4 +255,41 @@ export function computeRouteProgress(driverLat, driverLng, decodedPath, totalDis
   const progressPct = Math.min(100, Math.round((coveredKm / totalDistanceKm) * 100));
 
   return { coveredKm: parseFloat(coveredKm.toFixed(3)), remainingKm: parseFloat(remainingKm.toFixed(3)), progressPct, nearestIdx };
+}
+
+/**
+ * Actual billed distance for a completed trip, derived from GPS pings rather
+ * than the upfront estimate. This is polyline-projection (nearest point on the
+ * PLANNED route, reusing computeRouteProgress above), not true snap-to-road —
+ * a real map-matching engine (Google Roads API / self-hosted OSRM/Valhalla
+ * `match`) is a deferred infra decision, flagged in the README, not silently
+ * presented as full map-matching.
+ *
+ * Walks non-noise pings in chronological order and tracks the MONOTONIC max
+ * progress-so-far along the route, so GPS jitter (a ping landing slightly
+ * "behind" the previous one) can't cause double-counted back-and-forth distance.
+ * A ping flagged as following a large time gap doesn't get bridged with a
+ * straight line — its progress is still computed against the real planned
+ * route, which is a closer estimate than Haversine-connecting the gap.
+ *
+ * @param {Array<{lat:number,lng:number,isNoise?:boolean,gapFlag?:boolean}>} pings — chronological order
+ */
+export function computeCumulativeTripDistance(pings, decodedPath, totalDistanceKm) {
+  if (!decodedPath || decodedPath.length < 2 || !pings?.length) {
+    return { actualDistanceKm: 0, gapCount: 0, usablePingCount: 0 };
+  }
+
+  let maxCoveredKm = 0;
+  let gapCount = 0;
+  let usablePingCount = 0;
+
+  for (const ping of pings) {
+    if (ping.isNoise) continue;
+    usablePingCount++;
+    if (ping.gapFlag) gapCount++;
+    const { coveredKm } = computeRouteProgress(ping.lat, ping.lng, decodedPath, totalDistanceKm);
+    if (coveredKm > maxCoveredKm) maxCoveredKm = coveredKm;
+  }
+
+  return { actualDistanceKm: parseFloat(maxCoveredKm.toFixed(3)), gapCount, usablePingCount };
 }
