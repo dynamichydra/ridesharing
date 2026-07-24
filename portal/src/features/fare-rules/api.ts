@@ -5,6 +5,10 @@ import type {
   FareRulePayload,
   UpdateFareRulePayload,
   LookupOption,
+  TaxRule,
+  TaxRuleListParams,
+  TaxRulePayload,
+  UpdateTaxRulePayload,
 } from "./types";
 
 // Base path: /fare — rule CRUD lives under /fare/rules (Admin only)
@@ -54,6 +58,25 @@ export const fareRulesApi = {
 // Types/Zones features, prefer wiring those in instead of this local
 // fetcher — this is a minimal stand-in so the dropdowns aren't left empty.
 // ---------------------------------------------------------------------
+
+// ── Tax Rules — /fare/tax-rules (Admin) ───────────────────────────────────
+// Note: unlike /fare/rules, the backend's listPaginated() ignores all query filters
+// besides page/limit — no countryId/appliesTo filter exists server-side yet.
+const TAX_RULES_BASE_URL = "/fare/tax-rules";
+
+export const taxRulesApi = {
+  list: (params: TaxRuleListParams = {}) =>
+    apiClient.get<TaxRule[]>(`${TAX_RULES_BASE_URL}?page=${params.page ?? 1}&limit=${params.limit ?? 10}`),
+
+  create: (payload: TaxRulePayload) => apiClient.post<TaxRule>(TAX_RULES_BASE_URL, payload),
+
+  update: (id: string, payload: UpdateTaxRulePayload) =>
+    apiClient.patch<TaxRule>(`${TAX_RULES_BASE_URL}/${id}`, payload),
+
+  // DELETE /fare/tax-rules/:id — a soft delete server-side (sets isActive=false), not a real
+  // row deletion, so this is the same enable/disable toggle convention as everything else.
+  disable: (id: string) => apiClient.delete<{ deleted: true }>(`${TAX_RULES_BASE_URL}/${id}`),
+};
 
 export const lookupsApi = {
   // GET /geo/countries  (Public)

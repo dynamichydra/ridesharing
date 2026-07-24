@@ -1,9 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { fareRulesApi, lookupsApi } from "./api";
-import type { FareRuleListParams, FareRulePayload, UpdateFareRulePayload } from "./types";
+import { fareRulesApi, lookupsApi, taxRulesApi } from "./api";
+import type {
+  FareRuleListParams,
+  FareRulePayload,
+  UpdateFareRulePayload,
+  TaxRuleListParams,
+  TaxRulePayload,
+  UpdateTaxRulePayload,
+} from "./types";
 
 const FARE_RULES_KEY = "fare-rules";
+const TAX_RULES_KEY = "tax-rules";
 
 export function useFareRules(params: FareRuleListParams = {}) {
   return useQuery({
@@ -60,6 +68,60 @@ export function useSetFareRuleActive() {
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to update fare rule status");
+    },
+  });
+}
+
+// ---------------------------------------------------------------------
+// Tax Rules
+// ---------------------------------------------------------------------
+
+export function useTaxRules(params: TaxRuleListParams = {}) {
+  return useQuery({
+    queryKey: [TAX_RULES_KEY, params],
+    queryFn: () => taxRulesApi.list(params),
+  });
+}
+
+export function useCreateTaxRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: TaxRulePayload) => taxRulesApi.create(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [TAX_RULES_KEY], refetchType: "active" });
+      toast.success("Tax rule created");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to create tax rule");
+    },
+  });
+}
+
+export function useUpdateTaxRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateTaxRulePayload }) =>
+      taxRulesApi.update(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [TAX_RULES_KEY], refetchType: "active" });
+      toast.success("Tax rule updated");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to update tax rule");
+    },
+  });
+}
+
+export function useDisableTaxRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => taxRulesApi.disable(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [TAX_RULES_KEY], refetchType: "active" });
+      toast.success("Tax rule disabled");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to disable tax rule");
     },
   });
 }

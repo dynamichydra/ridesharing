@@ -12,3 +12,15 @@ export interface RideStatRow {
   expired: string | number;
   total: string | number;
 }
+
+// GET /admin/stats/subscriptions — raw SQL row, keys are the query's literal column
+// aliases (snake_case), not camelCased by drizzle (this is db.execute(sql\`...\`), not the
+// query builder) — same as RideStatRow above.
+export interface SubscriptionStatRow {
+  plan_name: string;
+  plan_type: string;
+  price_minor: string | number;
+  currency_code: string;
+  total_subscriptions: string | number;
+  active_count: string | number;
+}

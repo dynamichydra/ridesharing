@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Banknote, CreditCard } from "lucide-react";
+import { Banknote, CreditCard, Undo2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { RidePayment } from "../types";
 
 function formatMinor(amountMinor: number | null, currencyCode: string | null): string {
@@ -19,7 +20,11 @@ const PAYMENT_STATUS_STYLES: Record<string, string> = {
   refunded: "bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-400",
 };
 
-export function getRidePaymentColumns(): ColumnDef<RidePayment>[] {
+interface RidePaymentColumnActions {
+  onRefund: (payment: RidePayment) => void;
+}
+
+export function getRidePaymentColumns({ onRefund }: RidePaymentColumnActions): ColumnDef<RidePayment>[] {
   return [
     {
       id: "ride",
@@ -88,6 +93,21 @@ export function getRidePaymentColumns(): ColumnDef<RidePayment>[] {
           {new Date(row.original.payment.createdAt).toLocaleString()}
         </span>
       ),
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) =>
+        row.original.payment.status === "captured" ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 cursor-pointer"
+            onClick={() => onRefund(row.original)}
+          >
+            <Undo2 className="h-3 w-3" /> Refund
+          </Button>
+        ) : null,
     },
   ];
 }

@@ -89,3 +89,36 @@ export interface LookupOption {
   id: string;
   name: string;
 }
+
+// ── Tax Rules (same backend module, /fare/tax-rules) ─────────────────────
+
+export type TaxAppliesTo = "fare" | "subscription" | "both";
+
+export interface TaxRule {
+  id: string;
+  countryId: string;
+  stateId: string | null; // null = applies to the whole country — state-level rules aren't resolved yet
+  name: string; // e.g. "GST", "HST", "PST"
+  appliesTo: TaxAppliesTo;
+  rate: string; // decimal string, e.g. "0.1300" = 13%
+  isInclusive: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaxRuleListParams {
+  page?: number;
+  limit?: number;
+}
+
+export interface TaxRulePayload {
+  countryId: string;
+  stateId?: string;
+  name: string;
+  appliesTo: TaxAppliesTo;
+  rate: number;
+  isInclusive?: boolean;
+}
+
+export type UpdateTaxRulePayload = Partial<TaxRulePayload> & { isActive?: boolean };

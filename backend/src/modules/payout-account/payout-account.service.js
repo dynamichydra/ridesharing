@@ -82,7 +82,16 @@ export async function listPayoutAccounts(filters, page, limit, offset) {
   const where = conditions.length ? and(...conditions) : undefined;
 
   const [{ total }] = await db.select({ total: count() }).from(driverPayoutAccounts).where(where);
-  const rows = await db.select().from(driverPayoutAccounts).where(where)
+  const rows = await db.select({
+    id: driverPayoutAccounts.id, driverId: driverPayoutAccounts.driverId,
+    driverName: drivers.name, driverPhone: drivers.phone,
+    gateway: driverPayoutAccounts.gateway, stripeAccountId: driverPayoutAccounts.stripeAccountId,
+    stripeDetailsSubmitted: driverPayoutAccounts.stripeDetailsSubmitted,
+    stripePayoutsEnabled: driverPayoutAccounts.stripePayoutsEnabled,
+    status: driverPayoutAccounts.status, rejectionReason: driverPayoutAccounts.rejectionReason,
+    verifiedBy: driverPayoutAccounts.verifiedBy, verifiedAt: driverPayoutAccounts.verifiedAt,
+    createdAt: driverPayoutAccounts.createdAt, updatedAt: driverPayoutAccounts.updatedAt,
+  }).from(driverPayoutAccounts).innerJoin(drivers, eq(driverPayoutAccounts.driverId, drivers.id)).where(where)
     .orderBy(desc(driverPayoutAccounts.createdAt)).limit(limit).offset(offset);
   return { rows, pagination: paginate(page, limit, total) };
 }

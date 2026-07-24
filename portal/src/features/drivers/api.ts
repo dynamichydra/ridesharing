@@ -3,6 +3,7 @@ import type {
   Driver,
   DriverDetail,
   DriverListParams,
+  CreateDriverPayload,
   ApproveDriverPayload,
   RejectDriverPayload,
   RequestDocumentsPayload,
@@ -11,6 +12,7 @@ import type {
   VerifyDocumentPayload,
   DriverSubscriptionHistoryRow,
   DriverPaymentRow,
+  VehicleTypeOption,
 } from "./types";
 
 const BASE_URL = "/drivers";
@@ -36,6 +38,9 @@ export const driversApi = {
   // GET /drivers?page=&limit=&approvalStatus=&...  (Admin)
   list: (params: DriverListParams) =>
     apiClient.get<Driver[]>(`${BASE_URL}?${buildQuery(params)}`),
+
+  // POST /drivers  (Admin) — manual registration; only name + (phone or email) are required
+  create: (payload: CreateDriverPayload) => apiClient.post<Driver>(BASE_URL, payload),
 
   // GET /drivers/:id  (Admin) — aggregated registration-summary view:
   // { driver, vehicles, documents, answers, isComplete, missing } — NOT a flat Driver.
@@ -86,4 +91,9 @@ export const driverSubscriptionsApi = {
     apiClient.get<DriverPaymentRow[]>(
       `${SUBSCRIPTIONS_BASE_URL}/admin/drivers/${driverId}/payments?page=${page}&limit=${limit}`,
     ),
+};
+
+export const vehicleTypesLookupApi = {
+  // GET /vehicle-types  (Public) — used only for the Create Driver form's dropdown
+  list: () => apiClient.get<VehicleTypeOption[]>("/vehicle-types"),
 };
