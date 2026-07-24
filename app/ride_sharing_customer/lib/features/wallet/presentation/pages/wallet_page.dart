@@ -31,10 +31,7 @@ class _WalletPageState extends State<WalletPage> {
         ),
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
-          onPressed: () => context.pop(),
-        ),
+        automaticallyImplyLeading: false,
       ),
       body: BlocBuilder<WalletBloc, WalletState>(
         builder: (context, state) {

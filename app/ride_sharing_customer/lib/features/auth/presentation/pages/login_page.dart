@@ -46,8 +46,7 @@ class _LoginPageState extends State<LoginPage> {
         }
         phone = '${_selectedCountry.dialCode}$digits';
       }
-      // Bypass AuthBloc API call and go directly to OTP page
-      context.push('/otp', extra: phone);
+      context.read<AuthBloc>().add(LoginSubmitted(phone));
     }
   }
 

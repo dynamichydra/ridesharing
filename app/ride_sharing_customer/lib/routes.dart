@@ -52,7 +52,7 @@ class AppRoutes {
   static const String transactions = '/transactions';
 
   static final GoRouter router = GoRouter(
-    initialLocation: home,
+    initialLocation: splash,
     redirect: (context, state) async {
       final storage = sl<StorageService>();
       final token = await storage.getToken();
@@ -64,7 +64,7 @@ class AppRoutes {
       if (!isLoggedIn && !isGoingToAuth) {
         return login;
       }
-      if (isLoggedIn && isGoingToAuth && state.matchedLocation != splash && state.matchedLocation != signup) {
+      if (isLoggedIn && isGoingToAuth && state.matchedLocation != splash && state.matchedLocation != signup && state.matchedLocation != onboarding) {
         return home;
       }
       return null;
@@ -111,47 +111,12 @@ class AppRoutes {
             builder: (context, state) => const RideHistoryPage(),
           ),
           GoRoute(
-            path: rideDetail,
-            builder: (context, state) {
-              final ride = Map<String, dynamic>.from(state.extra as Map);
-              return RideDetailPage(ride: ride);
-            },
-          ),
-          GoRoute(
             path: wallet,
             builder: (context, state) => const WalletPage(),
           ),
           GoRoute(
-            path: addFunds,
-            builder: (context, state) => const AddFundsPage(),
-          ),
-          GoRoute(
-            path: transactions,
-            builder: (context, state) => const TransactionsPage(),
-          ),
-          GoRoute(
             path: profile,
             builder: (context, state) => const ProfilePage(),
-          ),
-          GoRoute(
-            path: editProfile,
-            builder: (context, state) => const EditProfilePage(),
-          ),
-          GoRoute(
-            path: savedPlaces,
-            builder: (context, state) => const SavedPlacesPage(),
-          ),
-          GoRoute(
-            path: paymentMethods,
-            builder: (context, state) => const PaymentMethodsPage(),
-          ),
-          GoRoute(
-            path: help,
-            builder: (context, state) => const HelpPage(),
-          ),
-          GoRoute(
-            path: settings,
-            builder: (context, state) => const SettingsPage(),
           ),
         ],
       ),

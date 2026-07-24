@@ -5,6 +5,7 @@ class StorageService {
   final FlutterSecureStorage _secureStorage;
   
   static const String _tokenKey = 'auth_token';
+  static const String _refreshTokenKey = 'refresh_token';
   static const String _userIdKey = 'user_id';
   static const String _themeBox = 'theme_settings';
   static const String _themeModeKey = 'is_dark_mode';
@@ -27,6 +28,14 @@ class StorageService {
     return await _secureStorage.read(key: _tokenKey);
   }
 
+  Future<void> saveRefreshToken(String refreshToken) async {
+    await _secureStorage.write(key: _refreshTokenKey, value: refreshToken);
+  }
+
+  Future<String?> getRefreshToken() async {
+    return await _secureStorage.read(key: _refreshTokenKey);
+  }
+
   Future<void> saveUserId(String id) async {
     await _secureStorage.write(key: _userIdKey, value: id);
   }
@@ -37,6 +46,7 @@ class StorageService {
 
   Future<void> clearAuth() async {
     await _secureStorage.delete(key: _tokenKey);
+    await _secureStorage.delete(key: _refreshTokenKey);
     await _secureStorage.delete(key: _userIdKey);
   }
 

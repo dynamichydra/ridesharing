@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/services/storage_service.dart';
 
@@ -25,12 +26,24 @@ class AuthDataSourceImpl implements AuthDataSource {
     }
     _pendingPhone = phone;
 
-    final response = await _dioClient.dio.post('/api/v1/auth/rider/send-otp', data: {
-      'phone': phone,
-    });
+    try {
+      final response = await _dioClient.dio.post('/api/v1/auth/rider/send-otp', data: {
+        'phone': phone,
+      });
 
-    if (response.data['SUCCESS'] != true) {
-      throw Exception(response.data['MESSAGE'] ?? 'Failed to send OTP.');
+      if (response.data['SUCCESS'] != true) {
+        throw Exception(response.data['MESSAGE'] ?? 'Failed to send OTP.');
+      }
+    } catch (e) {
+      if (e is DioException) {
+        if (e.response != null) {
+          final msg = e.response?.data is Map
+              ? (e.response?.data['MESSAGE'] ?? e.response?.data['message'] ?? 'Failed to send OTP.')
+              : 'Failed to send OTP.';
+          throw Exception(msg);
+        }
+      }
+      throw Exception('Unable to connect to server. Please check your internet connection.');
     }
   }
 
@@ -51,46 +64,74 @@ class AuthDataSourceImpl implements AuthDataSource {
       throw Exception('Phone number not found. Please log in again.');
     }
 
-    final response = await _dioClient.dio.post('/api/v1/auth/rider/verify-otp', data: {
-      'phone': phone,
-      'otp': code,
-    });
+    try {
+      final response = await _dioClient.dio.post('/api/v1/auth/rider/verify-otp', data: {
+        'phone': phone,
+        'otp': code,
+      });
 
-    if (response.data['SUCCESS'] == true) {
-      final data = response.data['MESSAGE'];
-      final token = data['accessToken'] ?? '';
-      final user = data['user'] ?? {};
-      final userId = user['id'] ?? '';
-      final isNew = data['isNew'] ?? false;
+      if (response.data['SUCCESS'] == true) {
+        final data = response.data['MESSAGE'];
+        final token = data['accessToken'] ?? '';
+        final refreshToken = data['refreshToken'] ?? '';
+        final user = data['user'] ?? {};
+        final userId = user['id'] ?? '';
+        final isNew = data['isNew'] ?? false;
 
-      if (token.isNotEmpty) {
-        await _storageService.saveToken(token);
+        if (token.isNotEmpty) {
+          await _storageService.saveToken(token);
+        }
+        if (refreshToken.isNotEmpty) {
+          await _storageService.saveRefreshToken(refreshToken);
+        }
+        if (userId.isNotEmpty) {
+          await _storageService.saveUserId(userId);
+        }
+
+        // If user has empty name or email, treat as new/incomplete registration
+        final nameEmpty = (user['name'] ?? '').toString().trim().isEmpty;
+        final emailEmpty = (user['email'] ?? '').toString().trim().isEmpty;
+
+        return {
+          'isNew': isNew || nameEmpty || emailEmpty,
+          'user': user,
+        };
+      } else {
+        throw Exception(response.data['MESSAGE'] ?? 'Invalid OTP code.');
       }
-      if (userId.isNotEmpty) {
-        await _storageService.saveUserId(userId);
+    } catch (e) {
+      if (e is DioException) {
+        if (e.response != null) {
+          final msg = e.response?.data is Map
+              ? (e.response?.data['MESSAGE'] ?? e.response?.data['message'] ?? 'Invalid or expired OTP.')
+              : 'Invalid or expired OTP.';
+          throw Exception(msg);
+        }
       }
-
-      // If user has empty name or email, treat as new/incomplete registration
-      final nameEmpty = (user['name'] ?? '').toString().trim().isEmpty;
-      final emailEmpty = (user['email'] ?? '').toString().trim().isEmpty;
-
-      return {
-        'isNew': isNew || nameEmpty || emailEmpty,
-        'user': user,
-      };
-    } else {
-      throw Exception(response.data['MESSAGE'] ?? 'Invalid OTP code.');
+      throw Exception('Unable to connect to server. Please check your internet connection.');
     }
   }
 
   @override
   Future<void> registerProfileDetails(String name, String email) async {
-    final response = await _dioClient.dio.patch('/api/v1/rider/profile', data: {
-      'name': name,
-      'email': email,
-    });
-    if (response.data['SUCCESS'] != true) {
-      throw Exception(response.data['MESSAGE'] ?? 'Failed to complete profile registration.');
+    try {
+      final response = await _dioClient.dio.patch('/api/v1/riders/profile', data: {
+        'name': name,
+        'email': email,
+      });
+      if (response.data['SUCCESS'] != true) {
+        throw Exception(response.data['MESSAGE'] ?? 'Failed to complete profile registration.');
+      }
+    } catch (e) {
+      if (e is DioException) {
+        if (e.response != null) {
+          final msg = e.response?.data is Map
+              ? (e.response?.data['MESSAGE'] ?? e.response?.data['message'] ?? 'Failed to complete profile registration.')
+              : 'Failed to complete profile registration.';
+          throw Exception(msg);
+        }
+      }
+      throw Exception('Unable to connect to server. Please check your internet connection.');
     }
   }
 

@@ -22,6 +22,11 @@ class MockBookingDataSource implements BookingDataSource {
       ),
     ];
   }
+
+  @override
+  Future<Map<String, dynamic>?> detectZone(double lat, double lng) async {
+    return {'id': 'zone_1', 'name': 'City Zone'};
+  }
 }
 
 void main() {

@@ -31,10 +31,7 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
-          onPressed: () => context.pop(),
-        ),
+        automaticallyImplyLeading: false,
       ),
       body: BlocBuilder<ProfileBloc, ProfileState>(
         builder: (context, state) {

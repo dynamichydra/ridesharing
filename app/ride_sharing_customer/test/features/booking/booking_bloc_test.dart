@@ -28,6 +28,11 @@ class MockBookingRepository implements BookingRepository {
   double calculateFare(double distanceMiles, Vehicle vehicle) {
     return 10.0;
   }
+
+  @override
+  Future<Map<String, dynamic>?> detectZone(double lat, double lng) async {
+    return {'id': 'zone_1', 'name': 'City Zone'};
+  }
 }
 
 void main() {

@@ -45,7 +45,7 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
           });
         } else if (state is AuthUnauthenticated) {
           Future.delayed(const Duration(milliseconds: 1500), () {
-            if (mounted) context.go('/onboarding');
+            if (mounted) context.go('/login');
           });
         }
       },
