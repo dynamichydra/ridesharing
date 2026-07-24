@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../bloc/auth_bloc.dart';
 
 class SplashPage extends StatefulWidget {
@@ -10,13 +12,16 @@ class SplashPage extends StatefulWidget {
   State<SplashPage> createState() => _SplashPageState();
 }
 
-class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateMixin {
+class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
+  bool _isPermissionGranted = false;
+  AuthState? _pendingState;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -24,29 +29,80 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
     _fadeAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _controller.forward();
 
+    _requestLocationPermission();
+
     // Trigger startup auth state evaluation
     context.read<AuthBloc>().add(AppStarted());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_isPermissionGranted) {
+      _requestLocationPermission();
+    }
+  }
+
+  Future<void> _requestLocationPermission() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      await openAppSettings();
+      permission = await Geolocator.checkPermission();
+    }
+
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      await Geolocator.openLocationSettings();
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    }
+
+    if ((permission == LocationPermission.always || permission == LocationPermission.whileInUse) && serviceEnabled) {
+      setState(() {
+        _isPermissionGranted = true;
+      });
+      _navigateIfReady();
+    } else {
+      if (mounted) {
+        context.go('/location-permission', extra: () {
+          if (mounted) {
+            _requestLocationPermission();
+          }
+        });
+      }
+    }
+  }
+
+  void _navigateIfReady() {
+    if (!_isPermissionGranted || _pendingState == null) return;
+
+    if (_pendingState is AuthAuthenticated) {
+      Future.delayed(const Duration(milliseconds: 1000), () {
+        if (mounted) context.go('/home');
+      });
+    } else if (_pendingState is AuthUnauthenticated) {
+      Future.delayed(const Duration(milliseconds: 1000), () {
+        if (mounted) context.go('/login');
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
-        if (state is AuthAuthenticated) {
-          Future.delayed(const Duration(milliseconds: 2000), () {
-            if (mounted) context.go('/home');
-          });
-        } else if (state is AuthUnauthenticated) {
-          Future.delayed(const Duration(milliseconds: 2000), () {
-            if (mounted) context.go('/login');
-          });
-        }
+        _pendingState = state;
+        _navigateIfReady();
       },
       child: Scaffold(
         backgroundColor: Colors.white,

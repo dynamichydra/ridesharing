@@ -7,6 +7,7 @@ import 'injection_container.dart';
 import 'features/home/presentation/pages/main_layout.dart';
 import 'features/auth/presentation/pages/splash_page.dart';
 import 'features/auth/presentation/pages/onboarding_page.dart';
+import 'features/auth/presentation/pages/location_permission_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/presentation/pages/signup_page.dart';
 import 'features/auth/presentation/pages/otp_page.dart';
@@ -31,6 +32,7 @@ import 'features/wallet/presentation/pages/transactions_page.dart';
 class AppRoutes {
   static const String splash = '/';
   static const String onboarding = '/onboarding';
+  static const String locationPermission = '/location-permission';
   static const String login = '/login';
   static const String signup = '/signup';
   static const String otp = '/otp';
@@ -64,7 +66,7 @@ class AppRoutes {
       final token = await storage.getToken();
       final isLoggedIn = token != null;
 
-      final authPaths = [login, signup, forgotPassword, otp, onboarding, splash];
+      final authPaths = [login, signup, forgotPassword, otp, onboarding, splash, locationPermission];
       final isGoingToAuth = authPaths.contains(state.matchedLocation);
 
       if (!isLoggedIn && !isGoingToAuth) {
@@ -83,6 +85,13 @@ class AppRoutes {
       GoRoute(
         path: onboarding,
         builder: (context, state) => const OnboardingPage(),
+      ),
+      GoRoute(
+        path: locationPermission,
+        builder: (context, state) {
+          final onGranted = state.extra as VoidCallback?;
+          return LocationPermissionPage(onPermissionGranted: onGranted);
+        },
       ),
       GoRoute(
         path: login,

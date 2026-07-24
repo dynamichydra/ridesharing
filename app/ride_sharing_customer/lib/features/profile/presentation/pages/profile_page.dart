@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../../../../core/widgets/error_view.dart';
 import '../bloc/profile_bloc.dart';
@@ -66,10 +65,14 @@ class _ProfilePageState extends State<ProfilePage> {
                           height: 64,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: const Color(0xFFE2E7E9), width: 1.5),
-                            image: const DecorationImage(
-                              image: AssetImage('assets/images/onboarding_driver.png'),
-                              fit: BoxFit.cover,
+                            color: const Color(0xFFF1F5F9),
+                            border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                          ),
+                          child: const Center(
+                            child: Icon(
+                              Icons.person_rounded,
+                              size: 38,
+                              color: Color(0xFF94A3B8),
                             ),
                           ),
                         ),

@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
-import '../../../../core/widgets/custom_button.dart';
-import '../../../../core/widgets/custom_text_field.dart';
 import '../bloc/wallet_bloc.dart';
-import '../../../profile/presentation/bloc/profile_bloc.dart';
 
 class AddFundsPage extends StatefulWidget {
   const AddFundsPage({super.key});
@@ -17,10 +15,36 @@ class AddFundsPage extends StatefulWidget {
 class _AddFundsPageState extends State<AddFundsPage> {
   final _amountController = TextEditingController(text: '500');
   double _selectedAmount = 500.0;
-  Map<String, dynamic>? _selectedPaymentMethod;
-  bool _selectedPaymentMethodInitialized = false;
+  String _selectedMethodType = 'upi';
 
-  final List<double> _presets = [200.0, 500.0, 1000.0, 2000.0];
+  final List<double> _presets = [100.0, 200.0, 500.0, 1000.0];
+
+  final List<Map<String, dynamic>> _paymentMethods = [
+    {
+      'id': 'upi',
+      'title': 'UPI',
+      'subtitle': 'Pay using any UPI app',
+      'iconText': 'UPI',
+    },
+    {
+      'id': 'card',
+      'title': 'Debit/Credit Card',
+      'subtitle': 'Visa, Mastercard, Rupay',
+      'iconData': Icons.credit_card_rounded,
+    },
+    {
+      'id': 'netbanking',
+      'title': 'Net Banking',
+      'subtitle': 'All major banks',
+      'iconData': Icons.account_balance_rounded,
+    },
+    {
+      'id': 'wallets',
+      'title': 'Wallets',
+      'subtitle': 'Paytm, PhonePe, Amazon Pay',
+      'iconData': Icons.account_balance_wallet_outlined,
+    },
+  ];
 
   @override
   void dispose() {
@@ -29,34 +53,51 @@ class _AddFundsPageState extends State<AddFundsPage> {
   }
 
   void _submit() {
-    final double? amount = double.tryParse(_amountController.text.trim());
-    if (amount == null || amount <= 0) {
+    final text = _amountController.text.trim();
+    final RegExp amountRegex = RegExp(r'^\d+$');
+
+    if (text.isEmpty || !amountRegex.hasMatch(text)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid positive amount.')),
+        const SnackBar(content: Text('Please enter a valid whole number amount')),
       );
       return;
     }
-    
+
+    final double? amount = double.tryParse(text);
+    if (amount == null || amount < 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Minimum amount to add is ₹100')),
+      );
+      return;
+    }
+
     context.read<WalletBloc>().add(
           AddWalletFunds(
             amount: amount,
-            paymentMethodId: _selectedPaymentMethod?['id'] ?? 'pm_visa',
+            paymentMethodId: _selectedMethodType,
           ),
         );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Scaffold(
-      backgroundColor: theme.colorScheme.background,
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Add Funds'),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF0A2540), size: 24),
           onPressed: () => context.pop(),
+        ),
+        title: const Text(
+          'Add Money',
+          style: TextStyle(
+            color: Color(0xFF0A2540),
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
         ),
       ),
       body: BlocConsumer<WalletBloc, WalletState>(
@@ -65,7 +106,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('Funds added successfully!'),
-                backgroundColor: AppColors.successGreen,
+                backgroundColor: Color(0xFF009048),
               ),
             );
             context.pop();
@@ -73,7 +114,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.message),
-                backgroundColor: theme.colorScheme.error,
+                backgroundColor: AppColors.errorRed,
               ),
             );
           }
@@ -81,52 +122,73 @@ class _AddFundsPageState extends State<AddFundsPage> {
         builder: (context, walletState) {
           final isLoading = walletState is WalletLoading;
 
-          return BlocBuilder<ProfileBloc, ProfileState>(
-            builder: (context, profileState) {
-              if (profileState is ProfileInitial) {
-                context.read<ProfileBloc>().add(LoadProfile());
-              }
-
-              if (profileState is ProfileLoaded) {
-                final rawMethods = profileState.userProfile['payment_methods'] as List? ?? [];
-                final methods = rawMethods.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-
-                if (!_selectedPaymentMethodInitialized && methods.isNotEmpty) {
-                  final defaultMethod = methods.firstWhere(
-                    (m) => m['is_default'] == true,
-                    orElse: () => methods.first,
-                  );
-                  _selectedPaymentMethod = defaultMethod;
-                  _selectedPaymentMethodInitialized = true;
-                }
-
-                return SafeArea(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(AppSpacing.l),
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Enter Amount Card
+                  const Text(
+                    'Enter Amount',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0A2540),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+                    ),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Enter Amount',
-                          style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: AppSpacing.m),
-                        CustomTextField(
-                          controller: _amountController,
-                          labelText: 'Amount (${AppConstants.currencySymbol})',
-                          prefixIcon: Icons.currency_rupee_rounded,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          onChanged: (val) {
-                            setState(() {
-                              _selectedAmount = double.tryParse(val) ?? 0.0;
-                            });
-                          },
-                        ),
-                        const SizedBox(height: AppSpacing.l),
-                        
-                        // Presets Row
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              '₹ ',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0A2540),
+                              ),
+                            ),
+                            Expanded(
+                              child: TextField(
+                                controller: _amountController,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0A2540),
+                                ),
+                                decoration: const InputDecoration(
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  errorBorder: InputBorder.none,
+                                  disabledBorder: InputBorder.none,
+                                  contentPadding: EdgeInsets.zero,
+                                  isDense: true,
+                                ),
+                                onChanged: (val) {
+                                  setState(() {
+                                    _selectedAmount = double.tryParse(val) ?? 0.0;
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
                           children: _presets.map((preset) {
                             final isSelected = _selectedAmount == preset;
                             return Expanded(
@@ -138,23 +200,22 @@ class _AddFundsPageState extends State<AddFundsPage> {
                                   });
                                 },
                                 child: Container(
-                                  height: 48,
+                                  height: 40,
                                   margin: const EdgeInsets.symmetric(horizontal: 4),
                                   decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? AppColors.primaryBlue
-                                        : (isDark ? AppColors.darkSurface : Colors.white),
-                                    borderRadius: BorderRadius.circular(AppRadius.m),
+                                    color: isSelected ? const Color(0xFF009048) : const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(10),
                                     border: Border.all(
-                                      color: isSelected ? AppColors.primaryBlue : (isDark ? Colors.transparent : Colors.grey[300]!),
+                                      color: isSelected ? const Color(0xFF009048) : const Color(0xFFE2E8F0),
                                     ),
                                   ),
                                   child: Center(
                                     child: Text(
-                                      '${AppConstants.currencySymbol}${preset.toStringAsFixed(0)}',
+                                      '₹${preset.toStringAsFixed(0)}',
                                       style: TextStyle(
-                                        color: isSelected ? Colors.white : (isDark ? Colors.white : Colors.black),
-                                        fontWeight: FontWeight.bold,
+                                        color: isSelected ? Colors.white : const Color(0xFF0A2540),
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
                                       ),
                                     ),
                                   ),
@@ -163,106 +224,177 @@ class _AddFundsPageState extends State<AddFundsPage> {
                             );
                           }).toList(),
                         ),
-                        const SizedBox(height: AppSpacing.xxl),
-
-                        // Funding Source Card
-                        Text(
-                          'Payment Source',
-                          style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: AppSpacing.m),
-                        Card(
-                          child: _selectedPaymentMethod != null
-                              ? ListTile(
-                                  leading: const Icon(Icons.credit_card_rounded, color: AppColors.primaryBlue),
-                                  title: Text('${_selectedPaymentMethod!['brand']} ending in ${_selectedPaymentMethod!['last_4']}'),
-                                  subtitle: Text('Expires ${_selectedPaymentMethod!['expiry']}'),
-                                  trailing: const Icon(Icons.keyboard_arrow_down_rounded, size: 24),
-                                  onTap: () {
-                                    showModalBottomSheet(
-                                      context: context,
-                                      backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
-                                      shape: const RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.only(
-                                          topLeft: Radius.circular(AppRadius.xl),
-                                          topRight: Radius.circular(AppRadius.xl),
-                                        ),
-                                      ),
-                                      builder: (sheetContext) => Container(
-                                        padding: const EdgeInsets.all(AppSpacing.l),
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            const Center(
-                                              child: Text(
-                                                'Select Payment Source',
-                                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                              ),
-                                            ),
-                                            const SizedBox(height: AppSpacing.m),
-                                            const Divider(),
-                                            ...methods.map((pm) {
-                                              final brand = pm['brand'] as String;
-                                              final last4 = pm['last_4'] as String;
-                                              final isSelected = _selectedPaymentMethod?['id'] == pm['id'];
-
-                                              IconData pmIcon = Icons.credit_card_rounded;
-                                              if (pm['type'] == 'apple_pay') pmIcon = Icons.apple_rounded;
-                                              if (pm['type'] == 'cash') pmIcon = Icons.money_rounded;
-
-                                              return ListTile(
-                                                leading: Container(
-                                                  padding: const EdgeInsets.all(AppSpacing.s),
-                                                  decoration: BoxDecoration(
-                                                    color: isDark ? Colors.grey[850] : Colors.grey[100],
-                                                    shape: BoxShape.circle,
-                                                  ),
-                                                  child: Icon(pmIcon, color: AppColors.primaryBlue),
-                                                ),
-                                                title: Text('$brand ending in $last4'),
-                                                subtitle: Text('Expires ${pm['expiry']}'),
-                                                trailing: isSelected
-                                                    ? const Icon(Icons.check_circle_rounded, color: AppColors.successGreen)
-                                                    : null,
-                                                onTap: () {
-                                                  setState(() {
-                                                    _selectedPaymentMethod = pm;
-                                                  });
-                                                  Navigator.pop(sheetContext);
-                                                },
-                                              );
-                                            }).toList(),
-                                            const SizedBox(height: AppSpacing.m),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                )
-                              : ListTile(
-                                  leading: const Icon(Icons.add_rounded, color: AppColors.primaryBlue),
-                                  title: const Text('Add Payment Method'),
-                                  subtitle: const Text('Configure a funding source'),
-                                  trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-                                  onTap: () => context.push('/payment-methods'),
-                                ),
-                        ),
-
-                        const SizedBox(height: AppSpacing.xxl),
-                        CustomButton(
-                          text: 'Add ${AppConstants.currencySymbol}${_selectedAmount.toStringAsFixed(2)}',
-                          onPressed: _submit,
-                          isLoading: isLoading,
-                        ),
                       ],
                     ),
                   ),
-                );
-              }
+                  const SizedBox(height: 24),
 
-              return const Center(child: CircularProgressIndicator());
-            },
+                  // Select Payment Method Section
+                  const Text(
+                    'Select Payment Method',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0A2540),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+                    ),
+                    child: Column(
+                      children: _paymentMethods.map((pm) {
+                        final isSelected = _selectedMethodType == pm['id'];
+                        return Column(
+                          children: [
+                            InkWell(
+                              onTap: () {
+                                setState(() {
+                                  _selectedMethodType = pm['id'] as String;
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  children: [
+                                    if (pm['iconText'] != null)
+                                      Container(
+                                        width: 36,
+                                        height: 24,
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          pm['iconText'] as String,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF64748B),
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      )
+                                    else
+                                      Icon(
+                                        pm['iconData'] as IconData,
+                                        color: const Color(0xFF0A2540),
+                                        size: 24,
+                                      ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            pm['title'] as String,
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF0A2540),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            pm['subtitle'] as String,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF94A3B8),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      width: 20,
+                                      height: 20,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: isSelected ? const Color(0xFF009048) : const Color(0xFFCBD5E1),
+                                          width: 2,
+                                        ),
+                                      ),
+                                      child: isSelected
+                                          ? Center(
+                                              child: Container(
+                                                width: 10,
+                                                height: 10,
+                                                decoration: const BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  color: Color(0xFF009048),
+                                                ),
+                                              ),
+                                            )
+                                          : null,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            if (pm != _paymentMethods.last)
+                              const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Add Money Securely Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: ElevatedButton.icon(
+                      onPressed: isLoading ? null : _submit,
+                      icon: const Icon(Icons.lock_outline_rounded, color: Colors.white, size: 18),
+                      label: isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Text(
+                              'Add Money Securely',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF009048),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Security note footer
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.check_circle_rounded, color: Color(0xFF009048), size: 14),
+                      SizedBox(width: 6),
+                      Text(
+                        'Your payment is encrypted and secure',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
           );
         },
       ),

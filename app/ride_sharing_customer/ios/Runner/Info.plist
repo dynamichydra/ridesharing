@@ -66,5 +66,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Ryva Ride requires location access to auto-select your country code and connect you with nearby drivers.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Ryva Ride requires location access to track your rides in real time.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Ryva Ride requires location access to provide accurate ride pickup and navigation.</string>
 </dict>
 </plist>

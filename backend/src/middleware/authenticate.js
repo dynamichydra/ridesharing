@@ -36,3 +36,11 @@ export async function authenticateAny(request, reply) {
     return sendError(reply, 'Unauthorized', 401);
   }
 }
+
+export async function authenticateOptional(request, reply) {
+  try {
+    await request.jwtVerify();
+  } catch {
+    request.user = null;
+  }
+}

@@ -21,13 +21,13 @@ function assertValidEmail(email) {
 // ── Rider OTP (unchanged) ──────────────────────────────────────────────────────
 
 export async function sendOtp(phone, role = 'rider') {
-  const table = role === 'driver' ? drivers : users;
-  const [existing] = await db.select({ id: table.id }).from(table).where(eq(table.phone, phone)).limit(1);
-  if (!existing) throw { statusCode: 404, code: 'PHONE_NOT_REGISTERED', message: 'This phone number is not registered' };
+  assertValidPhone(phone);
+  await assertCanSendOtp(phone);
 
   const otp = generateOtp();
   await storeOtp(phone, otp);
   await sendOtpSms(phone, otp);
+  await markOtpSent(phone);
   return { sent: true };
 }
 

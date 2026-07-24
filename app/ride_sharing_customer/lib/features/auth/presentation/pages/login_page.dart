@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:geocoding/geocoding.dart' as geo;
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../../../core/constants/constants.dart';
 import '../../../../core/services/storage_service.dart';
 import '../../../../injection_container.dart';
@@ -17,15 +20,88 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
   CountryConfig _selectedCountry = CountryConfig.supportedCountries.first;
+  bool _isCheckingLocation = true;
+  bool _hasLocationPermission = false;
 
   @override
   void initState() {
     super.initState();
-    final index = CountryConfig.supportedCountries.indexWhere(
-      (c) => c.isoCode == 'IN',
-    );
-    if (index != -1) {
-      _selectedCountry = CountryConfig.supportedCountries[index];
+    _checkLocationAndDetectCountry();
+  }
+
+  Future<void> _checkLocationAndDetectCountry() async {
+    setState(() {
+      _isCheckingLocation = true;
+    });
+
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        await openAppSettings();
+        permission = await Geolocator.checkPermission();
+      }
+
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        setState(() {
+          _isCheckingLocation = false;
+          _hasLocationPermission = false;
+        });
+        return;
+      }
+
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        await Geolocator.openLocationSettings();
+        serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!serviceEnabled) {
+          setState(() {
+            _isCheckingLocation = false;
+            _hasLocationPermission = false;
+          });
+          return;
+        }
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.low,
+      );
+
+      final placemarks = await geo.Geocoding().placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      String isoCode = 'IN';
+      if (placemarks.isNotEmpty && placemarks.first.isoCountryCode != null) {
+        isoCode = placemarks.first.isoCountryCode!.toUpperCase();
+      }
+
+      final matched = CountryConfig.supportedCountries.firstWhere(
+        (c) => c.isoCode == isoCode,
+        orElse: () => isoCode == 'CA' || isoCode == 'US'
+            ? CountryConfig.supportedCountries.firstWhere((c) => c.isoCode == 'CA')
+            : CountryConfig.supportedCountries.firstWhere((c) => c.isoCode == 'IN'),
+      );
+
+      setState(() {
+        _selectedCountry = matched;
+        _hasLocationPermission = true;
+        _isCheckingLocation = false;
+      });
+    } catch (e) {
+      final permission = await Geolocator.checkPermission();
+      final hasPerm = permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse;
+
+      setState(() {
+        _hasLocationPermission = hasPerm;
+        _isCheckingLocation = false;
+      });
     }
   }
 
@@ -161,7 +237,7 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                               child: Row(
                                 children: [
-                                  // Auto-selected Country Prefix (Non-interactive)
+                                  // Auto-selected Country Prefix
                                   Padding(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 16.0,
@@ -169,9 +245,9 @@ class _LoginPageState extends State<LoginPage> {
                                     ),
                                     child: Row(
                                       children: [
-                                        const Text(
-                                          '🇮🇳',
-                                          style: TextStyle(fontSize: 20),
+                                        Text(
+                                          _selectedCountry.isoCode == 'CA' ? '🇨🇦' : '🇮🇳',
+                                          style: const TextStyle(fontSize: 20),
                                         ),
                                         const SizedBox(width: 8),
                                         Text(
@@ -195,6 +271,7 @@ class _LoginPageState extends State<LoginPage> {
                                   Expanded(
                                     child: TextFormField(
                                       controller: _phoneController,
+                                      enabled: _hasLocationPermission && !_isCheckingLocation,
                                       keyboardType: TextInputType.phone,
                                       style: const TextStyle(
                                         fontSize: 16,
@@ -216,9 +293,24 @@ class _LoginPageState extends State<LoginPage> {
                                         disabledBorder: InputBorder.none,
                                       ),
                                       validator: (value) {
+                                        if (!_hasLocationPermission) {
+                                          return 'Location permission required';
+                                        }
                                         if (value == null ||
                                             value.trim().isEmpty) {
                                           return 'Please enter your phone number';
+                                        }
+                                        final trimmed = value.trim();
+                                        if (trimmed.startsWith('+')) {
+                                          final fullPhoneRegex = RegExp(r'^\+[1-9]\d{6,14}$');
+                                          if (!fullPhoneRegex.hasMatch(trimmed)) {
+                                            return 'Enter valid phone number in E.164 format';
+                                          }
+                                        } else {
+                                          final localPhoneRegex = RegExp(r'^\d{7,12}$');
+                                          if (!localPhoneRegex.hasMatch(trimmed)) {
+                                            return 'Enter a valid mobile number (7 to 12 digits)';
+                                          }
                                         }
                                         return null;
                                       },
@@ -233,49 +325,68 @@ class _LoginPageState extends State<LoginPage> {
                               width: double.infinity,
                               height: 56,
                               child: ElevatedButton(
-                                onPressed: isLoading ? null : _submit,
+                                onPressed: (isLoading || _isCheckingLocation || !_hasLocationPermission)
+                                    ? (_hasLocationPermission ? null : _checkLocationAndDetectCountry)
+                                    : _submit,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF009048),
+                                  backgroundColor: _hasLocationPermission
+                                      ? const Color(0xFF009048)
+                                      : const Color(0xFF94A3B8),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                   elevation: 0,
                                 ),
-                                child: isLoading
+                                child: _isCheckingLocation
                                     ? const SizedBox(
                                         width: 24,
                                         height: 24,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2.5,
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                                Colors.white,
-                                              ),
+                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                         ),
                                       )
-                                    : Stack(
-                                        alignment: Alignment.center,
-                                        children: const [
-                                          Align(
-                                            alignment: Alignment.center,
-                                            child: Text(
-                                              'Send OTP',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ),
-                                          Align(
-                                            alignment: Alignment.centerRight,
-                                            child: Icon(
-                                              Icons.arrow_forward_rounded,
+                                    : !_hasLocationPermission
+                                        ? const Text(
+                                            'Allow Location to Continue',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
                                               color: Colors.white,
                                             ),
-                                          ),
-                                        ],
-                                      ),
+                                          )
+                                        : isLoading
+                                            ? const SizedBox(
+                                                width: 24,
+                                                height: 24,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2.5,
+                                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                                ),
+                                              )
+                                            : Stack(
+                                                alignment: Alignment.center,
+                                                children: const [
+                                                  Align(
+                                                    alignment: Alignment.center,
+                                                    child: Text(
+                                                      'Send OTP',
+                                                      style: TextStyle(
+                                                        fontSize: 16,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Align(
+                                                    alignment: Alignment.centerRight,
+                                                    child: Icon(
+                                                      Icons.arrow_forward_rounded,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                               ),
                             ),
                             const SizedBox(height: 20),

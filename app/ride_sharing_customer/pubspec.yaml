@@ -53,6 +53,7 @@ dependencies:
   logger: ^2.2.0
   responsive_framework: ^1.1.1
   flutter_native_splash: ^2.3.10
+  geocoding: ^5.0.0
 
 dev_dependencies:
   flutter_test:
@@ -70,6 +71,8 @@ flutter:
     - assets/mock/
     - assets/images/
     - assets/logos/
+    - assets/icons/
+    - assets/bottom-nav-icons/
   fonts:
     - family: SF Pro Display
       fonts:

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../bloc/profile_bloc.dart';
 
@@ -22,12 +21,12 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
       appBar: AppBar(
         title: const Text(
           'Payment Methods',
-          style: TextStyle(color: Color(0xFF021B47), fontWeight: FontWeight.bold, fontSize: 18),
+          style: TextStyle(color: Color(0xFF0A2540), fontWeight: FontWeight.bold, fontSize: 18),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
+          icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF0A2540)),
           onPressed: () => context.pop(),
         ),
       ),
@@ -45,38 +44,33 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
                   children: [
                     _buildPaymentMethodItem(
                       id: 'cash',
-                      icon: Icons.payments_outlined,
+                      imageAsset: 'assets/icons/cab-payment.png',
                       title: 'Cash',
-                      subtitle: 'Pay with cash',
-                      iconColor: const Color(0xFF01A34D),
+                      subtitle: 'Pay with cash after ride',
                     ),
                     _buildPaymentMethodItem(
                       id: 'upi',
-                      icon: Icons.qr_code_scanner_rounded,
+                      imageAsset: 'assets/icons/money-in.png',
                       title: 'UPI',
                       subtitle: 'Pay using any UPI app',
-                      iconColor: const Color(0xFF0165B7),
                     ),
                     _buildPaymentMethodItem(
                       id: 'cards',
-                      icon: Icons.credit_card_rounded,
+                      imageAsset: 'assets/icons/cab-payment.png',
                       title: 'Cards',
                       subtitle: 'Visa, MasterCard, RuPay',
-                      iconColor: Colors.deepPurple,
                     ),
                     _buildPaymentMethodItem(
                       id: 'wallet',
-                      icon: Icons.account_balance_wallet_outlined,
+                      imageAsset: 'assets/icons/money-in.png',
                       title: 'Wallet',
                       subtitle: 'Ryva Wallet',
-                      iconColor: const Color(0xFF01A34D),
                     ),
                     _buildPaymentMethodItem(
                       id: 'netbanking',
-                      icon: Icons.account_balance_rounded,
+                      imageAsset: 'assets/icons/cab-payment.png',
                       title: 'Net Banking',
                       subtitle: 'All major banks',
-                      iconColor: Colors.amber.shade800,
                     ),
                   ],
                 ),
@@ -94,17 +88,17 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
                         const SnackBar(content: Text('Add payment method flow triggered')),
                       );
                     },
-                    icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF01A34D)),
+                    icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF009048)),
                     label: const Text(
                       'Add Payment Method',
                       style: TextStyle(
-                        color: Color(0xFF021B47),
+                        color: Color(0xFF0A2540),
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
                       ),
                     ),
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFFE2E7E9)),
+                      side: const BorderSide(color: Color(0xFFE2E8F0)),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -121,10 +115,9 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
 
   Widget _buildPaymentMethodItem({
     required String id,
-    required IconData icon,
+    required String imageAsset,
     required String title,
     required String subtitle,
-    required Color iconColor,
   }) {
     final isSelected = _selectedMethodId == id;
 
@@ -141,19 +134,30 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? const Color(0xFF01A34D) : const Color(0xFFE2E7E9),
+            color: isSelected ? const Color(0xFF009048) : const Color(0xFFF1F5F9),
             width: isSelected ? 1.5 : 1,
           ),
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.08),
+              width: 44,
+              height: 44,
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF8FAFC),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: iconColor, size: 22),
+              child: Image.asset(
+                imageAsset,
+                width: 24,
+                height: 24,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.payment_rounded,
+                  color: Color(0xFF009048),
+                ),
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -165,7 +169,7 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF021B47),
+                      color: Color(0xFF0A2540),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -173,7 +177,7 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
                     subtitle,
                     style: const TextStyle(
                       fontSize: 12,
-                      color: Color(0xFF8A94A6),
+                      color: Color(0xFF94A3B8),
                     ),
                   ),
                 ],
@@ -186,7 +190,7 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isSelected ? const Color(0xFF01A34D) : Colors.grey.shade300,
+                  color: isSelected ? const Color(0xFF009048) : const Color(0xFFCBD5E1),
                   width: isSelected ? 6 : 2,
                 ),
               ),
