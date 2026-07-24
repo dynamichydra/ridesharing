@@ -10,6 +10,7 @@ import { postTransaction, getOrCreateSystemAccount, getOrCreateWalletAccount } f
 import { getOrCreateWallet } from '../wallet/wallet.service.js';
 import { handleDisputeEvent } from '../dispute/dispute.service.js';
 import { resolveCommissionRule, computeCommission } from '../commission/commission.service.js';
+import { publishNotification } from '../notification/notification-events.js';
 
 // ── Rider — pay online ─────────────────────────────────────────────────────────
 
@@ -380,16 +381,14 @@ async function _markRidePaid(ride, paymentInfo) {
     amountMinor: ride.finalFareMinor, currencyCode: ride.currencyCode, method: paymentInfo.method,
   });
   const amountLabel = formatMoney(ride.finalFareMinor, ride.currencyCode);
-  await publishEvent(TOPICS.NOTIF_PUSH, {
-    userType: 'rider', userId: ride.riderId,
-    type: 'PAYMENT_SUCCESS', title: 'Payment received',
-    body: `Your payment of ${amountLabel} for this ride has been recorded.`,
+  await publishNotification('PAYMENT_SUCCESS', {
+    userId: ride.riderId, userType: 'rider', rideId: ride.id,
+    variables: { amount: amountLabel, method: paymentInfo.method },
   });
   if (ride.driverId) {
-    await publishEvent(TOPICS.NOTIF_PUSH, {
-      userType: 'driver', userId: ride.driverId,
-      type: 'PAYMENT_SUCCESS', title: 'Payment received',
-      body: `Payment of ${amountLabel} (${paymentInfo.method}) recorded for your ride.`,
+    await publishNotification('PAYMENT_SUCCESS', {
+      userId: ride.driverId, userType: 'driver', rideId: ride.id,
+      variables: { amount: amountLabel, method: paymentInfo.method },
     });
   }
 

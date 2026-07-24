@@ -27,6 +27,7 @@ export const TOPICS = {
   PAYMENT_FAILED: 'payment.failed',
   NOTIF_PUSH: 'notif.push',
   NOTIF_SMS: 'notif.sms',
+  NOTIF_EMAIL: 'notif.email',
   SUBSCRIPTION_ACTIVATED: 'subscription.activated',
   SUBSCRIPTION_EXPIRED: 'subscription.expired',
   SUBSCRIPTION_CANCELLED: 'subscription.cancelled',

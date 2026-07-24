@@ -9,9 +9,12 @@
 
 import { kafka, TOPICS } from '../../config/kafka.js';
 import { db } from '../../config/db.js';
-import { auditLogs, drivers, users } from '../../../drizzle/schema/index.js';
-import { eq } from 'drizzle-orm';
+import { auditLogs, drivers, users, notificationTemplates, notifications } from '../../../drizzle/schema/index.js';
+import { eq, and, isNull } from 'drizzle-orm';
 import { sendPush } from '../../modules/notification/notification.service.js';
+import { sendSms } from '../../utils/sms.js';
+import { sendEmail } from '../../utils/email.js';
+import { renderTemplate } from '../../utils/renderTemplate.js';
 
 function parse(msg) {
   try { return JSON.parse(msg.value.toString()); } catch { return null; }
@@ -21,39 +24,90 @@ let _io = null;
 export function setSocketIO(io) { _io = io; }
 
 // ── Notification ──────────────────────────────────────────────────────────────
+// Two payload shapes land here:
+//  - Legacy: { title, body, ... } — the ~18 call sites not yet migrated to
+//    publishNotification() (notification-events.js). Sent as-is, exactly as before.
+//  - Template-driven: { eventType, variables, ... } (no title/body) — resolves the active
+//    notification_templates row for (eventType, channel, audience: userType) and renders it.
+// Both shapes end up persisted to `notifications` for in-app history, and both silently skip
+// (never throw) when there's nowhere to deliver — a missing template or missing contact info
+// must never take the consumer down.
+
+const CHANNEL_BY_TOPIC = { [TOPICS.NOTIF_PUSH]: 'push', [TOPICS.NOTIF_SMS]: 'sms', [TOPICS.NOTIF_EMAIL]: 'email' };
+
+async function resolveTemplate(eventType, channel, audience) {
+  const base = and(
+    eq(notificationTemplates.eventType, eventType),
+    eq(notificationTemplates.channel, channel),
+    eq(notificationTemplates.isActive, true),
+    eq(notificationTemplates.languageCode, 'en'),
+  );
+  if (audience) {
+    const [exact] = await db.select().from(notificationTemplates)
+      .where(and(base, eq(notificationTemplates.audience, audience))).limit(1);
+    if (exact) return exact;
+  }
+  const [generic] = await db.select().from(notificationTemplates)
+    .where(and(base, isNull(notificationTemplates.audience))).limit(1);
+  return generic || null;
+}
+
+async function resolveContact(userId, userType, field) {
+  const table = userType === 'driver' ? drivers : users;
+  const [row] = await db.select({ value: table[field] }).from(table).where(eq(table.id, userId)).limit(1);
+  return row?.value || null;
+}
 
 async function startNotificationConsumer() {
   const consumer = kafka.consumer({ groupId: 'notification-service' });
   await consumer.connect();
-  await consumer.subscribe({ topics: [TOPICS.NOTIF_PUSH, TOPICS.NOTIF_SMS] });
+  await consumer.subscribe({ topics: [TOPICS.NOTIF_PUSH, TOPICS.NOTIF_SMS, TOPICS.NOTIF_EMAIL] });
 
   await consumer.run({
     eachMessage: async ({ topic, message }) => {
       const payload = parse(message);
       if (!payload) return;
+      const channel = CHANNEL_BY_TOPIC[topic];
+      if (!channel) return;
 
-      if (topic === TOPICS.NOTIF_PUSH) {
-        let fcmToken = payload.fcmToken;
+      let title = payload.title;
+      let body = payload.body;
 
-        // Resolve FCM token from DB if not in payload
-        if (!fcmToken && payload.userId) {
-          if (payload.userType === 'driver') {
-            const [d] = await db.select({ fcmToken: drivers.fcmToken })
-              .from(drivers).where(eq(drivers.id, payload.userId)).limit(1);
-            fcmToken = d?.fcmToken;
-          } else {
-            const [u] = await db.select({ fcmToken: users.fcmToken })
-              .from(users).where(eq(users.id, payload.userId)).limit(1);
-            fcmToken = u?.fcmToken;
-          }
+      if (body === undefined && payload.eventType) {
+        const template = await resolveTemplate(payload.eventType, channel, payload.userType);
+        if (!template) {
+          console.warn(`[Notification] No active ${channel} template for event "${payload.eventType}" — skipping.`);
+          return;
         }
+        title = template.subject ? renderTemplate(template.subject, payload.variables) : undefined;
+        body = renderTemplate(template.bodyHtml, payload.variables);
+      }
+      if (body === undefined) return; // nothing resolvable to send
 
+      if (channel === 'push') {
+        let fcmToken = payload.fcmToken;
+        if (!fcmToken && payload.userId) {
+          fcmToken = await resolveContact(payload.userId, payload.userType, 'fcmToken');
+        }
         await sendPush({
-          fcmToken,
-          title: payload.title,
-          body: payload.body,
-          data: { type: payload.type || '', rideId: payload.rideId || '' },
+          fcmToken, title: title || '', body,
+          data: { type: payload.eventType || payload.type || '', rideId: payload.rideId || '' },
         });
+      } else if (channel === 'sms') {
+        const phone = payload.userId ? await resolveContact(payload.userId, payload.userType, 'phone') : null;
+        if (phone) await sendSms(phone, body);
+      } else if (channel === 'email') {
+        const email = payload.userId ? await resolveContact(payload.userId, payload.userType, 'email') : null;
+        if (email) await sendEmail({ to: email, subject: title || 'Notification', html: body });
+      }
+
+      if (payload.userId && payload.userType) {
+        await db.insert(notifications).values({
+          userId: payload.userId, userType: payload.userType,
+          eventType: payload.eventType || payload.type || null,
+          channel, title: title || null, body,
+          data: payload.rideId ? { rideId: payload.rideId } : null,
+        }).catch(() => {}); // never crash the consumer over a history-write failure
       }
     },
   });

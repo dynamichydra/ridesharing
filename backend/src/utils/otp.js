@@ -1,5 +1,5 @@
 import { redis, REDIS_KEYS } from '../config/redis.js';
-import { env, isTwilioConfigured } from '../config/env.js';
+import { sendSms } from './sms.js';
 
 const OTP_TTL_SECONDS       = 300;   // 5 minutes
 const RESEND_COOLDOWN_SECONDS = 30;   // min gap between sends
@@ -64,16 +64,5 @@ export async function verifyOtp(phone, otp) {
 }
 
 export async function sendOtpSms(phone, otp) {
-  // No Twilio creds configured — just log it (auto-switches to real SMS once they're set)
-  if (!isTwilioConfigured) {
-    console.log(`📱 OTP for ${phone}: ${otp}`);
-    return;
-  }
-  const { default: twilio } = await import('twilio');
-  const client = twilio(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN);
-  await client.messages.create({
-    body: `Your RideShare OTP is: ${otp}. Valid for 5 minutes.`,
-    from: env.TWILIO_PHONE_NUMBER,
-    to:   phone,
-  });
+  await sendSms(phone, `Your RideShare OTP is: ${otp}. Valid for 5 minutes.`);
 }

@@ -18,6 +18,7 @@ import {
   AlertOctagon,
   ScrollText,
   ClipboardList,
+  Bell,
   type LucideIcon
 } from "lucide-react";
 
@@ -187,6 +188,14 @@ export const navItem: NavType[] = [
     title: "Onboarding Config",
     url: "/onboarding-config",
     icon: ClipboardList,
+    isActive: true,
+    type: "regular",
+    roles: ["super_admin"],
+  },
+  {
+    title: "Notifications & Messages",
+    url: "/notification-templates",
+    icon: Bell,
     isActive: true,
     type: "regular",
     roles: ["super_admin"],

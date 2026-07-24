@@ -36,6 +36,7 @@ import {
   zones,
   fareRules,
   commissionRules,
+  notificationTemplates,
   taxRules,
   subscriptionPlans,
   subscriptions,
@@ -1109,6 +1110,49 @@ async function seed() {
     ]).onConflictDoNothing();
     log.ok('3 audit log entries created');
   }
+
+  // ── 11. Notification Templates ────────────────────────────────────────────────
+  // One row per (eventType, channel, audience) for the 3 call sites migrated to the
+  // template-driven dispatch pipeline (see notification-events.js's NOTIFICATION_EVENTS and
+  // src/kafka/consumers/index.js's resolveTemplate) — without these, publishNotification()
+  // would find nothing to render and skip every send.
+  log.section('11. Notification Templates');
+
+  await db.insert(notificationTemplates).values([
+    {
+      eventType: 'PAYMENT_SUCCESS', channel: 'push', audience: 'rider',
+      subject: null, bodyHtml: 'Your payment of {{amount}} for this ride has been recorded.',
+      isActive: true, createdBy: superAdmin?.id,
+    },
+    {
+      eventType: 'PAYMENT_SUCCESS', channel: 'push', audience: 'driver',
+      subject: null, bodyHtml: 'Payment of {{amount}} ({{method}}) recorded for your ride.',
+      isActive: true, createdBy: superAdmin?.id,
+    },
+    {
+      eventType: 'SUBSCRIPTION_ACTIVATED', channel: 'push', audience: 'driver',
+      subject: null, bodyHtml: 'Your {{planName}} plan is now active. Valid until {{endDate}}.',
+      isActive: true, createdBy: superAdmin?.id,
+    },
+    {
+      eventType: 'SUBSCRIPTION_ACTIVATED', channel: 'email', audience: 'driver',
+      subject: 'Your {{planName}} subscription is active',
+      bodyHtml: '<p>Your <strong>{{planName}}</strong> plan is now active, valid until {{endDate}}.</p>',
+      isActive: true, createdBy: superAdmin?.id,
+    },
+    {
+      eventType: 'DOCUMENT_REJECTED', channel: 'push', audience: 'driver',
+      subject: null, bodyHtml: 'Document rejected: {{reason}}',
+      isActive: true, createdBy: superAdmin?.id,
+    },
+    {
+      eventType: 'DOCUMENT_REJECTED', channel: 'sms', audience: 'driver',
+      subject: null, bodyHtml: 'RideShare: a document was rejected — {{reason}}',
+      isActive: true, createdBy: superAdmin?.id,
+    },
+  ]).onConflictDoNothing();
+
+  log.ok('6 notification templates seeded (PAYMENT_SUCCESS, SUBSCRIPTION_ACTIVATED, DOCUMENT_REJECTED)');
 
   // ── Summary ─────────────────────────────────────────────────────────────────
   console.log(`

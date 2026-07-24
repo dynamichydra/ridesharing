@@ -31,6 +31,7 @@ const LedgerList = lazy(() => import("@/features/ledger/pages"));
 const FlaggedTripList = lazy(() => import("@/features/flagged-trips/pages"));
 const AuditLogList = lazy(() => import("@/features/audit-logs/pages"));
 const OnboardingConfigList = lazy(() => import("@/features/onboarding-config/pages"));
+const NotificationTemplateList = lazy(() => import("@/features/notification-templates/pages/list"));
 
 const router = createBrowserRouter([
   {
@@ -261,6 +262,16 @@ const router = createBrowserRouter([
           <ProtectedRoute allowedRoles={["super_admin"]}>
             <Suspense fallback={<Loader />}>
               <OnboardingConfigList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "notification-templates",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <NotificationTemplateList />
             </Suspense>
           </ProtectedRoute>
         ),

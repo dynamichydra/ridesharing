@@ -14,7 +14,7 @@ import { publishEvent, TOPICS } from '../../config/kafka.js';
 //    payout.service.js,
 // 3. resets the linked driver_payout_accounts row to 'pending' for admin re-review — same
 //    re-verify-on-edit convention driver-documents.js already follows on re-upload.
-export async function submitBankDetails(driverId, data) {
+export async function submitBankDetails(driverId, data, actor = { id: driverId, type: 'driver' }) {
   const { bankName, accountHolderName, accountNumber, routingCode, upiId, walletProvider, walletNumber } = data;
   if (!accountNumber && !upiId && !walletNumber) {
     throw { statusCode: 400, message: 'One of accountNumber (with routingCode), upiId, or walletNumber (with walletProvider) is required' };
@@ -81,8 +81,9 @@ export async function submitBankDetails(driverId, data) {
     : await db.insert(driverPayoutAccounts).values(payoutValues).returning();
 
   await publishEvent(TOPICS.AUDIT_LOG, {
-    actorId: driverId, actorType: 'driver',
+    actorId: actor.id, actorType: actor.type,
     action: 'BANK_DETAILS_SUBMITTED', entityType: 'driver_bank_account', entityId: bankAccount.id,
+    ...(actor.type === 'admin' ? { meta: { driverId } } : {}),
   });
 
   return maskBankAccount(bankAccount);
