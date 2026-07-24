@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { fareRulesApi, lookupsApi, taxRulesApi } from "./api";
+import { fareRulesApi, lookupsApi, taxRulesApi, commissionRulesApi } from "./api";
 import type {
   FareRuleListParams,
   FareRulePayload,
@@ -8,10 +8,14 @@ import type {
   TaxRuleListParams,
   TaxRulePayload,
   UpdateTaxRulePayload,
+  CommissionRuleListParams,
+  CommissionRulePayload,
+  UpdateCommissionRulePayload,
 } from "./types";
 
 const FARE_RULES_KEY = "fare-rules";
 const TAX_RULES_KEY = "tax-rules";
+const COMMISSION_RULES_KEY = "commission-rules";
 
 export function useFareRules(params: FareRuleListParams = {}) {
   return useQuery({
@@ -122,6 +126,61 @@ export function useDisableTaxRule() {
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to disable tax rule");
+    },
+  });
+}
+
+// ---------------------------------------------------------------------
+// Commission Rules
+// ---------------------------------------------------------------------
+
+export function useCommissionRules(params: CommissionRuleListParams = {}) {
+  return useQuery({
+    queryKey: [COMMISSION_RULES_KEY, params],
+    queryFn: () => commissionRulesApi.list(params),
+  });
+}
+
+export function useCreateCommissionRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CommissionRulePayload) => commissionRulesApi.create(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [COMMISSION_RULES_KEY], refetchType: "active" });
+      toast.success("Commission rule created");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to create commission rule");
+    },
+  });
+}
+
+export function useUpdateCommissionRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateCommissionRulePayload }) =>
+      commissionRulesApi.update(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [COMMISSION_RULES_KEY], refetchType: "active" });
+      toast.success("Commission rule updated");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to update commission rule");
+    },
+  });
+}
+
+export function useSetCommissionRuleActive() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      commissionRulesApi.setActive(id, isActive),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: [COMMISSION_RULES_KEY], refetchType: "active" });
+      toast.success(variables.isActive ? "Commission rule enabled" : "Commission rule disabled");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to update commission rule status");
     },
   });
 }

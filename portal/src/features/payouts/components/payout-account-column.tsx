@@ -60,6 +60,37 @@ export function getPayoutAccountColumns({ onApprove, onReject, onPayNow }: Actio
         ),
     },
     {
+      id: "razorpayPayoutMethod",
+      header: "Payout Method",
+      cell: ({ row }) => {
+        const acct = row.original;
+        if (acct.gateway !== "razorpay") return <span className="text-muted-foreground text-xs">—</span>;
+        if (acct.razorpayFundAccountType === "vpa" && acct.upiId) {
+          return (
+            <div>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                UPI
+              </span>
+              <div className="text-xs text-muted-foreground mt-0.5">{acct.upiId}</div>
+            </div>
+          );
+        }
+        if (acct.accountNumberLast4) {
+          return (
+            <div>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
+                Bank
+              </span>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {acct.bankName || "Bank"} ••••{acct.accountNumberLast4}
+              </div>
+            </div>
+          );
+        }
+        return <span className="text-muted-foreground text-xs">Not submitted</span>;
+      },
+    },
+    {
       id: "status",
       header: "Status",
       cell: ({ row }) => (

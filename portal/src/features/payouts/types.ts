@@ -12,6 +12,15 @@ export interface PayoutAccount {
   stripeAccountId: string | null;
   stripeDetailsSubmitted: boolean;
   stripePayoutsEnabled: boolean;
+  razorpayFundAccountId: string | null;
+  razorpayFundAccountType: "bank_account" | "vpa" | null;
+  // Masked bank details / UPI id for admin review of the razorpay path — never the raw
+  // account number (see backend driver-bank-accounts.js / bank-account.service.js).
+  bankName: string | null;
+  accountHolderName: string | null;
+  accountNumberLast4: string | null;
+  routingCode: string | null;
+  upiId: string | null;
   status: PayoutAccountStatus;
   rejectionReason: string | null;
   verifiedBy: string | null;

@@ -35,6 +35,7 @@ import {
   vehicleTypePricing,
   zones,
   fareRules,
+  commissionRules,
   taxRules,
   subscriptionPlans,
   subscriptions,
@@ -462,6 +463,26 @@ async function seed() {
 
   log.ok(`India:  GST 18% on subscriptions`);
   log.ok(`Canada: HST 13% on both fares and subscriptions`);
+
+  // ── 4c. Commission Rules ─────────────────────────────────────────────────────
+  // Global default only — resolveCommissionRule falls back to this when no country/vehicle-type
+  // -specific row exists (see commission.service.js). Placeholder rates; an admin should tune
+  // these from the portal before going live.
+  log.section('4c. Commission Rules');
+
+  await db.insert(commissionRules).values([
+    {
+      name: 'Global default',
+      countryId: null, vehicleTypeId: null,
+      bookingFeeMinor: 0,
+      subscriberRate: '0.1500',    // 15% for drivers with an active subscription
+      nonSubscriberRate: '0.2500', // 25% for drivers without one
+      priority: 1,
+      isActive: true,
+    },
+  ]).onConflictDoNothing();
+
+  log.ok(`Global:  15% commission (subscribed) / 25% (unsubscribed), no booking fee`);
 
   // ── 5. Subscription Plans ───────────────────────────────────────────────────
   log.section('5. Subscription Plans');

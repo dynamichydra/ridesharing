@@ -9,6 +9,10 @@ import type {
   TaxRuleListParams,
   TaxRulePayload,
   UpdateTaxRulePayload,
+  CommissionRule,
+  CommissionRuleListParams,
+  CommissionRulePayload,
+  UpdateCommissionRulePayload,
 } from "./types";
 
 // Base path: /fare — rule CRUD lives under /fare/rules (Admin only)
@@ -76,6 +80,31 @@ export const taxRulesApi = {
   // DELETE /fare/tax-rules/:id — a soft delete server-side (sets isActive=false), not a real
   // row deletion, so this is the same enable/disable toggle convention as everything else.
   disable: (id: string) => apiClient.delete<{ deleted: true }>(`${TAX_RULES_BASE_URL}/${id}`),
+};
+
+// ── Commission Rules — /commission-rules (Admin) ──────────────────────────
+// Same { rule: {...} } row-wrapper convention as /fare/rules — unwrapped here so
+// column.tsx/list.tsx never see it.
+const COMMISSION_RULES_BASE_URL = "/commission-rules";
+
+export const commissionRulesApi = {
+  list: async (params: CommissionRuleListParams) => {
+    const query = new URLSearchParams();
+    query.set("page", String(params.page ?? 1));
+    query.set("limit", String(params.limit ?? 10));
+    if (params.countryId) query.set("countryId", params.countryId);
+    if (params.isActive !== undefined) query.set("isActive", String(params.isActive));
+    const res = await apiClient.get<Array<{ rule: CommissionRule }>>(`${COMMISSION_RULES_BASE_URL}?${query.toString()}`);
+    return { ...res, MESSAGE: (res.MESSAGE ?? []).map((item) => item.rule) };
+  },
+
+  create: (payload: CommissionRulePayload) => apiClient.post<CommissionRule>(COMMISSION_RULES_BASE_URL, payload),
+
+  update: (id: string, payload: UpdateCommissionRulePayload) =>
+    apiClient.patch<CommissionRule>(`${COMMISSION_RULES_BASE_URL}/${id}`, payload),
+
+  setActive: (id: string, isActive: boolean) =>
+    apiClient.patch<CommissionRule>(`${COMMISSION_RULES_BASE_URL}/${id}/${isActive ? "enable" : "disable"}`, {}),
 };
 
 export const lookupsApi = {

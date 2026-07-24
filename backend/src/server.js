@@ -16,6 +16,8 @@ import { riderRoutes } from './modules/rider/rider.routes.js';
 import { vehicleTypeRoutes } from './modules/vehicle-type/vehicle-type.routes.js';
 import { zoneRoutes } from './modules/zone/zone.routes.js';
 import { fareRoutes } from './modules/fare/fare.routes.js';
+import { commissionRoutes } from './modules/commission/commission.routes.js';
+import { bankAccountRoutes } from './modules/bank-account/bank-account.routes.js';
 import { rideRoutes } from './modules/ride/ride.routes.js';
 import { ridePaymentRoutes } from './modules/ride-payment/ride-payment.routes.js';
 import { subscriptionRoutes } from './modules/subscription/subscription.routes.js';
@@ -64,6 +66,8 @@ async function build() {
   await app.register(vehicleTypeRoutes, { prefix: `${PREFIX}/vehicle-types` });
   await app.register(zoneRoutes, { prefix: `${PREFIX}/zones` });
   await app.register(fareRoutes, { prefix: `${PREFIX}/fare` });
+  await app.register(commissionRoutes, { prefix: `${PREFIX}/commission-rules` });
+  await app.register(bankAccountRoutes, { prefix: `${PREFIX}/driver/bank-details` });
   await app.register(rideRoutes, { prefix: `${PREFIX}/rides` });
   await app.register(ridePaymentRoutes, { prefix: `${PREFIX}/ride-payments` });
   await app.register(trackingRoutes, { prefix: `${PREFIX}/tracking` });

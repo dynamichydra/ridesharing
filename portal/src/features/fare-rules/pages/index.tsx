@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { DollarSign, Percent } from "lucide-react";
+import { DollarSign, Percent, Split } from "lucide-react";
 import { cn } from "@/lib/utils";
 import FareRuleList from "./list";
 import TaxRulesTab from "./tax-rules";
+import CommissionRulesTab from "./commission-rules";
 
 const TABS = [
   { key: "fare-rules", label: "Fare Rules", icon: DollarSign },
   { key: "tax-rules", label: "Tax Rules", icon: Percent },
+  { key: "commission-rules", label: "Commission Rules", icon: Split },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -37,6 +39,7 @@ export default function FareRulesPage() {
 
       {activeTab === "fare-rules" && <FareRuleList />}
       {activeTab === "tax-rules" && <TaxRulesTab />}
+      {activeTab === "commission-rules" && <CommissionRulesTab />}
     </div>
   );
 }

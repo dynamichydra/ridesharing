@@ -110,6 +110,8 @@ async function _executePayout({ driverId, payoutAccount, wallet, gateway, batchI
   try {
     const result = await gateway.payout({
       stripeAccountId: payoutAccount.stripeAccountId,
+      fundAccountId: payoutAccount.razorpayFundAccountId,
+      mode: payoutAccount.razorpayFundAccountType === 'vpa' ? 'UPI' : 'IMPS',
       amountMinor: payoutRow.amountMinor,
       currencyCode: payoutRow.currencyCode,
       idempotencyKey: `payout:${payoutRow.id}`,
