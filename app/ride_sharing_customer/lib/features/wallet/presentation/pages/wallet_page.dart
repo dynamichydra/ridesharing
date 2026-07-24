@@ -31,7 +31,10 @@ class _WalletPageState extends State<WalletPage> {
         ),
         backgroundColor: Colors.white,
         elevation: 0,
-        automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(Icons.menu_rounded, color: Colors.black87, size: 24),
+          onPressed: () => Scaffold.of(context).openDrawer(),
+        ),
       ),
       body: BlocBuilder<WalletBloc, WalletState>(
         builder: (context, state) {

@@ -13,15 +13,9 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _calculateSelectedIndex(BuildContext context) {
     final String location = GoRouterState.of(context).matchedLocation;
-    if (location.startsWith('/ride-history') || location.startsWith('/ride-detail')) {
-      return 1;
-    }
-    if (location.startsWith('/wallet') || location.startsWith('/transactions') || location.startsWith('/add-funds')) {
-      return 2;
-    }
-    if (location.startsWith('/profile') || location.startsWith('/settings') || location.startsWith('/edit-profile') || location.startsWith('/saved-places') || location.startsWith('/payment-methods') || location.startsWith('/help')) {
-      return 3;
-    }
+    if (location == '/ride-history') return 1;
+    if (location == '/wallet') return 2;
+    if (location == '/profile') return 3;
     return 0; // Default to Home
   }
 

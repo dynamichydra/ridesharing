@@ -31,7 +31,10 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
         backgroundColor: Colors.white,
         elevation: 0,
-        automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(Icons.menu_rounded, color: Colors.black87, size: 24),
+          onPressed: () => Scaffold.of(context).openDrawer(),
+        ),
       ),
       body: BlocBuilder<ProfileBloc, ProfileState>(
         builder: (context, state) {

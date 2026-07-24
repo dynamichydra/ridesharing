@@ -40,7 +40,10 @@ class _RideHistoryPageState extends State<RideHistoryPage> with SingleTickerProv
         ),
         backgroundColor: Colors.white,
         elevation: 0,
-        automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(Icons.menu_rounded, color: Colors.black87, size: 24),
+          onPressed: () => Scaffold.of(context).openDrawer(),
+        ),
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: const Color(0xFF01A34D),

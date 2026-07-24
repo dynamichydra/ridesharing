@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'core/services/storage_service.dart';
 import 'injection_container.dart';
@@ -51,7 +52,12 @@ class AppRoutes {
   static const String rideDetail = '/ride-detail';
   static const String transactions = '/transactions';
 
+  // Root navigator key — sub-pages use this to push on top of the shell
+  static final GlobalKey<NavigatorState> _rootNavigatorKey =
+      GlobalKey<NavigatorState>(debugLabel: 'root');
+
   static final GoRouter router = GoRouter(
+    navigatorKey: _rootNavigatorKey,
     initialLocation: splash,
     redirect: (context, state) async {
       final storage = sl<StorageService>();
@@ -97,6 +103,7 @@ class AppRoutes {
         path: forgotPassword,
         builder: (context, state) => const ForgotPasswordPage(),
       ),
+      // ShellRoute wraps ONLY the 4 main tab pages with MainLayout (bottom nav + drawer)
       ShellRoute(
         builder: (context, state, child) {
           return MainLayout(child: child);
@@ -120,22 +127,72 @@ class AppRoutes {
           ),
         ],
       ),
+      // Sub-pages: parentNavigatorKey forces them onto the root navigator
+      // so they render full-screen WITHOUT the bottom nav bar
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: rideDetail,
+        builder: (context, state) {
+          final ride = Map<String, dynamic>.from(state.extra as Map);
+          return RideDetailPage(ride: ride);
+        },
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: addFunds,
+        builder: (context, state) => const AddFundsPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: transactions,
+        builder: (context, state) => const TransactionsPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: editProfile,
+        builder: (context, state) => const EditProfilePage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: savedPlaces,
+        builder: (context, state) => const SavedPlacesPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: paymentMethods,
+        builder: (context, state) => const PaymentMethodsPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: help,
+        builder: (context, state) => const HelpPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: settings,
+        builder: (context, state) => const SettingsPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         path: selectLocation,
         builder: (context, state) => const SelectLocationPage(),
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         path: rideOptions,
         builder: (context, state) => const RideOptionsPage(),
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         path: rideTracking,
         builder: (context, state) => const RideTrackingPage(),
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         path: notifications,
         builder: (context, state) => const NotificationsPage(),
       ),
     ],
   );
 }
+

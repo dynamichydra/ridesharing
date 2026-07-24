@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/constants/constants.dart';
 import '../bloc/auth_bloc.dart';
 
 class SplashPage extends StatefulWidget {
@@ -40,49 +39,70 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
         if (state is AuthAuthenticated) {
-          Future.delayed(const Duration(milliseconds: 1500), () {
+          Future.delayed(const Duration(milliseconds: 2000), () {
             if (mounted) context.go('/home');
           });
         } else if (state is AuthUnauthenticated) {
-          Future.delayed(const Duration(milliseconds: 1500), () {
+          Future.delayed(const Duration(milliseconds: 2000), () {
             if (mounted) context.go('/login');
           });
         }
       },
       child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        body: Center(
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Image.asset(
-                  'assets/images/ride-share-text-icon.png',
-                  height: 64,
-                  fit: BoxFit.contain,
-                ),
-                const SizedBox(height: AppSpacing.l),
-                const Text(
-                  'Ride Sharing',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: 2,
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: Stack(
+            children: [
+              // Main logo centered
+              Center(
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Image.asset(
+                    'assets/logos/main-logo-full.png',
+                    width: MediaQuery.of(context).size.width * 0.75,
+                    fit: BoxFit.contain,
                   ),
                 ),
-                const SizedBox(height: AppSpacing.s),
-                Text(
-                  'Move with freedom',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white.withOpacity(0.7),
-                    letterSpacing: 1.5,
-                  ),
+              ),
+
+              // Bottom 3-Dot Loading Indicator
+              Positioned(
+                bottom: 40,
+                left: 0,
+                right: 0,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF009048),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF0065B3),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFE5B800),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
