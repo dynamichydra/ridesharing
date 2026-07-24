@@ -89,3 +89,74 @@ export interface LookupOption {
   id: string;
   name: string;
 }
+
+// ── Tax Rules (same backend module, /fare/tax-rules) ─────────────────────
+
+export type TaxAppliesTo = "fare" | "subscription" | "both";
+
+export interface TaxRule {
+  id: string;
+  countryId: string;
+  stateId: string | null; // null = applies to the whole country — state-level rules aren't resolved yet
+  name: string; // e.g. "GST", "HST", "PST"
+  appliesTo: TaxAppliesTo;
+  rate: string; // decimal string, e.g. "0.1300" = 13%
+  isInclusive: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaxRuleListParams {
+  page?: number;
+  limit?: number;
+}
+
+export interface TaxRulePayload {
+  countryId: string;
+  stateId?: string;
+  name: string;
+  appliesTo: TaxAppliesTo;
+  rate: number;
+  isInclusive?: boolean;
+}
+
+export type UpdateTaxRulePayload = Partial<TaxRulePayload> & { isActive?: boolean };
+
+// ── Commission Rules (same backend module family, /commission-rules) ─────
+// Per-ride platform cut — a booking fee off the top plus a %, with a separate rate for
+// drivers with an active subscription vs without one (subscription is a discount on the
+// commission, not a full waiver — see backend commission.service.js).
+
+export interface CommissionRule {
+  id: string;
+  name: string;
+  countryId: string | null; // null = global default
+  vehicleTypeId: string | null; // null = all vehicle types
+  bookingFeeMinor: number;
+  subscriberRate: string; // decimal string, e.g. "0.1500" = 15%
+  nonSubscriberRate: string;
+  priority: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CommissionRuleListParams {
+  page?: number;
+  limit?: number;
+  countryId?: string;
+  isActive?: boolean;
+}
+
+export interface CommissionRulePayload {
+  name: string;
+  countryId?: string;
+  vehicleTypeId?: string;
+  bookingFeeMinor: number;
+  subscriberRate: number;
+  nonSubscriberRate: number;
+  priority?: number;
+}
+
+export type UpdateCommissionRulePayload = Partial<CommissionRulePayload> & { isActive?: boolean };

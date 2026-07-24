@@ -7,6 +7,7 @@ import { paginate } from '../../utils/response.js';
 import { createUploadUrl, verifyObjectExists, createViewUrl } from '../../utils/storage.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { advanceRegistration, REGISTRATION_STEP } from '../../utils/registration.js';
+import { publishNotification } from '../notification/notification-events.js';
 
 const SIDE_COLUMN = { front: 'frontUrl', back: 'backUrl', pdf: 'pdfUrl' };
 
@@ -149,10 +150,9 @@ export async function verifyDocument(docId, adminId, approve, rejectionReason) {
   if (!approve) {
     const [driver] = await db.select({ id: drivers.id }).from(drivers).where(eq(drivers.id, doc.driverId)).limit(1);
     if (driver) {
-      await publishEvent(TOPICS.NOTIF_PUSH, {
+      await publishNotification('DOCUMENT_REJECTED', {
         userId: doc.driverId, userType: 'driver',
-        title: 'Document rejected', body: rejectionReason || 'Please re-upload this document.',
-        type: 'DOCUMENT_REJECTED',
+        variables: { reason: rejectionReason || 'Please re-upload this document.' },
       });
     }
   }

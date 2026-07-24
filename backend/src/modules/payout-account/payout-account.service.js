@@ -1,6 +1,6 @@
 import { eq, and, desc, count } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { driverPayoutAccounts, drivers, countries } from '../../../drizzle/schema/index.js';
+import { driverPayoutAccounts, drivers, countries, driverBankAccounts } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
 import { env } from '../../config/env.js';
@@ -82,7 +82,27 @@ export async function listPayoutAccounts(filters, page, limit, offset) {
   const where = conditions.length ? and(...conditions) : undefined;
 
   const [{ total }] = await db.select({ total: count() }).from(driverPayoutAccounts).where(where);
-  const rows = await db.select().from(driverPayoutAccounts).where(where)
+  const rows = await db.select({
+    id: driverPayoutAccounts.id, driverId: driverPayoutAccounts.driverId,
+    driverName: drivers.name, driverPhone: drivers.phone,
+    gateway: driverPayoutAccounts.gateway, stripeAccountId: driverPayoutAccounts.stripeAccountId,
+    stripeDetailsSubmitted: driverPayoutAccounts.stripeDetailsSubmitted,
+    stripePayoutsEnabled: driverPayoutAccounts.stripePayoutsEnabled,
+    razorpayFundAccountId: driverPayoutAccounts.razorpayFundAccountId,
+    razorpayFundAccountType: driverPayoutAccounts.razorpayFundAccountType,
+    // masked bank details only, for admin review of the razorpay path — never the raw
+    // account number (see driver-bank-accounts.js / bank-account.service.js). upiId is a
+    // shareable payment handle, not secret, so it's shown as-is.
+    bankName: driverBankAccounts.bankName, accountHolderName: driverBankAccounts.accountHolderName,
+    accountNumberLast4: driverBankAccounts.accountNumberLast4, routingCode: driverBankAccounts.routingCode,
+    upiId: driverBankAccounts.upiId,
+    status: driverPayoutAccounts.status, rejectionReason: driverPayoutAccounts.rejectionReason,
+    verifiedBy: driverPayoutAccounts.verifiedBy, verifiedAt: driverPayoutAccounts.verifiedAt,
+    createdAt: driverPayoutAccounts.createdAt, updatedAt: driverPayoutAccounts.updatedAt,
+  }).from(driverPayoutAccounts)
+    .innerJoin(drivers, eq(driverPayoutAccounts.driverId, drivers.id))
+    .leftJoin(driverBankAccounts, eq(driverPayoutAccounts.driverId, driverBankAccounts.driverId))
+    .where(where)
     .orderBy(desc(driverPayoutAccounts.createdAt)).limit(limit).offset(offset);
   return { rows, pagination: paginate(page, limit, total) };
 }

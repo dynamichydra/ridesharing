@@ -9,6 +9,8 @@ import { withIdempotency } from '../../utils/idempotency.js';
 import { postTransaction, getOrCreateSystemAccount, getOrCreateWalletAccount } from '../ledger/ledger.service.js';
 import { getOrCreateWallet } from '../wallet/wallet.service.js';
 import { handleDisputeEvent } from '../dispute/dispute.service.js';
+import { resolveCommissionRule, computeCommission } from '../commission/commission.service.js';
+import { publishNotification } from '../notification/notification-events.js';
 
 // ── Rider — pay online ─────────────────────────────────────────────────────────
 
@@ -245,33 +247,71 @@ async function _loadPayableRide(ownershipCondition) {
   return ride;
 }
 
-// Online fares: Dr the gateway's processor-clearing account, Cr the driver's wallet — this
-// is what actually makes an online fare payable to the driver (previously nothing did).
-// Cash fares: a net-zero memo posting (driver already holds the cash, wallet untouched) —
-// records that revenue was recognized without the platform custodying funds. `idempotencyKey`
-// is per-ride so a duplicate call (e.g. verify + webhook both landing) posts once, not twice.
+// Resolves the commission rule for this ride and the driver's subscription status *at
+// settlement time* (not at request time — a driver's subscription can lapse mid-ride), and
+// stamps the breakdown onto ride.fareSnapshot so getRideInvoice/getRidePaymentStatus can show
+// it without a schema change to `rides`. Returns null (no commission applied) if there's no
+// driver to charge one against.
+async function _resolveRideCommission(ride) {
+  if (!ride.driverId) return null;
+  const [driver] = await db.select({ subscriptionStatus: drivers.subscriptionStatus })
+    .from(drivers).where(eq(drivers.id, ride.driverId)).limit(1);
+
+  const rule = await resolveCommissionRule(ride.vehicleTypeId, ride.countryId);
+  const breakdown = computeCommission({
+    finalFareMinor: ride.finalFareMinor,
+    rule,
+    isSubscriber: driver?.subscriptionStatus === 'active',
+  });
+
+  await db.update(rides).set({
+    fareSnapshot: { ...(ride.fareSnapshot || {}), commission: { ruleId: rule.id, ...breakdown } },
+  }).where(eq(rides.id, ride.id));
+
+  return breakdown;
+}
+
+// Online fares: Dr the gateway's processor-clearing account, Cr the driver's wallet for their
+// post-commission earnings, Cr platform_commission_revenue for the booking fee + rate cut —
+// this is what actually makes an online fare payable to the driver (previously nothing did,
+// and nothing deducted a platform cut either).
+// Cash fares: the existing net-zero memo (driver already holds the cash, wallet untouched)
+// still records that revenue was recognized without the platform custodying funds — plus a
+// real debit against the driver's wallet for the commission they owe on cash already in hand,
+// which can legitimately run the wallet negative (allowNegative) for a mostly-cash driver, the
+// same way a refund clawback already can elsewhere in this codebase.
+// `idempotencyKey` is per-ride so a duplicate call (e.g. verify + webhook both landing) posts
+// once, not twice.
 async function _postRideFareLedger(ride, paymentInfo) {
   const currencyCode = ride.currencyCode;
+  const commission = await _resolveRideCommission(ride);
 
   if (paymentInfo.method === 'online') {
     if (!ride.driverId) return; // no driver to credit — shouldn't happen for a completed ride
     const driverWallet = await getOrCreateWallet('driver', ride.driverId);
-    const [clearingAccount, driverWalletAccount] = await Promise.all([
+    const [clearingAccount, driverWalletAccount, commissionAccount] = await Promise.all([
       getOrCreateSystemAccount(`processor_clearing:${paymentInfo.gateway}`, currencyCode),
       getOrCreateWalletAccount(driverWallet.id, currencyCode),
+      getOrCreateSystemAccount('platform_commission_revenue', currencyCode),
     ]);
+    const entries = [
+      { accountId: clearingAccount.id, direction: 'debit', amountMinor: ride.finalFareMinor, currencyCode },
+      {
+        accountId: driverWalletAccount.id, direction: 'credit', amountMinor: commission.driverEarningsMinor, currencyCode,
+        reason: 'ride_fare_online', description: `Fare for ride ${ride.id}`,
+      },
+    ];
+    // No cut this ride (e.g. a 0% rule) -> driverEarningsMinor already equals finalFareMinor,
+    // so the entries above alone balance; only add a third leg when there's really a fee to book.
+    if (commission.commissionMinor > 0) {
+      entries.push({ accountId: commissionAccount.id, direction: 'credit', amountMinor: commission.commissionMinor, currencyCode });
+    }
     await postTransaction({
       businessType: 'ride_fare_online',
       idempotencyKey: `ride_fare_online:${ride.id}`,
       referenceType: 'ride',
       referenceId: ride.id,
-      entries: [
-        { accountId: clearingAccount.id, direction: 'debit', amountMinor: ride.finalFareMinor, currencyCode },
-        {
-          accountId: driverWalletAccount.id, direction: 'credit', amountMinor: ride.finalFareMinor, currencyCode,
-          reason: 'ride_fare_online', description: `Fare for ride ${ride.id}`,
-        },
-      ],
+      entries,
     });
   } else if (paymentInfo.method === 'cash') {
     const [cashMemo, revenueMemo] = await Promise.all([
@@ -288,6 +328,27 @@ async function _postRideFareLedger(ride, paymentInfo) {
         { accountId: revenueMemo.id, direction: 'credit', amountMinor: ride.finalFareMinor, currencyCode },
       ],
     });
+
+    if (ride.driverId && commission?.commissionMinor > 0) {
+      const driverWallet = await getOrCreateWallet('driver', ride.driverId);
+      const [driverWalletAccount, commissionAccount] = await Promise.all([
+        getOrCreateWalletAccount(driverWallet.id, currencyCode),
+        getOrCreateSystemAccount('platform_commission_revenue', currencyCode),
+      ]);
+      await postTransaction({
+        businessType: 'ride_commission_cash',
+        idempotencyKey: `ride_commission_cash:${ride.id}`,
+        referenceType: 'ride',
+        referenceId: ride.id,
+        entries: [
+          {
+            accountId: driverWalletAccount.id, direction: 'debit', amountMinor: commission.commissionMinor, currencyCode,
+            reason: 'ride_commission_cash', description: `Commission owed for cash ride ${ride.id}`, allowNegative: true,
+          },
+          { accountId: commissionAccount.id, direction: 'credit', amountMinor: commission.commissionMinor, currencyCode },
+        ],
+      });
+    }
   }
 }
 
@@ -320,16 +381,14 @@ async function _markRidePaid(ride, paymentInfo) {
     amountMinor: ride.finalFareMinor, currencyCode: ride.currencyCode, method: paymentInfo.method,
   });
   const amountLabel = formatMoney(ride.finalFareMinor, ride.currencyCode);
-  await publishEvent(TOPICS.NOTIF_PUSH, {
-    userType: 'rider', userId: ride.riderId,
-    type: 'PAYMENT_SUCCESS', title: 'Payment received',
-    body: `Your payment of ${amountLabel} for this ride has been recorded.`,
+  await publishNotification('PAYMENT_SUCCESS', {
+    userId: ride.riderId, userType: 'rider', rideId: ride.id,
+    variables: { amount: amountLabel, method: paymentInfo.method },
   });
   if (ride.driverId) {
-    await publishEvent(TOPICS.NOTIF_PUSH, {
-      userType: 'driver', userId: ride.driverId,
-      type: 'PAYMENT_SUCCESS', title: 'Payment received',
-      body: `Payment of ${amountLabel} (${paymentInfo.method}) recorded for your ride.`,
+    await publishNotification('PAYMENT_SUCCESS', {
+      userId: ride.driverId, userType: 'driver', rideId: ride.id,
+      variables: { amount: amountLabel, method: paymentInfo.method },
     });
   }
 

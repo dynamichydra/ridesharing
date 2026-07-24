@@ -63,6 +63,25 @@ export interface Pagination {
   totalPages: number;
 }
 
+// POST /drivers  (Admin) — only name is strictly required; phone or email must be present
+// (at least one). Creates the driver in registration_in_progress — this doesn't skip the
+// normal document/vehicle registration flow, just seeds the initial record.
+export interface CreateDriverPayload {
+  name: string;
+  phone?: string;
+  email?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  preferredLanguageCode?: string;
+  countryId?: string;
+  stateId?: string;
+  cityId?: string;
+  vehicleTypeId?: string;
+  vehicleNumber?: string;
+  vehicleModel?: string;
+  vehicleYear?: string;
+}
+
 export interface ApproveDriverPayload {
   note?: string;
 }
@@ -189,4 +208,10 @@ export interface Payment {
 export interface DriverPaymentRow {
   payment: Payment;
   plan: SubscriptionPlanSummary;
+}
+
+// Minimal option shape for the vehicle-type dropdown in the Create Driver form.
+export interface VehicleTypeOption {
+  id: string;
+  name: string;
 }

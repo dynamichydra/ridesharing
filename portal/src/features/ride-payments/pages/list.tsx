@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Wallet } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { AutoFilters, type FilterSchema } from "@/components/filters/AutoFilters";
@@ -7,7 +7,8 @@ import { useFilterController } from "@/components/filters/useFilterController";
 import { getRidePaymentColumns } from "../components/column";
 import { useRidePayments } from "../hooks";
 import { useCountryOptions } from "@/features/geo/hooks";
-import type { RidePaymentListParams, Pagination } from "../types";
+import { InitiateRefundDialog } from "@/features/refunds/components/dialog";
+import type { RidePayment, RidePaymentListParams, Pagination } from "../types";
 
 const BASE_FILTER_SCHEMA: FilterSchema = {
   status: {
@@ -66,6 +67,14 @@ export default function RidePaymentList() {
     },
   };
 
+  const [refundPayment, setRefundPayment] = useState<RidePayment | null>(null);
+  const [isRefundOpen, setIsRefundOpen] = useState(false);
+
+  const handleRefund = (payment: RidePayment) => {
+    setRefundPayment(payment);
+    setIsRefundOpen(true);
+  };
+
   const page = Number(controller.applied.page) || 1;
   const limit = Number(controller.applied.limit) || 10;
 
@@ -88,7 +97,7 @@ export default function RidePaymentList() {
   const totalPages = pagination?.totalPages || 1;
   const totalRecords = pagination?.totalItems ?? payments.length;
 
-  const columns = useMemo(() => getRidePaymentColumns(), []);
+  const columns = useMemo(() => getRidePaymentColumns({ onRefund: handleRefund }), []);
 
   const handlePageChange = (pageIndex: number) => {
     controller.apply({ page: pageIndex + 1 });
@@ -131,6 +140,20 @@ export default function RidePaymentList() {
           isFetching={isFetching}
         />
       </div>
+
+      <InitiateRefundDialog
+        open={isRefundOpen}
+        onOpenChange={setIsRefundOpen}
+        payment={
+          refundPayment
+            ? {
+                paymentId: refundPayment.payment.id,
+                remainingMinor: refundPayment.payment.amountMinor,
+                currencyCode: refundPayment.payment.currencyCode,
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

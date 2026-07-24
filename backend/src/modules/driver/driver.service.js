@@ -1,6 +1,6 @@
 import { eq, desc, count, and, or, ilike } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { drivers, subscriptions, cities } from '../../../drizzle/schema/index.js';
+import { drivers, subscriptions, cities, driverPayoutAccounts } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
@@ -135,15 +135,23 @@ export async function submitApplication(driverId) {
 
 export async function goOnline(driverId, lat, lng) {
   const [driver] = await db.select({
-    subscriptionStatus: drivers.subscriptionStatus,
-    approvalStatus:     drivers.approvalStatus,
-    isBlocked:          drivers.isBlocked,
+    approvalStatus: drivers.approvalStatus,
+    isBlocked:      drivers.isBlocked,
   }).from(drivers).where(eq(drivers.id, driverId)).limit(1);
 
   if (!driver)                              throw { statusCode: 404, message: 'Driver not found' };
   if (driver.isBlocked)                     throw { statusCode: 403, message: 'Account is blocked' };
   if (driver.approvalStatus !== 'approved') throw { statusCode: 403, message: 'Account not approved yet' };
-  if (driver.subscriptionStatus !== 'active') throw { statusCode: 403, message: 'No active subscription' };
+
+  // A subscription is no longer required to go online (see commission.service.js) — but a
+  // driver still needs somewhere for the platform to actually pay them, so an approved payout
+  // account (Stripe Connect or RazorpayX, see payout-account/bank-account modules) is now the
+  // gate instead of subscriptionStatus.
+  const [payoutAccount] = await db.select({ status: driverPayoutAccounts.status })
+    .from(driverPayoutAccounts).where(eq(driverPayoutAccounts.driverId, driverId)).limit(1);
+  if (!payoutAccount || payoutAccount.status !== 'approved') {
+    throw { statusCode: 403, message: 'Add and verify your payout bank details before going online' };
+  }
 
   await db.update(drivers).set({
     isOnline: true, currentLat: String(lat), currentLng: String(lng), lastLocationAt: new Date(),

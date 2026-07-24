@@ -1,12 +1,22 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, Calendar } from "lucide-react";
-import { useDashboardStats, useRideStats } from "../hooks";
+import { TrendingUp, Calendar, CreditCard } from "lucide-react";
+import { useDashboardStats, useRideStats, useSubscriptionStats } from "../hooks";
 import { dashboardCards } from "../cards";
 import RideAnalyticsChart from "../chart";
+
+function formatMinor(priceMinor: string | number, currencyCode: string): string {
+  const amount = Number(priceMinor) / 100;
+  try {
+    return new Intl.NumberFormat("en", { style: "currency", currency: currencyCode }).format(amount);
+  } catch {
+    return `${currencyCode} ${amount.toFixed(2)}`;
+  }
+}
 
 export default function DashboardPage() {
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
   const { data: chartData = [], isLoading: chartLoading } = useRideStats(7);
+  const { data: planStats = [], isLoading: planStatsLoading } = useSubscriptionStats();
 
   if (statsLoading || chartLoading) {
     return <div className="py-8 text-center text-muted-foreground">Loading dashboard…</div>;
@@ -93,6 +103,47 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-border bg-card shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <CreditCard className="h-5 w-5 text-primary" />
+            Subscription Plans Breakdown
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {planStatsLoading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : planStats.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No subscription plans yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-muted-foreground uppercase tracking-wide border-b border-border">
+                    <th className="pb-2 pr-4 font-semibold">Plan</th>
+                    <th className="pb-2 pr-4 font-semibold">Type</th>
+                    <th className="pb-2 pr-4 font-semibold">Price</th>
+                    <th className="pb-2 pr-4 font-semibold">Total Subs</th>
+                    <th className="pb-2 font-semibold">Active</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {planStats.map((row) => (
+                    <tr key={`${row.plan_name}-${row.plan_type}`} className="border-b border-border/50 last:border-0">
+                      <td className="py-2 pr-4 font-medium text-foreground">{row.plan_name}</td>
+                      <td className="py-2 pr-4 text-muted-foreground capitalize">{row.plan_type}</td>
+                      <td className="py-2 pr-4 text-foreground">{formatMinor(row.price_minor, row.currency_code)}</td>
+                      <td className="py-2 pr-4 text-foreground">{row.total_subscriptions}</td>
+                      <td className="py-2 text-green-600 dark:text-green-400 font-semibold">{row.active_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { getApplicableTaxRules } from '../fare/tax-rules.service.js';
 import { withIdempotency } from '../../utils/idempotency.js';
 import { postTransaction, getOrCreateSystemAccount } from '../ledger/ledger.service.js';
 import { handleDisputeEvent } from '../dispute/dispute.service.js';
+import { publishNotification } from '../notification/notification-events.js';
 
 // ── Plans (admin) ─────────────────────────────────────────────────────────────
 
@@ -219,11 +220,9 @@ async function _activateSubscription(driverId, planId, plan, amountMinor, paymen
   });
 
   await publishEvent(TOPICS.SUBSCRIPTION_ACTIVATED, { id: sub.id, driverId, planId, endDate });
-  await publishEvent(TOPICS.NOTIF_PUSH, {
-    userType: 'driver', userId: driverId,
-    type: 'SUBSCRIPTION_ACTIVATED',
-    title: '🎉 Subscription Active!',
-    body:  `Your ${plan.name} plan is now active. ${endDate ? `Valid until ${endDate.toDateString()}.` : 'Lifetime access!'}`,
+  await publishNotification('SUBSCRIPTION_ACTIVATED', {
+    userId: driverId, userType: 'driver',
+    variables: { planName: plan.name, endDate: endDate ? endDate.toDateString() : 'Lifetime access' },
   });
   return sub;
 }

@@ -15,6 +15,9 @@ export const driverPayoutAccounts = pgTable('driver_payout_accounts', {
   stripeAccountId:        varchar('stripe_account_id'),
   stripeDetailsSubmitted: boolean('stripe_details_submitted').default(false),
   stripePayoutsEnabled:   boolean('stripe_payouts_enabled').default(false),
+  razorpayContactId:      varchar('razorpay_contact_id'),     // RazorpayX Contact — created from driver_bank_accounts
+  razorpayFundAccountId:  varchar('razorpay_fund_account_id'), // RazorpayX Fund Account — what payout() actually pays into
+  razorpayFundAccountType: varchar('razorpay_fund_account_type', { length: 20 }), // 'bank_account' | 'vpa' — picks the payout mode (IMPS vs UPI), see payout.service.js
   status:                 varchar('status', { length: 20 }).default('pending'), // pending | approved | rejected
   rejectionReason:        text('rejection_reason'),
   verifiedBy:             uuid('verified_by').references(() => admins.id),

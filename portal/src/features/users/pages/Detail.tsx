@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { RiderFormDialog } from "../components/dialog";
 import { RiderSubscriptionPanel } from "../components/subscription-panel";
 import { WalletPanel } from "@/features/wallets/components/wallet-panel";
+import { BankDetailsPanel } from "@/features/bank-details/components/bank-details-panel";
 import { useCountryOptions, useStateOptions, useCityOptions } from "@/features/geo/hooks";
 import { useRider, useRiderRides, useUpdateRider } from "../hooks";
 import { useRidePayments } from "@/features/ride-payments/hooks";
@@ -204,6 +205,8 @@ export default function RiderDetail() {
         </Card>
 
         <WalletPanel ownerType="rider" ownerId={riderId} />
+
+        <BankDetailsPanel ownerType="rider" ownerId={riderId} />
 
         <RiderSubscriptionPanel riderId={riderId} />
 

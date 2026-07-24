@@ -1,8 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { driversApi, documentsApi, driverSubscriptionsApi } from "./api";
+import { driversApi, documentsApi, driverSubscriptionsApi, vehicleTypesLookupApi } from "./api";
 import type {
   DriverListParams,
+  CreateDriverPayload,
   ApproveDriverPayload,
   RejectDriverPayload,
   RequestDocumentsPayload,
@@ -37,6 +38,28 @@ export function useExportDrivers() {
     onError: (err: any) => {
       toast.error(err.message || "Failed to export drivers");
     },
+  });
+}
+
+export function useCreateDriver() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreateDriverPayload) => driversApi.create(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY], refetchType: "active" });
+      toast.success("Driver registered");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to register driver");
+    },
+  });
+}
+
+export function useVehicleTypeOptions() {
+  return useQuery({
+    queryKey: ["vehicle-types", "lookup"],
+    queryFn: () => vehicleTypesLookupApi.list(),
+    staleTime: 5 * 60 * 1000,
   });
 }
 

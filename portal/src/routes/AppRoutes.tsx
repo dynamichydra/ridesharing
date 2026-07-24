@@ -23,8 +23,15 @@ const SubscriptionPlanList = lazy(() => import("@/features/subscriptions/pages")
 const RiderPlanList = lazy(() => import("@/features/rider-plans/pages"));
 const WalletList = lazy(() => import("@/features/wallets/pages"));
 const RidePaymentList = lazy(() => import("@/features/ride-payments/pages"));
+const RefundList = lazy(() => import("@/features/refunds/pages"));
+const PayoutList = lazy(() => import("@/features/payouts/pages"));
+const DisputeList = lazy(() => import("@/features/disputes/pages"));
+const ReconciliationList = lazy(() => import("@/features/reconciliation/pages"));
+const LedgerList = lazy(() => import("@/features/ledger/pages"));
+const FlaggedTripList = lazy(() => import("@/features/flagged-trips/pages"));
 const AuditLogList = lazy(() => import("@/features/audit-logs/pages"));
 const OnboardingConfigList = lazy(() => import("@/features/onboarding-config/pages"));
+const NotificationTemplateList = lazy(() => import("@/features/notification-templates/pages/list"));
 
 const router = createBrowserRouter([
   {
@@ -180,6 +187,66 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: "refunds",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <RefundList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "payouts",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <PayoutList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "disputes",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <DisputeList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "reconciliation",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <ReconciliationList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "ledger",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <LedgerList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "flagged-trips",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <FlaggedTripList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: "audit-logs",
         element: (
           <ProtectedRoute allowedRoles={["super_admin"]}>
@@ -195,6 +262,16 @@ const router = createBrowserRouter([
           <ProtectedRoute allowedRoles={["super_admin"]}>
             <Suspense fallback={<Loader />}>
               <OnboardingConfigList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "notification-templates",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <NotificationTemplateList />
             </Suspense>
           </ProtectedRoute>
         ),

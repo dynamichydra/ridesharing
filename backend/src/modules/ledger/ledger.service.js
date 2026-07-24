@@ -189,6 +189,15 @@ export async function listTransactions(filters, page, limit, offset) {
 export async function getTransaction(id) {
   const [transaction] = await db.select().from(ledgerTransactions).where(eq(ledgerTransactions.id, id)).limit(1);
   if (!transaction) throw { statusCode: 404, message: 'Ledger transaction not found' };
-  const entries = await db.select().from(ledgerEntries).where(eq(ledgerEntries.transactionId, id));
+  // Joined with the account so admin reads show a readable code (e.g.
+  // 'processor_clearing:razorpay') / wallet reference instead of a bare account UUID.
+  const entries = await db.select({
+    id: ledgerEntries.id, transactionId: ledgerEntries.transactionId, accountId: ledgerEntries.accountId,
+    accountType: ledgerAccounts.type, accountCode: ledgerAccounts.code, walletId: ledgerAccounts.walletId,
+    direction: ledgerEntries.direction, amountMinor: ledgerEntries.amountMinor, currencyCode: ledgerEntries.currencyCode,
+    createdAt: ledgerEntries.createdAt,
+  }).from(ledgerEntries)
+    .innerJoin(ledgerAccounts, eq(ledgerEntries.accountId, ledgerAccounts.id))
+    .where(eq(ledgerEntries.transactionId, id));
   return { transaction, entries };
 }

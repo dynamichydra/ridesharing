@@ -10,4 +10,7 @@ export const dashboardApi = {
 
   // GET /admin/stats/rides?days=  (Admin) — daily ride stats for the last N days
   getRideStats: (days: number) => apiClient.get<any>(`${BASE_URL}/stats/rides?days=${days}`),
+
+  // GET /admin/stats/subscriptions  (Admin) — per-plan subscription counts
+  getSubscriptionStats: () => apiClient.get<any>(`${BASE_URL}/stats/subscriptions`),
 };

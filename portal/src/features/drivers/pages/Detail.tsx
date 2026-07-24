@@ -28,6 +28,7 @@ import {
 } from "../components/dialog";
 import { DriverSubscriptionPanel } from "../components/subscription-panel";
 import { WalletPanel } from "@/features/wallets/components/wallet-panel";
+import { BankDetailsPanel } from "@/features/bank-details/components/bank-details-panel";
 import { useCountryOptions, useStateOptions, useCityOptions } from "@/features/geo/hooks";
 import {
   useDriver,
@@ -267,6 +268,8 @@ export default function DriverDetail() {
         </Card>
 
         <WalletPanel ownerType="driver" ownerId={driverId} />
+
+        <BankDetailsPanel ownerType="driver" ownerId={driverId} />
 
         <Card className="border-border bg-card shadow-sm md:col-span-2">
           <CardHeader>

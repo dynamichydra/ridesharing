@@ -2,13 +2,14 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { Car, CheckCheck, Download } from "lucide-react";
+import { Car, CheckCheck, Download, UserPlus } from "lucide-react";
 import type { RowSelectionState } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/data-table";
 import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getDriverColumns } from "../components/column";
+import { CreateDriverDialog } from "../components/create-dialog";
 import { useDrivers, useToggleBlockDriver, useExportDrivers, useApproveDriver } from "../hooks";
 import type { Driver } from "../types";
 import { AutoFilters, type FilterSchema } from "@/components/filters/AutoFilters";
@@ -38,6 +39,7 @@ export default function DriverList() {
   const geoFilterSchema = useGeoFilterSchema(controller);
   const driverFilterSchema: FilterSchema = { ...driverBaseFilterSchema, ...geoFilterSchema };
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const page = Number(controller.applied.page) || 1;
 
@@ -129,15 +131,20 @@ export default function DriverList() {
             {data?.COUNT ?? 0} Total
           </span>
         </div>
-        <Button
-          onClick={handleExport}
-          variant="outline"
-          size="sm"
-          disabled={exportMutation.isPending}
-          className="gap-2 h-8"
-        >
-          <Download className="h-4 w-4" /> Export CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setIsCreateOpen(true)} size="sm" className="gap-2 h-8 cursor-pointer">
+            <UserPlus className="h-4 w-4" /> Register Driver
+          </Button>
+          <Button
+            onClick={handleExport}
+            variant="outline"
+            size="sm"
+            disabled={exportMutation.isPending}
+            className="gap-2 h-8"
+          >
+            <Download className="h-4 w-4" /> Export CSV
+          </Button>
+        </div>
       </div>
       <AutoFilters
         schema={driverFilterSchema}
@@ -178,6 +185,8 @@ export default function DriverList() {
           onRowSelectionChange={setRowSelection}
         />
       </div>
+
+      <CreateDriverDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
     </div>
   );
 }

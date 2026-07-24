@@ -1,6 +1,6 @@
 import { eq, and, desc, count } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { wallets, driverPayoutAccounts, payoutBatches, payouts } from '../../../drizzle/schema/index.js';
+import { wallets, driverPayoutAccounts, payoutBatches, payouts, drivers } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
 import { formatMoney } from '../../utils/money.js';
@@ -110,6 +110,8 @@ async function _executePayout({ driverId, payoutAccount, wallet, gateway, batchI
   try {
     const result = await gateway.payout({
       stripeAccountId: payoutAccount.stripeAccountId,
+      fundAccountId: payoutAccount.razorpayFundAccountId,
+      mode: payoutAccount.razorpayFundAccountType === 'vpa' ? 'UPI' : 'IMPS',
       amountMinor: payoutRow.amountMinor,
       currencyCode: payoutRow.currencyCode,
       idempotencyKey: `payout:${payoutRow.id}`,
@@ -170,7 +172,14 @@ export async function listPayouts(filters, page, limit, offset) {
   const where = conditions.length ? and(...conditions) : undefined;
 
   const [{ total }] = await db.select({ total: count() }).from(payouts).where(where);
-  const rows = await db.select().from(payouts).where(where)
+  const rows = await db.select({
+    id: payouts.id, driverId: payouts.driverId, driverName: drivers.name, driverPhone: drivers.phone,
+    batchId: payouts.batchId, payoutAccountId: payouts.payoutAccountId,
+    amountMinor: payouts.amountMinor, currencyCode: payouts.currencyCode,
+    gateway: payouts.gateway, gatewayPayoutId: payouts.gatewayPayoutId,
+    status: payouts.status, failureReason: payouts.failureReason,
+    createdAt: payouts.createdAt, updatedAt: payouts.updatedAt,
+  }).from(payouts).innerJoin(drivers, eq(payouts.driverId, drivers.id)).where(where)
     .orderBy(desc(payouts.createdAt)).limit(limit).offset(offset);
   return { rows, pagination: paginate(page, limit, total) };
 }
