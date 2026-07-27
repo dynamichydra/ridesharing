@@ -224,6 +224,55 @@ function waitForAcceptanceSignal(rideId, timeoutMs) {
   });
 }
 
+/**
+ * Booking-screen availability check: which vehicle types have at least one
+ * eligible driver within the widest matching ring right now? Shares the same
+ * H3 candidate-pool + eligibility predicate as queryDriversInRadius(), but
+ * without vehicle-type filtering, scoring, or locking — this is a read-only
+ * "would matching find someone" check, not an offer.
+ */
+export async function getAvailableVehicleTypeIds(pickupLat, pickupLng, riderId) {
+  const radiusKm = RADII_KM[RADII_KM.length - 1];
+  const idPool = await getCandidateDriverIds(pickupLat, pickupLng, radiusKm);
+  if (idPool.length === 0) return [];
+
+  const rows = await db.execute(sql`
+    SELECT DISTINCT d.vehicle_type_id AS "vehicleTypeId"
+    FROM drivers d
+    INNER JOIN subscriptions s ON s.driver_id = d.id
+      AND s.status = 'active'
+      AND (s.end_date IS NULL OR s.end_date > NOW())
+    INNER JOIN subscription_plans sp ON sp.id = s.plan_id
+    WHERE
+      d.id IN (${sql.join(idPool.map((id) => sql`${id}::uuid`), sql`, `)})
+      AND d.is_online       = true
+      AND d.is_blocked      = false
+      AND d.approval_status = 'approved'
+      AND d.vehicle_type_id IS NOT NULL
+      AND d.current_lat IS NOT NULL
+      AND (sp.vehicle_type_ids IS NULL OR sp.vehicle_type_ids @> to_jsonb(d.vehicle_type_id::text))
+      AND (
+        sp.max_rides_per_day IS NULL
+        OR (
+          SELECT COUNT(*) FROM rides r
+          WHERE r.driver_id = d.id AND r.status = 'completed' AND r.requested_at >= CURRENT_DATE
+        ) < sp.max_rides_per_day
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM driver_rider_blocks b
+        WHERE b.driver_id = d.id AND b.rider_id = ${riderId}::uuid
+      )
+      AND (6371 * acos(
+        LEAST(1.0,
+          cos(radians(${pickupLat})) * cos(radians(d.current_lat::float))
+          * cos(radians(d.current_lng::float) - radians(${pickupLng}))
+          + sin(radians(${pickupLat})) * sin(radians(d.current_lat::float))
+        )
+      )) <= ${radiusKm}
+  `);
+  return rows.map((r) => r.vehicleTypeId);
+}
+
 // ── public API ────────────────────────────────────────────────────────────────
 
 export function startMatchingProcess(ride) {

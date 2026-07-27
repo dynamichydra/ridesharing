@@ -1,7 +1,8 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin } from '../../middleware/authenticate.js';
+import { authenticateAdmin, authenticateRider } from '../../middleware/authenticate.js';
 import { calculateFare, estimateAllTypes } from './fare.service.js';
 import { listAll } from '../vehicle-type/vehicle-type.service.js';
+import { getAvailableVehicleTypeIds } from '../matching/matching.service.js';
 import * as fareRulesService from './fare-rules.service.js';
 import * as taxRulesService from './tax-rules.service.js';
 
@@ -36,6 +37,34 @@ export async function fareRoutes(app) {
       pickupLat: parseFloat(pickupLat), pickupLng: parseFloat(pickupLng),
       dropLat:   parseFloat(dropLat),   dropLng:   parseFloat(dropLng),
       activeVehicleTypes: activeTypes,
+    });
+    return sendSuccess(reply, data);
+  });
+
+  // POST /api/v1/fare/available
+  // Returns fare estimates only for vehicle types that currently have an
+  // available driver near the pickup point (booking screen) — unlike
+  // /estimate-all, which returns every active vehicle type regardless of
+  // driver availability.
+  app.post('/available', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const { pickupLat, pickupLng, dropLat, dropLng } = request.body;
+    if (!pickupLat || !pickupLng || !dropLat || !dropLng) {
+      return sendError(reply, 'pickupLat, pickupLng, dropLat, dropLng are required');
+    }
+    const lat = parseFloat(pickupLat);
+    const lng = parseFloat(pickupLng);
+
+    const [activeTypes, availableIds] = await Promise.all([
+      listAll(true),
+      getAvailableVehicleTypeIds(lat, lng, request.user.id),
+    ]);
+    const availableIdSet = new Set(availableIds);
+    const availableTypes = activeTypes.filter((vt) => availableIdSet.has(vt.id));
+
+    const data = await estimateAllTypes({
+      pickupLat: lat, pickupLng: lng,
+      dropLat:   parseFloat(dropLat), dropLng: parseFloat(dropLng),
+      activeVehicleTypes: availableTypes,
     });
     return sendSuccess(reply, data);
   });
