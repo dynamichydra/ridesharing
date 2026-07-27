@@ -317,7 +317,7 @@ gateway-neutral field names since what they contain differs per gateway.
 | POST | `/webhook/razorpay` | Public (HMAC-signed) | raw Razorpay payload | Razorpay webhook — signature verified via `X-Razorpay-Signature` header. |
 | POST | `/webhook/stripe` | Public (signed) | raw Stripe event | Stripe webhook — signature verified via `Stripe-Signature` header (`stripe.webhooks.constructEvent`). |
 | GET | `/plans/all` | Admin | `?countryId=` (optional) | List all plans, including inactive (paginated). |
-| POST | `/plans` | Admin | `{ name, countryId, type, currencyCode, priceMinor, durationDays?, trialDays?, features?, vehicleTypeIds?, maxRidesPerDay?, sortOrder? }` | Create a plan (any `type`: monthly/quarterly/yearly/lifetime/custom). If the currency's gateway is configured, a matching recurring plan is created there too and stored as `gateway`/`gatewayPlanId`. |
+| POST | `/plans` | Admin | `{ name, countryId, type, currencyCode, priceMinor, durationDays?, trialDays?, features?, vehicleTypeIds?, maxRidesPerDay?, priorityMatching?, sortOrder? }` | Create a plan (any `type`: monthly/quarterly/yearly/lifetime/custom). If the currency's gateway is configured, a matching recurring plan is created there too and stored as `gateway`/`gatewayPlanId`. `features` is freeform marketing copy (display-only, not enforced). `vehicleTypeIds` (must reference real vehicle types, `null`/omitted = all types), `maxRidesPerDay` (`null` = unlimited), and `priorityMatching` are enforced by the matching engine — see `matching.service.js`/`scoring.service.js`. |
 | PATCH | `/plans/:id` | Admin | partial fields | Update a plan. |
 | DELETE | `/plans/:id` | Admin | — | Delete/deactivate a plan. |
 

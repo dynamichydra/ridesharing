@@ -1,10 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { CheckCircle, Pencil, CreditCard, Ban, XCircle } from "lucide-react";
+import { CheckCircle, Pencil, CreditCard, Ban, XCircle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SubscriptionPlan, LookupOption } from "../types";
 
 interface Props {
   onEdit: (plan: SubscriptionPlan) => void;
+  onViewDetails: (plan: SubscriptionPlan) => void;
   onToggleActive: (plan: SubscriptionPlan) => void;
   countries: LookupOption[];
 }
@@ -19,6 +20,7 @@ function formatPrice(priceMinor: number, currencyCode: string): string {
 
 export function getSubscriptionPlanColumns({
   onEdit,
+  onViewDetails,
   onToggleActive,
   countries,
 }: Props): ColumnDef<SubscriptionPlan>[] {
@@ -40,13 +42,6 @@ export function getSubscriptionPlanColumns({
       header: "Country",
       cell: ({ row }) => (
         <span className="text-foreground">{countryName(countries, row.original.countryId)}</span>
-      ),
-    },
-    {
-      accessorKey: "currencyCode",
-      header: "Currency",
-      cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">{row.original.currencyCode}</span>
       ),
     },
     {
@@ -73,36 +68,6 @@ export function getSubscriptionPlanColumns({
       ),
     },
     {
-      accessorKey: "trialDays",
-      header: "Trial Days",
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.trialDays}</span>,
-    },
-    {
-      accessorKey: "features",
-      header: "Features",
-      cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground max-w-xs truncate block">
-          {row.original.features && row.original.features.length > 0
-            ? row.original.features.join(", ")
-            : "—"}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "maxRidesPerDay",
-      header: "Max Rides Per Day",
-      cell: ({ row }) => (
-        <span className="text-muted-foreground">
-          {row.original.maxRidesPerDay ? row.original.maxRidesPerDay : "Unlimited"}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "sortOrder",
-      header: "Sort Order",
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.sortOrder}</span>,
-    },
-    {
       accessorKey: "isActive",
       header: "Active",
       cell: ({ row }) =>
@@ -127,9 +92,9 @@ export function getSubscriptionPlanColumns({
     },
     {
       id: "actions",
-      size: 110,
-      minSize: 110,
-      maxSize: 110,
+      size: 150,
+      minSize: 150,
+      maxSize: 150,
 
       header: () => (
         <div className="w-full text-center">
@@ -144,9 +109,23 @@ export function getSubscriptionPlanColumns({
             size="icon"
             onClick={(e) => {
               e.stopPropagation();
+              onViewDetails(row.original);
+            }}
+            className="h-8 w-8"
+            title="View Details"
+          >
+            <Info className="h-3.5 w-3.5" />
+          </Button>
+
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
               onEdit(row.original);
             }}
             className="h-8 w-8"
+            title="Edit"
           >
             <Pencil className="h-3.5 w-3.5" />
           </Button>

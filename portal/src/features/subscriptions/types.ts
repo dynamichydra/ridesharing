@@ -12,6 +12,7 @@ export interface SubscriptionPlan {
   trialDays: number;
   features: string[] | null;
   maxRidesPerDay: number | null;
+  priorityMatching: boolean;
   sortOrder: number;
   isActive: boolean;
   createdAt: string;
@@ -45,7 +46,9 @@ export interface CreateSubscriptionPlanPayload {
   durationDays: number | null;
   trialDays: number;
   features: string[];
+  vehicleTypeIds: string[] | null;
   maxRidesPerDay: number | null;
+  priorityMatching: boolean;
   sortOrder: number;
 }
 

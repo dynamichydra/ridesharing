@@ -16,8 +16,12 @@ export const subscriptionPlanSchema = z
     trialDays: z.coerce.number({ message: "Trial days is required" }).min(0, {
       message: "Trial days can't be negative",
     }),
-    featuresText: z.string(),
+    features: z.array(z.string().min(1).max(100)).max(20, {
+      message: "At most 20 feature entries are allowed",
+    }),
+    vehicleTypeIds: z.array(z.string()),
     maxRidesPerDay: z.string(),
+    priorityMatching: z.boolean(),
     sortOrder: z.coerce.number({ message: "Sort order is required" }),
   })
   .superRefine((values, ctx) => {
@@ -27,6 +31,16 @@ export const subscriptionPlanSchema = z
         message: "Duration is required unless the plan is Lifetime",
         path: ["durationDays"],
       });
+    }
+    if (values.maxRidesPerDay.trim()) {
+      const n = Number(values.maxRidesPerDay);
+      if (!Number.isInteger(n) || n < 0) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Max rides per day must be a non-negative whole number",
+          path: ["maxRidesPerDay"],
+        });
+      }
     }
   });
 
@@ -40,7 +54,9 @@ export const emptySubscriptionPlanFormValues: SubscriptionPlanFormValues = {
   priceMinor: 0,
   durationDays: "30",
   trialDays: 0,
-  featuresText: "",
+  features: [],
+  vehicleTypeIds: [],
   maxRidesPerDay: "",
+  priorityMatching: false,
   sortOrder: 1,
 };

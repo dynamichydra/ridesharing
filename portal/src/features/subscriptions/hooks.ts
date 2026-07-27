@@ -24,6 +24,14 @@ export function useCountryOptions() {
   });
 }
 
+export function useVehicleTypeOptions() {
+  return useQuery({
+    queryKey: [SUBSCRIPTION_PLANS_KEY, "lookup-vehicle-types"],
+    queryFn: () => lookupsApi.listVehicleTypes(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useCreateSubscriptionPlan() {
   const queryClient = useQueryClient();
   return useMutation({

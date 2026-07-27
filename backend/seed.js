@@ -536,6 +536,8 @@ async function seed() {
     trialDays:        7,
     features:        ['Unlimited rides', 'Priority matching', 'No commission cut', '24/7 support', 'Save ₹3989 vs monthly', 'Featured driver listing'],
     maxRidesPerDay:  null,
+    vehicleTypeIds:  [vtCab?.id, vtPremium?.id].filter(Boolean),
+    priorityMatching: true,
     sortOrder:        3,
     isActive:         true,
   }).onConflictDoNothing().returning();
@@ -550,6 +552,7 @@ async function seed() {
     trialDays:        0,
     features:        ['Unlimited rides forever', 'VIP support', 'One-time payment', 'All future features included', 'Priority matching always'],
     maxRidesPerDay:  null,
+    priorityMatching: true,
     sortOrder:        4,
     isActive:         true,
   }).onConflictDoNothing().returning();

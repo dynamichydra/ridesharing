@@ -40,4 +40,7 @@ export const subscriptionPlansApi = {
 export const lookupsApi = {
   // GET /geo/countries  (Public)
   listCountries: () => apiClient.get<LookupOption[]>("/geo/countries"),
+
+  // GET /vehicle-types  (Public)
+  listVehicleTypes: () => apiClient.get<LookupOption[]>("/vehicle-types"),
 };

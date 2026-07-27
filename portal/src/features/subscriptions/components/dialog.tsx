@@ -18,6 +18,7 @@ interface SubscriptionPlanFormDialogProps {
   selectedPlan: SubscriptionPlan | null;
   defaultValues: SubscriptionPlanFormValues;
   countries: LookupOption[];
+  vehicleTypes: LookupOption[];
   isSaving: boolean;
   onSubmit: (values: SubscriptionPlanFormValues) => void;
 }
@@ -28,6 +29,7 @@ export function SubscriptionPlanFormDialog({
   selectedPlan,
   defaultValues,
   countries,
+  vehicleTypes,
   isSaving,
   onSubmit,
 }: SubscriptionPlanFormDialogProps) {
@@ -44,6 +46,7 @@ export function SubscriptionPlanFormDialog({
           formId={FORM_ID}
           defaultValues={defaultValues}
           countries={countries}
+          vehicleTypes={vehicleTypes}
           onSubmit={onSubmit}
         />
 

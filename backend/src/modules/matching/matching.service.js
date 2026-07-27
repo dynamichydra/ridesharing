@@ -102,6 +102,7 @@ async function queryDriversInRadius(pickupLat, pickupLng, vehicleTypeId, radiusK
       d.fcm_token          AS "fcmToken",
       d.current_lat::float AS "currentLat",
       d.current_lng::float AS "currentLng",
+      sp.priority_matching AS "priorityMatching",
       ROUND(
         (6371 * acos(
           LEAST(1.0,
@@ -115,6 +116,7 @@ async function queryDriversInRadius(pickupLat, pickupLng, vehicleTypeId, radiusK
     INNER JOIN subscriptions s ON s.driver_id = d.id
       AND s.status = 'active'
       AND (s.end_date IS NULL OR s.end_date > NOW())
+    INNER JOIN subscription_plans sp ON sp.id = s.plan_id
     WHERE
       d.id IN (${sql.join(idPool.map((id) => sql`${id}::uuid`), sql`, `)})
       AND d.is_online           = true
@@ -122,6 +124,14 @@ async function queryDriversInRadius(pickupLat, pickupLng, vehicleTypeId, radiusK
       AND d.approval_status = 'approved'
       AND d.vehicle_type_id = ${vehicleTypeId}
       AND d.current_lat IS NOT NULL
+      AND (sp.vehicle_type_ids IS NULL OR sp.vehicle_type_ids @> to_jsonb(${vehicleTypeId}::text))
+      AND (
+        sp.max_rides_per_day IS NULL
+        OR (
+          SELECT COUNT(*) FROM rides r
+          WHERE r.driver_id = d.id AND r.status = 'completed' AND r.requested_at >= CURRENT_DATE
+        ) < sp.max_rides_per_day
+      )
       AND NOT EXISTS (
         SELECT 1 FROM driver_rider_blocks b
         WHERE b.driver_id = d.id AND b.rider_id = ${riderId}::uuid

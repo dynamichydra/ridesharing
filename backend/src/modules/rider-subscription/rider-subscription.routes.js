@@ -2,6 +2,7 @@ import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/r
 import { authenticateRider, authenticateAdmin } from '../../middleware/authenticate.js';
 import * as riderSubService from './rider-subscription.service.js';
 import { receiveWebhookEvent } from '../../jobs/webhook-processing.job.js';
+import { normalizePlanPayload } from '../subscription/plan-validation.js';
 
 export async function riderSubscriptionRoutes(app) {
 
@@ -91,12 +92,14 @@ export async function riderSubscriptionRoutes(app) {
     if (!name || !type || !countryId || !currencyCode || !priceMinor) {
       return sendError(reply, 'name, type, countryId, currencyCode and priceMinor are required');
     }
-    const data = await riderSubService.createPlan(request.body);
+    const payload = await normalizePlanPayload(request.body);
+    const data = await riderSubService.createPlan(payload);
     return sendSuccess(reply, data, 201);
   });
 
   app.patch('/plans/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await riderSubService.updatePlan(request.params.id, request.body);
+    const payload = await normalizePlanPayload(request.body);
+    const data = await riderSubService.updatePlan(request.params.id, payload);
     return sendSuccess(reply, data);
   });
 

@@ -1,8 +1,11 @@
-import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { MultiSelect } from "@/components/ui/multi-select";
 import {
   subscriptionPlanSchema,
   subscriptionPlanTypeOptions,
@@ -10,10 +13,68 @@ import {
 } from "../schema";
 import type { LookupOption } from "../types";
 
+// Freeform marketing bullets (display-only, not enforced) — a plain tag/chip input rather than
+// the fixed-catalog MultiSelect, since there's no predefined list of allowed feature strings.
+function FeatureChipsInput({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (value: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+
+  const commitDraft = () => {
+    const trimmed = draft.trim();
+    if (trimmed && !value.includes(trimmed)) {
+      onChange([...value, trimmed]);
+    }
+    setDraft("");
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5 min-h-8">
+        {value.map((feature) => (
+          <Badge key={feature} variant="secondary" className="flex items-center gap-1">
+            <span>{feature}</span>
+            <X
+              className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-foreground"
+              onClick={() => onChange(value.filter((f) => f !== feature))}
+            />
+          </Badge>
+        ))}
+      </div>
+      <Input
+        value={draft}
+        onChange={(e) => {
+          if (e.target.value.endsWith(",")) {
+            setDraft(e.target.value.slice(0, -1));
+            commitDraft();
+            return;
+          }
+          setDraft(e.target.value);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault();
+            commitDraft();
+          } else if (e.key === "Backspace" && draft === "" && value.length > 0) {
+            onChange(value.slice(0, -1));
+          }
+        }}
+        onBlur={commitDraft}
+        placeholder="Type a feature and press Enter…"
+      />
+    </div>
+  );
+}
+
 interface SubscriptionPlanFormProps {
   formId: string;
   defaultValues: SubscriptionPlanFormValues;
   countries: LookupOption[];
+  vehicleTypes: LookupOption[];
   onSubmit: (values: SubscriptionPlanFormValues) => void;
 }
 
@@ -21,10 +82,12 @@ export function SubscriptionPlanForm({
   formId,
   defaultValues,
   countries,
+  vehicleTypes,
   onSubmit,
 }: SubscriptionPlanFormProps) {
   const {
     register,
+    control,
     handleSubmit,
     watch,
     reset,
@@ -136,11 +199,30 @@ export function SubscriptionPlanForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="featuresText">Features (comma separated)</Label>
-        <Input
-          id="featuresText"
-          placeholder="Unlimited matches, Customer support access"
-          {...register("featuresText")}
+        <Label>Features (marketing copy — not enforced)</Label>
+        <Controller
+          control={control}
+          name="features"
+          render={({ field }) => (
+            <FeatureChipsInput value={field.value} onChange={field.onChange} />
+          )}
+        />
+        {errors.features && <p className="text-xs text-red-500">{errors.features.message}</p>}
+      </div>
+
+      <div className="space-y-2">
+        <Label>Allowed Vehicle Types (empty = all types)</Label>
+        <Controller
+          control={control}
+          name="vehicleTypeIds"
+          render={({ field }) => (
+            <MultiSelect
+              options={vehicleTypes.map((v) => ({ label: v.name, value: v.id }))}
+              value={field.value}
+              onChange={field.onChange}
+              placeholder="All vehicle types"
+            />
+          )}
         />
       </div>
 
@@ -148,6 +230,9 @@ export function SubscriptionPlanForm({
         <div className="space-y-2">
           <Label htmlFor="maxRidesPerDay">Max Rides Per Day</Label>
           <Input id="maxRidesPerDay" placeholder="Unlimited" {...register("maxRidesPerDay")} />
+          {errors.maxRidesPerDay && (
+            <p className="text-xs text-red-500">{errors.maxRidesPerDay.message}</p>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="sortOrder">
@@ -156,6 +241,18 @@ export function SubscriptionPlanForm({
           <Input id="sortOrder" type="number" step="1" {...register("sortOrder")} />
           {errors.sortOrder && <p className="text-xs text-red-500">{errors.sortOrder.message}</p>}
         </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          id="priorityMatching"
+          type="checkbox"
+          className="h-4 w-4 rounded border-border cursor-pointer"
+          {...register("priorityMatching")}
+        />
+        <Label htmlFor="priorityMatching" className="cursor-pointer">
+          Priority matching (boosts this plan's drivers in ride matching)
+        </Label>
       </div>
     </form>
   );

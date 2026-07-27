@@ -18,6 +18,11 @@ export const DEFAULT_WEIGHTS = Object.freeze({
   acceptanceRateWeight: 0.2,
 });
 
+// Flat score bump for drivers whose active subscription plan has priorityMatching enabled
+// (subscription_plans.priority_matching) — a fixed bonus rather than a matching_weights column
+// since it's a per-driver plan perk, not a tunable ops weight.
+const PRIORITY_MATCHING_BONUS = 0.15;
+
 export function scoreDrivers(candidates, weights = DEFAULT_WEIGHTS) {
   const { distanceWeight, ratingWeight, acceptanceRateWeight } = { ...DEFAULT_WEIGHTS, ...weights };
 
@@ -31,7 +36,8 @@ export function scoreDrivers(candidates, weights = DEFAULT_WEIGHTS) {
         _score:
           distanceWeight * (1 / etaMin) +
           ratingWeight * (rating / 5) +
-          acceptanceRateWeight * acceptanceRate,
+          acceptanceRateWeight * acceptanceRate +
+          (c.priorityMatching ? PRIORITY_MATCHING_BONUS : 0),
       };
     })
     .sort((a, b) => b._score - a._score);

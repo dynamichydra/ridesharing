@@ -1,0 +1,1 @@
+ALTER TABLE "subscription_plans" ADD COLUMN "priority_matching" boolean DEFAULT false;

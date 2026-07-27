@@ -8,9 +8,11 @@ import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getSubscriptionPlanColumns } from "../components/column";
 import { SubscriptionPlanFormDialog } from "../components/dialog";
+import { SubscriptionPlanDetailsDialog } from "../components/details-dialog";
 import {
   useSubscriptionPlans,
   useCountryOptions,
+  useVehicleTypeOptions,
   useCreateSubscriptionPlan,
   useUpdateSubscriptionPlan,
   useSetSubscriptionPlanActive,
@@ -34,8 +36,10 @@ function planToFormValues(plan: SubscriptionPlan): SubscriptionPlanFormValues {
     priceMinor: plan.priceMinor,
     durationDays: plan.durationDays?.toString() ?? "",
     trialDays: plan.trialDays,
-    featuresText: plan.features?.join(", ") ?? "",
+    features: plan.features ?? [],
+    vehicleTypeIds: plan.vehicleTypeIds ?? [],
     maxRidesPerDay: plan.maxRidesPerDay?.toString() ?? "",
+    priorityMatching: plan.priorityMatching ?? false,
     sortOrder: plan.sortOrder,
   };
 }
@@ -51,11 +55,10 @@ function buildPayload(
     priceMinor: Number(values.priceMinor),
     durationDays: values.type === "lifetime" ? null : values.durationDays ? Number(values.durationDays) : null,
     trialDays: Number(values.trialDays) || 0,
-    features: values.featuresText
-      .split(",")
-      .map((f) => f.trim())
-      .filter(Boolean),
+    features: values.features,
+    vehicleTypeIds: values.vehicleTypeIds.length ? values.vehicleTypeIds : null,
     maxRidesPerDay: values.maxRidesPerDay ? Number(values.maxRidesPerDay) : null,
+    priorityMatching: values.priorityMatching,
     sortOrder: Number(values.sortOrder),
   };
 }
@@ -74,9 +77,14 @@ export default function SubscriptionPlanList() {
 
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [viewingPlan, setViewingPlan] = useState<SubscriptionPlan | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   const { data: countriesData } = useCountryOptions();
   const countries = countriesData?.MESSAGE || [];
+
+  const { data: vehicleTypesData } = useVehicleTypeOptions();
+  const vehicleTypes = vehicleTypesData?.MESSAGE || [];
 
   const { data, isLoading, isFetching } = useSubscriptionPlans({
     page,
@@ -107,6 +115,11 @@ export default function SubscriptionPlanList() {
   const handleOpenEdit = (plan: SubscriptionPlan) => {
     setSelectedPlan(plan);
     setIsFormOpen(true);
+  };
+
+  const handleOpenDetails = (plan: SubscriptionPlan) => {
+    setViewingPlan(plan);
+    setIsDetailsOpen(true);
   };
 
   const handleToggleActive = (plan: SubscriptionPlan) => {
@@ -145,6 +158,7 @@ export default function SubscriptionPlanList() {
     () =>
       getSubscriptionPlanColumns({
         onEdit: handleOpenEdit,
+        onViewDetails: handleOpenDetails,
         onToggleActive: handleToggleActive,
         countries,
       }),
@@ -236,8 +250,20 @@ export default function SubscriptionPlanList() {
         selectedPlan={selectedPlan}
         defaultValues={defaultValues}
         countries={countries}
+        vehicleTypes={vehicleTypes}
         isSaving={createMutation.isPending || updateMutation.isPending}
         onSubmit={handleSubmit}
+      />
+
+      <SubscriptionPlanDetailsDialog
+        open={isDetailsOpen}
+        onOpenChange={(open) => {
+          setIsDetailsOpen(open);
+          if (!open) setViewingPlan(null);
+        }}
+        plan={viewingPlan}
+        countries={countries}
+        vehicleTypes={vehicleTypes}
       />
     </div>
   );
