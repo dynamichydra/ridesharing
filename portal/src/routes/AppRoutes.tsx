@@ -16,6 +16,7 @@ const DriverList = lazy(() => import("@/features/drivers/pages/list"));
 const DriverDetail = lazy(() => import("@/features/drivers/pages/Detail"));
 const RideList = lazy(() => import("@/features/rides/pages"));
 const VehicleTypeList = lazy(() => import("@/features/vehicle-types/pages"));
+const VehicleModelList = lazy(() => import("@/features/vehicle-models/pages"));
 const ZoneList = lazy(() => import("@/features/zones/pages"));
 const GeoList = lazy(() => import("@/features/geo/pages"));
 const FareRuleList = lazy(() => import("@/features/fare-rules/pages"));
@@ -122,6 +123,16 @@ const router = createBrowserRouter([
           <ProtectedRoute allowedRoles={["super_admin"]}>
             <Suspense fallback={<Loader />}>
               <VehicleTypeList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "vehicle-models",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <VehicleModelList />
             </Suspense>
           </ProtectedRoute>
         ),

@@ -14,6 +14,7 @@ import { authRoutes } from './modules/auth/auth.routes.js';
 import { driverRoutes } from './modules/driver/driver.routes.js';
 import { riderRoutes } from './modules/rider/rider.routes.js';
 import { vehicleTypeRoutes } from './modules/vehicle-type/vehicle-type.routes.js';
+import { vehicleModelRoutes } from './modules/vehicle-model/vehicle-model.routes.js';
 import { zoneRoutes } from './modules/zone/zone.routes.js';
 import { fareRoutes } from './modules/fare/fare.routes.js';
 import { commissionRoutes } from './modules/commission/commission.routes.js';
@@ -66,6 +67,7 @@ async function build() {
   await app.register(driverRoutes, { prefix: `${PREFIX}/drivers` });
   await app.register(riderRoutes, { prefix: `${PREFIX}/riders` });
   await app.register(vehicleTypeRoutes, { prefix: `${PREFIX}/vehicle-types` });
+  await app.register(vehicleModelRoutes, { prefix: `${PREFIX}/vehicle-models` });
   await app.register(zoneRoutes, { prefix: `${PREFIX}/zones` });
   await app.register(fareRoutes, { prefix: `${PREFIX}/fare` });
   await app.register(commissionRoutes, { prefix: `${PREFIX}/commission-rules` });

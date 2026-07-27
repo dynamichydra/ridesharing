@@ -39,10 +39,4 @@ export const metrics = {
     help: 'Completed trips flagged for manual review due to actual-vs-estimate fare deviation',
     registers: [registry],
   }),
-  rateCardResolutionTotal: new client.Counter({
-    name: 'rate_card_resolution_total',
-    help: 'Rate-card resolutions by fallback tier — a rising "global" share means a market is missing a real rate card',
-    labelNames: ['tier'], // exact | category | global
-    registers: [registry],
-  }),
 };

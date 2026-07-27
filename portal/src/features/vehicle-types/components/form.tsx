@@ -104,6 +104,69 @@ export default function VehicleTypeForm({
         )}
       </div>
 
+      <div className="border-t border-border pt-3 space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Rate (flat, same in every country)
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="baseRate">
+              Base Fare <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="baseRate"
+              placeholder="15.00"
+              value={values.baseRate}
+              onChange={(e) => update("baseRate", e.target.value)}
+              required
+            />
+            {errors.baseRate && <p className="text-xs text-destructive">{errors.baseRate}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="perKmRate">
+              Per KM Rate <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="perKmRate"
+              placeholder="6.00"
+              value={values.perKmRate}
+              onChange={(e) => update("perKmRate", e.target.value)}
+              required
+            />
+            {errors.perKmRate && <p className="text-xs text-destructive">{errors.perKmRate}</p>}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="perMinRate">
+              Per Minute Rate <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="perMinRate"
+              placeholder="0.50"
+              value={values.perMinRate}
+              onChange={(e) => update("perMinRate", e.target.value)}
+              required
+            />
+            {errors.perMinRate && <p className="text-xs text-destructive">{errors.perMinRate}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="minFare">
+              Minimum Fare <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="minFare"
+              placeholder="30.00"
+              value={values.minFare}
+              onChange={(e) => update("minFare", e.target.value)}
+              required
+            />
+            {errors.minFare && <p className="text-xs text-destructive">{errors.minFare}</p>}
+          </div>
+        </div>
+      </div>
+
       <DialogFooter className="pt-4">
         <Button type="button" variant="outline" onClick={onCancel} className="cursor-pointer">
           Cancel

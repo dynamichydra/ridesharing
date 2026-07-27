@@ -79,7 +79,6 @@ export async function requestRide({
     durationMin: fareData.durationInTrafficMin,
     polyline: fareData.polyline,
     fareSnapshot: fareData,
-    ratePricingId: fareData.ratePricingId,
     appliedFareRuleIds: fareData.appliedFareRuleIds,
     status: 'searching',
   }).returning();

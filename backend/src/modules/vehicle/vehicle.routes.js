@@ -2,7 +2,7 @@ import { sendSuccess, sendError } from '../../utils/response.js';
 import { authenticateDriver, authenticateAdmin } from '../../middleware/authenticate.js';
 import * as vehicleService from './vehicle.service.js';
 
-const REQUIRED_FIELDS = ['vehicleTypeId', 'model', 'year', 'registrationNumber'];
+const REQUIRED_FIELDS = ['vehicleModelId', 'year', 'registrationNumber'];
 
 export async function vehicleRoutes(app) {
 

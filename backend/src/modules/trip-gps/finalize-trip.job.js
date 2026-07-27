@@ -1,6 +1,6 @@
 import { eq, asc } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { rides, tripGpsPings, vehicleTypePricing, flaggedTrips } from '../../../drizzle/schema/index.js';
+import { rides, tripGpsPings, flaggedTrips } from '../../../drizzle/schema/index.js';
 import { decodePolyline, computeCumulativeTripDistance } from '../../utils/maps.js';
 import { roundToIncrement } from '../../utils/money.js';
 import { flushRidePings, markRideGpsInactive } from './gps-ping.service.js';
@@ -8,14 +8,14 @@ import { shouldFlagDeviation } from './deviation-policy.js';
 import { metrics } from '../../utils/metrics.js';
 
 /**
- * Pure recompute — no DB access. Reuses the SAME rate-card row and the SAME
+ * Pure recompute — no DB access. Reuses the SAME rate numbers and the SAME
  * resolved zone/surge multipliers that were stamped into the ride's
- * fareSnapshot.breakdown at request time (not current live rates/rules), so a
- * disputed trip's fare is reconstructed exactly as it was actually charged,
- * not re-priced against whatever rates/rules exist today. The effective tax
- * rate is likewise re-derived from the ORIGINAL estimate's own numbers rather
- * than re-querying tax rules, for the same audit-consistency reason — this
- * codebase doesn't version tax_rules the way it now versions rate cards.
+ * fareSnapshot.breakdown at request time (not the vehicle type's current live
+ * rate), so a disputed trip's fare is reconstructed exactly as it was actually
+ * charged, not re-priced against whatever the rate has since been edited to.
+ * The effective tax rate is likewise re-derived from the ORIGINAL estimate's
+ * own numbers rather than re-querying tax rules, for the same audit-consistency
+ * reason — this codebase doesn't version tax_rules.
  */
 export function recomputeActualFare({ pricing, breakdown, estimatedFareMinor, actualDistanceKm, actualDurationMin, roundingIncrementMinor }) {
   const baseFareMinor = pricing.baseRateMinor;
@@ -82,13 +82,10 @@ export async function finalizeTripDistance(rideId) {
     gpsNoiseRejectedCount,
   }).where(eq(rides.id, rideId));
 
-  if (!ride.ratePricingId) return; // pre-existing ride from before this feature — nothing stamped to recompute against
-
-  const [pricing] = await db.select().from(vehicleTypePricing)
-    .where(eq(vehicleTypePricing.id, ride.ratePricingId)).limit(1);
-  if (!pricing) return;
-
   const breakdown = ride.fareSnapshot?.breakdown ?? {};
+  const pricing = breakdown.rate;
+  if (!pricing) return; // pre-existing ride from before this feature — nothing stamped to recompute against
+
   const { actualFareMinor } = recomputeActualFare({
     pricing, breakdown,
     estimatedFareMinor: ride.estimatedFareMinor,

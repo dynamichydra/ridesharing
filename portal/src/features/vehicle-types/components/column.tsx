@@ -1,55 +1,18 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Car, Edit2, Ban, CheckCircle, XCircle, Banknote } from "lucide-react";
+import { Car, Edit2, Ban, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { VehicleType, VehicleTypePricing } from "../types";
+import type { VehicleType } from "../types";
 
 interface Props {
-  pricingMap: Record<string, VehicleTypePricing | undefined>;
-  countrySelected: boolean;
   onEdit: (vt: VehicleType) => void;
   onToggleActive: (vt: VehicleType) => void;
-  onEditPricing: (vt: VehicleType) => void;
 }
 
-function formatMinor(amountMinor: number, currencyCode: string) {
-  const amount = amountMinor / 100; // assumes a 2-decimal currency, see schema.ts note
-  try {
-    return new Intl.NumberFormat("en", { style: "currency", currency: currencyCode }).format(
-      amount
-    );
-  } catch {
-    return `${currencyCode} ${amount.toFixed(2)}`;
-  }
+function formatMinor(amountMinor: number) {
+  return (amountMinor / 100).toFixed(2); // assumes a 2-decimal currency, see schema.ts note
 }
 
-function rateCell(
-  field: keyof VehicleTypePricing,
-  pricingMap: Record<string, VehicleTypePricing | undefined>,
-  countrySelected: boolean
-) {
-  return ({ row }: { row: { original: VehicleType } }) => {
-    if (!countrySelected) {
-      return <span className="text-muted-foreground text-xs">Select country</span>;
-    }
-    const pricing = pricingMap[row.original.id];
-    if (!pricing) {
-      return <span className="text-muted-foreground text-xs">Not set</span>;
-    }
-    return (
-      <span className="text-muted-foreground">
-        {formatMinor(pricing[field] as number, pricing.currencyCode)}
-      </span>
-    );
-  };
-}
-
-export function getVehicleTypeColumns({
-  pricingMap,
-  countrySelected,
-  onEdit,
-  onToggleActive,
-  onEditPricing,
-}: Props): ColumnDef<VehicleType>[] {
+export function getVehicleTypeColumns({ onEdit, onToggleActive }: Props): ColumnDef<VehicleType>[] {
   return [
     {
       accessorKey: "name",
@@ -77,10 +40,26 @@ export function getVehicleTypeColumns({
         <span className="text-muted-foreground">{row.original.capacity} Pax</span>
       ),
     },
-    { id: "baseRate", header: "Base Rate", cell: rateCell("baseRateMinor", pricingMap, countrySelected) },
-    { id: "perKmRate", header: "Per KM Rate", cell: rateCell("perKmRateMinor", pricingMap, countrySelected) },
-    { id: "perMinRate", header: "Per Min Rate", cell: rateCell("perMinRateMinor", pricingMap, countrySelected) },
-    { id: "minFare", header: "Min Fare", cell: rateCell("minFareMinor", pricingMap, countrySelected) },
+    {
+      id: "baseRate",
+      header: "Base Rate",
+      cell: ({ row }) => <span className="text-muted-foreground">{formatMinor(row.original.baseRateMinor)}</span>,
+    },
+    {
+      id: "perKmRate",
+      header: "Per KM Rate",
+      cell: ({ row }) => <span className="text-muted-foreground">{formatMinor(row.original.perKmRateMinor)}</span>,
+    },
+    {
+      id: "perMinRate",
+      header: "Per Min Rate",
+      cell: ({ row }) => <span className="text-muted-foreground">{formatMinor(row.original.perMinRateMinor)}</span>,
+    },
+    {
+      id: "minFare",
+      header: "Min Fare",
+      cell: ({ row }) => <span className="text-muted-foreground">{formatMinor(row.original.minFareMinor)}</span>,
+    },
     {
       accessorKey: "isActive",
       header: "Status",
@@ -100,16 +79,6 @@ export function getVehicleTypeColumns({
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => (
         <div className="flex items-center gap-2 justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onEditPricing(row.original)}
-            className="border-border hover:bg-muted cursor-pointer"
-            title="Edit pricing"
-            disabled={!countrySelected}
-          >
-            <Banknote className="h-3.5 w-3.5" />
-          </Button>
           <Button
             variant="outline"
             size="sm"

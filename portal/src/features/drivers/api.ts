@@ -12,7 +12,7 @@ import type {
   VerifyDocumentPayload,
   DriverSubscriptionHistoryRow,
   DriverPaymentRow,
-  VehicleTypeOption,
+  VehicleModelOption,
 } from "./types";
 
 const BASE_URL = "/drivers";
@@ -93,7 +93,7 @@ export const driverSubscriptionsApi = {
     ),
 };
 
-export const vehicleTypesLookupApi = {
-  // GET /vehicle-types  (Public) — used only for the Create Driver form's dropdown
-  list: () => apiClient.get<VehicleTypeOption[]>("/vehicle-types"),
+export const vehicleModelsLookupApi = {
+  // GET /vehicle-models  (Public) — used only for the Create Driver form's dropdown
+  list: () => apiClient.get<VehicleModelOption[]>("/vehicle-models"),
 };

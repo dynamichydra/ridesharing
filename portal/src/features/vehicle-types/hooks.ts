@@ -1,16 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { vehicleTypesApi, vehicleTypePricingApi, countriesApi } from "./api";
+import { vehicleTypesApi } from "./api";
 import type {
   VehicleTypeListParams,
   CreateVehicleTypePayload,
   UpdateVehicleTypePayload,
-  SetVehicleTypePricingPayload,
 } from "./types";
 
 const VEHICLE_TYPES_KEY = "vehicle-types";
-const PRICING_KEY = "vehicle-type-pricing";
-const COUNTRIES_KEY = "geo-admin-countries";
 
 export function useVehicleTypes(params: VehicleTypeListParams = {}) {
   return useQuery({
@@ -31,8 +28,7 @@ export function useCreateVehicleType() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: CreateVehicleTypePayload) => vehicleTypesApi.create(payload),
-    onSuccess: (data) => {
-  console.log("SUCCESS", data);
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [VEHICLE_TYPES_KEY], refetchType: "active" });
       toast.success("Vehicle type created!");
     },
@@ -45,8 +41,7 @@ export function useUpdateVehicleType() {
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdateVehicleTypePayload }) =>
       vehicleTypesApi.update(id, payload),
-    onSuccess: (data) => {
-  console.log("SUCCESS", data);
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [VEHICLE_TYPES_KEY], refetchType: "active" });
       toast.success("Vehicle type updated!");
     },
@@ -64,39 +59,5 @@ export function useSetVehicleTypeActive() {
       toast.success(variables.isActive ? "Vehicle type enabled" : "Vehicle type disabled");
     },
     onError: (err: any) => toast.error(err.message || "Failed to update vehicle type status"),
-  });
-}
-
-export function useCountries() {
-  return useQuery({
-    queryKey: [COUNTRIES_KEY],
-    queryFn: () => countriesApi.list(),
-  });
-}
-
-export function useVehicleTypePricingForCountry(countryId: string | undefined) {
-  return useQuery({
-    queryKey: [PRICING_KEY, countryId],
-    queryFn: () => vehicleTypePricingApi.listForCountry(countryId as string),
-    enabled: !!countryId,
-  });
-}
-
-export function useSetVehicleTypePricing() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      vehicleTypeId,
-      payload,
-    }: {
-      vehicleTypeId: string;
-      payload: SetVehicleTypePricingPayload;
-    }) => vehicleTypePricingApi.set(vehicleTypeId, payload),
-    onSuccess: (data) => {
-  console.log("SUCCESS", data);
-      queryClient.invalidateQueries({ queryKey: [PRICING_KEY], refetchType: "active" });
-      toast.success("Pricing updated!");
-    },
-    onError: (err: any) => toast.error(err.message || "Failed to update pricing"),
   });
 }

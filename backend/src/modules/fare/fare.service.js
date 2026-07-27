@@ -6,7 +6,6 @@ import { detectZone } from '../zone/zone.service.js';
 import { resolveHexZones } from '../zone/hex-zone.service.js';
 import { getActiveRulesForVehicle } from './fare-rules.service.js';
 import { getApplicableTaxRules } from './tax-rules.service.js';
-import { resolveRateCard } from '../vehicle-type/vehicle-type-pricing.service.js';
 import { getDefaultCountry, getCountryById } from '../geo/geo.service.js';
 import { isTimeInRange } from '../../utils/time.js';
 import { getRouteData } from '../../utils/maps.js';      // shared — no duplicate Client
@@ -29,7 +28,7 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
   const cached = await redis.get(cacheKey);
   if (cached) return JSON.parse(cached);
 
-  // 1. Vehicle type catalog (name/capacity — physical attributes only, no rates here)
+  // 1. Vehicle type catalog — name/capacity plus its flat, global rate (no per-country cards)
   const [vt] = await db.select().from(vehicleTypes)
     .where(eq(vehicleTypes.id, vehicleTypeId)).limit(1);
   if (!vt) throw { statusCode: 404, message: 'Vehicle type not found' };
@@ -45,30 +44,23 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
   const hexZones   = await resolveHexZones(parseFloat(pickupLat), parseFloat(pickupLng));
   const hexZoneIds = new Set(hexZones.map((z) => z.id));
 
-  // 3. Country-specific rate card for this vehicle type. fuelType is always null
-  // here — the specific vehicle (and its fuel type) isn't known until a driver is
-  // matched after this quote, so only the category-level tier is reachable today;
-  // the fuelType-exact tier is schema-ready for a future rider-facing selection
-  // feature (see vehicle-type-pricing.service.js's resolveRateCard doc comment).
-  const pricing = await resolveRateCard(vehicleTypeId, country.id, null);
-
-  // 4. Route data (shared utility)
+  // 3. Route data (shared utility)
   const route = await getRouteData(
     parseFloat(pickupLat), parseFloat(pickupLng),
     parseFloat(dropLat),   parseFloat(dropLng),
   );
   const { distanceKm, durationMin, durationInTrafficMin, trafficDelayS, polyline, bounds } = route;
 
-  // 5. Base calculation — all integer minor units from here on
-  const baseFareMinor     = pricing.baseRateMinor;
-  const distanceFareMinor = Math.round(distanceKm * pricing.perKmRateMinor);
-  const timeFareMinor     = Math.round(durationInTrafficMin * pricing.perMinRateMinor);
+  // 4. Base calculation — all integer minor units from here on
+  const baseFareMinor     = vt.baseRateMinor;
+  const distanceFareMinor = Math.round(distanceKm * vt.perKmRateMinor);
+  const timeFareMinor     = Math.round(durationInTrafficMin * vt.perMinRateMinor);
   const subtotalMinor     = baseFareMinor + distanceFareMinor + timeFareMinor;
 
-  // 6. Zone multiplier
+  // 5. Zone multiplier
   const zoneMultiplier = zone ? parseFloat(zone.multiplier) : 1.0;
 
-  // 7. Dynamic fare rules — evaluated in the country's local time, not server time
+  // 6. Dynamic fare rules — evaluated in the country's local time, not server time
   const rules          = await getActiveRulesForVehicle(vehicleTypeId, country.id);
   let   surgeMultiplier = 1.0;
   let   flatFareMinor   = null; // set by a zone rule's flatFareMinor; highest-priority match wins
@@ -107,10 +99,10 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
   const totalBeforeMinMinor = flatFareMinor != null
     ? flatFareMinor
     : Math.round(subtotalMinor * zoneMultiplier * surgeMultiplier);
-  const minFareApplied      = totalBeforeMinMinor < pricing.minFareMinor;
-  const preTaxFareMinor     = Math.max(totalBeforeMinMinor, pricing.minFareMinor);
+  const minFareApplied      = totalBeforeMinMinor < vt.minFareMinor;
+  const preTaxFareMinor     = Math.max(totalBeforeMinMinor, vt.minFareMinor);
 
-  // 8. Tax — exclusive rules add on top; inclusive rules are informational only
+  // 7. Tax — exclusive rules add on top; inclusive rules are informational only
   //    (already priced into the rate card by whoever set it).
   const taxRulesList  = await getApplicableTaxRules(country.id, 'fare');
   const exclusiveRate = taxRulesList.filter((r) => !r.isInclusive)
@@ -124,8 +116,6 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
     vehicleTypeName: vt.name,
     countryId:   country.id,
     currencyCode,
-    ratePricingId: pricing.id,       // exact rate-card row/version resolved — stamped onto rides.ratePricingId
-    ratePricingTier: pricing.resolutionTier, // exact | category | global — see resolveRateCard's fallback chain
     appliedFareRuleIds,              // stamped onto rides.appliedFareRuleIds
     distanceKm:      parseFloat(distanceKm.toFixed(3)),
     durationMin,
@@ -133,6 +123,15 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
     polyline,
     bounds,
     breakdown: {
+      // The vehicle type's rate at request time, snapshotted here (not re-read live) so
+      // finalize-trip.job.js can recompute the actual fare against the SAME numbers this
+      // ride was quoted with, even if the rate is edited later — see recomputeActualFare().
+      rate: {
+        baseRateMinor:   vt.baseRateMinor,
+        perKmRateMinor:  vt.perKmRateMinor,
+        perMinRateMinor: vt.perMinRateMinor,
+        minFareMinor:    vt.minFareMinor,
+      },
       baseFareMinor,
       distanceFareMinor,
       timeFareMinor,

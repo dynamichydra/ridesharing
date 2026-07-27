@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useCountryOptions, useStateOptions, useCityOptions } from "@/features/geo/hooks";
-import { useCreateDriver, useVehicleTypeOptions } from "../hooks";
+import { useCreateDriver, useVehicleModelOptions } from "../hooks";
 
 interface Props {
   open: boolean;
@@ -30,9 +30,8 @@ const EMPTY = {
   countryId: "",
   stateId: "",
   cityId: "",
-  vehicleTypeId: "",
+  vehicleModelId: "",
   vehicleNumber: "",
-  vehicleModel: "",
   vehicleYear: "",
 };
 
@@ -47,12 +46,12 @@ export function CreateDriverDialog({ open, onOpenChange }: Props) {
   const { data: countriesData } = useCountryOptions();
   const { data: statesData } = useStateOptions(values.countryId || undefined);
   const { data: citiesData } = useCityOptions(values.stateId || undefined);
-  const { data: vehicleTypesData } = useVehicleTypeOptions();
+  const { data: vehicleModelsData } = useVehicleModelOptions();
 
   const countries = countriesData?.MESSAGE || [];
   const states = statesData?.MESSAGE || [];
   const cities = citiesData?.MESSAGE || [];
-  const vehicleTypes = vehicleTypesData?.MESSAGE || [];
+  const vehicleModels = vehicleModelsData?.MESSAGE || [];
 
   const set = (field: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const value = e.target.value;
@@ -81,9 +80,8 @@ export function CreateDriverDialog({ open, onOpenChange }: Props) {
         countryId: values.countryId || undefined,
         stateId: values.stateId || undefined,
         cityId: values.cityId || undefined,
-        vehicleTypeId: values.vehicleTypeId || undefined,
+        vehicleModelId: values.vehicleModelId || undefined,
         vehicleNumber: values.vehicleNumber.trim() || undefined,
-        vehicleModel: values.vehicleModel.trim() || undefined,
         vehicleYear: values.vehicleYear.trim() || undefined,
       },
       { onSuccess: () => onOpenChange(false) },
@@ -181,24 +179,24 @@ export function CreateDriverDialog({ open, onOpenChange }: Props) {
           <div className="border-t border-border pt-3 space-y-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Vehicle (Optional)</p>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="cd-vehicle-type">Vehicle Type</Label>
-                <NativeSelect id="cd-vehicle-type" value={values.vehicleTypeId} onChange={set("vehicleTypeId")}>
+              <div className="space-y-2 col-span-2">
+                <Label htmlFor="cd-vehicle-model">Vehicle Model</Label>
+                <NativeSelect id="cd-vehicle-model" value={values.vehicleModelId} onChange={set("vehicleModelId")}>
                   <NativeSelectOption value="">—</NativeSelectOption>
-                  {vehicleTypes.map((vt) => (
-                    <NativeSelectOption key={vt.id} value={vt.id}>
-                      {vt.name}
+                  {vehicleModels.map((vm) => (
+                    <NativeSelectOption key={vm.id} value={vm.id}>
+                      {vm.brand} {vm.name}
                     </NativeSelectOption>
                   ))}
                 </NativeSelect>
+                <p className="text-xs text-muted-foreground">
+                  The vehicle category is derived from the model — it can't be picked directly, so a
+                  driver's actual vehicle always matches the category they're approved for.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="cd-vehicle-number">Vehicle Number</Label>
                 <Input id="cd-vehicle-number" value={values.vehicleNumber} onChange={set("vehicleNumber")} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="cd-vehicle-model">Vehicle Model</Label>
-                <Input id="cd-vehicle-model" value={values.vehicleModel} onChange={set("vehicleModel")} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="cd-vehicle-year">Vehicle Year</Label>

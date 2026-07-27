@@ -76,9 +76,8 @@ export interface CreateDriverPayload {
   countryId?: string;
   stateId?: string;
   cityId?: string;
-  vehicleTypeId?: string;
+  vehicleModelId?: string;
   vehicleNumber?: string;
-  vehicleModel?: string;
   vehicleYear?: string;
 }
 
@@ -210,8 +209,12 @@ export interface DriverPaymentRow {
   plan: SubscriptionPlanSummary;
 }
 
-// Minimal option shape for the vehicle-type dropdown in the Create Driver form.
-export interface VehicleTypeOption {
+// Minimal option shape for the vehicle-model dropdown in the Create Driver form — picking a
+// model (not a type) is what drives fraud prevention: the backend derives vehicleTypeId from
+// this, the admin/driver never sets the category directly. See vehicle.service.js#addVehicle.
+export interface VehicleModelOption {
   id: string;
+  vehicleTypeId: string;
+  brand: string;
   name: string;
 }

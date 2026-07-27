@@ -5,8 +5,7 @@ import { paginate } from '../../utils/response.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 
 /**
- * Commission-rule resolution — same exact -> category -> global fallback tier as
- * vehicle-type-pricing.service.js's resolveRateCard:
+ * Commission-rule resolution — exact -> category -> global fallback tier:
  *   1. Exact match: vehicleTypeId + countryId, active.
  *   2. Country default: countryId set, vehicleTypeId IS NULL, active.
  *   3. Global default: both IS NULL, active.

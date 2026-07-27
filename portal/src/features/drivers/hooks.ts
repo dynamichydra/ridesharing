@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { driversApi, documentsApi, driverSubscriptionsApi, vehicleTypesLookupApi } from "./api";
+import { driversApi, documentsApi, driverSubscriptionsApi, vehicleModelsLookupApi } from "./api";
 import type {
   DriverListParams,
   CreateDriverPayload,
@@ -55,10 +55,10 @@ export function useCreateDriver() {
   });
 }
 
-export function useVehicleTypeOptions() {
+export function useVehicleModelOptions() {
   return useQuery({
-    queryKey: ["vehicle-types", "lookup"],
-    queryFn: () => vehicleTypesLookupApi.list(),
+    queryKey: ["vehicle-models", "lookup"],
+    queryFn: () => vehicleModelsLookupApi.list(),
     staleTime: 5 * 60 * 1000,
   });
 }

@@ -1,5 +1,15 @@
 import { z } from "zod";
 
+// Rate amounts are entered as major-unit decimals (e.g. "15.00") and converted x100 to minor
+// units on submit — only correct for 2-decimal currencies (INR, CAD). A zero-decimal currency
+// (e.g. JPY) would need a different conversion here.
+const rateFields = {
+  baseRate: z.string().min(1, { message: "Base fare is required" }),
+  perKmRate: z.string().min(1, { message: "Per KM rate is required" }),
+  perMinRate: z.string().min(1, { message: "Per minute rate is required" }),
+  minFare: z.string().min(1, { message: "Minimum fare is required" }),
+};
+
 export const vehicleTypeCreateSchema = z.object({
   name: z.string().min(1, { message: "Vehicle type name is required" }),
   capacity: z.coerce
@@ -10,6 +20,7 @@ export const vehicleTypeCreateSchema = z.object({
     .number({ message: "Sort order is required" })
     .int()
     .min(0, { message: "Sort order must be zero or greater" }),
+  ...rateFields,
 });
 
 export type VehicleTypeCreateValues = z.infer<typeof vehicleTypeCreateSchema>;
@@ -20,6 +31,7 @@ export const vehicleTypeEditSchema = z.object({
     .int()
     .gt(0, { message: "Capacity must be greater than zero" }),
   isActive: z.boolean(),
+  ...rateFields,
 });
 
 export type VehicleTypeEditValues = z.infer<typeof vehicleTypeEditSchema>;
@@ -29,17 +41,8 @@ export interface VehicleTypeFormValues {
   capacity: number | "";
   sortOrder: number | "";
   isActive: boolean;
+  baseRate: string;
+  perKmRate: string;
+  perMinRate: string;
+  minFare: string;
 }
-
-// Pricing form — amounts kept as major-unit decimal strings ("15.00") in the
-// UI, converted x100 to minor units on submit. See note in pricingForm.tsx
-// about the 2-decimal-currency assumption.
-export const vehicleTypePricingSchema = z.object({
-  currencyCode: z.string().min(1, { message: "Currency is required" }),
-  baseRate: z.string().min(1, { message: "Base fare is required" }),
-  perKmRate: z.string().min(1, { message: "Per KM rate is required" }),
-  perMinRate: z.string().min(1, { message: "Per minute rate is required" }),
-  minFare: z.string().min(1, { message: "Minimum fare is required" }),
-});
-
-export type VehicleTypePricingFormValues = z.infer<typeof vehicleTypePricingSchema>;

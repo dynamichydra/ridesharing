@@ -7,7 +7,7 @@ export * from './users.js';
 export * from './drivers.js';
 export * from './driver-devices.js';
 export * from './vehicle-types.js';
-export * from './vehicle-type-pricing.js';
+export * from './vehicle-models.js';
 export * from './driver-vehicles.js';
 export * from './document-types.js';
 export * from './document-type-requirements.js';

@@ -3,7 +3,6 @@ import { users } from './users.js';
 import { drivers } from './drivers.js';
 import { vehicleTypes } from './vehicle-types.js';
 import { countries } from './countries.js';
-import { vehicleTypePricing } from './vehicle-type-pricing.js';
 
 export const rides = pgTable('rides', {
   id:             uuid('id').primaryKey().defaultRandom(),
@@ -18,8 +17,7 @@ export const rides = pgTable('rides', {
   dropLat:        decimal('drop_lat', { precision: 10, scale: 8 }).notNull(),
   dropLng:        decimal('drop_lng', { precision: 11, scale: 8 }).notNull(),
   dropAddress:    text('drop_address'),
-  fareSnapshot:   jsonb('fare_snapshot'),         // full breakdown stored at ride time
-  ratePricingId:  uuid('rate_pricing_id').references(() => vehicleTypePricing.id), // exact rate-card row/version resolved at request time — traceable even after the card is later superseded
+  fareSnapshot:   jsonb('fare_snapshot'),         // full breakdown stored at ride time, incl. the rate numbers used (see fare.service.js)
   appliedFareRuleIds: text('applied_fare_rule_ids').array(), // fare_rules ids applied at request time (surge/zone/time/traffic)
   estimatedFareMinor: integer('estimated_fare_minor'),
   finalFareMinor:     integer('final_fare_minor'),

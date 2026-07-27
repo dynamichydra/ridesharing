@@ -1,6 +1,6 @@
 import { eq, desc, count, and, or, ilike } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { drivers, subscriptions, cities, driverPayoutAccounts } from '../../../drizzle/schema/index.js';
+import { drivers, subscriptions, cities, driverPayoutAccounts, vehicleModels } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
@@ -200,6 +200,16 @@ export async function adminRegisterDriver(adminId, data) {
     if (existing) throw { statusCode: 409, code: 'EMAIL_TAKEN', message: 'A driver with this email already exists' };
   }
 
+  // vehicleTypeId/vehicleModel are resolved from the catalog, not taken from the client —
+  // same fraud-prevention rule as the driver's own vehicle submission (see vehicle.service.js).
+  let vehicleTypeId, vehicleModel;
+  if (data.vehicleModelId) {
+    const [vm] = await db.select().from(vehicleModels).where(eq(vehicleModels.id, data.vehicleModelId)).limit(1);
+    if (!vm || !vm.isActive) throw { statusCode: 400, message: 'Invalid vehicle model' };
+    vehicleTypeId = vm.vehicleTypeId;
+    vehicleModel = vm.name;
+  }
+
   const [driver] = await db.insert(drivers).values({
     name, phone, email,
     dateOfBirth: data.dateOfBirth,
@@ -208,9 +218,9 @@ export async function adminRegisterDriver(adminId, data) {
     countryId: data.countryId,
     stateId: data.stateId,
     cityId: data.cityId,
-    vehicleTypeId: data.vehicleTypeId,
+    vehicleTypeId,
     vehicleNumber: data.vehicleNumber,
-    vehicleModel: data.vehicleModel,
+    vehicleModel,
     vehicleYear: data.vehicleYear,
     registrationStatus: 'registration_in_progress',
     registrationStep: REGISTRATION_STEP.PERSONAL_INFO,

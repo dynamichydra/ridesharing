@@ -8,10 +8,9 @@
  *
  * What it seeds:
  *   1.  1  super admin
- *   2.  2  countries       (India — default, Canada) to prove multi-country pricing works
- *   3.  4  vehicle types   (Bike, Auto, Cab, Premium Cab) — global catalog
- *   4.  6  vehicle-type rate cards (India: all 4; Canada: Cab + Premium only — Bike/Auto
- *          intentionally left unpriced there to demonstrate "not offered in this country")
+ *   2.  2  countries       (India — default, Canada)
+ *   3.  4  vehicle types   (Bike, Auto, Cab, Premium Cab) — global catalog, flat global rate
+ *   4. 11  vehicle models  (brand/model → type catalog, e.g. Splendor → Bike)
  *   5.  5  zones           (3 Kolkata, 2 Toronto)
  *   6.  7  fare rules      (1 global, 5 India-scoped, 1 Canada-scoped)
  *   7.  2  tax rules       (India GST, Canada HST)
@@ -32,7 +31,7 @@ import bcrypt from 'bcryptjs';
 import {
   admins,
   vehicleTypes,
-  vehicleTypePricing,
+  vehicleModels,
   zones,
   fareRules,
   commissionRules,
@@ -128,9 +127,10 @@ async function seed() {
   log.ok(`Ops admin   → ops@rideshare.com   / Ops@123456`);
 
   // ── 1b. Geography & Languages ───────────────────────────────────────────────
-  // Two countries on purpose — this is the seed that proves the pricing model
-  // isn't secretly single-market: different currency, different rate card,
-  // different subscription plans, different tax rule, same code path throughout.
+  // Two countries on purpose — this is the seed that proves the model isn't secretly
+  // single-market: different currency, different subscription plans, different tax
+  // rule, same code path throughout. Vehicle-type rates are flat/global (no per-country
+  // rate card), so pricing itself doesn't vary by country.
   log.section('1b. Geography & Languages');
 
   await db.insert(languages).values([
@@ -232,45 +232,55 @@ async function seed() {
 
   log.ok(`4 onboarding questions (own_vehicle, weekly_hours, worked_before, rental_interest)`);
 
-  // ── 2. Vehicle Types (global catalog — no rates here) ─────────────────────────
-  log.section('2. Vehicle Types (catalog)');
+  // ── 2. Vehicle Types (global catalog, flat global rate — no per-country cards) ─
+  log.section('2. Vehicle Types (catalog + flat rate)');
 
   const [vtBike] = await db.insert(vehicleTypes).values({
     name: 'Bike', slug: 'bike', capacity: 1, sortOrder: 1, isActive: true, createdBy: superAdmin?.id,
+    baseRateMinor: 1500, perKmRateMinor: 600, perMinRateMinor: 50, minFareMinor: 3000,
   }).onConflictDoNothing().returning();
 
   const [vtAuto] = await db.insert(vehicleTypes).values({
     name: 'Auto', slug: 'auto', capacity: 3, sortOrder: 2, isActive: true, createdBy: superAdmin?.id,
+    baseRateMinor: 2500, perKmRateMinor: 1000, perMinRateMinor: 75, minFareMinor: 5000,
   }).onConflictDoNothing().returning();
 
   const [vtCab] = await db.insert(vehicleTypes).values({
     name: 'Cab', slug: 'cab', capacity: 4, sortOrder: 3, isActive: true, createdBy: superAdmin?.id,
+    baseRateMinor: 5000, perKmRateMinor: 1400, perMinRateMinor: 100, minFareMinor: 8000,
   }).onConflictDoNothing().returning();
 
   const [vtPremium] = await db.insert(vehicleTypes).values({
     name: 'Premium Cab', slug: 'premium-cab', capacity: 4, sortOrder: 4, isActive: true, createdBy: superAdmin?.id,
+    baseRateMinor: 10000, perKmRateMinor: 2000, perMinRateMinor: 150, minFareMinor: 15000,
   }).onConflictDoNothing().returning();
 
-  log.ok(`Bike, Auto, Cab, Premium Cab — same catalog in every country`);
+  log.ok(`Bike 15+6/km, Auto 25+10/km, Cab 50+14/km, Premium 100+20/km — same flat rate in every country`);
 
-  // ── 2b. Per-country rate cards ─────────────────────────────────────────────
-  log.section('2b. Vehicle-Type Pricing (per country)');
+  // ── 2c. Vehicle Models (brand/model → type catalog) ────────────────────────
+  // Drivers pick one of these when registering a vehicle instead of self-declaring a
+  // vehicleTypeId — see vehicle.service.js#addVehicle. Prevents e.g. an old hatchback
+  // being registered as "Premium Cab".
+  log.section('2b. Vehicle Models (brand/model catalog)');
 
-  await db.insert(vehicleTypePricing).values([
-    // India — INR, amounts in paise
-    { vehicleTypeId: vtBike?.id,    countryId: india?.id, currencyCode: 'INR', baseRateMinor: 1500,  perKmRateMinor: 600,  perMinRateMinor: 50,  minFareMinor: 3000 },
-    { vehicleTypeId: vtAuto?.id,    countryId: india?.id, currencyCode: 'INR', baseRateMinor: 2500,  perKmRateMinor: 1000, perMinRateMinor: 75,  minFareMinor: 5000 },
-    { vehicleTypeId: vtCab?.id,     countryId: india?.id, currencyCode: 'INR', baseRateMinor: 5000,  perKmRateMinor: 1400, perMinRateMinor: 100, minFareMinor: 8000 },
-    { vehicleTypeId: vtPremium?.id, countryId: india?.id, currencyCode: 'INR', baseRateMinor: 10000, perKmRateMinor: 2000, perMinRateMinor: 150, minFareMinor: 15000 },
-    // Canada — CAD, amounts in cents. Bike/Auto intentionally NOT priced here —
-    // estimateAllTypes() silently drops them for Canadian pickups (getRate() 404s,
-    // caught and filtered), proving a vehicle type can be catalog-global but market-partial.
-    { vehicleTypeId: vtCab?.id,     countryId: canada?.id, currencyCode: 'CAD', baseRateMinor: 500,  perKmRateMinor: 150, perMinRateMinor: 25, minFareMinor: 800 },
-    { vehicleTypeId: vtPremium?.id, countryId: canada?.id, currencyCode: 'CAD', baseRateMinor: 1000, perKmRateMinor: 250, perMinRateMinor: 40, minFareMinor: 1500 },
-  ]).onConflictDoNothing();
+  const modelSlug = (brand, name) => `${brand}-${name}`.toLowerCase().replace(/\s+/g, '-');
+  const vehicleModelRows = [
+    { vehicleTypeId: vtBike?.id,    brand: 'Honda',        name: 'Splendor' },
+    { vehicleTypeId: vtBike?.id,    brand: 'TVS',          name: 'Apache' },
+    { vehicleTypeId: vtBike?.id,    brand: 'Hero',         name: 'Passion' },
+    { vehicleTypeId: vtAuto?.id,    brand: 'Bajaj',        name: 'RE Auto' },
+    { vehicleTypeId: vtAuto?.id,    brand: 'Piaggio',      name: 'Ape Auto' },
+    { vehicleTypeId: vtCab?.id,     brand: 'Maruti Suzuki', name: 'WagonR' },
+    { vehicleTypeId: vtCab?.id,     brand: 'Maruti Suzuki', name: 'Swift Dzire' },
+    { vehicleTypeId: vtCab?.id,     brand: 'Hyundai',      name: 'i10' },
+    { vehicleTypeId: vtPremium?.id, brand: 'Toyota',       name: 'Innova Crysta' },
+    { vehicleTypeId: vtPremium?.id, brand: 'Toyota',       name: 'Fortuner' },
+    { vehicleTypeId: vtPremium?.id, brand: 'Mahindra',     name: 'XUV700' },
+  ].map((m, i) => ({ ...m, slug: modelSlug(m.brand, m.name), sortOrder: i + 1, isActive: true, createdBy: superAdmin?.id }));
 
-  log.ok(`India:  Bike ₹15+₹6/km, Auto ₹25+₹10/km, Cab ₹50+₹14/km, Premium ₹100+₹20/km`);
-  log.ok(`Canada: Cab $5+$1.50/km, Premium $10+$2.50/km  (Bike/Auto not offered)`);
+  await db.insert(vehicleModels).values(vehicleModelRows).onConflictDoNothing();
+
+  log.ok(`11 vehicle models seeded (Splendor/Apache/Passion → Bike, RE/Ape Auto → Auto, WagonR/Swift Dzire/i10 → Cab, Innova/Fortuner/XUV700 → Premium Cab)`);
 
   // ── 3. Zones ────────────────────────────────────────────────────────────────
   log.section('3. Zones');
@@ -1187,8 +1197,9 @@ ${'═'.repeat(55)}
   Document Types: Driver's License, Vehicle Registration, Insurance Certificate, National ID
   Legal Docs:     Terms v1.0, Privacy Policy v1.0 (global)
   Questions:      own_vehicle, weekly_hours, worked_before, rental_interest
-  Vehicle Types:  Bike, Auto, Cab, Premium Cab (global catalog)
-  Pricing:        India: all 4 types.  Canada: Cab + Premium only.
+  Vehicle Types:  Bike, Auto, Cab, Premium Cab (global catalog, flat global rate)
+  Vehicle Models: 11 brand/model rows (Splendor/Apache/Passion → Bike, RE/Ape Auto → Auto,
+                  WagonR/Swift Dzire/i10 → Cab, Innova/Fortuner/XUV700 → Premium Cab)
   Zones:          Kolkata City Centre/Airport/Salt Lake, Toronto Downtown/Pearson
   Fare Rules:     Night Surge (global) + 5 India-scoped + 1 Canada-scoped
   Tax Rules:      India GST 18% (subscription), Canada HST 13% (fare + subscription)

@@ -7,27 +7,19 @@ import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getVehicleTypeColumns } from "../components/column";
 import { VehicleTypeFilters } from "../components/filters";
-import {
-  VehicleTypeFormDialog,
-  PricingFormDialog,
-} from "../components/dialog";
+import { VehicleTypeFormDialog } from "../components/dialog";
 import {
   useVehicleTypes,
   useCreateVehicleType,
   useUpdateVehicleType,
   useSetVehicleTypeActive,
-  useCountries,
-  useVehicleTypePricingForCountry,
-  useSetVehicleTypePricing,
 } from "../hooks";
 import {
   vehicleTypeCreateSchema,
   vehicleTypeEditSchema,
-  vehicleTypePricingSchema,
   type VehicleTypeFormValues,
-  type VehicleTypePricingFormValues,
 } from "../schema";
-import type { VehicleType, VehicleTypePricing, Pagination } from "../types";
+import type { VehicleType, Pagination } from "../types";
 
 const VEHICLE_TYPES_KEY = "vehicle-types";
 
@@ -36,10 +28,6 @@ const EMPTY_FORM: VehicleTypeFormValues = {
   capacity: "",
   sortOrder: "",
   isActive: true,
-};
-
-const EMPTY_PRICING_FORM: VehicleTypePricingFormValues = {
-  currencyCode: "",
   baseRate: "",
   perKmRate: "",
   perMinRate: "",
@@ -55,22 +43,11 @@ export default function VehicleTypeList() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [formValues, setFormValues] = useState<VehicleTypeFormValues>(EMPTY_FORM);
-const [formErrors, setFormErrors] = useState<
-  Partial<Record<keyof VehicleTypeFormValues, string>>
->({});
+  const [formErrors, setFormErrors] = useState<
+    Partial<Record<keyof VehicleTypeFormValues, string>>
+  >({});
 
-  const [isPricingOpen, setIsPricingOpen] = useState(false);
-  const [pricingVehicleType, setPricingVehicleType] = useState<VehicleType | null>(null);
-  const [pricingValues, setPricingValues] =
-    useState<VehicleTypePricingFormValues>(EMPTY_PRICING_FORM);
-const [pricingErrors, setPricingErrors] = useState<
-  Partial<Record<keyof VehicleTypePricingFormValues, string>>
->({});
-
-  // countryId is UI-only context for the pricing join — never sent to
-  // GET /vehicle-types, which the API doc doesn't confirm supports it.
-  const { countryId: selectedCountryId, page: appliedPageStr, ...vehicleTypeFilterParams } =
-    applied;
+  const { page: appliedPageStr, ...vehicleTypeFilterParams } = applied;
   const page = Number(appliedPageStr ?? 1);
 
   const { data, isLoading, isFetching } = useVehicleTypes({
@@ -78,30 +55,16 @@ const [pricingErrors, setPricingErrors] = useState<
     page,
     limit: pageSize,
   });
-  const { data: countriesData } = useCountries();
-  const { data: pricingData } = useVehicleTypePricingForCountry(selectedCountryId || undefined);
 
   const createMutation = useCreateVehicleType();
   const updateMutation = useUpdateVehicleType();
   const setActiveMutation = useSetVehicleTypeActive();
-  const setPricingMutation = useSetVehicleTypePricing();
 
   const vehicleTypes = data?.MESSAGE || [];
-  const countries = countriesData?.MESSAGE || [];
-  const selectedCountry = countries.find((c) => c.id === selectedCountryId);
 
   const pagination = data?.PAGINATION as unknown as Pagination | undefined;
   const totalPages = pagination?.totalPages || 1;
   const totalRecords = pagination?.totalItems ?? vehicleTypes.length;
-
-  const pricingMap = useMemo(() => {
-    const rows = (pricingData?.MESSAGE ?? []) as VehicleTypePricing[];
-    const map: Record<string, VehicleTypePricing> = {};
-    rows.forEach((row) => {
-      map[row.vehicleTypeId] = row;
-    });
-    return map;
-  }, [pricingData]);
 
   const refreshList = () => {
     queryClient.invalidateQueries({ queryKey: [VEHICLE_TYPES_KEY], refetchType: "active" });
@@ -123,6 +86,10 @@ const [pricingErrors, setPricingErrors] = useState<
       capacity: vt.capacity,
       sortOrder: vt.sortOrder,
       isActive: vt.isActive,
+      baseRate: (vt.baseRateMinor / 100).toFixed(2),
+      perKmRate: (vt.perKmRateMinor / 100).toFixed(2),
+      perMinRate: (vt.perMinRateMinor / 100).toFixed(2),
+      minFare: (vt.minFareMinor / 100).toFixed(2),
     });
     setFormErrors({});
     setIsFormOpen(true);
@@ -130,24 +97,6 @@ const [pricingErrors, setPricingErrors] = useState<
 
   const handleToggleActive = (vt: VehicleType) => {
     setActiveMutation.mutate({ id: vt.id, isActive: !vt.isActive });
-  };
-
-  const handleOpenPricing = (vt: VehicleType) => {
-    const existing = pricingMap[vt.id];
-    setPricingVehicleType(vt);
-    setPricingValues(
-      existing
-        ? {
-            currencyCode: existing.currencyCode,
-            baseRate: (existing.baseRateMinor / 100).toFixed(2),
-            perKmRate: (existing.perKmRateMinor / 100).toFixed(2),
-            perMinRate: (existing.perMinRateMinor / 100).toFixed(2),
-            minFare: (existing.minFareMinor / 100).toFixed(2),
-          }
-        : { ...EMPTY_PRICING_FORM, currencyCode: selectedCountry?.currencyCode ?? "" }
-    );
-    setPricingErrors({});
-    setIsPricingOpen(true);
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -164,16 +113,31 @@ const [pricingErrors, setPricingErrors] = useState<
         return;
       }
       setFormErrors({});
-      createMutation.mutate(result.data, {
-        onSuccess: () => {
-          setIsFormOpen(false);
-          refreshList();
+      createMutation.mutate(
+        {
+          name: result.data.name,
+          capacity: result.data.capacity,
+          sortOrder: result.data.sortOrder,
+          baseRateMinor: Math.round(Number(result.data.baseRate) * 100),
+          perKmRateMinor: Math.round(Number(result.data.perKmRate) * 100),
+          perMinRateMinor: Math.round(Number(result.data.perMinRate) * 100),
+          minFareMinor: Math.round(Number(result.data.minFare) * 100),
         },
-      });
+        {
+          onSuccess: () => {
+            setIsFormOpen(false);
+            refreshList();
+          },
+        }
+      );
     } else if (selectedVehicleType) {
       const result = vehicleTypeEditSchema.safeParse({
         capacity: formValues.capacity,
         isActive: formValues.isActive,
+        baseRate: formValues.baseRate,
+        perKmRate: formValues.perKmRate,
+        perMinRate: formValues.perMinRate,
+        minFare: formValues.minFare,
       });
       if (!result.success) {
         const fieldErrors: Partial<Record<keyof VehicleTypeFormValues, string>> = {};
@@ -185,7 +149,17 @@ const [pricingErrors, setPricingErrors] = useState<
       }
       setFormErrors({});
       updateMutation.mutate(
-        { id: selectedVehicleType.id, payload: result.data },
+        {
+          id: selectedVehicleType.id,
+          payload: {
+            capacity: result.data.capacity,
+            isActive: result.data.isActive,
+            baseRateMinor: Math.round(Number(result.data.baseRate) * 100),
+            perKmRateMinor: Math.round(Number(result.data.perKmRate) * 100),
+            perMinRateMinor: Math.round(Number(result.data.perMinRate) * 100),
+            minFareMinor: Math.round(Number(result.data.minFare) * 100),
+          },
+        },
         {
           onSuccess: () => {
             setIsFormOpen(false);
@@ -196,47 +170,9 @@ const [pricingErrors, setPricingErrors] = useState<
     }
   };
 
-  const handlePricingSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!pricingVehicleType || !selectedCountryId) return;
-
-    const result = vehicleTypePricingSchema.safeParse(pricingValues);
-    if (!result.success) {
-      const fieldErrors: Partial<Record<keyof VehicleTypePricingFormValues, string>> = {};
-      result.error.issues.forEach((issue) => {
-        fieldErrors[issue.path[0] as keyof VehicleTypePricingFormValues] = issue.message;
-      });
-      setPricingErrors(fieldErrors);
-      return;
-    }
-    setPricingErrors({});
-
-    setPricingMutation.mutate(
-      {
-        vehicleTypeId: pricingVehicleType.id,
-        payload: {
-          countryId: selectedCountryId,
-          currencyCode: result.data.currencyCode,
-          baseRateMinor: Math.round(Number(result.data.baseRate) * 100),
-          perKmRateMinor: Math.round(Number(result.data.perKmRate) * 100),
-          perMinRateMinor: Math.round(Number(result.data.perMinRate) * 100),
-          minFareMinor: Math.round(Number(result.data.minFare) * 100),
-        },
-      },
-      { onSuccess: () => setIsPricingOpen(false) }
-    );
-  };
-
   const columns = useMemo(
-    () =>
-      getVehicleTypeColumns({
-        pricingMap,
-        countrySelected: !!selectedCountryId,
-        onEdit: handleOpenEdit,
-        onToggleActive: handleToggleActive,
-        onEditPricing: handleOpenPricing,
-      }),
-    [pricingMap, selectedCountryId]
+    () => getVehicleTypeColumns({ onEdit: handleOpenEdit, onToggleActive: handleToggleActive }),
+    []
   );
 
   const handlePageChange = (pageIndex: number) => {
@@ -275,7 +211,6 @@ const [pricingErrors, setPricingErrors] = useState<
       <VehicleTypeFilters
         controller={{ draft, applied, setDraftValue, apply, reset }}
         isFetching={isFetching}
-        countries={countries}
       />
 
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
@@ -304,17 +239,6 @@ const [pricingErrors, setPricingErrors] = useState<
         errors={formErrors}
         onSubmit={handleFormSubmit}
         isPending={createMutation.isPending || updateMutation.isPending}
-      />
-      <PricingFormDialog
-        open={isPricingOpen}
-        onOpenChange={setIsPricingOpen}
-        vehicleType={pricingVehicleType}
-        countryName={selectedCountry?.name}
-        values={pricingValues}
-        setValues={setPricingValues}
-        errors={pricingErrors}
-        onSubmit={handlePricingSubmit}
-        isPending={setPricingMutation.isPending}
       />
     </div>
   );
