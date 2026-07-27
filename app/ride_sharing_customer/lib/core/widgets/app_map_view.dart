@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../constants/constants.dart';
 import 'mock_map_view.dart';
 
 class AppMapView extends StatelessWidget {
@@ -17,13 +18,15 @@ class AppMapView extends StatelessWidget {
     this.driverPosition,
     this.driverBearing = 0.0,
     this.routePoints = const [],
-    this.useGoogleMaps = false, // Default to mock mode for guaranteed compilation and look-and-feel
+    this.useGoogleMaps = true,
   });
 
   @override
   Widget build(BuildContext context) {
     if (useGoogleMaps) {
       return GoogleMap(
+        // Applied platform-specific Google Cloud Map ID (Android: fff6d11d7fdc289b41602fe8, iOS: fff6d11d7fdc289b1acc6a66)
+        mapId: AppConstants.cloudMapId,
         initialCameraPosition: CameraPosition(
           target: driverPosition ?? pickup ?? const LatLng(12.9716, 77.5946),
           zoom: 14.0,

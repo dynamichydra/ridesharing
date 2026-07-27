@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class AppColors {
@@ -89,5 +90,18 @@ class CountryConfig {
 class AppConstants {
   static String currencySymbol = '₹';
   static const String distanceUnit = 'km';
+  static const String googleMapsApiKey = 'AIzaSyCa9c3EMWliRd2AUcZA-LpJF7VwhEjsd7g';
+
+  // Google Cloud Map IDs
+  static const String androidMapId = 'fff6d11d7fdc289b41602fe8';
+  static const String iosMapId = 'fff6d11d7fdc289b1acc6a66';
+
+  /// Automatically resolves the correct Google Cloud Map ID based on platform
+  static String get cloudMapId {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return iosMapId;
+    }
+    return androidMapId;
+  }
 }
 

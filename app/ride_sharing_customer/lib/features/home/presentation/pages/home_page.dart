@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../../../../core/constants/constants.dart';
-import '../../../../core/widgets/app_map_view.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../../../../core/widgets/error_view.dart';
 import '../bloc/home_bloc.dart';
-import '../widgets/navigation_drawer.dart';
-import '../../../booking/presentation/bloc/booking_bloc.dart';
+import '../../../location/presentation/widgets/google_map_picker.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -27,8 +23,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       backgroundColor: Colors.white,
       body: BlocBuilder<HomeBloc, HomeState>(
@@ -47,10 +41,12 @@ class _HomePageState extends State<HomePage> {
           if (state is HomeLoaded) {
             return Stack(
               children: [
-                // 1. Map Background
+                // 1. Map Background with live current location fetching
                 Positioned.fill(
-                  child: AppMapView(
-                    pickup: state.currentPosition,
+                  child: GoogleMapPicker(
+                    showConfirmButton: false,
+                    showMyLocationButton: true,
+                    initialPosition: state.currentPosition,
                   ),
                 ),
 
