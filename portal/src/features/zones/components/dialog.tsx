@@ -5,8 +5,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import ZoneForm, { ZoneDetectForm } from "./form";
-import type { ZoneFormState, ZoneDetectFormState } from "./form";
+import ZoneForm, { ZoneDetectForm, GenerateHexForm } from "./form";
+import type { ZoneFormState, ZoneDetectFormState, GenerateHexFormState } from "./form";
 import type { Zone, Country } from "../types";
 
 interface ZoneFormDialogProps {
@@ -18,6 +18,7 @@ interface ZoneFormDialogProps {
   onChange: (values: ZoneFormState) => void;
   onSubmit: (e: React.FormEvent) => void;
   isPending: boolean;
+  contextZones?: Zone[];
 }
 
 export function ZoneFormDialog({
@@ -29,10 +30,11 @@ export function ZoneFormDialog({
   onChange,
   onSubmit,
   isPending,
+  contextZones,
 }: ZoneFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-160 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{zone ? "Edit Zone" : "Add Zone"}</DialogTitle>
           <DialogDescription>
@@ -49,6 +51,8 @@ export function ZoneFormDialog({
           onCancel={() => onOpenChange(false)}
           isPending={isPending}
           submitLabel={zone ? "Save Modifications" : "Generate Zone"}
+          contextZones={contextZones}
+          hexCells={zone?.hexCells}
         />
       </DialogContent>
     </Dialog>
@@ -63,6 +67,8 @@ interface ZoneDetectDialogProps {
   onSubmit: (e: React.FormEvent) => void;
   isPending: boolean;
   detectedZoneName?: string | null;
+  hexMatches?: Zone[];
+  contextZones?: Zone[];
 }
 
 export function ZoneDetectDialog({
@@ -73,14 +79,16 @@ export function ZoneDetectDialog({
   onSubmit,
   isPending,
   detectedZoneName,
+  hexMatches,
+  contextZones,
 }: ZoneDetectDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[420px]">
+      <DialogContent className="sm:max-w-120 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Detect Zone</DialogTitle>
           <DialogDescription>
-            Input latitude/longitude values to verify matching operational geofences.
+            Click a point on the map (or type coordinates) to check matching operational geofences and H3 hex zones.
           </DialogDescription>
         </DialogHeader>
         <ZoneDetectForm
@@ -90,6 +98,50 @@ export function ZoneDetectDialog({
           onCancel={() => onOpenChange(false)}
           isPending={isPending}
           detectedZoneName={detectedZoneName}
+          hexMatches={hexMatches}
+          contextZones={contextZones}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface GenerateHexDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  zone: Zone | null;
+  values: GenerateHexFormState;
+  onChange: (values: GenerateHexFormState) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  isPending: boolean;
+}
+
+export function GenerateHexDialog({
+  open,
+  onOpenChange,
+  zone,
+  values,
+  onChange,
+  onSubmit,
+  isPending,
+}: GenerateHexDialogProps) {
+  if (!zone) return null;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>Generate Hex Cells — {zone.name}</DialogTitle>
+          <DialogDescription>
+            Derives H3 hex cells from this zone's stored polygon at the chosen resolution.
+          </DialogDescription>
+        </DialogHeader>
+        <GenerateHexForm
+          zone={zone}
+          values={values}
+          onChange={onChange}
+          onSubmit={onSubmit}
+          onCancel={() => onOpenChange(false)}
+          isPending={isPending}
         />
       </DialogContent>
     </Dialog>

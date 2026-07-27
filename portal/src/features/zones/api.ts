@@ -1,5 +1,12 @@
 import { apiClient } from "@/lib/api-client";
-import type { Zone, ZoneListParams, ZonePayload, ZoneDetectPayload, Country } from "./types";
+import type {
+  Zone,
+  ZoneListParams,
+  ZonePayload,
+  ZoneDetectPayload,
+  GenerateHexCellsPayload,
+  Country,
+} from "./types";
 
 const BASE_URL = "/zones";
 
@@ -17,6 +24,12 @@ export const zonesApi = {
   // GET /zones?page=&countryId=
   list: (params: ZoneListParams) =>
     apiClient.get<Zone[]>(`${BASE_URL}?${buildQuery(params)}`),
+
+  // GET /zones?countryId= (no `page` param hits the backend's unpaginated listAll branch) —
+  // used to draw every other zone as map context while drawing/editing/picking a point, not
+  // for the table (which stays server-paginated).
+  listAllActive: (countryId?: string) =>
+    apiClient.get<Zone[]>(`${BASE_URL}${countryId ? `?countryId=${countryId}` : ""}`),
 
   // GET /zones/:id
   getById: (id: string) => 
@@ -37,6 +50,14 @@ export const zonesApi = {
   // POST /zones/detect
   detect: (payload: ZoneDetectPayload) =>
     apiClient.post<Zone | null>(`${BASE_URL}/detect`, payload),
+
+  // POST /zones/resolve-hex — all H3 hex-zone matches, priority-ordered (most specific first)
+  resolveHex: (payload: ZoneDetectPayload) =>
+    apiClient.post<Zone[]>(`${BASE_URL}/resolve-hex`, payload),
+
+  // POST /zones/:id/generate-hex-cells — (re)derive hexCells from the stored polygon
+  generateHexCells: ({ id, resolution }: GenerateHexCellsPayload) =>
+    apiClient.post<Zone>(`${BASE_URL}/${id}/generate-hex-cells`, { resolution }),
 };
 
 export const geoApi = {

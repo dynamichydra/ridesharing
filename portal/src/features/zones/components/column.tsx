@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Map, Pencil, Ban, CheckCircle2, XCircle } from "lucide-react";
+import { Map, Pencil, Ban, CheckCircle2, XCircle, Hexagon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Zone } from "../types";
 
@@ -7,12 +7,14 @@ interface Props {
   countriesMap: Map<string, string>;
   onEdit: (zone: Zone) => void;
   onToggleActive: (zone: Zone) => void;
+  onGenerateHex: (zone: Zone) => void;
 }
 
 export function getZoneColumns({
   countriesMap,
   onEdit,
   onToggleActive,
+  onGenerateHex,
 }: Props): ColumnDef<Zone>[] {
   return [
     {
@@ -49,6 +51,21 @@ export function getZoneColumns({
       ),
     },
     {
+      accessorKey: "hexCells",
+      header: "H3 Index",
+      cell: ({ row }) =>
+        row.original.resolution != null ? (
+          <span className="flex items-center gap-1.5 text-xs">
+            <Hexagon className="h-3.5 w-3.5 text-primary" />
+            <span className="font-mono text-foreground">
+              res {row.original.resolution} · {row.original.hexCells?.length ?? 0} cells
+            </span>
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground italic">Not generated</span>
+        ),
+    },
+    {
       accessorKey: "isActive",
       header: "Status",
       cell: ({ row }) =>
@@ -79,6 +96,18 @@ export function getZoneColumns({
             title="Edit zone"
           >
             <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onGenerateHex(row.original);
+            }}
+            className="h-8 w-8"
+            title={row.original.resolution != null ? "Regenerate hex cells" : "Generate hex cells"}
+          >
+            <Hexagon className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant={row.original.isActive ? "destructive" : "outline"}
