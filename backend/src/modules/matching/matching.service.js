@@ -136,19 +136,18 @@ async function queryDriversInRadius(pickupLat, pickupLng, vehicleTypeId, radiusK
         SELECT 1 FROM driver_rider_blocks b
         WHERE b.driver_id = d.id AND b.rider_id = ${riderId}::uuid
       )
-      ${exclusion}
-    HAVING
-      (6371 * acos(
+      AND (6371 * acos(
         LEAST(1.0,
           cos(radians(${pickupLat})) * cos(radians(d.current_lat::float))
           * cos(radians(d.current_lng::float) - radians(${pickupLng}))
           + sin(radians(${pickupLat})) * sin(radians(d.current_lat::float))
         )
       )) <= ${radiusKm}
+      ${exclusion}
     ORDER BY distance_km ASC
     LIMIT ${CANDIDATE_BUFFER}
   `);
-  return rows;
+  return rows.rows;
 }
 
 /**
@@ -270,7 +269,7 @@ export async function getAvailableVehicleTypeIds(pickupLat, pickupLng, riderId) 
         )
       )) <= ${radiusKm}
   `);
-  return rows.map((r) => r.vehicleTypeId);
+  return rows.rows.map((r) => r.vehicleTypeId);
 }
 
 // ── public API ────────────────────────────────────────────────────────────────
@@ -351,24 +350,31 @@ async function _runMatchingRings(ride) {
     );
 
     // Broadcast to all candidates via Kafka → Socket.IO
-    await publishEvent(TOPICS.RIDE_MATCHED, {
-      id: rideId,
-      rideId,
-      ring: ringIdx + 1,
-      radiusKm,
-      candidates: offerPayload,
-      pickupLat, pickupLng,
-      dropLat: ride.dropLat,
-      dropLng: ride.dropLng,
-      pickupAddress: ride.pickupAddress,
-      dropAddress: ride.dropAddress,
-      vehicleTypeId,
-      estimatedFare: fromMinor(ride.estimatedFareMinor, ride.currencyCode),
-      currency: ride.currencyCode,
-      distanceKm: ride.distanceKm,
-      polyline: ride.polyline,
-      expiresAt: Date.now() + ACCEPT_TIMEOUT_MS,
-    }, rideId);
+    console.log(`[Matching] Ride ${rideId} — publishing RIDE_MATCHED to Kafka for driver(s): ${candidates.map((c) => c.id).join(', ')}`);
+    try {
+      await publishEvent(TOPICS.RIDE_MATCHED, {
+        id: rideId,
+        rideId,
+        ring: ringIdx + 1,
+        radiusKm,
+        candidates: offerPayload,
+        pickupLat, pickupLng,
+        dropLat: ride.dropLat,
+        dropLng: ride.dropLng,
+        pickupAddress: ride.pickupAddress,
+        dropAddress: ride.dropAddress,
+        vehicleTypeId,
+        estimatedFare: fromMinor(ride.estimatedFareMinor, ride.currencyCode),
+        currency: ride.currencyCode,
+        distanceKm: ride.distanceKm,
+        polyline: ride.polyline,
+        expiresAt: Date.now() + ACCEPT_TIMEOUT_MS,
+      }, rideId);
+      console.log(`[Matching] Ride ${rideId} — RIDE_MATCHED published OK`);
+    } catch (err) {
+      console.error(`[Matching] Ride ${rideId} — publishEvent(RIDE_MATCHED) FAILED:`, err.message);
+      throw err;
+    }
 
     // Bug 9 fix: instant signal via pub/sub — no more DB polling
     const accepted = await waitForAcceptanceSignal(rideId, ACCEPT_TIMEOUT_MS);
