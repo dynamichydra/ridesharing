@@ -189,9 +189,9 @@ export default function RideList() {
         open={isDetailsOpen}
         onOpenChange={setIsDetailsOpen}
         ride={selectedRide}
-        timeline={timeline}
+        timeline={timeline?.MESSAGE}
         timelineLoading={timelineLoading}
-        offers={offers}
+        offers={offers?.MESSAGE}
         offersLoading={offersLoading}
         onCancelRide={handleCancelRide}
         isCancelling={cancelMutation.isPending}
