@@ -33,7 +33,40 @@ class MockBookingRepository implements BookingRepository {
   Future<Map<String, dynamic>?> detectZone(double lat, double lng) async {
     return {'id': 'zone_1', 'name': 'City Zone'};
   }
+
+  @override
+  Future<List<Map<String, dynamic>>> estimateAllFares({
+    required double pickupLat,
+    required double pickupLng,
+    required double dropLat,
+    required double dropLng,
+  }) async {
+    return [
+      {
+        'vehicleTypeId': 'veh_economy',
+        'vehicleTypeName': 'Auto',
+        'estimatedFareMinor': 1000,
+        'distanceKm': 5.0,
+        'durationMin': 15,
+      }
+    ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> requestRide({
+    required String vehicleTypeId,
+    required double pickupLat,
+    required double pickupLng,
+    required String pickupAddress,
+    required double dropLat,
+    required double dropLng,
+    required String dropAddress,
+  }) async {
+    return {'id': 'ride_mock_id', 'status': 'searching'};
+  }
 }
+
+
 
 void main() {
   late MockBookingRepository repository;

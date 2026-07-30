@@ -12,20 +12,22 @@ class VehicleModel extends Vehicle {
     required super.multiplier,
     required super.etaMinutes,
     required super.type,
+    super.isShared = false,
   });
 
   factory VehicleModel.fromJson(Map<String, dynamic> json) {
     return VehicleModel(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      description: json['description'] as String,
-      baseFare: (json['base_fare'] as num).toDouble(),
-      perMile: (json['per_mile'] as num).toDouble(),
-      perMinute: (json['per_minute'] as num).toDouble(),
-      capacity: json['capacity'] as int,
-      multiplier: (json['multiplier'] as num).toDouble(),
-      etaMinutes: json['eta_minutes'] as int,
-      type: json['type'] as String,
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      description: json['description'] ?? 'Fast and reliable ride',
+      baseFare: (json['baseRate'] ?? 0.0 as num).toDouble(),
+      perMile: (json['perKmRate'] ?? 0.0 as num).toDouble(),
+      perMinute: (json['perMinRate'] ?? 0.0 as num).toDouble(),
+      capacity: json['capacity'] ?? 4,
+      multiplier: 1.0,
+      etaMinutes: 5,
+      type: json['name']?.toString().toLowerCase() ?? 'sedan',
+      isShared: json['isShared'] ?? false,
     );
   }
 
@@ -34,13 +36,14 @@ class VehicleModel extends Vehicle {
       'id': id,
       'name': name,
       'description': description,
-      'base_fare': baseFare,
-      'per_mile': perMile,
-      'per_minute': perMinute,
+      'baseRate': baseFare,
+      'perKmRate': perMile,
+      'perMinRate': perMinute,
       'capacity': capacity,
       'multiplier': multiplier,
-      'eta_minutes': etaMinutes,
+      'etaMinutes': etaMinutes,
       'type': type,
+      'isShared': isShared,
     };
   }
 }

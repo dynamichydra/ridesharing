@@ -1,4 +1,6 @@
-class Vehicle {
+import 'package:equatable/equatable.dart';
+
+class Vehicle extends Equatable {
   final String id;
   final String name;
   final String description;
@@ -9,6 +11,7 @@ class Vehicle {
   final double multiplier;
   final int etaMinutes;
   final String type;
+  final bool isShared;
 
   const Vehicle({
     required this.id,
@@ -21,5 +24,21 @@ class Vehicle {
     required this.multiplier,
     required this.etaMinutes,
     required this.type,
+    this.isShared = false,
   });
+
+  @override
+  List<Object?> get props => [
+        id,
+        name,
+        description,
+        baseFare,
+        perMile,
+        perMinute,
+        capacity,
+        multiplier,
+        etaMinutes,
+        type,
+        isShared,
+      ];
 }

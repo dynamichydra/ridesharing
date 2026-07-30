@@ -26,6 +26,7 @@ class AppTheme {
         color: AppColors.lightDivider,
         thickness: 1,
       ),
+
       cardTheme: CardThemeData(
         color: AppColors.lightSurface,
         elevation: 2,

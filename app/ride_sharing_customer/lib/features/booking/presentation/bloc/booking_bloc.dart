@@ -128,6 +128,7 @@ class BookingVehicleOptionsLoaded extends BookingState {
 }
 
 class BookingConfirmed extends BookingState {
+  final String rideId;
   final LatLng pickup;
   final String pickupName;
   final LatLng destination;
@@ -136,6 +137,7 @@ class BookingConfirmed extends BookingState {
   final double fare;
 
   const BookingConfirmed({
+    required this.rideId,
     required this.pickup,
     required this.pickupName,
     required this.destination,
@@ -145,8 +147,9 @@ class BookingConfirmed extends BookingState {
   });
 
   @override
-  List<Object?> get props => [pickup, pickupName, destination, destinationName, selectedVehicle, fare];
+  List<Object?> get props => [rideId, pickup, pickupName, destination, destinationName, selectedVehicle, fare];
 }
+
 
 class BookingError extends BookingState {
   final String message;
@@ -173,22 +176,6 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
   Future<void> _onSetRideLocations(SetRideLocations event, Emitter<BookingState> emit) async {
     emit(BookingLoading());
     try {
-      // 1. Detect Pickup and Destination Zones
-      final pickupZone = await _bookingRepository.detectZone(event.pickup.latitude, event.pickup.longitude);
-      final destZone = await _bookingRepository.detectZone(event.destination.latitude, event.destination.longitude);
-
-      if (pickupZone == null) {
-        throw Exception("Pickup location is out of our service area.");
-      }
-      if (destZone == null) {
-        throw Exception("Destination location is out of our service area.");
-      }
-
-      // Check for restricted areas
-      if (pickupZone['type'] == 'restricted' || destZone['type'] == 'restricted') {
-        throw Exception("Booking is temporarily restricted in this zone.");
-      }
-
       final distance = LocationHelper.calculateDistance(
         event.pickup.latitude,
         event.pickup.longitude,
@@ -196,21 +183,47 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
         event.destination.longitude,
       );
 
-      final vehiclesList = await _bookingRepository.getVehicles();
-      
-      final zoneMultiplier = double.tryParse(pickupZone['multiplier']?.toString() ?? '1.00') ?? 1.00;
-      
-      // Calculate Airport Surcharge if either zone is an airport
-      double airportSurcharge = 0.0;
-      if (pickupZone['type'] == 'airport' || destZone['type'] == 'airport') {
-        airportSurcharge = 150.00; // Flat INR 150.00 (or equivalent base unit)
+
+      print('[BookingBloc] Fetching server fare estimates...');
+      final estimates = await _bookingRepository.estimateAllFares(
+        pickupLat: event.pickup.latitude,
+        pickupLng: event.pickup.longitude,
+        dropLat: event.destination.latitude,
+        dropLng: event.destination.longitude,
+      );
+      print('[BookingBloc] Server estimates: $estimates');
+
+      if (estimates.isEmpty) {
+        throw Exception("No rides are currently available for this route.");
       }
 
+      final List<Vehicle> vehiclesList = [];
       final Map<String, double> fares = {};
-      for (final vehicle in vehiclesList) {
-        final rawFare = _bookingRepository.calculateFare(distance, vehicle);
-        final finalFare = (rawFare * zoneMultiplier) + airportSurcharge;
-        fares[vehicle.id] = double.parse(finalFare.toStringAsFixed(2));
+
+      for (final est in estimates) {
+        final String typeId = est['vehicleTypeId']?.toString() ?? '';
+        final String name = est['vehicleTypeName']?.toString() ?? 'Ride';
+        final int estimatedFareMinor = est['estimatedFareMinor'] as int? ?? 0;
+        final double fareValue = estimatedFareMinor / 100.0;
+        
+        final double distKm = double.tryParse(est['distanceKm']?.toString() ?? '0.0') ?? 0.0;
+        final int durationMin = est['durationMin'] as int? ?? 0;
+
+        final vehicle = Vehicle(
+          id: typeId,
+          name: name,
+          description: '${distKm.toStringAsFixed(1)} km • ${durationMin} mins',
+          baseFare: fareValue,
+          perMile: 0,
+          perMinute: 0,
+          capacity: name.toLowerCase().contains('bike') || name.toLowerCase().contains('moto') ? 1 : 4,
+          multiplier: 1.0,
+          etaMinutes: 5,
+          type: name.toLowerCase().contains('bike') || name.toLowerCase().contains('moto') ? 'bike' : 'sedan',
+        );
+
+        vehiclesList.add(vehicle);
+        fares[typeId] = fareValue;
       }
 
       emit(BookingVehicleOptionsLoaded(
@@ -225,9 +238,12 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
         calculatedFares: fares,
         selectedVehicle: vehiclesList.isNotEmpty ? vehiclesList.first : vehiclesList.first, // fallback safe
       ));
+
     } catch (e) {
+      print('[BookingBloc] SetRideLocations failed with error: $e');
       emit(BookingError(e.toString().replaceAll('Exception: ', '')));
     }
+
   }
 
   void _onSelectVehicle(SelectVehicle event, Emitter<BookingState> emit) {
@@ -242,11 +258,24 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     if (currentState is BookingVehicleOptionsLoaded) {
       emit(BookingLoading());
       try {
-        await Future.delayed(const Duration(milliseconds: 1000));
-        
         final selectedFare = currentState.calculatedFares[currentState.selectedVehicle.id] ?? 10.0;
+
+        print('[BookingBloc] Confirming booking with backend requestRide...');
+        final result = await _bookingRepository.requestRide(
+          vehicleTypeId: currentState.selectedVehicle.id,
+          pickupLat: currentState.pickup.latitude,
+          pickupLng: currentState.pickup.longitude,
+          pickupAddress: currentState.pickupAddress,
+          dropLat: currentState.destination.latitude,
+          dropLng: currentState.destination.longitude,
+          dropAddress: currentState.destinationAddress,
+        );
+        print('[BookingBloc] requestRide successful: $result');
+        
+        final rideId = result['ride']?['id']?.toString() ?? 'fake_ride_id_${DateTime.now().millisecondsSinceEpoch}';
         
         emit(BookingConfirmed(
+          rideId: rideId,
           pickup: currentState.pickup,
           pickupName: currentState.pickupName,
           destination: currentState.destination,
@@ -254,11 +283,14 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
           selectedVehicle: currentState.selectedVehicle,
           fare: selectedFare,
         ));
+
       } catch (e) {
-        emit(BookingError(e.toString()));
+        print('[BookingBloc] ConfirmRideBooking failed: $e');
+        emit(BookingError(e.toString().replaceAll('Exception: ', '')));
       }
     }
   }
+
 
   void _onClearBooking(ClearBooking event, Emitter<BookingState> emit) {
     emit(BookingInitial());

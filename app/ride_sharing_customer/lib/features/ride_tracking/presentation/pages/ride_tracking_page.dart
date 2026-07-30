@@ -1,16 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/app_map_view.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../bloc/ride_tracking_bloc.dart';
 import '../../../booking/presentation/bloc/booking_bloc.dart';
 import '../../../wallet/presentation/bloc/wallet_bloc.dart';
 import '../../../profile/presentation/bloc/profile_bloc.dart';
+import '../../../../injection_container.dart';
+import '../../../../core/network/dio_client.dart';
 
-class RideTrackingPage extends StatelessWidget {
+
+class RideTrackingPage extends StatefulWidget {
   const RideTrackingPage({super.key});
+
+  @override
+  State<RideTrackingPage> createState() => _RideTrackingPageState();
+}
+
+class _RideTrackingPageState extends State<RideTrackingPage> {
+  int _selectedRating = 5;
+  final TextEditingController _commentController = TextEditingController();
+  bool _isSubmittingRating = false;
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +54,6 @@ class RideTrackingPage extends StatelessWidget {
 
             // Determine state flags
             final bool isDriverArriving = state.trackingState == 'driverArriving';
-            final bool isRideInProgress = state.trackingState == 'rideInProgress';
             final bool isRideCompleted = state.trackingState == 'rideCompleted';
 
             return Stack(
@@ -67,7 +83,7 @@ class RideTrackingPage extends StatelessWidget {
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.06),
+                                  color: Colors.black.withValues(alpha: 0.06),
                                   blurRadius: 8,
                                   offset: const Offset(0, 3),
                                 ),
@@ -79,7 +95,7 @@ class RideTrackingPage extends StatelessWidget {
                                   'Driver is on the way',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: Color(0xFF01A34D),
+                                    color: Color(0xFF009048),
                                     fontSize: 15,
                                   ),
                                 ),
@@ -103,7 +119,7 @@ class RideTrackingPage extends StatelessWidget {
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.06),
+                                  color: Colors.black.withValues(alpha: 0.06),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4),
                                 ),
@@ -149,33 +165,27 @@ class RideTrackingPage extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Handle bar
+                          // Handle Bar
                           Container(
-                            width: 40,
+                            width: 38,
                             height: 4,
+                            margin: const EdgeInsets.only(bottom: 16),
                             decoration: BoxDecoration(
+
                               color: Colors.grey.shade300,
                               borderRadius: BorderRadius.circular(2),
                             ),
                           ),
-                          const SizedBox(height: 16),
 
-                          // Driver Profile details
+                          // Driver info Card
                           Row(
                             children: [
-                              Container(
-                                width: 56,
-                                height: 56,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: const Color(0xFFE2E7E9)),
-                                  image: const DecorationImage(
-                                    image: AssetImage('assets/images/onboarding_driver.png'),
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundColor: const Color(0xFFF1F5F9),
+                                backgroundImage: NetworkImage(state.driverAvatar),
                               ),
-                              const SizedBox(width: 14),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,108 +193,91 @@ class RideTrackingPage extends StatelessWidget {
                                     Text(
                                       state.driverName,
                                       style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
                                         fontSize: 16,
-                                        color: Color(0xFF021B47),
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF0A2540),
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '${state.driverVehicle} • ${state.plateNumber}',
-                                      style: const TextStyle(fontSize: 12, color: Color(0xFF8A94A6)),
+                                    const SizedBox(height: 2),
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.star_rounded, size: 16, color: Colors.amber),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          state.driverRating.toStringAsFixed(1),
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF535E79),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
                               ),
-                              // Rating badge
-                              Row(
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  const Icon(Icons.star_rounded, color: Colors.amber, size: 18),
-                                  const SizedBox(width: 2),
                                   Text(
-                                    '${state.driverRating}',
+                                    state.driverVehicle,
                                     style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF021B47),
                                       fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0A2540),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      state.plateNumber,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF535E79),
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
                             ],
                           ),
-                          const SizedBox(height: 20),
 
-                          if (isDriverArriving) ...[
-                            // Communication Actions row
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                _buildCircularAction(
-                                  icon: Icons.phone_rounded,
-                                  color: const Color(0xFF01A34D),
-                                  label: 'Call',
-                                  onTap: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Calling ${state.driverName}...')),
-                                    );
-                                  },
-                                ),
-                                _buildCircularAction(
-                                  icon: Icons.message_rounded,
-                                  color: const Color(0xFF01A34D),
-                                  label: 'Message',
-                                  onTap: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Chat with ${state.driverName} opened')),
-                                    );
-                                  },
-                                ),
-                                _buildCircularAction(
-                                  icon: Icons.share_rounded,
-                                  color: const Color(0xFF01A34D),
-                                  label: 'Share',
-                                  onTap: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Share ride details triggered')),
-                                    );
-                                  },
-                                ),
-                                _buildCircularAction(
-                                  icon: Icons.close_rounded,
-                                  color: const Color(0xFFE53935),
-                                  label: 'Cancel',
-                                  onTap: () {
-                                    context.read<RideTrackingBloc>().add(CancelRide());
-                                  },
-                                ),
-                              ],
-                            ),
-                          ] else ...[
-                            // Share live location button
-                            SizedBox(
-                              width: double.infinity,
-                              height: 52,
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Sharing live location link...')),
-                                  );
-                                },
-                                icon: const Icon(Icons.share_location_rounded, color: Color(0xFF0165B7)),
-                                label: const Text(
-                                  'Share Live Location',
-                                  style: TextStyle(color: Color(0xFF0165B7), fontWeight: FontWeight.bold),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Color(0xFFE2E7E9)),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
+                          const SizedBox(height: 20),
+                          const Divider(),
+                          const SizedBox(height: 16),
+
+                          // Quick actions
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _buildCircularAction(
+                                icon: Icons.call,
+                                color: const Color(0xFF009048),
+                                label: 'Call Driver',
+                                onTap: () {},
                               ),
-                            ),
-                          ],
+                              _buildCircularAction(
+                                icon: Icons.chat_bubble_rounded,
+                                color: const Color(0xFF009048),
+                                label: 'Message',
+                                onTap: () {},
+                              ),
+                              _buildCircularAction(
+                                icon: Icons.cancel_outlined,
+                                color: const Color(0xFFE53935),
+                                label: 'Cancel Ride',
+                                onTap: () {
+                                  context.read<RideTrackingBloc>().add(CancelRide());
+                                },
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -293,7 +286,7 @@ class RideTrackingPage extends StatelessWidget {
             );
           }
 
-          return const Scaffold(body: LoadingView());
+          return const SizedBox.shrink();
         },
       ),
     );
@@ -338,7 +331,7 @@ class RideTrackingPage extends StatelessWidget {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.08),
+              color: color.withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 22),
@@ -353,7 +346,7 @@ class RideTrackingPage extends StatelessWidget {
     );
   }
 
-  // Ride completed full overlay matching the receipt design screen
+  // Ride completed receipt with interactive rating & optional comments
   Widget _buildCompletedReceiptView(BuildContext context, RideTrackingActive state) {
     return Positioned.fill(
       child: Container(
@@ -364,9 +357,9 @@ class RideTrackingPage extends StatelessWidget {
               // Green completed header
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
                 decoration: const BoxDecoration(
-                  color: Color(0xFF01A34D),
+                  color: Color(0xFF009048),
                   borderRadius: BorderRadius.only(
                     bottomLeft: Radius.circular(24),
                     bottomRight: Radius.circular(24),
@@ -381,14 +374,14 @@ class RideTrackingPage extends StatelessWidget {
                         color: Colors.white,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.check_rounded, color: Color(0xFF01A34D), size: 36),
+                      child: const Icon(Icons.check_rounded, color: Color(0xFF009048), size: 36),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     const Text(
                       'Ride Completed',
                       style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     const Text(
                       'Thank you for riding with us!',
                       style: TextStyle(fontSize: 14, color: Colors.white70),
@@ -401,18 +394,19 @@ class RideTrackingPage extends StatelessWidget {
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(24),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       // Total fare row
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            'Total Fare',
+                            'Total Fare Paid',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
                           ),
                           Text(
                             '₹${state.fare.toStringAsFixed(0)}',
-                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF009048)),
                           ),
                         ],
                       ),
@@ -420,36 +414,69 @@ class RideTrackingPage extends StatelessWidget {
                       const Divider(),
                       const SizedBox(height: 12),
 
-                      // Receipt table list items
+                      // Receipt details
                       _buildReceiptRow('Base Fare', '₹85'),
                       _buildReceiptRow('Distance (10.2 km)', '₹30'),
                       _buildReceiptRow('Time (22 min)', '₹10'),
-                      _buildReceiptRow('Platform Fee', '₹0'),
                       _buildReceiptRow('Payment Method', 'Cash'),
                       
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
                       const Divider(),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
 
-                      // Rate Driver Section
-                      const Text(
-                        'Rate your ride',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                      // Interactive Star Rating
+                      const Center(
+                        child: Text(
+                          'Rate your experience',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0A2540)),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       
-                      // 5 Stars row
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(
-                          5,
-                          (index) => Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: Icon(
+                        children: List.generate(5, (index) {
+                          final starPos = index + 1;
+                          final isSelected = starPos <= _selectedRating;
+                          return IconButton(
+                            icon: Icon(
                               Icons.star_rounded,
-                              color: index < 4 ? Colors.amber : Colors.grey.shade300,
-                              size: 36,
+                              color: isSelected ? Colors.amber : Colors.grey.shade300,
+                              size: 40,
                             ),
+                            onPressed: () {
+                              setState(() {
+                                _selectedRating = starPos;
+                              });
+                            },
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Optional Review Text Field
+                      const Text(
+                        'Review comments (Optional)',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _commentController,
+                        maxLines: 3,
+                        style: const TextStyle(fontSize: 14, color: Color(0xFF0F172A)),
+                        decoration: InputDecoration(
+                          hintText: 'Share details of your trip here...',
+                          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                          contentPadding: const EdgeInsets.all(12),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade200),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFF009048)),
                           ),
                         ),
                       ),
@@ -458,29 +485,65 @@ class RideTrackingPage extends StatelessWidget {
                 ),
               ),
 
-              // Done action button at bottom
+              // Submit Action Button
               Padding(
                 padding: const EdgeInsets.only(left: 24, right: 24, bottom: 20),
                 child: SizedBox(
                   width: double.infinity,
-                  height: 56,
+                  height: 54,
                   child: ElevatedButton(
-                    onPressed: () {
-                      context.read<BookingBloc>().add(ClearBooking());
-                      context.go('/home');
-                    },
+                    onPressed: _isSubmittingRating
+                        ? null
+                        : () async {
+                            final bookingBloc = context.read<BookingBloc>();
+                            final messenger = ScaffoldMessenger.of(context);
+                            final router = GoRouter.of(context);
+
+                            setState(() {
+                              _isSubmittingRating = true;
+                            });
+
+                            // Submit rating to backend
+                            try {
+                              final dioClient = sl<DioClient>();
+                              await dioClient.dio.post('/api/v1/rides/${state.rideId}/rate', data: {
+                                'rating': _selectedRating,
+                                'review': _commentController.text,
+                              });
+                            } catch (e) {
+                              print('[RideTrackingPage] Rating submission failed: $e');
+                            }
+
+                            if (mounted) {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Thank you for rating!'),
+                                  backgroundColor: Color(0xFF009048),
+                                ),
+                              );
+                              bookingBloc.add(ClearBooking());
+                              router.go('/home');
+                            }
+                          },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF01A34D),
+                      backgroundColor: const Color(0xFF009048),
                       foregroundColor: Colors.white,
+                      disabledBackgroundColor: const Color(0xFFCBD5E1),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                       elevation: 0,
                     ),
-                    child: const Text(
-                      'Done',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
+                    child: _isSubmittingRating
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                          )
+                        : const Text(
+                            'Submit Rating',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
                   ),
                 ),
               ),

@@ -1,6 +1,8 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/constants/constants.dart';
+import '../../../location/services/location_service.dart';
+
 
 abstract class HomeDataSource {
   Future<LatLng> getCurrentLocation();
@@ -15,10 +17,17 @@ class HomeDataSourceImpl implements HomeDataSource {
 
   @override
   Future<LatLng> getCurrentLocation() async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    // Defaults to Bengaluru, India (UB City center)
-    return const LatLng(12.9716, 77.5946);
+    try {
+      final locationService = LocationService();
+      final currentLoc = await locationService.getCurrentLocation();
+      if (currentLoc != null) {
+        return currentLoc;
+      }
+    } catch (_) {}
+    // Default fallback coordinates (Kolkata City Center)
+    return const LatLng(22.5726, 88.3639);
   }
+
 
   @override
   Future<List<Map<String, dynamic>>> searchPlaces(String query) async {

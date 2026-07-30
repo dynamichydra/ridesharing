@@ -5,8 +5,8 @@ import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/app_map_view.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../../../../core/widgets/error_view.dart';
-import '../../../../core/utils/location_helper.dart';
 import '../bloc/booking_bloc.dart';
+
 import '../../../ride_tracking/presentation/bloc/ride_tracking_bloc.dart';
 
 class RideOptionsPage extends StatelessWidget {
@@ -20,13 +20,13 @@ class RideOptionsPage extends StatelessWidget {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          'Ride Options',
+          'Choose Ride Options',
           style: TextStyle(color: Color(0xFF021B47), fontWeight: FontWeight.bold, fontSize: 18),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF021B47)),
           onPressed: () {
             context.read<BookingBloc>().add(ClearBooking());
             context.pop();
@@ -38,6 +38,7 @@ class RideOptionsPage extends StatelessWidget {
           if (state is BookingConfirmed) {
             context.read<RideTrackingBloc>().add(
                   StartRideTracking(
+                    rideId: state.rideId,
                     pickup: state.pickup,
                     pickupName: state.pickupName,
                     destination: state.destination,
@@ -45,6 +46,7 @@ class RideOptionsPage extends StatelessWidget {
                     vehicleName: state.selectedVehicle.name,
                     fare: state.fare,
                   ),
+
                 );
             context.go('/ride-tracking');
           } else if (state is BookingError) {
@@ -69,12 +71,6 @@ class RideOptionsPage extends StatelessWidget {
           }
 
           if (state is BookingVehicleOptionsLoaded) {
-            final routePoints = LocationHelper.generateRoutePoints(
-              state.pickup,
-              state.destination,
-              20,
-            );
-
             return Stack(
               children: [
                 // 1. Map path view
@@ -82,34 +78,43 @@ class RideOptionsPage extends StatelessWidget {
                   child: AppMapView(
                     pickup: state.pickup,
                     destination: state.destination,
-                    routePoints: routePoints,
+                    // Route polyline is not shown on this page;
+                    // the real route was already drawn on SelectLocationPage.
+                    routePoints: const [],
                   ),
                 ),
 
-                // 2. Floating Top Route Pins Card
+                // 2. Floating Top Route Summary Card
                 Positioned(
                   top: 12,
                   left: 16,
                   right: 16,
                   child: Container(
-                    padding: const EdgeInsets.all(14),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.06),
-                          blurRadius: 10,
+                          color: const Color(0xFF021B47).withOpacity(0.08),
+                          blurRadius: 16,
                           offset: const Offset(0, 4),
                         ),
                       ],
                     ),
                     child: Row(
                       children: [
-                        // Pin Dotted Line Column
+                        // Dotted Line Column
                         Column(
                           children: [
-                            const Icon(Icons.circle, color: Color(0xFF01A34D), size: 12),
+                            Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFE6F6ED),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.circle, color: Color(0xFF01A34D), size: 10),
+                            ),
                             Container(
                               height: 24,
                               width: 1,
@@ -117,7 +122,14 @@ class RideOptionsPage extends StatelessWidget {
                                 color: Colors.grey.shade300,
                               ),
                             ),
-                            const Icon(Icons.location_on_rounded, color: Color(0xFFE53935), size: 14),
+                            Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFDE8E8),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.location_on_rounded, color: Color(0xFFE53935), size: 12),
+                            ),
                           ],
                         ),
                         const SizedBox(width: 14),
@@ -130,18 +142,18 @@ class RideOptionsPage extends StatelessWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  fontSize: 14,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFF021B47),
                                 ),
                               ),
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 12),
                               Text(
                                 state.destinationName.isNotEmpty ? state.destinationName : 'Destination Location',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  fontSize: 14,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFF021B47),
                                 ),
@@ -149,8 +161,30 @@ class RideOptionsPage extends StatelessWidget {
                             ],
                           ),
                         ),
-                        // Swap button
-                        const Icon(Icons.swap_vert_rounded, color: Colors.grey),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF7F9FC),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFE2E7E9)),
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                '${state.distanceMiles.toStringAsFixed(1)} mi',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF021B47),
+                                ),
+                              ),
+                              const Text(
+                                '~18 min',
+                                style: TextStyle(fontSize: 10, color: Color(0xFF8A94A6)),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -162,17 +196,17 @@ class RideOptionsPage extends StatelessWidget {
                   left: 0,
                   right: 0,
                   child: Container(
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(24),
-                        topRight: Radius.circular(24),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(28),
+                        topRight: Radius.circular(28),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 12,
-                          offset: Offset(0, -4),
+                          color: const Color(0xFF021B47).withOpacity(0.12),
+                          blurRadius: 20,
+                          offset: const Offset(0, -6),
                         ),
                       ],
                     ),
@@ -181,127 +215,206 @@ class RideOptionsPage extends StatelessWidget {
                       children: [
                         const SizedBox(height: 12),
                         Container(
-                          width: 40,
+                          width: 36,
                           height: 4,
                           decoration: BoxDecoration(
                             color: Colors.grey.shade300,
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        
-                        // "Recommended" Title
+                        const SizedBox(height: 14),
+
+                        // Section Title
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: const [
                               Text(
-                                'Recommended',
+                                'Available Vehicles',
                                 style: TextStyle(
-                                  fontSize: 15,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFF021B47),
+                                ),
+                              ),
+                              Text(
+                                'Best Fares',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF01A34D),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
 
-                        // List of Vehicles
+                        // List of Vehicles including Cab Share Mode
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: Column(
                             children: state.vehicles.map((vehicle) {
                               final isSelected = state.selectedVehicle.id == vehicle.id;
                               final price = state.calculatedFares[vehicle.id] ?? 0.0;
+                              final isShared = vehicle.isShared || vehicle.name.toLowerCase().contains('share');
 
                               return InkWell(
                                 onTap: () {
                                   context.read<BookingBloc>().add(SelectVehicle(vehicle));
                                 },
+                                borderRadius: BorderRadius.circular(16),
                                 child: Container(
-                                  margin: const EdgeInsets.symmetric(vertical: 6),
+                                  margin: const EdgeInsets.symmetric(vertical: 5),
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color: isSelected
+                                        ? (isShared
+                                            ? const Color(0xFF0165B7).withOpacity(0.04)
+                                            : const Color(0xFF01A34D).withOpacity(0.04))
+                                        : Colors.white,
                                     borderRadius: BorderRadius.circular(16),
                                     border: Border.all(
-                                      color: isSelected ? const Color(0xFF01A34D) : const Color(0xFFE2E7E9),
+                                      color: isSelected
+                                          ? (isShared ? const Color(0xFF0165B7) : const Color(0xFF01A34D))
+                                          : const Color(0xFFE2E7E9),
                                       width: isSelected ? 2 : 1,
                                     ),
-                                    boxShadow: isSelected
-                                        ? [
-                                            BoxShadow(
-                                              color: const Color(0xFF01A34D).withOpacity(0.04),
-                                              blurRadius: 10,
-                                              offset: const Offset(0, 4),
-                                            ),
-                                          ]
-                                        : null,
                                   ),
-                                  child: Row(
+                                  child: Column(
                                     children: [
-                                      // Vehicle icon fallback
-                                      Container(
-                                        width: 50,
-                                        height: 50,
-                                        decoration: BoxDecoration(
-                                          color: isSelected
-                                              ? const Color(0xFF01A34D).withOpacity(0.06)
-                                              : Colors.grey.shade100,
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Icon(
-                                          Icons.directions_car_filled_rounded,
-                                          color: isSelected ? const Color(0xFF01A34D) : const Color(0xFF0165B7),
-                                          size: 28,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 14),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
+                                      Row(
+                                        children: [
+                                          // Vehicle icon fallback
+                                          Container(
+                                            width: 48,
+                                            height: 48,
+                                            decoration: BoxDecoration(
+                                              color: isShared
+                                                  ? const Color(0xFF0165B7).withOpacity(0.12)
+                                                  : (isSelected
+                                                      ? const Color(0xFF01A34D).withOpacity(0.12)
+                                                      : Colors.grey.shade100),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Icon(
+                                              isShared ? Icons.groups_rounded : Icons.directions_car_filled_rounded,
+                                              color: isShared
+                                                  ? const Color(0xFF0165B7)
+                                                  : (isSelected ? const Color(0xFF01A34D) : const Color(0xFF021B47)),
+                                              size: 26,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
-                                                Text(
-                                                  vehicle.name,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 15,
-                                                    color: Color(0xFF021B47),
-                                                  ),
+                                                Row(
+                                                  children: [
+                                                    Text(
+                                                      vehicle.name,
+                                                      style: const TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 15,
+                                                        color: Color(0xFF021B47),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    if (isShared) ...[
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0xFFE53935),
+                                                          borderRadius: BorderRadius.circular(6),
+                                                        ),
+                                                        child: const Text(
+                                                          'SAVE 40%',
+                                                          style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 9,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ] else ...[
+                                                      const Icon(Icons.person_rounded, size: 14, color: Colors.grey),
+                                                      Text(
+                                                        ' ${vehicle.capacity}',
+                                                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                                      ),
+                                                    ],
+                                                  ],
                                                 ),
-                                                const SizedBox(width: 6),
-                                                const Icon(Icons.person_rounded, size: 14, color: Colors.grey),
+                                                const SizedBox(height: 3),
                                                 Text(
-                                                  ' ${vehicle.capacity}',
-                                                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                                  vehicle.description,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(fontSize: 11, color: Color(0xFF8A94A6)),
                                                 ),
                                               ],
                                             ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              '${vehicle.etaMinutes} min away • Drop in 15 min',
-                                              style: const TextStyle(fontSize: 11, color: Color(0xFF8A94A6)),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
-                                        children: [
-                                          Text(
-                                            '${AppConstants.currencySymbol}${price.toStringAsFixed(0)}',
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                              color: Color(0xFF021B47),
-                                            ),
+                                          ),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                '${AppConstants.currencySymbol}${price.toStringAsFixed(0)}',
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isShared ? const Color(0xFF0165B7) : const Color(0xFF021B47),
+                                                ),
+                                              ),
+                                              Text(
+                                                '${vehicle.etaMinutes} min away',
+                                                style: const TextStyle(fontSize: 10, color: Color(0xFF8A94A6)),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),
+
+                                      // Cab Sharing Seat Breakdown if selected
+                                      if (isShared && isSelected) ...[
+                                        const SizedBox(height: 10),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF0165B7).withOpacity(0.06),
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: const [
+                                              Row(
+                                                children: [
+                                                  Icon(Icons.event_seat_rounded, color: Color(0xFF0165B7), size: 14),
+                                                  SizedBox(width: 6),
+                                                  Text(
+                                                    'Co-passengers: 2/3 Seats booked',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Color(0xFF0165B7),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              Text(
+                                                'Split Fare Active',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFF01A34D),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -309,36 +422,48 @@ class RideOptionsPage extends StatelessWidget {
                             }).toList(),
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 14),
 
                         // Payment section Row
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: InkWell(
                             onTap: () => context.push('/payment-methods'),
+                            borderRadius: BorderRadius.circular(14),
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               decoration: BoxDecoration(
+                                color: const Color(0xFFF7F9FC),
                                 border: Border.all(color: const Color(0xFFE2E7E9)),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(14),
                               ),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text(
-                                    'Payment',
-                                    style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                                  Row(
+                                    children: const [
+                                      Icon(Icons.payment_rounded, color: Color(0xFF021B47), size: 20),
+                                      SizedBox(width: 10),
+                                      Text(
+                                        'Payment Method',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF021B47),
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   Row(
                                     children: const [
                                       Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF01A34D), size: 18),
-                                      SizedBox(width: 8),
+                                      SizedBox(width: 6),
                                       Text(
                                         'Cash',
-                                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF01A34D), fontSize: 13),
                                       ),
-                                      SizedBox(width: 6),
-                                      Icon(Icons.keyboard_arrow_down_rounded, color: Colors.grey),
+                                      SizedBox(width: 4),
+                                      Icon(Icons.keyboard_arrow_down_rounded, color: Colors.grey, size: 18),
                                     ],
                                   ),
                                 ],
@@ -346,7 +471,7 @@ class RideOptionsPage extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 14),
 
                         // Action Confirm Button
                         Padding(
@@ -359,24 +484,37 @@ class RideOptionsPage extends StatelessWidget {
                                 context.read<BookingBloc>().add(ConfirmRideBooking());
                               },
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF01A34D),
+                                backgroundColor: state.selectedVehicle.isShared
+                                    ? const Color(0xFF0165B7)
+                                    : const Color(0xFF01A34D),
                                 foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(16),
                                 ),
                                 elevation: 0,
                               ),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const SizedBox(width: 24),
-                                  Text(
-                                    'Confirm ${state.selectedVehicle.name}',
-                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        state.selectedVehicle.isShared
+                                            ? Icons.groups_rounded
+                                            : Icons.directions_car_rounded,
+                                        color: Colors.white,
+                                        size: 22,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        'Book ${state.selectedVehicle.name}',
+                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
                                   ),
                                   Text(
                                     '${AppConstants.currencySymbol}${(state.calculatedFares[state.selectedVehicle.id] ?? 0.0).toStringAsFixed(0)}',
-                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                                   ),
                                 ],
                               ),

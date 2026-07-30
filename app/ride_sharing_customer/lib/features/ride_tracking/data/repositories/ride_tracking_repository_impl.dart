@@ -1,6 +1,6 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../domain/repositories/ride_tracking_repository.dart';
-import '../../../../core/utils/location_helper.dart';
+
 
 class RideTrackingRepositoryImpl implements RideTrackingRepository {
   @override
@@ -18,7 +18,17 @@ class RideTrackingRepositoryImpl implements RideTrackingRepository {
 
   @override
   List<LatLng> getRoutePoints(LatLng start, LatLng end) {
-    // Generate 35 points for a smooth visual tracking transition
-    return LocationHelper.generateRoutePoints(start, end, 35);
+    // Linear interpolation between two points for smooth driver dot animation.
+    // This is not road routing — use GoogleRoutesService for real route polylines.
+    const int steps = 35;
+    final List<LatLng> points = [];
+    for (int i = 0; i <= steps; i++) {
+      final double t = i / steps;
+      points.add(LatLng(
+        start.latitude + (end.latitude - start.latitude) * t,
+        start.longitude + (end.longitude - start.longitude) * t,
+      ));
+    }
+    return points;
   }
 }

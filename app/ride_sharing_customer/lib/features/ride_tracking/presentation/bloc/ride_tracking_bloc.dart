@@ -18,6 +18,7 @@ abstract class RideTrackingEvent extends Equatable {
 }
 
 class StartRideTracking extends RideTrackingEvent {
+  final String rideId;
   final LatLng pickup;
   final String pickupName;
   final LatLng destination;
@@ -26,6 +27,7 @@ class StartRideTracking extends RideTrackingEvent {
   final double fare;
 
   const StartRideTracking({
+    required this.rideId,
     required this.pickup,
     required this.pickupName,
     required this.destination,
@@ -35,8 +37,9 @@ class StartRideTracking extends RideTrackingEvent {
   });
 
   @override
-  List<Object?> get props => [pickup, pickupName, destination, destinationName, vehicleName, fare];
+  List<Object?> get props => [rideId, pickup, pickupName, destination, destinationName, vehicleName, fare];
 }
+
 
 class AdvanceSimulationStep extends RideTrackingEvent {}
 
@@ -57,6 +60,7 @@ class RideTrackingInitial extends RideTrackingState {}
 class RideTrackingLoading extends RideTrackingState {}
 
 class RideTrackingActive extends RideTrackingState {
+  final String rideId;
   final String driverName;
   final double driverRating;
   final String driverAvatar;
@@ -75,6 +79,7 @@ class RideTrackingActive extends RideTrackingState {
   final String vehicleName;
 
   const RideTrackingActive({
+    required this.rideId,
     required this.driverName,
     required this.driverRating,
     required this.driverAvatar,
@@ -101,6 +106,7 @@ class RideTrackingActive extends RideTrackingState {
     int? stepIndex,
   }) {
     return RideTrackingActive(
+      rideId: rideId,
       driverName: driverName,
       driverRating: driverRating,
       driverAvatar: driverAvatar,
@@ -122,8 +128,10 @@ class RideTrackingActive extends RideTrackingState {
 
   @override
   List<Object?> get props => [
+        rideId,
         driverName,
         driverRating,
+
         driverAvatar,
         driverVehicle,
         plateNumber,
@@ -168,6 +176,7 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       final points = _rideTrackingRepository.getRoutePoints(driverStart, event.pickup);
 
       emit(RideTrackingActive(
+        rideId: event.rideId,
         driverName: driver['name'] as String,
         driverRating: (driver['rating'] as num).toDouble(),
         driverAvatar: driver['avatar'] as String,
@@ -185,6 +194,7 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         fare: event.fare,
         vehicleName: event.vehicleName,
       ));
+
 
       // Start tick timer
       _startTimer();
