@@ -5,17 +5,30 @@ import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
 import { postTransaction, getOrCreateSystemAccount, getOrCreateWalletAccount } from '../ledger/ledger.service.js';
 import { getOrCreateWallet } from '../wallet/wallet.service.js';
+import { getGateway } from '../payment/payment.service.js';
+
+// Exact (case-insensitive) status strings that mean the dispute is finally resolved.
+// Stripe's enum is fully known and confirmed from the installed SDK's types
+// (stripe/cjs/resources/Disputes.d.ts DisputeStatus: needs_response, under_review, won, lost,
+// warning_needs_response, warning_under_review, warning_closed, charge_refunded). Razorpay's is
+// per its public Payment Disputes API docs (open, under_review, won, lost, closed,
+// action_required) — NOT confirmed against a live payload, same caveat as elsewhere in this
+// dispute code; if a live dispute ever reports something outside this set it falls through to
+// 'open' (a hold, no ledger resolution) rather than being guessed at.
+const WON_STATUSES = new Set(['won']);
+const LOST_STATUSES = new Set(['lost']);
 
 /**
- * Pure classification — extracted so it's unit-testable without a DB. Deliberately
- * approximate: Stripe's status enum is fully known (won/lost/needs_response/prevented/
- * under_review/warning_*), Razorpay's is not verified from the installed SDK. Anything that
- * isn't clearly a win or a loss is treated as still-open (a hold, no ledger resolution yet).
+ * Pure classification — extracted so it's unit-testable without a DB. Exact-match against the
+ * known status sets above rather than a substring test: a substring check (`includes('won')`/
+ * `includes('lost')`) would misclassify any hypothetical compound status that merely contains
+ * those words (e.g. a 'lost_appeal_reopened'-shaped string) as a final win/loss instead of
+ * leaving it open. Anything not exactly 'won' or 'lost' is treated as still-open.
  */
 export function classifyDisputeStatus(rawStatus) {
-  const s = (rawStatus || '').toLowerCase();
-  if (s.includes('won')) return 'won';
-  if (s.includes('lost')) return 'lost';
+  const s = (rawStatus || '').toLowerCase().trim();
+  if (WON_STATUSES.has(s)) return 'won';
+  if (LOST_STATUSES.has(s)) return 'lost';
   return 'open';
 }
 
@@ -135,6 +148,69 @@ async function _resolveDisputeHold(payment, disputeRow, classification) {
   }
 }
 
+// ── Admin — contest/accept with the processor ────────────────────────────────────
+// Previously triage-only (adminNotes never fed back to the processor). These call the
+// gateway directly, so unlike updateDisputeNotes below they can fail with a real gateway
+// error — that propagates as-is rather than being swallowed.
+
+export async function acceptDispute(disputeId, adminId) {
+  const [disputeRow] = await db.select().from(disputes).where(eq(disputes.id, disputeId)).limit(1);
+  if (!disputeRow) throw { statusCode: 404, message: 'Dispute not found' };
+  if (classifyDisputeStatus(disputeRow.status) !== 'open') {
+    throw { statusCode: 409, message: `Dispute is already '${disputeRow.status}' — nothing to accept` };
+  }
+
+  const gateway = getGateway(disputeRow.gateway);
+  const result = await gateway.acceptDispute({ gatewayDisputeId: disputeRow.gatewayDisputeId });
+
+  return _applyProcessorDisputeUpdate(disputeRow, result.status, adminId, 'DISPUTE_ACCEPTED');
+}
+
+export async function contestDispute(disputeId, adminId, evidence) {
+  if (!evidence) throw { statusCode: 400, message: 'evidence is required' };
+  const [disputeRow] = await db.select().from(disputes).where(eq(disputes.id, disputeId)).limit(1);
+  if (!disputeRow) throw { statusCode: 404, message: 'Dispute not found' };
+  if (classifyDisputeStatus(disputeRow.status) !== 'open') {
+    throw { statusCode: 409, message: `Dispute is already '${disputeRow.status}' — nothing to contest` };
+  }
+
+  const gateway = getGateway(disputeRow.gateway);
+  const result = disputeRow.gateway === 'stripe'
+    ? await gateway.submitDisputeEvidence({ gatewayDisputeId: disputeRow.gatewayDisputeId, evidence })
+    : await gateway.contestDispute({ gatewayDisputeId: disputeRow.gatewayDisputeId, amountMinor: disputeRow.amountMinor, evidence });
+
+  return _applyProcessorDisputeUpdate(disputeRow, result.status, adminId, 'DISPUTE_CONTESTED', {
+    evidence, evidenceSubmittedAt: new Date(), evidenceSubmittedBy: adminId,
+  });
+}
+
+// Shared by accept/contest above: persist whatever status the processor returned, and — if
+// that status now classifies as won/lost — resolve the ledger hold through the same
+// _resolveDisputeHold the webhook path uses. If a later webhook redelivery reports the same
+// final status, handleDisputeEvent's `existing.status === status` no-op guard prevents a
+// second resolution attempt (and postTransaction's idempotency key would no-op it anyway).
+async function _applyProcessorDisputeUpdate(disputeRow, newStatus, adminId, auditAction, extraFields = {}) {
+  const [updated] = await db.update(disputes)
+    .set({ status: newStatus, updatedAt: new Date(), ...extraFields })
+    .where(eq(disputes.id, disputeRow.id)).returning();
+
+  const classification = classifyDisputeStatus(newStatus);
+  if (classification === 'won' || classification === 'lost') {
+    const [payment] = disputeRow.paymentId
+      ? await db.select().from(payments).where(eq(payments.id, disputeRow.paymentId)).limit(1)
+      : [null];
+    if (payment) await _resolveDisputeHold(payment, updated, classification);
+  }
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin', action: auditAction,
+    entityType: 'dispute', entityId: updated.id,
+    meta: { gateway: disputeRow.gateway, gatewayDisputeId: disputeRow.gatewayDisputeId, newStatus },
+  });
+
+  return updated;
+}
+
 // ── Admin reads ─────────────────────────────────────────────────────────────────
 
 export async function listDisputes(filters, page, limit, offset) {
@@ -155,8 +231,8 @@ export async function getDispute(id) {
   return dispute;
 }
 
-// Admin triage notes only — never touches the processor (accepting/contesting a dispute is
-// out of scope here, see the Phase 3 plan).
+// Admin triage notes only — never touches the processor. See acceptDispute/contestDispute
+// above for the two actions that do.
 export async function updateDisputeNotes(id, adminNotes) {
   const [dispute] = await db.update(disputes)
     .set({ adminNotes, updatedAt: new Date() }).where(eq(disputes.id, id)).returning();

@@ -27,6 +27,7 @@ export * from './rider-subscription-plans.js';
 export * from './rider-subscriptions.js';
 export * from './wallets.js';
 export * from './wallet-transactions.js';
+export * from './wallet-withdrawals.js';
 export * from './payments.js';
 export * from './ledger-accounts.js';
 export * from './ledger-transactions.js';

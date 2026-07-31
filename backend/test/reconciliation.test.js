@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { diffTransactions } from '../src/modules/reconciliation/reconciliation.service.js';
+import { diffTransactions, assessMismatchSeverity } from '../src/modules/reconciliation/reconciliation.service.js';
 
 // diffTransactions() is the core comparison reconciliation.job.js runs daily — given our
 // internal `payments` rows and the processor's own transaction list for the same window, it
@@ -65,4 +65,24 @@ test('multiple independent transactions each get judged on their own merits', ()
   const result = diffTransactions(internal, external);
   const types = result.map((m) => m.type).sort();
   assert.deepEqual(types, ['missing_external', 'missing_internal']);
+});
+
+// assessMismatchSeverity() is a triage heuristic only (see reconciliation.service.js) — it
+// never drives auto-correction, just lets admins sort/filter findings by amount at risk.
+
+test('small amounts are low severity', () => {
+  assert.equal(assessMismatchSeverity({ type: 'missing_internal', internalAmountMinor: null, externalAmountMinor: 1000 }), 'low');
+});
+
+test('large external amount on a missing_internal finding is high severity', () => {
+  assert.equal(assessMismatchSeverity({ type: 'missing_internal', internalAmountMinor: null, externalAmountMinor: 600000 }), 'high');
+});
+
+test('amount_mismatch severity is based on the delta, not either raw amount', () => {
+  // Both amounts are individually "high", but they're only 1000 minor units apart.
+  assert.equal(assessMismatchSeverity({ type: 'amount_mismatch', internalAmountMinor: 600000, externalAmountMinor: 599000 }), 'low');
+});
+
+test('duplicate_internal is always at least medium severity regardless of amount', () => {
+  assert.equal(assessMismatchSeverity({ type: 'duplicate_internal', internalAmountMinor: 100, externalAmountMinor: null }), 'medium');
 });

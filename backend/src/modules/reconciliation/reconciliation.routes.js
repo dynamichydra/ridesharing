@@ -12,10 +12,10 @@ export async function reconciliationRoutes(app) {
     return sendList(reply, rows, pagination);
   });
 
-  // GET /api/v1/reconciliation/mismatches?runId=&status=&page=&limit=
+  // GET /api/v1/reconciliation/mismatches?runId=&status=&severity=&page=&limit=
   app.get('/mismatches', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);
-    const filters = { runId: request.query.runId, status: request.query.status };
+    const filters = { runId: request.query.runId, status: request.query.status, severity: request.query.severity };
     const { rows, pagination } = await reconciliationService.listMismatches(filters, page, limit, offset);
     return sendList(reply, rows, pagination);
   });

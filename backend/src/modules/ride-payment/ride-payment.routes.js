@@ -74,6 +74,20 @@ export async function ridePaymentRoutes(app) {
     return sendSuccess(reply, { received: true });
   });
 
+  // POST /api/v1/ride-payments/webhook/stripe
+  // Backstop for CAD ride-fare payments — same shape as the subscription domain's Stripe
+  // webhook. Without this, a CAD ride payment relied entirely on the client's /verify call.
+  app.post('/webhook/stripe', {
+    config: { rawBody: true }, // need raw body for Stripe's signature check
+  }, async (request, reply) => {
+    const signature = request.headers['stripe-signature'];
+    if (!signature) return sendError(reply, 'Missing signature', 400);
+    const raw = request.rawBody || JSON.stringify(request.body);
+    const event = ridePaymentService.parseAndVerifyWebhook('stripe', raw, signature);
+    await receiveWebhookEvent({ gatewayName: 'stripe', domain: 'ride_payment', rawBody: raw, event });
+    return sendSuccess(reply, { received: true });
+  });
+
   // ── Admin ─────────────────────────────────────────────────────────────────────
 
   // GET /api/v1/ride-payments

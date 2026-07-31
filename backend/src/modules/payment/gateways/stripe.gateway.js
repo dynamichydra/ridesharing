@@ -82,6 +82,23 @@ export const stripeGateway = {
       };
     }
 
+    // Payout reconciliation — driver payouts go out via client.transfers.create() (a Transfer
+    // to the driver's Connect account), not the Payouts API, so the only async failure signal
+    // is a transfer later being reversed (e.g. the connected account's payout to their real
+    // bank bounced and Stripe pulled the funds back). Confirmed against
+    // stripe/cjs/resources/Events.d.ts: 'transfer.reversed' fires on the platform account,
+    // signed with the same secret as every other event handled by this function.
+    if (event.type === 'transfer.reversed') {
+      const transfer = event.data.object;
+      return {
+        kind: 'payout_status',
+        gatewayPayoutId: transfer.id,
+        status: transfer.reversed ? 'reversed' : 'processed',
+        failureReason: 'Transfer reversed by Stripe',
+        eventId: event.id,
+      };
+    }
+
     if (event.type !== 'payment_intent.succeeded') return null;
     const intent = event.data.object;
     return {
@@ -91,6 +108,23 @@ export const stripeGateway = {
       metadata: intent.metadata,
       eventId: event.id, // Stripe webhook events carry a native unique id ("evt_...")
     };
+  },
+
+  // ── Dispute contest/accept ───────────────────────────────────────────────────
+  // Confirmed against stripe/cjs/resources/Disputes.d.ts: `close()` tells Stripe the merchant
+  // won't submit evidence (accepting the loss — closes the dispute, which then reports as
+  // 'lost'); `update(id, { evidence, submit: true })` submits evidence for review (status
+  // becomes 'under_review' until Stripe's decision, delivered later via the same
+  // charge.dispute.* webhook already handled above).
+
+  async acceptDispute({ gatewayDisputeId }) {
+    const dispute = await client.disputes.close(gatewayDisputeId);
+    return { status: dispute.status };
+  },
+
+  async submitDisputeEvidence({ gatewayDisputeId, evidence }) {
+    const dispute = await client.disputes.update(gatewayDisputeId, { evidence, submit: true });
+    return { status: dispute.status };
   },
 
   // amountMinor omitted -> full refund of the PaymentIntent.

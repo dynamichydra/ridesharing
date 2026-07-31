@@ -27,16 +27,17 @@ export async function startStripeOnboarding(driverId) {
     }).returning();
   }
 
-  // No driver-facing app exists yet (the rider Flutter app is the only mobile client today) —
-  // these are placeholder backend routes so Stripe's hosted flow has somewhere real to
-  // redirect to during manual testing; point them at an actual driver-app screen once one
-  // exists.
+  // No driver-facing app exists yet (the rider Flutter app is the only mobile client today).
+  // DRIVER_APP_ONBOARDING_RETURN_URL/_REFRESH_URL let a deployment point these at a real
+  // driver-app deep link (e.g. rideshare-driver://onboarding-return) the moment one exists,
+  // with no code change — unset, they fall back to this backend's own placeholder
+  // acknowledgement routes, which is all there is to redirect to during manual testing today.
   const baseUrl = env.APP_BASE_URL || `http://localhost:${env.PORT}`;
   const prefix = `${baseUrl}/api/${env.API_VERSION}/payout-accounts/stripe`;
   const { url } = await stripeGateway.createOnboardingLink({
     stripeAccountId: account.stripeAccountId,
-    refreshUrl: `${prefix}/onboarding-refresh`,
-    returnUrl: `${prefix}/onboarding-return`,
+    refreshUrl: env.DRIVER_APP_ONBOARDING_REFRESH_URL || `${prefix}/onboarding-refresh`,
+    returnUrl: env.DRIVER_APP_ONBOARDING_RETURN_URL || `${prefix}/onboarding-return`,
   });
   return { url };
 }

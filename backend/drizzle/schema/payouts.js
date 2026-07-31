@@ -15,7 +15,7 @@ export const payouts = pgTable('payouts', {
   currencyCode:     varchar('currency_code', { length: 3 }).notNull(),
   gateway:          varchar('gateway', { length: 20 }).notNull(),
   gatewayPayoutId:  varchar('gateway_payout_id'),
-  status:           varchar('status', { length: 12 }).notNull().default('pending'), // pending | processing | completed | failed
+  status:           varchar('status', { length: 12 }).notNull().default('pending'), // pending | processing | completed | failed | reversed
   failureReason:    text('failure_reason'),
   createdAt:        timestamp('created_at').defaultNow(),
   updatedAt:        timestamp('updated_at').defaultNow(),

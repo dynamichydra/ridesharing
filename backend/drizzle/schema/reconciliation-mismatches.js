@@ -14,6 +14,10 @@ export const reconciliationMismatches = pgTable('reconciliation_mismatches', {
   externalAmountMinor: integer('external_amount_minor'),
   paymentId:          uuid('payment_id').references(() => payments.id),
   status:             varchar('status', { length: 10 }).notNull().default('open'), // open | resolved | ignored
+  // Computed once at insert time by assessMismatchSeverity() — a triage heuristic (amount at
+  // risk + type), not a precise financial judgment. Never drives auto-correction; purely lets
+  // admins sort/filter instead of reviewing every mismatch in createdAt order.
+  severity:           varchar('severity', { length: 10 }).notNull().default('low'), // low | medium | high
   resolvedBy:         uuid('resolved_by'),
   resolvedAt:         timestamp('resolved_at'),
   notes:              text('notes'),

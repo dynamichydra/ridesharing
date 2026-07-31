@@ -44,3 +44,8 @@ test('null/undefined/empty status is treated as open, not a crash', () => {
   assert.equal(classifyDisputeStatus(undefined), 'open');
   assert.equal(classifyDisputeStatus(''), 'open');
 });
+
+test('a compound status merely containing "won"/"lost" as a substring is not misclassified', () => {
+  assert.equal(classifyDisputeStatus('not_won'), 'open');
+  assert.equal(classifyDisputeStatus('lost_appeal_reopened'), 'open');
+});

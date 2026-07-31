@@ -1,5 +1,5 @@
 import { sendSuccess, sendError, sendList, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin, authenticateAny } from '../../middleware/authenticate.js';
+import { authenticateAdmin, authenticateAny, authenticateRider } from '../../middleware/authenticate.js';
 import * as walletService from './wallet.service.js';
 
 export async function walletRoutes(app) {
@@ -30,6 +30,25 @@ export async function walletRoutes(app) {
     if (!orderRef || !paymentRef) return sendError(reply, 'orderRef and paymentRef are required');
     const data = await walletService.verifyWalletTopup(request.user, orderRef, paymentRef, signature);
     return sendSuccess(reply, data);
+  });
+
+  // ── Rider self-service — withdrawal request ──────────────────────────────────
+  // No gateway call happens here (riders have no payout rail) — an admin reviews the request
+  // and manually wires the money to the rider's bank/UPI details on file; see
+  // wallet.service.js requestWalletWithdrawal.
+
+  // POST /api/v1/wallets/me/withdraw/request  { amountMinor, reason }
+  app.post('/me/withdraw/request', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const { amountMinor, reason } = request.body;
+    const data = await walletService.requestWalletWithdrawal(request.user.id, amountMinor, reason);
+    return sendSuccess(reply, data, 201);
+  });
+
+  // GET /api/v1/wallets/me/withdrawals?page=&limit=
+  app.get('/me/withdrawals', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const { rows, pagination } = await walletService.getMyWalletWithdrawals(request.user.id, page, limit, offset);
+    return sendList(reply, rows, pagination);
   });
 
   // ── Admin — global list across drivers + riders ─────────────────────────────
@@ -76,6 +95,28 @@ export async function walletRoutes(app) {
   // POST /api/v1/wallets/rider/:riderId/adjust  { type, amountMinor, reason, description? }
   app.post('/rider/:riderId/adjust', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const data = await walletService.adminAdjustWallet('rider', request.params.riderId, request.body, request.user.id);
+    return sendSuccess(reply, data);
+  });
+
+  // ── Admin — review rider withdrawal requests ────────────────────────────────
+
+  // GET /api/v1/wallets/withdrawals?status=&page=&limit=
+  app.get('/withdrawals', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const filters = { status: request.query.status };
+    const { rows, pagination } = await walletService.listWalletWithdrawals(filters, page, limit, offset);
+    return sendList(reply, rows, pagination);
+  });
+
+  // PATCH /api/v1/wallets/withdrawals/:id/approve
+  app.patch('/withdrawals/:id/approve', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await walletService.approveWalletWithdrawal(request.params.id, request.user.id);
+    return sendSuccess(reply, data);
+  });
+
+  // PATCH /api/v1/wallets/withdrawals/:id/reject  { rejectionReason }
+  app.patch('/withdrawals/:id/reject', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await walletService.rejectWalletWithdrawal(request.params.id, request.user.id, request.body.rejectionReason);
     return sendSuccess(reply, data);
   });
 }

@@ -13,7 +13,7 @@ export const webhookEvents = pgTable('webhook_events', {
   id:         uuid('id').primaryKey().defaultRandom(),
   gateway:    varchar('gateway', { length: 20 }).notNull(),
   eventId:    varchar('event_id', { length: 120 }).notNull(),
-  domain:     varchar('domain', { length: 30 }).notNull(), // ride_payment | driver_subscription | rider_subscription
+  domain:     varchar('domain', { length: 30 }).notNull(), // ride_payment | driver_subscription | rider_subscription | payout
   rawBody:    text('raw_body').notNull(),
   payload:    jsonb('payload').notNull(),
   status:     varchar('status', { length: 12 }).notNull().default('received'),

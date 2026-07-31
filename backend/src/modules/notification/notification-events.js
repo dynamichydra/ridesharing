@@ -36,6 +36,21 @@ export const NOTIFICATION_EVENTS = {
     variables: ['reason'],
     channels: ['push'],
   },
+  WALLET_WITHDRAWAL_APPROVED: {
+    label: 'Wallet withdrawal approved',
+    variables: ['amount'],
+    channels: ['push'],
+  },
+  WALLET_WITHDRAWAL_REJECTED: {
+    label: 'Wallet withdrawal rejected',
+    variables: ['reason'],
+    channels: ['push'],
+  },
+  RIDE_DISPUTE_RAISED: {
+    label: 'Ride dispute raised against you',
+    variables: ['rideId', 'reason'],
+    channels: ['push'],
+  },
   RIDE_DISPUTE_RESPONDED: {
     label: 'Ride dispute received a response',
     variables: ['rideId'],

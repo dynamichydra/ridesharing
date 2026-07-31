@@ -1,6 +1,6 @@
 import { eq, and, desc, count, ilike, sql } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { wallets, walletTransactions, drivers, users, countries, payments } from '../../../drizzle/schema/index.js';
+import { wallets, walletTransactions, walletWithdrawals, drivers, users, countries, payments } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
 import { getDefaultCountry } from '../geo/geo.service.js';
@@ -9,6 +9,7 @@ import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
 import { withIdempotency } from '../../utils/idempotency.js';
 import { publishNotification } from '../notification/notification-events.js';
 import { formatMoney } from '../../utils/money.js';
+import { getRiderBankDetails } from '../bank-account/rider-bank-account.service.js';
 
 const OWNER_COLUMN = { driver: wallets.driverId, rider: wallets.riderId };
 const OWNER_TABLE = { driver: drivers, rider: users };
@@ -183,6 +184,147 @@ async function _creditWalletTopup(wallet, countryId, paymentInfo) {
   });
 
   return result;
+}
+
+// ── Rider self-service — wallet withdrawal request ───────────────────────────────
+// Drivers already have a real payout rail (bank transfer via Razorpay/Stripe — see
+// payout.service.js); riders don't (see rider-bank-accounts.js), so this is deliberately
+// scoped to riders only. Approval doesn't call a gateway — an admin manually wires the money
+// to whatever bank/UPI/wallet details the rider has on file and approval just records that
+// and debits the ledger, same "admin does the last mile" shape as the rest of this system's
+// stubs where no generic bank-transfer gateway integration exists.
+
+export async function requestWalletWithdrawal(riderId, amountMinor, reason) {
+  if (!Number.isInteger(amountMinor) || amountMinor <= 0) {
+    throw { statusCode: 400, message: 'amountMinor must be a positive integer' };
+  }
+  if (!reason) throw { statusCode: 400, message: 'reason is required' };
+
+  const bankDetails = await getRiderBankDetails(riderId);
+  if (!bankDetails) {
+    throw { statusCode: 422, message: 'No bank/UPI details on file — contact support to have them added before requesting a withdrawal' };
+  }
+
+  const wallet = await getOrCreateWallet('rider', riderId);
+  if (amountMinor > wallet.balanceMinor) {
+    throw { statusCode: 422, message: `Withdrawal amount (${amountMinor}) exceeds wallet balance (${wallet.balanceMinor})` };
+  }
+
+  const [openRequest] = await db.select().from(walletWithdrawals)
+    .where(and(eq(walletWithdrawals.walletId, wallet.id), eq(walletWithdrawals.status, 'requested'))).limit(1);
+  if (openRequest) throw { statusCode: 409, message: 'A withdrawal request for this wallet is already awaiting review' };
+
+  const [withdrawalRow] = await db.insert(walletWithdrawals).values({
+    walletId: wallet.id, ownerType: 'rider', ownerId: riderId,
+    amountMinor, currencyCode: wallet.currencyCode, reason, status: 'requested',
+  }).returning();
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: riderId, actorType: 'rider', action: 'WALLET_WITHDRAWAL_REQUESTED',
+    entityType: 'wallet_withdrawal', entityId: withdrawalRow.id,
+    meta: { walletId: wallet.id, amountMinor },
+  });
+
+  return withdrawalRow;
+}
+
+export async function getMyWalletWithdrawals(riderId, page, limit, offset) {
+  const where = eq(walletWithdrawals.ownerId, riderId);
+  const [{ total }] = await db.select({ total: count() }).from(walletWithdrawals).where(where);
+  const rows = await db.select().from(walletWithdrawals).where(where)
+    .orderBy(desc(walletWithdrawals.createdAt)).limit(limit).offset(offset);
+  return { rows, pagination: paginate(page, limit, total) };
+}
+
+// Locks the row and flips requested->processing inside one transaction so a concurrent
+// approve/reject can't slip through before the ledger post — mirrors refund.service.js
+// approveRefundRequest's requested->pending step. If the ledger post is rejected (most likely:
+// the wallet balance dropped below the requested amount since the request was made), the row
+// is marked 'failed' and the error propagates instead of silently completing.
+export async function approveWalletWithdrawal(id, adminId) {
+  const withdrawalRow = await db.transaction(async (tx) => {
+    const [existing] = await tx.select().from(walletWithdrawals).where(eq(walletWithdrawals.id, id)).for('update').limit(1);
+    if (!existing) throw { statusCode: 404, message: 'Withdrawal request not found' };
+    if (existing.status !== 'requested') throw { statusCode: 409, message: `Withdrawal request is already '${existing.status}'` };
+
+    const [updated] = await tx.update(walletWithdrawals)
+      .set({ status: 'processing', reviewedById: adminId, reviewedAt: new Date(), updatedAt: new Date() })
+      .where(eq(walletWithdrawals.id, id)).returning();
+    return updated;
+  });
+
+  try {
+    const [walletAccount, clearingAccount] = await Promise.all([
+      getOrCreateWalletAccount(withdrawalRow.walletId, withdrawalRow.currencyCode),
+      getOrCreateSystemAccount('wallet_withdrawal_clearing', withdrawalRow.currencyCode),
+    ]);
+    await postTransaction({
+      businessType: 'wallet_withdrawal',
+      idempotencyKey: `wallet_withdrawal:${withdrawalRow.id}`,
+      referenceType: 'wallet_withdrawal', referenceId: withdrawalRow.id,
+      entries: [
+        {
+          accountId: walletAccount.id, direction: 'debit', amountMinor: withdrawalRow.amountMinor, currencyCode: withdrawalRow.currencyCode,
+          reason: 'wallet_withdrawal', description: `Withdrawal ${withdrawalRow.id}`,
+        },
+        { accountId: clearingAccount.id, direction: 'credit', amountMinor: withdrawalRow.amountMinor, currencyCode: withdrawalRow.currencyCode },
+      ],
+    });
+  } catch (err) {
+    await db.update(walletWithdrawals).set({ status: 'failed', updatedAt: new Date() }).where(eq(walletWithdrawals.id, id));
+    throw err;
+  }
+
+  const [updated] = await db.update(walletWithdrawals)
+    .set({ status: 'completed', updatedAt: new Date() })
+    .where(eq(walletWithdrawals.id, id)).returning();
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin', action: 'WALLET_WITHDRAWAL_APPROVED',
+    entityType: 'wallet_withdrawal', entityId: id,
+    meta: { amountMinor: withdrawalRow.amountMinor },
+  });
+  await publishNotification('WALLET_WITHDRAWAL_APPROVED', {
+    userId: withdrawalRow.ownerId, userType: withdrawalRow.ownerType,
+    variables: { amount: formatMoney(withdrawalRow.amountMinor, withdrawalRow.currencyCode) },
+  });
+
+  return updated;
+}
+
+export async function rejectWalletWithdrawal(id, adminId, rejectionReason) {
+  if (!rejectionReason) throw { statusCode: 400, message: 'rejectionReason is required' };
+
+  const [withdrawalRow] = await db.update(walletWithdrawals)
+    .set({ status: 'rejected', rejectionReason, reviewedById: adminId, reviewedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(walletWithdrawals.id, id), eq(walletWithdrawals.status, 'requested')))
+    .returning();
+  if (!withdrawalRow) throw { statusCode: 409, message: 'Withdrawal request is not in a reviewable state' };
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin', action: 'WALLET_WITHDRAWAL_REJECTED',
+    entityType: 'wallet_withdrawal', entityId: withdrawalRow.id,
+    meta: { rejectionReason },
+  });
+  await publishNotification('WALLET_WITHDRAWAL_REJECTED', {
+    userId: withdrawalRow.ownerId, userType: withdrawalRow.ownerType,
+    variables: { reason: rejectionReason },
+  });
+
+  return withdrawalRow;
+}
+
+// ── Admin reads ──────────────────────────────────────────────────────────────────
+
+export async function listWalletWithdrawals(filters, page, limit, offset) {
+  const conditions = [];
+  if (filters.status) conditions.push(eq(walletWithdrawals.status, filters.status));
+  const where = conditions.length ? and(...conditions) : undefined;
+
+  const [{ total }] = await db.select({ total: count() }).from(walletWithdrawals).where(where);
+  const rows = await db.select().from(walletWithdrawals).where(where)
+    .orderBy(desc(walletWithdrawals.createdAt)).limit(limit).offset(offset);
+  return { rows, pagination: paginate(page, limit, total) };
 }
 
 export async function listTransactions(walletId, page, limit, offset) {

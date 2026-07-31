@@ -8,6 +8,7 @@ import { decideWebhookAction } from '../utils/webhook-dedup.js';
 import { processWebhookEvent as processRidePaymentWebhook } from '../modules/ride-payment/ride-payment.service.js';
 import { processWebhookEvent as processDriverSubscriptionWebhook } from '../modules/subscription/subscription.service.js';
 import { processWebhookEvent as processRiderSubscriptionWebhook } from '../modules/rider-subscription/rider-subscription.service.js';
+import { processPayoutStatusWebhook } from '../modules/payout/payout.service.js';
 
 const connection = redis;
 
@@ -15,6 +16,7 @@ const DOMAIN_HANDLERS = {
   ride_payment: processRidePaymentWebhook,
   driver_subscription: processDriverSubscriptionWebhook,
   rider_subscription: processRiderSubscriptionWebhook,
+  payout: processPayoutStatusWebhook,
 };
 
 const JOB_OPTS = { attempts: 5, backoff: { type: 'exponential', delay: 5000 } };

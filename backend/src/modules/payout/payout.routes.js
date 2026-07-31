@@ -1,6 +1,7 @@
 import { sendSuccess, sendError, sendList, parsePagination } from '../../utils/response.js';
 import { authenticateAdmin, authenticateDriver } from '../../middleware/authenticate.js';
 import * as payoutService from './payout.service.js';
+import { receiveWebhookEvent } from '../../jobs/webhook-processing.job.js';
 
 export async function payoutRoutes(app) {
 
@@ -61,5 +62,35 @@ export async function payoutRoutes(app) {
     const { page, limit, offset } = parsePagination(request.query);
     const { rows, pagination } = await payoutService.listBatches(page, limit, offset);
     return sendList(reply, rows, pagination);
+  });
+
+  // ── Gateway webhook — async payout-status reconciliation ────────────────────────
+  // Backstop for a payout that reverses/fails on the processor's side after _executePayout
+  // already treated the initial HTTP call as final. See payout.service.js
+  // processPayoutStatusWebhook. Dashboard-side: point these at RazorpayX's payout.* events /
+  // Stripe's transfer.reversed event respectively.
+
+  // POST /api/v1/payouts/webhook/razorpay
+  app.post('/webhook/razorpay', {
+    config: { rawBody: true },
+  }, async (request, reply) => {
+    const signature = request.headers['x-razorpay-signature'];
+    if (!signature) return sendError(reply, 'Missing signature', 400);
+    const raw = request.rawBody || JSON.stringify(request.body);
+    const event = payoutService.parseAndVerifyPayoutWebhook('razorpay', raw, signature);
+    await receiveWebhookEvent({ gatewayName: 'razorpay', domain: 'payout', rawBody: raw, event });
+    return sendSuccess(reply, { received: true });
+  });
+
+  // POST /api/v1/payouts/webhook/stripe
+  app.post('/webhook/stripe', {
+    config: { rawBody: true },
+  }, async (request, reply) => {
+    const signature = request.headers['stripe-signature'];
+    if (!signature) return sendError(reply, 'Missing signature', 400);
+    const raw = request.rawBody || JSON.stringify(request.body);
+    const event = payoutService.parseAndVerifyPayoutWebhook('stripe', raw, signature);
+    await receiveWebhookEvent({ gatewayName: 'stripe', domain: 'payout', rawBody: raw, event });
+    return sendSuccess(reply, { received: true });
   });
 }

@@ -1,9 +1,34 @@
 import { eq, and, gte, lte, inArray, desc, count } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { payments, reconciliationRuns, reconciliationMismatches } from '../../../drizzle/schema/index.js';
+import { payments, reconciliationRuns, reconciliationMismatches, admins } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
 import { getGateway } from '../payment/payment.service.js';
+import { sendEmail } from '../../utils/email.js';
+
+// Heuristic thresholds for assessMismatchSeverity() below, in minor currency units — roughly
+// ₹5,000/$5,000 and ₹500/$50 respectively. Deliberately currency-agnostic and approximate; the
+// point is triage ordering for admins, not a precise financial judgment, so this never needs
+// per-currency tuning to be useful.
+const HIGH_SEVERITY_MINOR = 500000;
+const MEDIUM_SEVERITY_MINOR = 50000;
+
+/**
+ * Pure — how much money is plausibly at risk for a given finding, then bucketed into
+ * low/medium/high. `duplicate_internal` is always at least 'medium' regardless of amount: it
+ * signals a data-integrity bug in our own system (two internal rows for one gateway payment),
+ * not just a routine timing drift, so it shouldn't be buried at 'low' just because the amount
+ * happens to be small.
+ */
+export function assessMismatchSeverity(mismatch) {
+  const amountAtRisk = mismatch.type === 'amount_mismatch'
+    ? Math.abs((mismatch.internalAmountMinor ?? 0) - (mismatch.externalAmountMinor ?? 0))
+    : (mismatch.internalAmountMinor ?? mismatch.externalAmountMinor ?? 0);
+
+  if (amountAtRisk >= HIGH_SEVERITY_MINOR) return 'high';
+  if (amountAtRisk >= MEDIUM_SEVERITY_MINOR || mismatch.type === 'duplicate_internal') return 'medium';
+  return 'low';
+}
 
 /**
  * Pure diff — extracted so it's unit-testable without a DB or gateway call. `internal` is our
@@ -81,17 +106,40 @@ export async function runReconciliation({ gatewayName, fromUnix, toUnix }) {
   }).returning();
 
   if (mismatches.length > 0) {
-    await db.insert(reconciliationMismatches).values(
-      mismatches.map((m) => ({ ...m, runId: run.id })),
-    );
+    const withSeverity = mismatches.map((m) => ({ ...m, runId: run.id, severity: assessMismatchSeverity(m) }));
+    await db.insert(reconciliationMismatches).values(withSeverity);
     await publishEvent(TOPICS.AUDIT_LOG, {
       actorType: 'system', action: 'RECONCILIATION_MISMATCH',
       entityType: 'reconciliation_run', entityId: run.id,
       meta: { gateway: gatewayName, mismatchCount: mismatches.length },
     });
+    await _alertAdmins(run, withSeverity);
   }
 
   return run;
+}
+
+// Reconciliation has no per-user owner to route through the normal
+// publishNotification()/resolveContact() pipeline (that's scoped to driver/rider userTypes) —
+// this goes straight to every active admin's email instead, best-effort. A send failure here
+// must never fail the reconciliation run itself; same "never take the job down" convention as
+// the notification consumer's own per-channel error handling.
+async function _alertAdmins(run, mismatchesWithSeverity) {
+  try {
+    const activeAdmins = await db.select({ email: admins.email }).from(admins).where(eq(admins.isActive, true));
+    if (activeAdmins.length === 0) return;
+
+    const highCount = mismatchesWithSeverity.filter((m) => m.severity === 'high').length;
+    const subject = `Reconciliation (${run.gateway}): ${mismatchesWithSeverity.length} mismatch(es)${highCount ? `, ${highCount} high-severity` : ''}`;
+    const html = `<p>Reconciliation run <strong>${run.id}</strong> for <strong>${run.gateway}</strong> `
+      + `found ${mismatchesWithSeverity.length} mismatch(es) (${highCount} high-severity) `
+      + `for the window ${run.windowFrom.toISOString()} – ${run.windowTo.toISOString()}.</p>`
+      + `<p>Review in the admin portal under Reconciliation → run ${run.id}.</p>`;
+
+    await Promise.all(activeAdmins.map((a) => sendEmail({ to: a.email, subject, html }).catch(() => {})));
+  } catch (err) {
+    console.error('[Reconciliation] Admin alert email failed:', err.message);
+  }
 }
 
 // Admin marks a finding reviewed — never auto-applied to any other table.
@@ -117,8 +165,9 @@ export async function listRuns(filters, page, limit, offset) {
 
 export async function listMismatches(filters, page, limit, offset) {
   const conditions = [];
-  if (filters.runId)  conditions.push(eq(reconciliationMismatches.runId, filters.runId));
-  if (filters.status) conditions.push(eq(reconciliationMismatches.status, filters.status));
+  if (filters.runId)    conditions.push(eq(reconciliationMismatches.runId, filters.runId));
+  if (filters.status)   conditions.push(eq(reconciliationMismatches.status, filters.status));
+  if (filters.severity) conditions.push(eq(reconciliationMismatches.severity, filters.severity));
   const where = conditions.length ? and(...conditions) : undefined;
 
   const [{ total }] = await db.select({ total: count() }).from(reconciliationMismatches).where(where);

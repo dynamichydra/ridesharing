@@ -1179,6 +1179,21 @@ async function seed() {
       isActive: true, createdBy: superAdmin?.id,
     },
     {
+      eventType: 'WALLET_WITHDRAWAL_APPROVED', channel: 'push', audience: 'rider',
+      subject: null, bodyHtml: 'Your withdrawal of {{amount}} has been approved and is on its way.',
+      isActive: true, createdBy: superAdmin?.id,
+    },
+    {
+      eventType: 'WALLET_WITHDRAWAL_REJECTED', channel: 'push', audience: 'rider',
+      subject: null, bodyHtml: 'Your withdrawal request was not approved: {{reason}}',
+      isActive: true, createdBy: superAdmin?.id,
+    },
+    {
+      eventType: 'RIDE_DISPUTE_RAISED', channel: 'push', audience: null,
+      subject: null, bodyHtml: 'A dispute was raised on a ride you were part of: {{reason}}',
+      isActive: true, createdBy: superAdmin?.id,
+    },
+    {
       eventType: 'RIDE_DISPUTE_RESPONDED', channel: 'push', audience: null,
       subject: null, bodyHtml: 'There is a new response on your ride dispute.',
       isActive: true, createdBy: superAdmin?.id,
@@ -1190,7 +1205,7 @@ async function seed() {
     },
   ]).onConflictDoNothing();
 
-  log.ok('11 notification templates seeded (PAYMENT_SUCCESS, SUBSCRIPTION_ACTIVATED, DOCUMENT_REJECTED, WALLET_TOPUP, REFUND_REQUEST_APPROVED/REJECTED, RIDE_DISPUTE_RESPONDED/RESOLVED)');
+  log.ok('14 notification templates seeded (PAYMENT_SUCCESS, SUBSCRIPTION_ACTIVATED, DOCUMENT_REJECTED, WALLET_TOPUP, REFUND_REQUEST_APPROVED/REJECTED, WALLET_WITHDRAWAL_APPROVED/REJECTED, RIDE_DISPUTE_RAISED/RESPONDED/RESOLVED)');
 
   // ── Summary ─────────────────────────────────────────────────────────────────
   console.log(`

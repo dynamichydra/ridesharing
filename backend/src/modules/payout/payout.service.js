@@ -7,7 +7,7 @@ import { formatMoney } from '../../utils/money.js';
 import { withIdempotency } from '../../utils/idempotency.js';
 import { getGateway } from '../payment/payment.service.js';
 import { postTransaction, getOrCreateSystemAccount, getOrCreateWalletAccount } from '../ledger/ledger.service.js';
-import { getWallet } from '../wallet/wallet.service.js';
+import { getWallet, getOrCreateWallet } from '../wallet/wallet.service.js';
 
 /**
  * Pure eligibility check — extracted so it's unit-testable without a DB or gateway call.
@@ -189,4 +189,83 @@ export async function listBatches(page, limit, offset) {
   const rows = await db.select().from(payoutBatches)
     .orderBy(desc(payoutBatches.createdAt)).limit(limit).offset(offset);
   return { rows, pagination: paginate(page, limit, total) };
+}
+
+// ── Gateway webhook — async payout-status reconciliation ────────────────────────
+// Both gateways' payout calls in _executePayout() are treated as synchronously final the
+// moment the HTTP call returns success. This webhook is the backstop for the case where a
+// payout reverses/fails on the processor's side *after* that — see payout-system-overview.md
+// §7 gap #1. Same split-in-two shape as ride-payment/subscription webhooks: verify+parse
+// synchronously, then hand off to the async webhook-processing job.
+
+export function parseAndVerifyPayoutWebhook(gatewayName, rawBody, signature) {
+  const gateway = getGateway(gatewayName);
+  if (!gateway.isConfigured) {
+    console.log(`[Payout] ${gatewayName} webhook received but not configured — ignoring.`);
+    return null;
+  }
+  if (!gateway.verifyWebhookSignature(rawBody, signature)) {
+    throw { statusCode: 400, message: 'Invalid webhook signature' };
+  }
+  const event = gateway.parseWebhookEvent(rawBody, signature);
+  return event && event.kind === 'payout_status' ? { ...event, gatewayName } : null;
+}
+
+// success/processed states need no action — _executePayout already marked the row 'completed'
+// synchronously. Only a reversal/rejection arriving after the fact needs to claw the funds
+// back out of the wallet, since the driver was already credited as paid.
+const REVERSING_STATUSES = new Set(['reversed', 'rejected', 'failed']);
+
+export async function processPayoutStatusWebhook(event) {
+  const { gatewayPayoutId, status, failureReason } = event;
+  const [payoutRow] = await db.select().from(payouts).where(eq(payouts.gatewayPayoutId, gatewayPayoutId)).limit(1);
+  if (!payoutRow) {
+    console.log(`[Payout] Webhook for unknown gatewayPayoutId '${gatewayPayoutId}' — ignoring.`);
+    return;
+  }
+  if (!REVERSING_STATUSES.has(status) || payoutRow.status !== 'completed') return; // nothing to reconcile
+
+  await _reversePayout(payoutRow, failureReason || `Reversed by gateway (status: ${status})`);
+}
+
+// Mirrors the reversal shape used elsewhere (refund.service.js, dispute.service.js): the
+// original ledger entries are never edited, a new reversing transaction posts instead. The
+// driver already spent/lost access to funds they were credited as paid — this claws them back
+// into the wallet (allowNegative, same reasoning as a cash-commission debit or a refund
+// clawback) so the debt is visible and settles out of future earnings/payouts.
+async function _reversePayout(payoutRow, failureReason) {
+  const wallet = await getOrCreateWallet('driver', payoutRow.driverId);
+  const [clearingAccount, walletAccount] = await Promise.all([
+    getOrCreateSystemAccount(`payout_clearing:${payoutRow.gateway}`, payoutRow.currencyCode),
+    getOrCreateWalletAccount(wallet.id, payoutRow.currencyCode),
+  ]);
+
+  await postTransaction({
+    businessType: 'driver_payout_reversal',
+    idempotencyKey: `payout_reversal:${payoutRow.id}`,
+    referenceType: 'payout', referenceId: payoutRow.id,
+    entries: [
+      { accountId: clearingAccount.id, direction: 'debit', amountMinor: payoutRow.amountMinor, currencyCode: payoutRow.currencyCode },
+      {
+        accountId: walletAccount.id, direction: 'credit', amountMinor: payoutRow.amountMinor, currencyCode: payoutRow.currencyCode,
+        reason: 'driver_payout_reversal', description: `Payout ${payoutRow.id} reversed`, allowNegative: true,
+      },
+    ],
+  });
+
+  await db.update(payouts)
+    .set({ status: 'reversed', failureReason, updatedAt: new Date() })
+    .where(eq(payouts.id, payoutRow.id));
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorType: 'system', action: 'PAYOUT_REVERSED',
+    entityType: 'payout', entityId: payoutRow.id,
+    meta: { driverId: payoutRow.driverId, amountMinor: payoutRow.amountMinor, failureReason },
+  });
+  await publishEvent(TOPICS.NOTIF_PUSH, {
+    userId: payoutRow.driverId, userType: 'driver',
+    title: 'Payout reversed',
+    body: `Your ${formatMoney(payoutRow.amountMinor, payoutRow.currencyCode)} payout was reversed and has been added back to your wallet balance.`,
+    type: 'PAYOUT_REVERSED',
+  });
 }

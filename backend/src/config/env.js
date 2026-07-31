@@ -45,6 +45,12 @@ const schema = z.object({
   S3_BUCKET: z.string().optional(),
   S3_PUBLIC_URL: z.string().optional(),
   APP_BASE_URL: z.string().optional(),
+  // Stripe Connect onboarding return targets — see payout-account.service.js
+  // startStripeOnboarding. Unset falls back to the backend's own placeholder acknowledgement
+  // routes (POST/GET .../stripe/onboarding-return|refresh); set these to real driver-app deep
+  // links (e.g. rideshare-driver://onboarding-return) once a driver app exists to redirect to.
+  DRIVER_APP_ONBOARDING_RETURN_URL: z.string().optional(),
+  DRIVER_APP_ONBOARDING_REFRESH_URL: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

@@ -47,6 +47,16 @@ export async function raiseDispute(user, { rideId, reason, description }) {
     meta: { rideId, reason },
   });
 
+  // Notify the *other* party on the ride — they're the one who needs to respond.
+  const otherPartyId = side === 'rider' ? ride.driverId : ride.riderId;
+  const otherPartyType = side === 'rider' ? 'driver' : 'rider';
+  if (otherPartyId) {
+    await publishNotification('RIDE_DISPUTE_RAISED', {
+      userId: otherPartyId, userType: otherPartyType,
+      variables: { rideId, reason },
+    });
+  }
+
   return disputeRow;
 }
 

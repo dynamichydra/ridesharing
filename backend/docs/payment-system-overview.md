@@ -33,10 +33,11 @@ There is no fine-grained permission system — three flat role gates
 | Pay for own subscription (rider side) | ✅ (rider plans) | — | — |
 | View own wallet balance | ✅ `GET /wallets/me` | ✅ `GET /wallets/me` | ✅ any wallet |
 | Top up own wallet | ✅ initiate/verify (own gateway order) | ✅ initiate/verify (own gateway order) | ✅ manual credit/debit adjustment |
+| Withdraw from own wallet | ✅ `POST /wallets/me/withdraw/request` — creates a `requested` row, admin approval debits the ledger (no gateway call, manually wired) | — (use payout instead) | ✅ approve/reject requests |
 | Submit bank details for payout | — | ✅ | ✅ on driver's behalf |
 | Trigger / view own payout | — | ✅ `POST /payouts/me/instant`, `GET /payouts/mine` (still requires an admin-approved payout account) | ✅ instant + batch |
 | Request a refund | ✅ `POST /refunds/request` — creates a `requested` row, admin approval still executes the real gateway refund | — | ✅ approve/reject requests, or issue an instant refund directly |
-| Raise/respond to a dispute | ✅ ride/payment complaint ticket (`ride-disputes`), not the processor chargeback below | ✅ ride/payment complaint ticket (`ride-disputes`) | ✅ triage-only on processor chargebacks (can't contest with processor); resolves complaint tickets |
+| Raise/respond to a dispute | ✅ ride/payment complaint ticket (`ride-disputes`), not the processor chargeback below | ✅ ride/payment complaint ticket (`ride-disputes`) | ✅ triage notes on processor chargebacks, plus accept/contest with the processor directly; resolves complaint tickets |
 | View ledger / reconciliation | — | — | ✅ read-only |
 
 **Key point to internalize**: this used to be a strictly "admin-mediated money" design —
@@ -44,8 +45,10 @@ every wallet adjustment, refund, and payout decision passed through an admin, wi
 rider/driver self-service outside of "pay for the thing I'm using." That's no longer
 fully true: riders and drivers can now view/top up their own wallet, a driver can
 self-trigger their own payout (still gated on an admin-approved payout account — see
-§7), and a rider can *request* a refund (still admin-approved before any gateway call
-happens — see §8). The one genuinely new concept is `ride-disputes` (§9a): a
+§7), a rider can *request* a refund (still admin-approved before any gateway call
+happens — see §8), and a rider can *request* a wallet withdrawal (still admin-approved,
+and never a gateway call — riders have no payout rail, so the admin wires the money
+manually — see §6). The one genuinely new concept is `ride-disputes` (§9a): a
 rider/driver complaint ticket against a ride, entirely separate from the processor
 chargeback `disputes` table, which remains admin-triage-only.
 
@@ -142,17 +145,16 @@ sequenceDiagram
     API-->>Driver: PAYMENT_SUCCESS notification
 ```
 
-In parallel, **Razorpay also sends a webhook** (`POST /ride-payments/webhook/razorpay`)
-for `payment.captured` events, verified via HMAC-SHA256 of the raw request body against
-`RAZORPAY_WEBHOOK_SECRET`. This is a backstop in case the rider's `/verify` call never
-lands (app killed, network drop, etc.) — the webhook and the client verify race safely
-because ride-payment activation is idempotent.
-
-> ⚠️ **Gap**: there is **no Stripe webhook route for ride-fare payments** — only
-> Razorpay has one for this domain. CAD ride payments rely entirely on the client
-> calling `/verify`; if that call never happens, nothing reconciles it automatically
-> (daily reconciliation, §7, would eventually catch the mismatch — but there's no
-> real-time backstop like Razorpay gets).
+In parallel, **both gateways also send a webhook** — `POST
+/ride-payments/webhook/razorpay` for `payment.captured` events (HMAC-SHA256 of the raw
+request body against `RAZORPAY_WEBHOOK_SECRET`), and `POST
+/ride-payments/webhook/stripe` for `payment_intent.succeeded` events (verified via
+Stripe's SDK against `STRIPE_WEBHOOK_SECRET`). Both are a backstop in case the rider's
+`/verify` call never lands (app killed, network drop, etc.) — the webhook and the
+client verify race safely because ride-payment activation is idempotent
+(`_markRidePaid` no-ops once `rides.paymentStatus = 'paid'`). Both routes dispatch
+through the same gateway-agnostic `processWebhookEvent()` in `ride-payment.service.js`
+via the `ride_payment` domain handler in `webhook-processing.job.js`.
 
 ### 3b. Cash payment — "how does the system handle it?"
 
@@ -252,9 +254,20 @@ an integer in minor currency units) + `wallet_transactions` (append-only audit t
   the owner's currency) credits immediately on initiate, same as everywhere else in
   this codebase. Ledger posting is Dr `processor_clearing:<gateway>` / Cr the wallet —
   no commission split, since a top-up isn't a fare.
-- The **only direct ways to touch a wallet balance** are self-service top-up (above)
-  and `POST /wallets/:ownerType/:ownerId/adjust` (admin-only) — everything else is a
-  side-effect of a ledger posting (ride earnings, refunds, payouts, dispute holds).
+- The **direct ways to touch a wallet balance** are self-service top-up (above),
+  `POST /wallets/:ownerType/:ownerId/adjust` (admin-only), and — for riders — a
+  self-service **withdrawal request**: `POST /wallets/me/withdraw/request
+  { amountMinor, reason }` inserts a `wallet_withdrawals` row (`status='requested'`),
+  requires the rider already has bank/UPI details on file (`rider-bank-accounts.js`),
+  and blocks a second open request per wallet. An admin then calls `PATCH
+  /wallets/withdrawals/:id/approve` or `.../reject { rejectionReason }`
+  (`wallet.service.js`). Unlike a driver payout, approval never calls a gateway —
+  riders have no payout rail (§7 is driver-only) — so the admin manually wires the
+  money to the bank/UPI/wallet details on file and approval just posts the ledger
+  debit (Dr the wallet / Cr a `wallet_withdrawal_clearing` system account) and marks
+  the request `completed`. `GET /wallets/me/withdrawals` lets the rider track their own
+  requests. Everything else touching a wallet balance is a side-effect of a ledger
+  posting (ride earnings, refunds, payouts, dispute holds).
 - Wallet balance is a **cache**: every ledger entry posted against a wallet-type ledger
   account automatically updates `wallets.balanceMinor` and inserts a matching
   `wallet_transactions` row, under a row lock, inside `postTransaction()`. If you ever
@@ -268,6 +281,7 @@ flowchart LR
     Refund["Refund of an online ride"] -->|Dr clawback| Wallet
     Payout["Payout batch/instant"] -->|Dr full balance| Wallet
     AdminAdjust["Admin manual adjust"] -->|Cr or Dr| Wallet
+    Withdrawal["Rider withdrawal (admin-approved)"] -->|Dr requested amount| Wallet
     Dispute["Dispute opened"] -->|Dr hold| Wallet
     Wallet[("Driver Wallet\nbalanceMinor")]
 ```
@@ -321,9 +335,8 @@ every other payout path.
 
 ```mermaid
 flowchart TD
-    Start([Weekly batch job\nMon 03:00 UTC]) --> CheckGW{Gateway loop}
-    CheckGW -->|"stripe"| Eligible
-    CheckGW -.->|"razorpay — NOT in automated loop, see gap below"| Manual[Admin must POST /payouts/batch/razorpay manually]
+    Start([Weekly batch job\nMon 03:00 UTC]) --> CheckGW{Gateway loop: stripe, razorpay}
+    CheckGW --> Eligible
 
     Eligible{selectEligiblePayout} -->|"wallet balance <= 0"| Skip1[Skip — nothing owed]
     Eligible -->|"no driver_payout_accounts row\n(never submitted bank details)"| Skip2["Skip — 'Payout account is not approved'"]
@@ -333,7 +346,18 @@ flowchart TD
     Execute[Lock wallet row, insert 'pending' payouts row] --> Call[Call gateway.payout]
     Call -->|success| Done[status=completed, ledger posts\nDr wallet / Cr payout_clearing, notify driver]
     Call -->|failure| Fail["status=failed, wallet left untouched\n(funds held, never lost), AUDIT_LOG PAYOUT_FAILED"]
+    Done -.->|"gateway webhook later reports\nreversed/rejected"| Reversed["status=reversed, ledger reverses\nDr payout_clearing / Cr wallet (allowNegative),\nAUDIT_LOG PAYOUT_REVERSED, notify driver"]
 ```
+
+**Async reversal**: `POST /payouts/webhook/razorpay` (RazorpayX `payout.processed`/
+`payout.reversed`/`payout.rejected`) and `POST /payouts/webhook/stripe` (Stripe
+`transfer.reversed`) catch the case where a payout that returned success synchronously
+later bounces on the processor's side. Both dispatch through the `payout` domain in
+`webhook-processing.job.js` to `processPayoutStatusWebhook()` in `payout.service.js`,
+which looks up the `payouts` row by `gatewayPayoutId` and, if it was `completed` and the
+gateway now reports a reversal/rejection, posts a reversing ledger transaction (Dr
+`payout_clearing:<gateway>` / Cr the driver's wallet, `allowNegative: true` — same
+clawback pattern as a refund or cash-commission debit) and flips the row to `reversed`.
 
 **Answering "what if a driver never adds bank details?"** directly: their
 `drivers.js` schema record has **no bank fields at all** (bank data lives entirely in
@@ -346,20 +370,28 @@ system built for this today.
 
 ### Known gaps in payouts (be aware of these before relying on this system)
 
-1. **Razorpay is hardcoded out of the automated weekly batch** —
-   `payout-batch.job.js` only loops `['stripe']`. Razorpay payout code is fully
-   implemented (RazorpayX Contacts/Fund Accounts/Payouts via raw REST calls, since the
-   installed `razorpay` npm package doesn't expose those resources natively) but only
-   runs via a manual admin-triggered batch or an admin's instant-payout call.
-2. **No async payout-status reconciliation for either gateway** — both Razorpay's and
-   Stripe's payout calls are treated as synchronously final the moment the HTTP call
-   returns success. If a payout later reverses/fails on the processor's side after the
-   fact, nothing in this codebase catches that automatically.
-3. **RazorpayX contact/payout integration is explicitly unverified** against a live
-   account per in-code comments.
-4. **Stripe Connect onboarding redirect URLs are placeholders** — there's no driver
-   mobile-app screen wired to receive the onboarding return yet (only a rider app
-   exists per this repo's structure).
+1. **RazorpayX contact/payout integration is explicitly unverified** against a live
+   account per in-code comments — the request/response *shapes* used for Contacts, Fund
+   Accounts, Payouts, and now Disputes accept/contest all follow Razorpay's public REST
+   docs but have never been exercised against a real (even test-mode) account. One real
+   bug in this area *was* found and fixed without needing a live account, though: every
+   call through the `razorpay` npm package (not just the RazorpayX ones — orders,
+   refunds, reconciliation reads, all of it) shares one internal error normalizer
+   (`razorpay/dist/api.js`) that throws a plain `{statusCode, error: {description}}`
+   object with **no `.message` property** on any API failure. The app's global error
+   handler reads `error.message`, so every one of these calls would previously surface
+   as a message-less `{"SUCCESS":false}` on failure, hiding the actual Razorpay-reported
+   reason. `razorpay.gateway.js`'s `normalizeRazorpayApiError()` (wrapping every SDK/raw
+   call via an internal `_call()` helper) fixes this — confirmed by reading the installed
+   package's source directly, not a live-account concern.
+2. **Stripe Connect onboarding redirect targets are still backend placeholder
+   acknowledgement routes by default** — there's no driver mobile-app screen to send
+   the driver back into yet (only a rider app exists per this repo's structure), so this
+   can't be fully closed without one existing. What *is* fixed: the URLs are no longer
+   hardcoded — `DRIVER_APP_ONBOARDING_RETURN_URL`/`DRIVER_APP_ONBOARDING_REFRESH_URL`
+   (`payout-account.service.js` `startStripeOnboarding`) let a deployment point these at
+   a real driver-app deep link the moment one exists, with no code change; unset, the
+   backend's own placeholder routes are used exactly as before.
 
 ---
 
@@ -417,8 +449,9 @@ triggered them — both funnel through the same `_executeRefund` helper.
 
 ## 9. Disputes (chargebacks)
 
-Read/triage only for admins — **the system never auto-resolves a dispute and never
-contests it with the processor**; an admin can only leave notes.
+The system never *auto*-resolves a dispute, but an admin can now push a decision **to**
+the processor instead of only leaving triage notes — accept (concede) it, or contest it
+with evidence.
 
 ```mermaid
 sequenceDiagram
@@ -431,8 +464,16 @@ sequenceDiagram
     API->>API: handleDisputeEvent() - looks up payment by gatewayPaymentId
     API->>API: insert disputes row (status = raw processor string)
     API->>Ledger: post dispute_hold - Dr driver wallet / Cr dispute_holding:gateway
-    Admin->>API: PATCH /disputes/:id {adminNotes} (triage only)
-    GW->>API: status update webhook (redelivery)
+    Admin->>API: PATCH /disputes/:id {adminNotes} (triage only, never touches the processor)
+    alt admin accepts
+        Admin->>API: POST /disputes/:id/accept
+        API->>GW: gateway.acceptDispute() - Stripe disputes.close() / Razorpay POST .../accept
+    else admin contests
+        Admin->>API: POST /disputes/:id/contest {evidence}
+        API->>GW: gateway.submitDisputeEvidence() (Stripe) / .contestDispute() (Razorpay)
+    end
+    GW-->>API: returns the dispute's new status directly
+    GW->>API: status update webhook (redelivery of the same status - deduped, no-op)
     alt classified 'won'
         API->>Ledger: release hold back to driver wallet
     else classified 'lost'
@@ -440,10 +481,27 @@ sequenceDiagram
     end
 ```
 
+Both actions funnel through the same `_applyProcessorDisputeUpdate()` helper
+(`dispute.service.js`) that the webhook path's resolution logic uses — whichever
+status the gateway call returns is classified and resolved the same way a webhook-driven
+status change already was, so there's no separate "admin resolution" code path to keep in
+sync. A subsequent webhook redelivery of the same final status is a no-op (existing
+`existing.status === status` guard), and the ledger post itself is idempotency-keyed, so
+there's no risk of double-resolving if the processor's webhook and the admin's direct call
+both land.
+
 > ⚠️ **Gap**: Razorpay's dispute webhook payload/status enum is explicitly flagged in
-> code as **unverified against a live dispute** — the classification
-> (`classifyDisputeStatus`) is a crude substring match (`contains 'won'` /
-> `contains 'lost'` / else `'open'`).
+> code as **unverified against a live dispute** — `classifyDisputeStatus` now does an
+> exact (case-insensitive) match against each gateway's documented status enum rather
+> than a substring test, but the Razorpay side of that enum (`open` / `under_review` /
+> `won` / `lost` / `closed` / `action_required`) is taken from Razorpay's public API
+> docs, not a live payload sample. The new accept/contest calls inherit the same
+> caveat on the Razorpay side: `acceptDispute`/`contestDispute` go through the same raw
+> `api.post()` escape hatch as the RazorpayX payout code (the installed `razorpay`
+> package doesn't expose a Disputes resource), following Razorpay's documented
+> `POST /disputes/:id/accept` / `.../contest` contract but not exercised against a live
+> dispute. Stripe's side (`disputes.close()` / `disputes.update(..., {submit: true})`)
+> is a normal typed SDK call, not a caveat.
 
 ---
 
@@ -475,6 +533,11 @@ actually on. If an admin agrees a complaint warrants money moving, they act thro
 existing refund-request-approval (§8) or wallet-adjust (§6) endpoints separately — this
 module never touches those itself.
 
+A push notification fires at every stage via `publishNotification()`
+(`notification-events.js`): `RIDE_DISPUTE_RAISED` to the *other* party when a ticket is
+opened, `RIDE_DISPUTE_RESPONDED` to the raiser when they respond, `RIDE_DISPUTE_RESOLVED`
+to both raiser and responder when an admin closes it out.
+
 ---
 
 ## 10. Reconciliation
@@ -493,6 +556,25 @@ flag discrepancies for a human:
    consistency audit: re-derives whether any ledger transaction is unbalanced, and
    whether any wallet's cached `balanceMinor` has drifted from what the ledger entries
    actually sum to. Publishes an `AUDIT_LOG` event if anything's off.
+
+**Why mismatches are never auto-corrected, on purpose**: none of the four finding types
+have a safe automatic fix. `missing_internal` would require guessing which
+ride/subscription/wallet an unmatched gateway payment belongs to; `missing_external`
+could just as easily be a reconciliation-window edge case as a real problem;
+`amount_mismatch` can't be fixed by editing `payments.amountMinor` alone — the ledger
+entries were derived from `ride.finalFareMinor`/plan price at the time, not from that
+column, so a real fix means re-deriving commission splits; `duplicate_internal` gives no
+reliable signal for which of the two rows is the "real" one to keep. Auto-correcting
+financial discrepancies without human review is a known anti-pattern — it risks masking
+the underlying bug instead of catching it. What *did* get built to make the human review
+step less likely to be neglected: every mismatch gets a `severity` (`low`/`medium`/`high`)
+computed by `assessMismatchSeverity()` — a pure triage heuristic based on amount-at-risk
+(and `duplicate_internal` is always at least `medium`, since it signals a bug in our own
+system regardless of amount) — filterable via `GET
+/reconciliation/mismatches?severity=high`. And every run that finds any mismatches
+emails every active admin a summary (`reconciliation.service.js` `_alertAdmins` —
+bypasses the normal driver/rider-scoped `publishNotification()` pipeline since admins
+aren't a userType it resolves contacts for; best-effort, never fails the run itself).
 
 ```mermaid
 flowchart LR
@@ -554,9 +636,9 @@ flowchart TB
 Money doesn't move to the driver in real time as rides complete — it accumulates as a
 balance in their internal wallet (§6). Getting it into an actual bank account requires:
 (a) driver submits bank details, (b) an admin manually approves the payout account,
-(c) either the weekly automated batch (Stripe only today) or an admin's manual/instant
-trigger (works for both gateways) executes an external payout that debits the wallet
-and credits their real bank account/Stripe balance.
+(c) either the weekly automated batch (both gateways) or an admin's manual/instant
+trigger executes an external payout that debits the wallet and credits their real bank
+account/Stripe balance.
 
 **2. If a rider pays cash, how does the system handle it?**
 The driver self-reports the cash collection via an app action
@@ -593,16 +675,9 @@ hand.
 
 | Area | Gap |
 |---|---|
-| Payouts | Razorpay payouts not in the automated weekly batch (Stripe only); manual admin trigger required |
-| Payouts | No async payout-status webhook reconciliation for either gateway (treated as synchronously final) |
-| Payouts | RazorpayX Contacts/Fund Accounts/Payouts integration unverified against a live account |
-| Ride payments | No Stripe webhook for ride-fare payments (only subscriptions have both gateways' webhooks) |
-| Disputes (processor) | Razorpay dispute webhook payload/status shape unverified; status classification is a crude substring match |
-| Disputes (processor) | Admin can only triage/notate — no processor-side contest/accept flow |
-| Wallets | No withdrawal/cash-out endpoint — top-up is self-service now, but getting money *out* of a wallet still only happens via a driver payout (drivers) or an admin adjustment (riders) |
-| Payout onboarding | Stripe Connect onboarding redirect targets are placeholders (no driver app exists yet) |
-| Reconciliation | Mismatches are flagged only, never auto-corrected |
-| Ride disputes (§9a) | No push/email notification wired for raise/respond/resolve — audit-log only, same as refund requests |
+| Payouts | RazorpayX Contacts/Fund Accounts/Payouts integration unverified against a live account (error-message propagation for all Razorpay SDK calls was audited and fixed — see §7) |
+| Disputes (processor) | Razorpay dispute webhook/accept/contest payload+status shape unverified against a live account (status enum taken from public docs, not a live sample) |
+| Payout onboarding | Stripe Connect onboarding redirect targets default to backend placeholder routes (configurable via env now, but no driver app exists yet to point them at) |
 
 
  https://claude.ai/code/artifact/e8cb1773-de02-4c57-93c7-6fc92d3f67c1

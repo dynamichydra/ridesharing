@@ -15,11 +15,10 @@ export async function schedulePayoutBatch() {
 const payoutBatchWorker = new Worker(
   'payout-batch',
   async () => {
-    // Only Stripe has real payout execution today — see razorpay.gateway.js payout() and the
-    // Phase 4 plan notes on why. runPayoutBatch() itself also no-ops per-gateway when that
-    // gateway isn't configured or doesn't support payouts, so this loop is future-proof if a
-    // second payout-capable gateway is added later.
-    for (const gatewayName of ['stripe']) {
+    // runPayoutBatch() no-ops per-gateway when that gateway isn't configured or doesn't support
+    // payouts (gateway.isConfigured / gateway.supportsPayouts), so listing a gateway here that
+    // isn't set up in a given environment is harmless.
+    for (const gatewayName of ['stripe', 'razorpay']) {
       const result = await runPayoutBatch(gatewayName);
       if (result) {
         console.log(`[Job] Payout batch (${gatewayName}): ${result.driverCount} driver(s), ${result.totalAmountMinor} minor units total.`);
