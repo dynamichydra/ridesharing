@@ -55,3 +55,4 @@ export * from './trip-gps-pings.js';
 export * from './flagged-trips.js';
 export * from './notification-templates.js';
 export * from './notifications.js';
+export * from './outbox-events.js';

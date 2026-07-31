@@ -2,6 +2,7 @@ import { eq, and, desc, count, ilike, sql } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { wallets, walletTransactions, walletWithdrawals, drivers, users, countries, payments } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
+import { enqueueEvent } from '../../utils/outbox.js';
 import { paginate } from '../../utils/response.js';
 import { getDefaultCountry } from '../geo/geo.service.js';
 import { postTransaction, getOrCreateSystemAccount, getOrCreateWalletAccount } from '../ledger/ledger.service.js';
@@ -214,15 +215,22 @@ export async function requestWalletWithdrawal(riderId, amountMinor, reason) {
     .where(and(eq(walletWithdrawals.walletId, wallet.id), eq(walletWithdrawals.status, 'requested'))).limit(1);
   if (openRequest) throw { statusCode: 409, message: 'A withdrawal request for this wallet is already awaiting review' };
 
-  const [withdrawalRow] = await db.insert(walletWithdrawals).values({
-    walletId: wallet.id, ownerType: 'rider', ownerId: riderId,
-    amountMinor, currencyCode: wallet.currencyCode, reason, status: 'requested',
-  }).returning();
+  const withdrawalRow = await db.transaction(async (tx) => {
+    const [row] = await tx.insert(walletWithdrawals).values({
+      walletId: wallet.id, ownerType: 'rider', ownerId: riderId,
+      amountMinor, currencyCode: wallet.currencyCode, reason, status: 'requested',
+    }).returning();
 
-  await publishEvent(TOPICS.AUDIT_LOG, {
-    actorId: riderId, actorType: 'rider', action: 'WALLET_WITHDRAWAL_REQUESTED',
-    entityType: 'wallet_withdrawal', entityId: withdrawalRow.id,
-    meta: { walletId: wallet.id, amountMinor },
+    await enqueueEvent(tx, {
+      aggregateType: 'wallet_withdrawal', aggregateId: row.id, topic: TOPICS.AUDIT_LOG,
+      payload: {
+        actorId: riderId, actorType: 'rider', action: 'WALLET_WITHDRAWAL_REQUESTED',
+        entityType: 'wallet_withdrawal', entityId: row.id,
+        meta: { walletId: wallet.id, amountMinor },
+      },
+    });
+
+    return row;
   });
 
   return withdrawalRow;

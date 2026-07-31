@@ -1,7 +1,8 @@
 import { eq, and, desc, count } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { wallets, driverPayoutAccounts, payoutBatches, payouts, drivers } from '../../../drizzle/schema/index.js';
-import { publishEvent, TOPICS } from '../../config/kafka.js';
+import { TOPICS } from '../../config/kafka.js';
+import { enqueueEvent } from '../../utils/outbox.js';
 import { paginate } from '../../utils/response.js';
 import { formatMoney } from '../../utils/money.js';
 import { withIdempotency } from '../../utils/idempotency.js';
@@ -120,20 +121,39 @@ async function _executePayout({ driverId, payoutAccount, wallet, gateway, batchI
   } catch (err) {
     // Failure holds the funds, never drops them — the wallet is untouched, so the balance
     // stays owed and visible for manual review/retry. Never silently swallowed.
-    await db.update(payouts)
-      .set({ status: 'failed', failureReason: err.message || 'Unknown gateway error', updatedAt: new Date() })
-      .where(eq(payouts.id, payoutRow.id));
-    await publishEvent(TOPICS.AUDIT_LOG, {
-      actorType: 'system', action: 'PAYOUT_FAILED',
-      entityType: 'payout', entityId: payoutRow.id,
-      meta: { driverId, amountMinor: payoutRow.amountMinor, error: err.message },
+    await db.transaction(async (tx) => {
+      await tx.update(payouts)
+        .set({ status: 'failed', failureReason: err.message || 'Unknown gateway error', updatedAt: new Date() })
+        .where(eq(payouts.id, payoutRow.id));
+      await enqueueEvent(tx, {
+        aggregateType: 'payout', aggregateId: payoutRow.id, topic: TOPICS.AUDIT_LOG,
+        payload: {
+          actorType: 'system', action: 'PAYOUT_FAILED',
+          entityType: 'payout', entityId: payoutRow.id,
+          meta: { driverId, amountMinor: payoutRow.amountMinor, error: err.message },
+        },
+      });
     });
     return { status: 'failed', payoutId: payoutRow.id, amountMinor: payoutRow.amountMinor };
   }
 
-  await db.update(payouts)
-    .set({ status: 'completed', gatewayPayoutId, updatedAt: new Date() })
-    .where(eq(payouts.id, payoutRow.id));
+  // The NOTIF_PUSH enqueue is bundled with this status update (rather than after the ledger
+  // post below) because the update is the write it needs to be atomic with — the outbox only
+  // guarantees the enqueue commits together with whatever write sits in the same tx.
+  await db.transaction(async (tx) => {
+    await tx.update(payouts)
+      .set({ status: 'completed', gatewayPayoutId, updatedAt: new Date() })
+      .where(eq(payouts.id, payoutRow.id));
+    await enqueueEvent(tx, {
+      aggregateType: 'payout', aggregateId: payoutRow.id, topic: TOPICS.NOTIF_PUSH,
+      payload: {
+        userId: driverId, userType: 'driver',
+        title: 'Payout sent',
+        body: `${formatMoney(payoutRow.amountMinor, payoutRow.currencyCode)} is on its way to your bank account.`,
+        type: 'PAYOUT_COMPLETED',
+      },
+    });
+  });
 
   const [clearingAccount, walletAccount] = await Promise.all([
     getOrCreateSystemAccount(`payout_clearing:${payoutRow.gateway}`, payoutRow.currencyCode),
@@ -150,13 +170,6 @@ async function _executePayout({ driverId, payoutAccount, wallet, gateway, batchI
       },
       { accountId: clearingAccount.id, direction: 'credit', amountMinor: payoutRow.amountMinor, currencyCode: payoutRow.currencyCode },
     ],
-  });
-
-  await publishEvent(TOPICS.NOTIF_PUSH, {
-    userId: driverId, userType: 'driver',
-    title: 'Payout sent',
-    body: `${formatMoney(payoutRow.amountMinor, payoutRow.currencyCode)} is on its way to your bank account.`,
-    type: 'PAYOUT_COMPLETED',
   });
 
   return { status: 'completed', payoutId: payoutRow.id, amountMinor: payoutRow.amountMinor };
@@ -253,19 +266,26 @@ async function _reversePayout(payoutRow, failureReason) {
     ],
   });
 
-  await db.update(payouts)
-    .set({ status: 'reversed', failureReason, updatedAt: new Date() })
-    .where(eq(payouts.id, payoutRow.id));
-
-  await publishEvent(TOPICS.AUDIT_LOG, {
-    actorType: 'system', action: 'PAYOUT_REVERSED',
-    entityType: 'payout', entityId: payoutRow.id,
-    meta: { driverId: payoutRow.driverId, amountMinor: payoutRow.amountMinor, failureReason },
-  });
-  await publishEvent(TOPICS.NOTIF_PUSH, {
-    userId: payoutRow.driverId, userType: 'driver',
-    title: 'Payout reversed',
-    body: `Your ${formatMoney(payoutRow.amountMinor, payoutRow.currencyCode)} payout was reversed and has been added back to your wallet balance.`,
-    type: 'PAYOUT_REVERSED',
+  await db.transaction(async (tx) => {
+    await tx.update(payouts)
+      .set({ status: 'reversed', failureReason, updatedAt: new Date() })
+      .where(eq(payouts.id, payoutRow.id));
+    await enqueueEvent(tx, {
+      aggregateType: 'payout', aggregateId: payoutRow.id, topic: TOPICS.AUDIT_LOG,
+      payload: {
+        actorType: 'system', action: 'PAYOUT_REVERSED',
+        entityType: 'payout', entityId: payoutRow.id,
+        meta: { driverId: payoutRow.driverId, amountMinor: payoutRow.amountMinor, failureReason },
+      },
+    });
+    await enqueueEvent(tx, {
+      aggregateType: 'payout', aggregateId: payoutRow.id, topic: TOPICS.NOTIF_PUSH,
+      payload: {
+        userId: payoutRow.driverId, userType: 'driver',
+        title: 'Payout reversed',
+        body: `Your ${formatMoney(payoutRow.amountMinor, payoutRow.currencyCode)} payout was reversed and has been added back to your wallet balance.`,
+        type: 'PAYOUT_REVERSED',
+      },
+    });
   });
 }

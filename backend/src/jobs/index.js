@@ -5,6 +5,8 @@ import { flushRidePings, listActiveGpsRides } from '../modules/trip-gps/gps-ping
 import { runLedgerVerification } from './ledger-verification.job.js';
 import { scheduleReconciliation } from './reconciliation.job.js';
 import { schedulePayoutBatch } from './payout-batch.job.js';
+import { scheduleOutboxRelay } from './outbox-relay.job.js';
+import { scheduleOutboxPrune } from './outbox-prune.job.js';
 import './webhook-processing.job.js'; // side-effect import — registers its own Queue/Worker
 
 const connection = redis;
@@ -125,5 +127,7 @@ export async function startJobs() {
   await scheduleLedgerVerification();
   await scheduleReconciliation();
   await schedulePayoutBatch();
+  await scheduleOutboxRelay();
+  await scheduleOutboxPrune();
   console.log('✅ BullMQ workers running');
 }
