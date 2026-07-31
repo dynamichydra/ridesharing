@@ -30,6 +30,7 @@ import { ledgerRoutes } from './modules/ledger/ledger.routes.js';
 import { refundRoutes } from './modules/refund/refund.routes.js';
 import { reconciliationRoutes } from './modules/reconciliation/reconciliation.routes.js';
 import { disputeRoutes } from './modules/dispute/dispute.routes.js';
+import { rideDisputeRoutes } from './modules/ride-dispute/ride-dispute.routes.js';
 import { payoutAccountRoutes } from './modules/payout-account/payout-account.routes.js';
 import { payoutRoutes } from './modules/payout/payout.routes.js';
 import { adminRoutes } from './modules/admin/admin.routes.js';
@@ -87,6 +88,7 @@ async function build() {
   await app.register(refundRoutes, { prefix: `${PREFIX}/refunds` });
   await app.register(reconciliationRoutes, { prefix: `${PREFIX}/reconciliation` });
   await app.register(disputeRoutes, { prefix: `${PREFIX}/disputes` });
+  await app.register(rideDisputeRoutes, { prefix: `${PREFIX}/ride-disputes` });
   await app.register(payoutAccountRoutes, { prefix: `${PREFIX}/payout-accounts` });
   await app.register(payoutRoutes, { prefix: `${PREFIX}/payouts` });
   await app.register(adminRoutes, { prefix: `${PREFIX}/admin` });

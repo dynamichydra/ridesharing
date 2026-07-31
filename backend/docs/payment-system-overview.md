@@ -31,19 +31,23 @@ There is no fine-grained permission system — three flat role gates
 | Collect a ride payment in cash | — | ✅ mark cash collected | — |
 | Pay for own subscription | — | ✅ (driver plans) | — |
 | Pay for own subscription (rider side) | ✅ (rider plans) | — | — |
-| View own wallet balance | ❌ **no endpoint** | ❌ **no endpoint** | ✅ any wallet |
-| Top up own wallet | ❌ **no endpoint** | ❌ **no endpoint** | ✅ manual credit/debit adjustment |
+| View own wallet balance | ✅ `GET /wallets/me` | ✅ `GET /wallets/me` | ✅ any wallet |
+| Top up own wallet | ✅ initiate/verify (own gateway order) | ✅ initiate/verify (own gateway order) | ✅ manual credit/debit adjustment |
 | Submit bank details for payout | — | ✅ | ✅ on driver's behalf |
-| Trigger / view own payout | — | ❌ **no self-service trigger** | ✅ instant + batch |
-| Request a refund | ❌ **no self-service** | — | ✅ only path that exists |
-| Raise/respond to a dispute | ❌ | ❌ | ✅ triage-only (can't contest with processor) |
+| Trigger / view own payout | — | ✅ `POST /payouts/me/instant`, `GET /payouts/mine` (still requires an admin-approved payout account) | ✅ instant + batch |
+| Request a refund | ✅ `POST /refunds/request` — creates a `requested` row, admin approval still executes the real gateway refund | — | ✅ approve/reject requests, or issue an instant refund directly |
+| Raise/respond to a dispute | ✅ ride/payment complaint ticket (`ride-disputes`), not the processor chargeback below | ✅ ride/payment complaint ticket (`ride-disputes`) | ✅ triage-only on processor chargebacks (can't contest with processor); resolves complaint tickets |
 | View ledger / reconciliation | — | — | ✅ read-only |
 
-**Key point to internalize**: outside of "pay for the thing I'm using," riders and
-drivers have essentially **no direct financial self-service** in this system. Every
-wallet adjustment, refund, and payout decision passes through an admin. This is a
-deliberate "admin-mediated money" design, not an oversight — it shows up consistently
-across every money-related route file.
+**Key point to internalize**: this used to be a strictly "admin-mediated money" design —
+every wallet adjustment, refund, and payout decision passed through an admin, with no
+rider/driver self-service outside of "pay for the thing I'm using." That's no longer
+fully true: riders and drivers can now view/top up their own wallet, a driver can
+self-trigger their own payout (still gated on an admin-approved payout account — see
+§7), and a rider can *request* a refund (still admin-approved before any gateway call
+happens — see §8). The one genuinely new concept is `ride-disputes` (§9a): a
+rider/driver complaint ticket against a ride, entirely separate from the processor
+chargeback `disputes` table, which remains admin-triage-only.
 
 ---
 
@@ -235,12 +239,21 @@ an integer in minor currency units) + `wallet_transactions` (append-only audit t
 `credit`/`debit`, snapshot of `balanceAfterMinor`).
 
 - **Drivers get a wallet lazily** — created automatically the first time money needs
-  to move through it (first ride earning, first commission debit, etc.).
-- **Riders do not get a wallet at all** until an admin explicitly credits one (e.g. a
-  goodwill credit, or a refund routed to wallet instead of the original payment
-  method) — there's no rider-facing "my wallet" screen or top-up flow in this backend.
-- The **only direct way to touch a wallet balance** is
-  `POST /wallets/:ownerType/:ownerId/adjust` (admin-only) — everything else is a
+  to move through it (first ride earning, first commission debit, first `GET
+  /wallets/me` call, etc.).
+- **Riders also get a wallet lazily now** — `GET /wallets/me` and the top-up endpoints
+  (`wallet.service.js getMyWallet`/`initiateWalletTopup`) auto-create a zero-balance
+  wallet the same way the driver side always has. Admins can still explicitly credit
+  one first (goodwill credit, refund routed to wallet); that no longer matters for
+  whether the rider *can* see/use a wallet.
+- **Self-service top-up**: `POST /wallets/me/topup/initiate` (Idempotency-Key
+  required) → `POST /wallets/me/topup/verify`, same two-step shape as ride payments
+  and subscriptions (`wallet.service.js`). Dev mode (no gateway keys configured for
+  the owner's currency) credits immediately on initiate, same as everywhere else in
+  this codebase. Ledger posting is Dr `processor_clearing:<gateway>` / Cr the wallet —
+  no commission split, since a top-up isn't a fare.
+- The **only direct ways to touch a wallet balance** are self-service top-up (above)
+  and `POST /wallets/:ownerType/:ownerId/adjust` (admin-only) — everything else is a
   side-effect of a ledger posting (ride earnings, refunds, payouts, dispute holds).
 - Wallet balance is a **cache**: every ledger entry posted against a wallet-type ledger
   account automatically updates `wallets.balanceMinor` and inserts a matching
@@ -290,7 +303,19 @@ convention used for driver document uploads.
 `driver_payout_accounts.status` is `'pending' | 'approved' | 'rejected'`. An admin must
 explicitly call `PATCH /payout-accounts/:id/verify` to flip it to `'approved'` before
 **any** payout can ever be attempted for that driver — this is enforced in code
-(`selectEligiblePayout`), not just documented as a policy.
+(`selectEligiblePayout`), not just documented as a policy. This gate applies equally
+whether the payout is admin-triggered or driver-self-triggered (below) — a driver
+calling their own instant-payout endpoint before their account is approved gets the
+same `422 'Payout account is not approved'` an admin would.
+
+### Driver self-service
+
+`POST /payouts/me/instant` (driver-authenticated, Idempotency-Key required) and `GET
+/payouts/mine` let a driver trigger and view their own payouts without an admin in the
+loop — `payout.routes.js` just calls the same `initiateInstantPayout`/`listPayouts`
+functions the admin routes use, scoped to `request.user.id`. No new eligibility rules:
+same approved-payout-account + positive-balance + gateway-supports-payouts checks as
+every other payout path.
 
 ### Step 3 — Payout execution
 
@@ -340,19 +365,34 @@ system built for this today.
 
 ## 8. Refunds
 
-**Admin-only, no self-service** — a rider cannot request their own refund through the
-API today; the route file's own comment says as much.
+**Admin-instant, or rider-request + admin-approval** — there are now two entry points
+into the same reversal logic, both implemented in `refund.service.js`:
+
+- **Admin-instant** (`POST /refunds`, unchanged from before): an admin picks any
+  `paymentId` and amount and it executes immediately.
+- **Rider-request** (`POST /refunds/request { rideId, reason }`): a rider can only
+  request a refund for their *own* ride's latest payment, for the full remaining
+  refundable amount — no partial-amount input, no gateway call yet. This inserts a
+  `refunds` row with `status='requested'`. An admin must then call `PATCH
+  /refunds/:id/approve` (re-validates the amount against the *current* already-refunded
+  total, then runs the exact same gateway-call + ledger-reversal logic as the instant
+  path) or `PATCH /refunds/:id/reject { rejectionReason }`. `GET /refunds/mine` lets
+  the rider track their own requests. The gateway is deliberately never called until an
+  admin approves — this preserves the admin-mediated-money control for the one
+  self-service path that moves real money back out of the platform.
 
 ```mermaid
 sequenceDiagram
+    actor Rider
     actor Admin
     participant API as Backend
     participant GW as Razorpay/Stripe
     participant Ledger
 
-    Admin->>API: POST /refunds {paymentId, amountMinor, reason} (Idempotency-Key)
-    API->>API: lock payment row, validate (captured, cumulative refunds <= original)
-    API->>API: insert refunds row (status=pending) - partial refunds supported
+    Rider->>API: POST /refunds/request {rideId, reason}
+    API->>API: insert refunds row (status=requested) - no gateway call yet
+    Admin->>API: PATCH /refunds/:id/approve
+    API->>API: lock payment+refund rows, re-validate cumulative refunds <= original
     alt payment.gateway is cash or none
         Note over API: no external call - purely internal reversal
     else online payment
@@ -369,7 +409,9 @@ sequenceDiagram
 Reversal specifics: a cash-ride refund reverses the memo pair; an online-ride refund
 debits the driver's wallet (they already got credited the fare, now they owe it back —
 `allowNegative: true` applies) and credits back the processor-clearing account; a
-subscription refund debits the relevant `platform_revenue:*` account.
+subscription refund debits the relevant `platform_revenue:*` account. These are
+identical regardless of which entry point (admin-instant vs rider-request-approved)
+triggered them — both funnel through the same `_executeRefund` helper.
 
 ---
 
@@ -402,6 +444,36 @@ sequenceDiagram
 > code as **unverified against a live dispute** — the classification
 > (`classifyDisputeStatus`) is a crude substring match (`contains 'won'` /
 > `contains 'lost'` / else `'open'`).
+
+---
+
+## 9a. Ride disputes (rider/driver complaint tickets)
+
+Not to be confused with §9 above — `ride_disputes` (`ride-dispute.service.js`,
+`ride-dispute.routes.js`) is a lightweight complaint-ticket system for a rider or
+driver to flag a specific ride ("overcharged", "driver never showed", etc.). It has no
+processor involvement, no webhook, and no ledger/money side effects of its own.
+
+```mermaid
+sequenceDiagram
+    actor Raiser as Rider or Driver (raiser)
+    actor Other as The other party on the ride
+    actor Admin
+    participant API as Backend
+
+    Raiser->>API: POST /ride-disputes {rideId, reason, description}
+    API->>API: insert ride_disputes row (status=open), snapshot latest payment if any
+    Other->>API: POST /ride-disputes/:id/respond {responseText}
+    API->>API: status=responded
+    Admin->>API: PATCH /ride-disputes/:id {status: resolved|rejected, adminNotes}
+```
+
+Key constraints enforced in `ride-dispute.service.js`: only the ride's rider or driver
+can raise or respond; a raiser can't respond to their own ticket; only one open ticket
+per (ride, raiser) at a time; `GET /ride-disputes/mine` scopes to rides the caller was
+actually on. If an admin agrees a complaint warrants money moving, they act through the
+existing refund-request-approval (§8) or wallet-adjust (§6) endpoints separately — this
+module never touches those itself.
 
 ---
 
@@ -525,12 +597,12 @@ hand.
 | Payouts | No async payout-status webhook reconciliation for either gateway (treated as synchronously final) |
 | Payouts | RazorpayX Contacts/Fund Accounts/Payouts integration unverified against a live account |
 | Ride payments | No Stripe webhook for ride-fare payments (only subscriptions have both gateways' webhooks) |
-| Disputes | Razorpay dispute webhook payload/status shape unverified; status classification is a crude substring match |
-| Disputes | Admin can only triage/notate — no processor-side contest/accept flow |
-| Wallets | No rider or driver self-service top-up/withdrawal endpoint anywhere |
-| Refunds | No rider-initiated refund path — admin-only |
+| Disputes (processor) | Razorpay dispute webhook payload/status shape unverified; status classification is a crude substring match |
+| Disputes (processor) | Admin can only triage/notate — no processor-side contest/accept flow |
+| Wallets | No withdrawal/cash-out endpoint — top-up is self-service now, but getting money *out* of a wallet still only happens via a driver payout (drivers) or an admin adjustment (riders) |
 | Payout onboarding | Stripe Connect onboarding redirect targets are placeholders (no driver app exists yet) |
 | Reconciliation | Mismatches are flagged only, never auto-corrected |
+| Ride disputes (§9a) | No push/email notification wired for raise/respond/resolve — audit-log only, same as refund requests |
 
 
  https://claude.ai/code/artifact/e8cb1773-de02-4c57-93c7-6fc92d3f67c1

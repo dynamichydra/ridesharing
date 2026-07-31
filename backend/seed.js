@@ -1163,9 +1163,34 @@ async function seed() {
       subject: null, bodyHtml: 'RideShare: a document was rejected — {{reason}}',
       isActive: true, createdBy: superAdmin?.id,
     },
+    {
+      eventType: 'WALLET_TOPUP', channel: 'push', audience: null,
+      subject: null, bodyHtml: 'Your wallet has been topped up by {{amount}}.',
+      isActive: true, createdBy: superAdmin?.id,
+    },
+    {
+      eventType: 'REFUND_REQUEST_APPROVED', channel: 'push', audience: 'rider',
+      subject: null, bodyHtml: 'Your refund request for {{amount}} has been approved and processed.',
+      isActive: true, createdBy: superAdmin?.id,
+    },
+    {
+      eventType: 'REFUND_REQUEST_REJECTED', channel: 'push', audience: 'rider',
+      subject: null, bodyHtml: 'Your refund request was not approved: {{reason}}',
+      isActive: true, createdBy: superAdmin?.id,
+    },
+    {
+      eventType: 'RIDE_DISPUTE_RESPONDED', channel: 'push', audience: null,
+      subject: null, bodyHtml: 'There is a new response on your ride dispute.',
+      isActive: true, createdBy: superAdmin?.id,
+    },
+    {
+      eventType: 'RIDE_DISPUTE_RESOLVED', channel: 'push', audience: null,
+      subject: null, bodyHtml: 'Your ride dispute has been {{status}}.',
+      isActive: true, createdBy: superAdmin?.id,
+    },
   ]).onConflictDoNothing();
 
-  log.ok('6 notification templates seeded (PAYMENT_SUCCESS, SUBSCRIPTION_ACTIVATED, DOCUMENT_REJECTED)');
+  log.ok('11 notification templates seeded (PAYMENT_SUCCESS, SUBSCRIPTION_ACTIVATED, DOCUMENT_REJECTED, WALLET_TOPUP, REFUND_REQUEST_APPROVED/REJECTED, RIDE_DISPUTE_RESPONDED/RESOLVED)');
 
   // ── Summary ─────────────────────────────────────────────────────────────────
   console.log(`

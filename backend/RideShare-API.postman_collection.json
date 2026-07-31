@@ -239,6 +239,18 @@
       "key": "ledger_transaction_id",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "wallet_topup_order_id",
+      "value": "",
+      "type": "string",
+      "description": "Gateway order id from Initiate Wallet Top-up — used by Verify Wallet Top-up"
+    },
+    {
+      "key": "ride_dispute_id",
+      "value": "",
+      "type": "string",
+      "description": "A ride-disputes complaint ticket id — distinct from dispute_id (processor chargebacks)"
     }
   ],
   "item": [
@@ -6980,6 +6992,154 @@
       "name": "👛 Wallets",
       "item": [
         {
+          "name": "Get My Wallet (Driver)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{driver_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/wallets/me",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "wallets", "me" ]
+            },
+            "description": "Self-service — auto-creates a zero-balance wallet on first call, same lazy-creation behaviour the driver side has always had."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Wallet (Rider)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{rider_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/wallets/me",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "wallets", "me" ]
+            },
+            "description": "Self-service — riders now get a wallet lazily too (previously only admins could create one via Adjust Rider Wallet)."
+          },
+          "response": []
+        },
+        {
+          "name": "Initiate Wallet Top-up (Driver)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS) {",
+                  "  if (res.MESSAGE.gatewayOrderId) pm.collectionVariables.set('wallet_topup_order_id', res.MESSAGE.gatewayOrderId);",
+                  "  console.log('✅ initiate response:', JSON.stringify(res.MESSAGE));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{driver_token}}" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountMinor\": 50000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/wallets/me/topup/initiate",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "wallets", "me", "topup", "initiate" ]
+            },
+            "description": "Same initiate/verify shape as Ride Payments and Subscriptions — see wallet.service.js initiateWalletTopup. Requires Idempotency-Key. In dev mode (no gateway keys configured for the owner's currency) this credits the wallet directly and returns { wallet, transaction }; otherwise it returns { gateway, gatewayOrderId, ..., paymentAttemptId } and Verify Wallet Top-up below must be called next."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Wallet Top-up (Driver)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{driver_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderRef\": \"{{wallet_topup_order_id}}\",\n  \"paymentRef\": \"pay_dev_test_001\",\n  \"signature\": \"dev_signature\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/wallets/me/topup/verify",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "wallets", "me", "topup", "verify" ]
+            },
+            "description": "Only needed when Initiate above returned a real gateway order — skip this if initiate already credited the wallet directly in dev mode."
+          },
+          "response": []
+        },
+        {
+          "name": "Initiate Wallet Top-up (Rider)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS) {",
+                  "  if (res.MESSAGE.gatewayOrderId) pm.collectionVariables.set('wallet_topup_order_id', res.MESSAGE.gatewayOrderId);",
+                  "  console.log('✅ initiate response:', JSON.stringify(res.MESSAGE));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{rider_token}}" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountMinor\": 50000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/wallets/me/topup/initiate",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "wallets", "me", "topup", "initiate" ]
+            },
+            "description": "Requires Idempotency-Key. In dev mode this credits the wallet directly and returns { wallet, transaction }; otherwise returns a gateway order and Verify Wallet Top-up below must be called next."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Wallet Top-up (Rider)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{rider_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderRef\": \"{{wallet_topup_order_id}}\",\n  \"paymentRef\": \"pay_dev_test_001\",\n  \"signature\": \"dev_signature\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/wallets/me/topup/verify",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "wallets", "me", "topup", "verify" ]
+            },
+            "description": "Only needed when Initiate above returned a real gateway order — skip this if initiate already credited the wallet directly in dev mode."
+          },
+          "response": []
+        },
+        {
           "name": "List Wallets — Admin",
           "event": [
             {
@@ -7321,6 +7481,98 @@
       "name": "💸 Refunds",
       "item": [
         {
+          "name": "Request Refund (Rider)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.id) {",
+                  "  pm.collectionVariables.set('refund_id', res.MESSAGE.id);",
+                  "  console.log('✅ refund_id saved (requested):', res.MESSAGE.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{rider_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rideId\": \"{{ride_id}}\",\n  \"reason\": \"Ride was cancelled but I was still charged\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/refunds/request",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "refunds", "request" ]
+            },
+            "description": "Self-service — for the rider's own ride's latest payment, full remaining refundable amount only (no partial-amount input, unlike Initiate Refund — Admin below). Creates a 'requested' row; no gateway call happens until an admin approves it via Approve Refund Request below."
+          },
+          "response": []
+        },
+        {
+          "name": "My Refunds (Rider)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{rider_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/refunds/mine?page=1&limit=20",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "refunds", "mine" ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Approve Refund Request — Admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/refunds/{{refund_id}}/approve",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "refunds", "{{refund_id}}", "approve" ]
+            },
+            "description": "Re-validates the requested amount against the current already-refunded total, then runs the same gateway-call + ledger-reversal logic as Initiate Refund — Admin below."
+          },
+          "response": []
+        },
+        {
+          "name": "Reject Refund Request — Admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rejectionReason\": \"Fare was correct — ride completed as booked.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/refunds/{{refund_id}}/reject",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "refunds", "{{refund_id}}", "reject" ]
+            },
+            "description": "Terminal decision — never touches the gateway."
+          },
+          "response": []
+        },
+        {
           "name": "Initiate Refund — Admin",
           "event": [
             {
@@ -7396,7 +7648,7 @@
                 { "key": "page", "value": "1" },
                 { "key": "limit", "value": "20" },
                 { "key": "paymentId", "value": "", "disabled": true },
-                { "key": "status", "value": "", "disabled": true, "description": "pending|completed|failed" }
+                { "key": "status", "value": "", "disabled": true, "description": "requested|pending|completed|failed|rejected" }
               ]
             }
           },
@@ -7673,6 +7925,184 @@
       ]
     },
     {
+      "name": "🗣️ Ride Disputes (rider/driver complaint tickets)",
+      "item": [
+        {
+          "name": "Raise Ride Dispute (Rider)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.id) {",
+                  "  pm.collectionVariables.set('ride_dispute_id', res.MESSAGE.id);",
+                  "  console.log('✅ ride_dispute_id saved:', res.MESSAGE.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{rider_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rideId\": \"{{ride_id}}\",\n  \"reason\": \"overcharged\",\n  \"description\": \"The final fare was higher than the estimate shown before the ride started.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-disputes",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "ride-disputes" ]
+            },
+            "description": "Not the processor chargeback ⚖️ Disputes module above — this is a lightweight rider/driver complaint ticket against a specific ride, with no ledger/money side effects of its own (see drizzle/schema/ride-disputes.js). Only the ride's rider or driver can raise one, and only one open ticket per (ride, raiser) at a time."
+          },
+          "response": []
+        },
+        {
+          "name": "Raise Ride Dispute (Driver)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{driver_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rideId\": \"{{ride_id}}\",\n  \"reason\": \"no_show\",\n  \"description\": \"Rider was not at the pickup location and did not respond to calls.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-disputes",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "ride-disputes" ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "My Ride Disputes (Rider)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{rider_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-disputes/mine?page=1&limit=20",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "ride-disputes", "mine" ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "My Ride Disputes (Driver)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{driver_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-disputes/mine?page=1&limit=20",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "ride-disputes", "mine" ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Respond to Ride Dispute (the other party)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{driver_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"responseText\": \"The final fare matched the route actually driven, including a toll not shown in the estimate.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-disputes/{{ride_dispute_id}}/respond",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "ride-disputes", "{{ride_dispute_id}}", "respond" ]
+            },
+            "description": "Only the ride's *other* party (not the raiser) can respond, and only once, while status is 'open'. Swap the Authorization header to {{rider_token}} if a driver raised the ticket instead."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Ride Dispute",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{rider_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-disputes/{{ride_dispute_id}}",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "ride-disputes", "{{ride_dispute_id}}" ]
+            },
+            "description": "Either ride participant (rider/driver), or an admin."
+          },
+          "response": []
+        },
+        {
+          "name": "List Ride Disputes — Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-disputes?page=1&limit=20&status=&rideId=",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "ride-disputes" ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "status", "value": "", "disabled": true, "description": "open|responded|resolved|rejected" },
+                { "key": "rideId", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Resolve Ride Dispute — Admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"resolved\",\n  \"adminNotes\": \"Verified against ride GPS trace — fare was correct, explained to rider.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/ride-disputes/{{ride_dispute_id}}",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "ride-disputes", "{{ride_dispute_id}}" ]
+            },
+            "description": "status must be 'resolved' or 'rejected'. This never touches the ledger/refund/wallet machinery itself — if money should move, do that separately through Request Refund / Approve Refund Request or Adjust Wallet."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "🏦 Payout Accounts",
       "item": [
         {
@@ -7887,6 +8317,59 @@
     {
       "name": "💵 Payouts",
       "item": [
+        {
+          "name": "Instant Payout (Driver self-service)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.SUCCESS && res.MESSAGE.payoutId) {",
+                  "  pm.collectionVariables.set('payout_id', res.MESSAGE.payoutId);",
+                  "  console.log('✅ payout result:', JSON.stringify(res.MESSAGE));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{driver_token}}" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/payouts/me/instant",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "payouts", "me", "instant" ]
+            },
+            "description": "Driver triggers a payout of their own wallet balance — same eligibility rules as Instant Payout — Admin below (approved payout account, positive balance, gateway supports payouts). Requires Idempotency-Key."
+          },
+          "response": []
+        },
+        {
+          "name": "My Payouts (Driver)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{driver_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/payouts/mine?page=1&limit=20&status=",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "{{api_version}}", "payouts", "mine" ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "status", "value": "", "disabled": true, "description": "pending|processing|completed|failed" }
+              ]
+            }
+          },
+          "response": []
+        },
         {
           "name": "Instant Payout — Admin",
           "event": [

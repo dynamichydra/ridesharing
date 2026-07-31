@@ -21,6 +21,31 @@ export const NOTIFICATION_EVENTS = {
     variables: ['reason'],
     channels: ['push', 'sms'],
   },
+  WALLET_TOPUP: {
+    label: 'Wallet topped up',
+    variables: ['amount'],
+    channels: ['push'],
+  },
+  REFUND_REQUEST_APPROVED: {
+    label: 'Refund request approved',
+    variables: ['amount'],
+    channels: ['push'],
+  },
+  REFUND_REQUEST_REJECTED: {
+    label: 'Refund request rejected',
+    variables: ['reason'],
+    channels: ['push'],
+  },
+  RIDE_DISPUTE_RESPONDED: {
+    label: 'Ride dispute received a response',
+    variables: ['rideId'],
+    channels: ['push'],
+  },
+  RIDE_DISPUTE_RESOLVED: {
+    label: 'Ride dispute resolved',
+    variables: ['status'],
+    channels: ['push'],
+  },
 };
 
 const CHANNEL_TOPICS = {

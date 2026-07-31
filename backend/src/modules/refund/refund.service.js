@@ -1,4 +1,4 @@
-import { eq, and, desc, count, sql } from 'drizzle-orm';
+import { eq, and, desc, count, sql, inArray } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import {
   payments, refunds, subscriptions, riderSubscriptions, rides, drivers,
@@ -9,6 +9,8 @@ import { withIdempotency } from '../../utils/idempotency.js';
 import { getGateway } from '../payment/payment.service.js';
 import { postTransaction, getOrCreateSystemAccount, getOrCreateWalletAccount } from '../ledger/ledger.service.js';
 import { getOrCreateWallet } from '../wallet/wallet.service.js';
+import { publishNotification } from '../notification/notification-events.js';
+import { formatMoney } from '../../utils/money.js';
 
 /**
  * Pure validation — extracted so it's unit-testable without a DB. `alreadyRefundedMinor` is
@@ -38,45 +40,173 @@ export function validateRefundAmount(payment, alreadyRefundedMinor, requestedAmo
 export async function initiateRefund({ paymentId, amountMinor, reason, initiatedById, idempotencyKey }) {
   return withIdempotency('refund_initiate', idempotencyKey, initiatedById, async () => {
     const { payment, refundRow, alreadyRefunded } = await _reserveRefund(paymentId, amountMinor, reason, initiatedById);
-
-    let gatewayRefundId = null;
-    try {
-      if (payment.gateway !== 'cash' && payment.gateway !== 'none') {
-        const gateway = getGateway(payment.gateway);
-        const result = await gateway.refund({
-          gatewayPaymentId: payment.gatewayPaymentId,
-          amountMinor,
-          currencyCode: payment.currencyCode,
-          idempotencyKey: `${idempotencyKey}:${refundRow.id}`,
-        });
-        gatewayRefundId = result.gatewayRefundId;
-      }
-    } catch (err) {
-      await db.update(refunds).set({ status: 'failed', updatedAt: new Date() }).where(eq(refunds.id, refundRow.id));
-      throw err;
-    }
-
-    await db.update(refunds)
-      .set({ status: 'completed', gatewayRefundId, updatedAt: new Date() })
-      .where(eq(refunds.id, refundRow.id));
-
-    await _postRefundLedger(payment, amountMinor, refundRow.id);
-
-    const fullyRefunded = alreadyRefunded + amountMinor >= payment.amountMinor;
-    if (fullyRefunded) {
-      await db.update(payments).set({ status: 'refunded', updatedAt: new Date() }).where(eq(payments.id, paymentId));
-      await _cancelLinkedSubscriptionOrRide(payment);
-    }
-
-    await publishEvent(TOPICS.AUDIT_LOG, {
-      actorId: initiatedById, actorType: 'admin', action: 'PAYMENT_REFUNDED',
-      entityType: 'payment', entityId: paymentId,
-      meta: { refundId: refundRow.id, amountMinor, fullyRefunded },
+    return _executeRefund(payment, refundRow, amountMinor, alreadyRefunded, `${idempotencyKey}:${refundRow.id}`, {
+      id: initiatedById, type: 'admin',
     });
-
-    const [updatedRefund] = await db.select().from(refunds).where(eq(refunds.id, refundRow.id)).limit(1);
-    return { refund: updatedRefund, fullyRefunded };
   });
+}
+
+// ── Rider self-service — request only, no gateway call until an admin approves ──────
+
+// A rider can only ever have their own ride's *latest* payment refunded, for whatever
+// remains after prior completed refunds — there's no partial-amount input here (unlike the
+// admin path), to keep the self-service surface simple: full remaining amount, admin reviews.
+export async function requestRefund(riderId, { rideId, reason }) {
+  if (!rideId) throw { statusCode: 400, message: 'rideId is required' };
+  if (!reason) throw { statusCode: 400, message: 'reason is required' };
+
+  const [ride] = await db.select().from(rides).where(and(eq(rides.id, rideId), eq(rides.riderId, riderId))).limit(1);
+  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+
+  const [payment] = await db.select().from(payments)
+    .where(eq(payments.rideId, rideId)).orderBy(desc(payments.createdAt)).limit(1);
+  if (!payment) throw { statusCode: 404, message: 'No payment found for this ride' };
+  if (payment.status !== 'captured') {
+    throw { statusCode: 422, message: `Cannot request a refund for a payment with status '${payment.status}'` };
+  }
+
+  const [{ alreadyRefunded }] = await db.select({
+    alreadyRefunded: sql`COALESCE(SUM(${refunds.amountMinor}), 0)`.mapWith(Number),
+  }).from(refunds).where(and(eq(refunds.paymentId, payment.id), eq(refunds.status, 'completed')));
+
+  const remaining = payment.amountMinor - alreadyRefunded;
+  if (remaining <= 0) throw { statusCode: 422, message: 'This payment has already been fully refunded' };
+
+  const [openRequest] = await db.select().from(refunds)
+    .where(and(eq(refunds.paymentId, payment.id), inArray(refunds.status, ['requested', 'pending']))).limit(1);
+  if (openRequest) throw { statusCode: 409, message: 'A refund request for this payment is already awaiting review' };
+
+  const [refundRow] = await db.insert(refunds).values({
+    paymentId: payment.id, amountMinor: remaining, currencyCode: payment.currencyCode, reason,
+    status: 'requested', initiatedByType: 'rider', initiatedById: riderId,
+  }).returning();
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: riderId, actorType: 'rider', action: 'REFUND_REQUESTED',
+    entityType: 'refund', entityId: refundRow.id,
+    meta: { rideId, paymentId: payment.id, amountMinor: remaining },
+  });
+
+  return refundRow;
+}
+
+export async function getMyRefunds(riderId, page, limit, offset) {
+  const where = eq(rides.riderId, riderId);
+  const [{ total }] = await db.select({ total: count() }).from(refunds)
+    .innerJoin(payments, eq(refunds.paymentId, payments.id))
+    .innerJoin(rides, eq(payments.rideId, rides.id))
+    .where(where);
+  const rows = await db.select({ refund: refunds, rideId: rides.id })
+    .from(refunds)
+    .innerJoin(payments, eq(refunds.paymentId, payments.id))
+    .innerJoin(rides, eq(payments.rideId, rides.id))
+    .where(where)
+    .orderBy(desc(refunds.createdAt)).limit(limit).offset(offset);
+  return { rows, pagination: paginate(page, limit, total) };
+}
+
+// Re-validates against the *current* already-refunded total (not the snapshot taken when the
+// request was created — time may have passed and other refunds may have landed since) before
+// promoting 'requested' -> 'pending' and actually calling the gateway.
+export async function approveRefundRequest(refundId, adminId) {
+  const { payment, refundRow, alreadyRefunded } = await db.transaction(async (tx) => {
+    const [existing] = await tx.select().from(refunds).where(eq(refunds.id, refundId)).for('update').limit(1);
+    if (!existing) throw { statusCode: 404, message: 'Refund request not found' };
+    if (existing.status !== 'requested') throw { statusCode: 409, message: `Refund request is already '${existing.status}'` };
+
+    const [payment] = await tx.select().from(payments).where(eq(payments.id, existing.paymentId)).for('update').limit(1);
+    if (!payment) throw { statusCode: 404, message: 'Payment not found' };
+
+    const [{ alreadyRefunded }] = await tx.select({
+      alreadyRefunded: sql`COALESCE(SUM(${refunds.amountMinor}), 0)`.mapWith(Number),
+    }).from(refunds).where(and(eq(refunds.paymentId, payment.id), eq(refunds.status, 'completed')));
+
+    const check = validateRefundAmount(payment, alreadyRefunded, existing.amountMinor);
+    if (!check.valid) throw { statusCode: 422, message: check.message };
+
+    const [updated] = await tx.update(refunds)
+      .set({ status: 'pending', reviewedById: adminId, reviewedAt: new Date(), updatedAt: new Date() })
+      .where(eq(refunds.id, refundId)).returning();
+
+    return { payment, refundRow: updated, alreadyRefunded };
+  });
+
+  const result = await _executeRefund(payment, refundRow, refundRow.amountMinor, alreadyRefunded, `refund_request:${refundRow.id}`, {
+    id: adminId, type: 'admin',
+  });
+
+  await publishNotification('REFUND_REQUEST_APPROVED', {
+    userId: refundRow.initiatedById, userType: 'rider',
+    variables: { amount: formatMoney(refundRow.amountMinor, refundRow.currencyCode) },
+  });
+
+  return result;
+}
+
+export async function rejectRefundRequest(refundId, adminId, rejectionReason) {
+  if (!rejectionReason) throw { statusCode: 400, message: 'rejectionReason is required' };
+
+  const [refundRow] = await db.update(refunds)
+    .set({ status: 'rejected', rejectionReason, reviewedById: adminId, reviewedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(refunds.id, refundId), eq(refunds.status, 'requested')))
+    .returning();
+  if (!refundRow) throw { statusCode: 409, message: 'Refund request is not in a reviewable state' };
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin', action: 'REFUND_REQUEST_REJECTED',
+    entityType: 'refund', entityId: refundRow.id,
+    meta: { rejectionReason },
+  });
+  await publishNotification('REFUND_REQUEST_REJECTED', {
+    userId: refundRow.initiatedById, userType: 'rider',
+    variables: { reason: rejectionReason },
+  });
+
+  return refundRow;
+}
+
+// Shared by the admin-instant path (initiateRefund) and the rider-request approval path
+// (approveRefundRequest) — the gateway call + ledger reversal + cascade + audit log are
+// identical either way, only who authorized it and which idempotency key namespaces the
+// gateway call differ.
+async function _executeRefund(payment, refundRow, amountMinor, alreadyRefunded, gatewayIdempotencyKey, actor) {
+  let gatewayRefundId = null;
+  try {
+    if (payment.gateway !== 'cash' && payment.gateway !== 'none') {
+      const gateway = getGateway(payment.gateway);
+      const result = await gateway.refund({
+        gatewayPaymentId: payment.gatewayPaymentId,
+        amountMinor,
+        currencyCode: payment.currencyCode,
+        idempotencyKey: gatewayIdempotencyKey,
+      });
+      gatewayRefundId = result.gatewayRefundId;
+    }
+  } catch (err) {
+    await db.update(refunds).set({ status: 'failed', updatedAt: new Date() }).where(eq(refunds.id, refundRow.id));
+    throw err;
+  }
+
+  await db.update(refunds)
+    .set({ status: 'completed', gatewayRefundId, updatedAt: new Date() })
+    .where(eq(refunds.id, refundRow.id));
+
+  await _postRefundLedger(payment, amountMinor, refundRow.id);
+
+  const fullyRefunded = alreadyRefunded + amountMinor >= payment.amountMinor;
+  if (fullyRefunded) {
+    await db.update(payments).set({ status: 'refunded', updatedAt: new Date() }).where(eq(payments.id, payment.id));
+    await _cancelLinkedSubscriptionOrRide(payment);
+  }
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: actor.id, actorType: actor.type, action: 'PAYMENT_REFUNDED',
+    entityType: 'payment', entityId: payment.id,
+    meta: { refundId: refundRow.id, amountMinor, fullyRefunded },
+  });
+
+  const [updatedRefund] = await db.select().from(refunds).where(eq(refunds.id, refundRow.id)).limit(1);
+  return { refund: updatedRefund, fullyRefunded };
 }
 
 // Locks the payment row for the validate+insert step only — the gateway call (a real network

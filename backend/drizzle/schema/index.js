@@ -37,6 +37,7 @@ export * from './webhook-events.js';
 export * from './reconciliation-runs.js';
 export * from './reconciliation-mismatches.js';
 export * from './disputes.js';
+export * from './ride-disputes.js';
 export * from './driver-payout-accounts.js';
 export * from './driver-bank-accounts.js';
 export * from './rider-bank-accounts.js';
