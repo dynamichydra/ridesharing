@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../style/appcolors.dart';
 import '../../../../core/localization/app_localizations.dart';
+import '../../../../services/location_service.dart';
 
 class _CountryCode {
   final String name;
@@ -43,7 +44,9 @@ class PhoneAuthScreen extends StatefulWidget {
 class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   late final TextEditingController _phoneController;
   bool _isValid = true;
-  _CountryCode _selectedCountry = _countries[0];
+  _CountryCode? _selectedCountry;
+  bool _isCheckingLocation = true;
+  String? _locationError;
 
   @override
   void initState() {
@@ -57,12 +60,69 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       }
     }
     _phoneController = TextEditingController(text: p);
+    _detectLocationCountry();
+  }
+
+  Future<void> _detectLocationCountry() async {
+    setState(() {
+      _isCheckingLocation = true;
+      _locationError = null;
+    });
+
+    try {
+      final locService = LocationService();
+      final position = await locService.getCurrentPosition();
+      
+      _CountryCode? detectedCountry;
+      // Canada bounding box: lat 41 to 83, lng -141 to -52
+      if (position.latitude >= 41.0 && position.latitude <= 83.0 &&
+          position.longitude >= -141.0 && position.longitude <= -52.0) {
+        detectedCountry = _countries[1]; // Canada (+1)
+      } 
+      // India bounding box: lat 6 to 37, lng 68 to 97
+      else if (position.latitude >= 6.0 && position.latitude <= 37.0 &&
+                 position.longitude >= 68.0 && position.longitude <= 97.0) {
+        detectedCountry = _countries[0]; // India (+91)
+      }
+
+      if (mounted) {
+        setState(() {
+          _isCheckingLocation = false;
+          if (detectedCountry != null) {
+            _selectedCountry = detectedCountry;
+            _locationError = null;
+          } else {
+            _selectedCountry = null;
+            _locationError = 'Service is not available in your location (Only India and Canada are supported).';
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isCheckingLocation = false;
+          // If we could not fetch position or permission denied
+          if (_selectedCountry == null) {
+            _locationError = 'Location access is required to determine service availability.';
+          }
+        });
+      }
+    }
   }
 
   void _submit() {
+    if (_selectedCountry == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_locationError ?? 'Service is not available in your location.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     final phone = _phoneController.text.trim();
     if (phone.length == 10 && RegExp(r'^[0-9]+$').hasMatch(phone)) {
-      widget.onPhoneSubmitted('${_selectedCountry.dialCode}$phone');
+      widget.onPhoneSubmitted('${_selectedCountry!.dialCode}$phone');
     } else {
       setState(() {
         _isValid = false;
@@ -151,49 +211,92 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (_isCheckingLocation) ...[
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(width: 12),
+                          Text(
+                            'Detecting location...',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else if (_locationError != null && _selectedCountry == null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _locationError!,
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.refresh, color: Colors.red, size: 20),
+                            onPressed: _detectLocationCountry,
+                            tooltip: 'Retry location detection',
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Read-only Country Prefix Pill based on live location
                       Container(
-                        height: 52, // Matches content layout
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        height: 52,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
+                          color: Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: _isValid
-                                ? Colors.grey.shade200
+                                ? Colors.grey.shade300
                                 : Colors.redAccent,
                           ),
                         ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<_CountryCode>(
-                            value: _selectedCountry,
-                            icon: const Icon(
-                              Icons.arrow_drop_down,
-                              color: AppColors.textSecondary,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _selectedCountry != null
+                                  ? '${_selectedCountry!.flag} ${_selectedCountry!.code} (${_selectedCountry!.dialCode})'
+                                  : '🚫 N/A',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: _selectedCountry != null
+                                    ? AppColors.textPrimary
+                                    : Colors.red.shade700,
+                              ),
                             ),
-                            onChanged: (newValue) {
-                              if (newValue != null) {
-                                setState(() {
-                                  _selectedCountry = newValue;
-                                });
-                              }
-                            },
-                            items: _countries.map((c) {
-                              return DropdownMenuItem<_CountryCode>(
-                                value: c,
-                                child: Text(
-                                  '${c.flag} ${c.code} (${c.dialCode})',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 12),

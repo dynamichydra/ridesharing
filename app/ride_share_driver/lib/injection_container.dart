@@ -24,6 +24,11 @@ import 'presentation/bloc/onboarding/onboarding_bloc.dart';
 import 'features/dashboard/presentation/bloc/driver_status_bloc.dart';
 import 'features/subscription/presentation/bloc/subscription_bloc.dart';
 import 'features/ride/presentation/bloc/ride_bloc.dart';
+import 'features/profile/data/datasources/profile_remote_datasource.dart';
+import 'features/profile/presentation/bloc/profile_bloc.dart';
+import 'features/wallet/data/datasources/wallet_remote_datasource.dart';
+import 'features/wallet/presentation/bloc/wallet_bloc.dart';
+import 'features/ride_history/data/datasources/ride_history_datasource.dart';
 
 final sl = GetIt.instance;
 
@@ -52,6 +57,12 @@ Future<void> init() async {
   // not be recreated with every RideBloc instance.
   sl.registerLazySingleton<RideSocketDataSource>(
       () => RideSocketDataSource(secureStorage: sl()));
+  sl.registerLazySingleton<ProfileRemoteDataSource>(
+      () => ProfileRemoteDataSource(apiClient: sl()));
+  sl.registerLazySingleton<WalletRemoteDataSource>(
+      () => WalletRemoteDataSource(apiClient: sl()));
+  sl.registerLazySingleton<RideHistoryDataSource>(
+      () => RideHistoryDataSource(apiClient: sl()));
 
   // ── Repositories ──────────────────────────────────────────────────────────
   sl.registerLazySingleton<AuthRepository>(
@@ -71,4 +82,6 @@ Future<void> init() async {
   sl.registerFactory(() => DriverStatusBloc(driverStatusRepository: sl(), locationService: sl()));
   sl.registerFactory(() => SubscriptionBloc(subscriptionRepository: sl()));
   sl.registerFactory(() => RideBloc(rideRepository: sl(), locationService: sl()));
+  sl.registerFactory(() => ProfileBloc(dataSource: sl()));
+  sl.registerFactory(() => WalletBloc(dataSource: sl()));
 }

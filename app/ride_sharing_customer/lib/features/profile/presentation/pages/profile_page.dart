@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../../../../core/widgets/error_view.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../bloc/profile_bloc.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -122,30 +123,30 @@ class _ProfilePageState extends State<ProfilePage> {
                     title: 'Payment Methods',
                     onTap: () => context.push('/payment-methods'),
                   ),
-                  _buildProfileMenuItem(
-                    icon: Icons.location_on_outlined,
-                    title: 'My Addresses',
-                    onTap: () => context.push('/saved-places'),
-                  ),
-                  _buildProfileMenuItem(
-                    icon: Icons.card_giftcard_rounded,
-                    title: 'Refer & Earn',
-                    badgeText: 'Get ₹100',
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Refer & Earn flow triggered')),
-                      );
-                    },
-                  ),
-                  _buildProfileMenuItem(
-                    icon: Icons.directions_car_outlined,
-                    title: 'Ride Preferences',
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Ride preferences opened')),
-                      );
-                    },
-                  ),
+                  // _buildProfileMenuItem(
+                  //   icon: Icons.location_on_outlined,
+                  //   title: 'My Addresses',
+                  //   onTap: () => context.push('/saved-places'),
+                  // ),
+                  // _buildProfileMenuItem(
+                  //   icon: Icons.card_giftcard_rounded,
+                  //   title: 'Refer & Earn',
+                  //   badgeText: 'Get ₹100',
+                  //   onTap: () {
+                  //     ScaffoldMessenger.of(context).showSnackBar(
+                  //       const SnackBar(content: Text('Refer & Earn flow triggered')),
+                  //     );
+                  //   },
+                  // ),
+                  // _buildProfileMenuItem(
+                  //   icon: Icons.directions_car_outlined,
+                  //   title: 'Ride Preferences',
+                  //   onTap: () {
+                  //     ScaffoldMessenger.of(context).showSnackBar(
+                  //       const SnackBar(content: Text('Ride preferences opened')),
+                  //     );
+                  //   },
+                  // ),
                   _buildProfileMenuItem(
                     icon: Icons.help_outline_rounded,
                     title: 'Help & Support',
@@ -163,10 +164,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     title: 'Logout',
                     titleColor: const Color(0xFFE53935),
                     onTap: () {
-                      // Perform logout
+                      context.read<AuthBloc>().add(LoggedOut());
                       context.go('/login');
                     },
                     showDivider: false,
+                    showRightArrow: false,
                   ),
                 ],
               ),
@@ -186,6 +188,7 @@ class _ProfilePageState extends State<ProfilePage> {
     String? badgeText,
     Color titleColor = const Color(0xFF021B47),
     bool showDivider = true,
+    bool showRightArrow = true,
   }) {
     return Column(
       children: [
@@ -221,7 +224,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const SizedBox(width: 8),
               ],
-              const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+              if(showRightArrow)
+               const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
             ],
           ),
           onTap: onTap,

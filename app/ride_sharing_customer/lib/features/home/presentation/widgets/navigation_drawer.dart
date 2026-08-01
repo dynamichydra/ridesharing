@@ -50,19 +50,19 @@ class AppNavigationDrawer extends StatelessWidget {
                   title: 'Wallet',
                   route: '/wallet',
                 ),
-                _buildDrawerItem(
-                  context,
-                  icon: Icons.location_on_outlined,
-                  title: 'My Addresses',
-                  route: '/saved-places',
-                ),
-                _buildDrawerItem(
-                  context,
-                  icon: Icons.card_giftcard_rounded,
-                  title: 'Refer & Earn',
-                  route: '/profile', // Fallback route
-                  badgeText: 'Get ₹100',
-                ),
+                // _buildDrawerItem(
+                //   context,
+                //   icon: Icons.location_on_outlined,
+                //   title: 'My Addresses',
+                //   route: '/saved-places',
+                // ),
+                // _buildDrawerItem(
+                //   context,
+                //   icon: Icons.card_giftcard_rounded,
+                //   title: 'Refer & Earn',
+                //   route: '/profile', // Fallback route
+                //   badgeText: 'Get ₹100',
+                // ),
                 _buildDrawerItem(
                   context,
                   icon: Icons.help_outline_rounded,
@@ -93,7 +93,8 @@ class AppNavigationDrawer extends StatelessWidget {
                       color: Color(0xFFE53935),
                     ),
                   ),
-                  onTap: () {
+                  onTap: () async {
+                    Navigator.of(context).pop(); // Dismiss drawer
                     context.read<AuthBloc>().add(LoggedOut());
                     context.go('/login');
                   },

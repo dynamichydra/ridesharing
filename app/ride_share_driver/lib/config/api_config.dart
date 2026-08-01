@@ -21,7 +21,7 @@ class ApiConfig {
   /// host/port logic.
   static String get socketBaseUrl {
     final uri = Uri.parse(baseUrl);
-    return uri.replace(path: '', query: '').toString();
+    return uri.origin;
   }
 
   static const Duration connectTimeout = Duration(seconds: 10);

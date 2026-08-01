@@ -9,7 +9,7 @@ import '../../../wallet/presentation/bloc/wallet_bloc.dart';
 import '../../../profile/presentation/bloc/profile_bloc.dart';
 import '../../../../injection_container.dart';
 import '../../../../core/network/dio_client.dart';
-
+import '../../../../core/utils/location_helper.dart';
 
 class RideTrackingPage extends StatefulWidget {
   const RideTrackingPage({super.key});
@@ -44,17 +44,26 @@ class _RideTrackingPageState extends State<RideTrackingPage> {
           }
         },
         builder: (context, state) {
-          if (state is RideTrackingLoading) {
+          if (state is RideTrackingLoading || state is RideTrackingSearching) {
             return const LoadingView();
           }
 
           if (state is RideTrackingActive) {
-            final double etaMin = ((state.routePoints.length - state.stepIndex) * 0.4).clamp(1.0, 15.0);
-            final String etaText = etaMin.toStringAsFixed(0);
-
             // Determine state flags
             final bool isDriverArriving = state.trackingState == 'driverArriving';
             final bool isRideCompleted = state.trackingState == 'rideCompleted';
+
+            final targetLocation = isDriverArriving ? state.pickup : state.destination;
+            final distanceKm = LocationHelper.calculateDistance(
+              state.driverPosition.latitude,
+              state.driverPosition.longitude,
+              targetLocation.latitude,
+              targetLocation.longitude,
+            );
+            
+            // Assume 3 mins per km for urban driving
+            final double etaMin = (distanceKm * 3.0).clamp(1.0, 60.0);
+            final String etaText = etaMin.toStringAsFixed(0);
 
             return Stack(
               children: [
@@ -183,7 +192,12 @@ class _RideTrackingPageState extends State<RideTrackingPage> {
                               CircleAvatar(
                                 radius: 24,
                                 backgroundColor: const Color(0xFFF1F5F9),
-                                backgroundImage: NetworkImage(state.driverAvatar),
+                                backgroundImage: (state.driverAvatar.isNotEmpty)
+                                    ? NetworkImage(state.driverAvatar)
+                                    : null,
+                                child: state.driverAvatar.isEmpty
+                                    ? const Icon(Icons.person, color: Color(0xFF535E79))
+                                    : null,
                               ),
                               const SizedBox(width: 12),
                               Expanded(

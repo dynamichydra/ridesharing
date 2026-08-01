@@ -34,7 +34,9 @@ class _RideHistoryPageState extends State<RideHistoryPage>
   @override
   Widget build(BuildContext context) {
     final isCancelledTab = _tabController.index == 2;
-    final activeColor = isCancelledTab ? const Color(0xFFE53935) : const Color(0xFF009048);
+    final activeColor = isCancelledTab
+        ? const Color(0xFFE53935)
+        : const Color(0xFF009048);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -43,8 +45,12 @@ class _RideHistoryPageState extends State<RideHistoryPage>
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Color(0xFF0A2540)),
-          onPressed: () => context.go('/home'),
+          icon: const Icon(
+            Icons.menu_rounded,
+            color: Color(0xFF0A2540),
+            size: 24,
+          ),
+          onPressed: () => Scaffold.of(context).openDrawer(),
         ),
         title: const Text(
           'My Rides',
@@ -64,15 +70,23 @@ class _RideHistoryPageState extends State<RideHistoryPage>
             indicatorWeight: 3,
             indicatorSize: TabBarIndicatorSize.tab,
             indicatorPadding: const EdgeInsets.symmetric(horizontal: 16),
-            labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
+            labelStyle: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+            ),
+            unselectedLabelStyle: const TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 15,
+            ),
             unselectedLabelColor: const Color(0xFF64748B),
             tabs: [
               Tab(
                 child: Text(
                   'Upcoming',
                   style: TextStyle(
-                    color: _tabController.index == 0 ? const Color(0xFF009048) : const Color(0xFF64748B),
+                    color: _tabController.index == 0
+                        ? const Color(0xFF009048)
+                        : const Color(0xFF64748B),
                   ),
                 ),
               ),
@@ -80,7 +94,9 @@ class _RideHistoryPageState extends State<RideHistoryPage>
                 child: Text(
                   'Completed',
                   style: TextStyle(
-                    color: _tabController.index == 1 ? const Color(0xFF009048) : const Color(0xFF64748B),
+                    color: _tabController.index == 1
+                        ? const Color(0xFF009048)
+                        : const Color(0xFF64748B),
                   ),
                 ),
               ),
@@ -88,7 +104,9 @@ class _RideHistoryPageState extends State<RideHistoryPage>
                 child: Text(
                   'Cancelled',
                   style: TextStyle(
-                    color: _tabController.index == 2 ? const Color(0xFFE53935) : const Color(0xFF64748B),
+                    color: _tabController.index == 2
+                        ? const Color(0xFFE53935)
+                        : const Color(0xFF64748B),
                   ),
                 ),
               ),
@@ -173,29 +191,44 @@ class _RideHistoryPageState extends State<RideHistoryPage>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline_rounded, size: 48, color: Color(0xFFE53935)),
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      size: 48,
+                      color: Color(0xFFE53935),
+                    ),
                     const SizedBox(height: 16),
                     const Text(
                       'Failed to load history',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0A2540)),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: Color(0xFF0A2540),
+                      ),
                     ),
 
                     const SizedBox(height: 8),
                     Text(
                       state.message,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF64748B),
+                      ),
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(
-                      onPressed: () => context.read<ProfileBloc>().add(LoadRideHistoryEvent()),
+                      onPressed: () => context.read<ProfileBloc>().add(
+                        LoadRideHistoryEvent(),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF009048),
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                       child: const Text('Retry'),
-                    )
+                    ),
                   ],
                 ),
               ),
@@ -245,10 +278,7 @@ class _RideHistoryPageState extends State<RideHistoryPage>
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF64748B),
-              ),
+              style: const TextStyle(fontSize: 14, color: Color(0xFF64748B)),
             ),
             if (showBookButton) ...[
               const SizedBox(height: 28),
@@ -257,7 +287,10 @@ class _RideHistoryPageState extends State<RideHistoryPage>
                 child: OutlinedButton(
                   onPressed: () => context.go('/home'),
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFF009048), width: 1.5),
+                    side: const BorderSide(
+                      color: Color(0xFF009048),
+                      width: 1.5,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -309,17 +342,23 @@ class _RideHistoryPageState extends State<RideHistoryPage>
   Widget _buildRideCard(Map<String, dynamic> ride) {
     final status = (ride['status'] as String? ?? '').toLowerCase();
     final bool isCancelled = status == 'cancelled';
-    final Color statusColor = isCancelled ? const Color(0xFFE53935) : const Color(0xFF009048);
-    final Color badgeBg = isCancelled ? const Color(0xFFFFEBEE) : const Color(0xFFE6F4EA);
+    final Color statusColor = isCancelled
+        ? const Color(0xFFE53935)
+        : const Color(0xFF009048);
+    final Color badgeBg = isCancelled
+        ? const Color(0xFFFFEBEE)
+        : const Color(0xFFE6F4EA);
 
     // Format Fare Minor units to Major currency units
     final int estimatedFareMinor = ride['estimatedFareMinor'] as int? ?? 0;
-    final int actualFareMinor = ride['actualFareMinor'] as int? ?? estimatedFareMinor;
+    final int actualFareMinor =
+        ride['actualFareMinor'] as int? ?? estimatedFareMinor;
     final double fare = actualFareMinor / 100.0;
 
     // Format Timestamp
     String formattedTime = 'Recent Trip';
-    final requestedAtStr = ride['requestedAt'] as String? ?? ride['createdAt'] as String?;
+    final requestedAtStr =
+        ride['requestedAt'] as String? ?? ride['createdAt'] as String?;
     if (requestedAtStr != null) {
       try {
         final parsedDate = DateTime.parse(requestedAtStr).toLocal();
@@ -360,7 +399,9 @@ class _RideHistoryPageState extends State<RideHistoryPage>
                       height: 10,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: isCancelled ? const Color(0xFFE53935) : const Color(0xFF009048),
+                        color: isCancelled
+                            ? const Color(0xFFE53935)
+                            : const Color(0xFF009048),
                       ),
                       child: Center(
                         child: Container(
@@ -438,10 +479,7 @@ class _RideHistoryPageState extends State<RideHistoryPage>
                   const SizedBox(height: 4),
                   const Text(
                     'Cash',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF94A3B8),
-                    ),
+                    style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
                   ),
                 ],
               ),
@@ -454,7 +492,11 @@ class _RideHistoryPageState extends State<RideHistoryPage>
             children: [
               Row(
                 children: [
-                  const Icon(Icons.calendar_today_outlined, size: 14, color: Color(0xFF64748B)),
+                  const Icon(
+                    Icons.calendar_today_outlined,
+                    size: 14,
+                    color: Color(0xFF64748B),
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     formattedTime,
@@ -466,7 +508,11 @@ class _RideHistoryPageState extends State<RideHistoryPage>
                   const SizedBox(width: 8),
                   const Text('|', style: TextStyle(color: Color(0xFFCBD5E1))),
                   const SizedBox(width: 8),
-                  const Icon(Icons.directions_car_rounded, size: 14, color: Color(0xFF64748B)),
+                  const Icon(
+                    Icons.directions_car_rounded,
+                    size: 14,
+                    color: Color(0xFF64748B),
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     vehicle,
@@ -478,7 +524,10 @@ class _RideHistoryPageState extends State<RideHistoryPage>
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: badgeBg,
                   borderRadius: BorderRadius.circular(8),

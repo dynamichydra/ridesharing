@@ -30,7 +30,12 @@ class RideSocketDataSource {
   Stream<RideAcceptResult> get onAcceptResult => _acceptResultController.stream;
 
   Future<void> connect() async {
-    if (_socket != null) return; // already connected/connecting
+    if (_socket != null) {
+      if (!_socket!.connected) {
+        _socket!.connect();
+      }
+      return;
+    }
 
     final token = await secureStorage.getToken();
     if (token == null) {

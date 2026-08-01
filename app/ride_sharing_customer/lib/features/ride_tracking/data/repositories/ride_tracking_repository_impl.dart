@@ -1,10 +1,43 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../domain/repositories/ride_tracking_repository.dart';
-
+import '../datasources/ride_tracking_socket_datasource.dart';
 
 class RideTrackingRepositoryImpl implements RideTrackingRepository {
+  final RideTrackingSocketDataSource socketDataSource;
+
+  RideTrackingRepositoryImpl({required this.socketDataSource});
+
+  @override
+  Future<void> connectToRide(String rideId) async {
+    await socketDataSource.connectAndSubscribe(rideId);
+  }
+
+  @override
+  void disconnectFromRide() {
+    socketDataSource.disconnect();
+  }
+
+  @override
+  Stream<Map<String, dynamic>> get onDriverAssigned => socketDataSource.onDriverAssigned;
+  
+  @override
+  Stream<Map<String, dynamic>> get onDriverLocation => socketDataSource.onDriverLocation;
+
+  @override
+  Stream<Map<String, dynamic>> get onRideStarted => socketDataSource.onRideStarted;
+
+  @override
+  Stream<Map<String, dynamic>> get onRideCompleted => socketDataSource.onRideCompleted;
+
+  @override
+  Stream<Map<String, dynamic>> get onRideCancelled => socketDataSource.onRideCancelled;
+
+  @override
+  Stream<String> get onSocketError => socketDataSource.onSocketError;
+
   @override
   Future<Map<String, dynamic>> getDriverDetails() async {
+    // Keep as fallback for mock mode if needed
     await Future.delayed(const Duration(milliseconds: 300));
     return {
       'name': 'David Miller',
@@ -18,8 +51,6 @@ class RideTrackingRepositoryImpl implements RideTrackingRepository {
 
   @override
   List<LatLng> getRoutePoints(LatLng start, LatLng end) {
-    // Linear interpolation between two points for smooth driver dot animation.
-    // This is not road routing — use GoogleRoutesService for real route polylines.
     const int steps = 35;
     final List<LatLng> points = [];
     for (int i = 0; i <= steps; i++) {

@@ -90,21 +90,21 @@ class BookingDataSourceImpl implements BookingDataSource {
     required double dropLng,
   }) async {
     try {
-      print('[BookingDataSource] POST /api/v1/fare/estimate-all requesting...');
-      final response = await _dioClient.dio.post('/api/v1/fare/estimate-all', data: {
+      print('[BookingDataSource] POST /api/v1/fare/available requesting...');
+      final response = await _dioClient.dio.post('/api/v1/fare/available', data: {
         'pickupLat': pickupLat,
         'pickupLng': pickupLng,
         'dropLat': dropLat,
         'dropLng': dropLng,
       });
-      print('[BookingDataSource] POST /api/v1/fare/estimate-all RESPONSE: ${response.statusCode} - ${response.data}');
+      print('[BookingDataSource] POST /api/v1/fare/available RESPONSE: ${response.statusCode} - ${response.data}');
       if (response.data['SUCCESS'] == true) {
         final List<dynamic> list = response.data['MESSAGE'] ?? [];
         return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
       return [];
     } catch (e) {
-      print('[BookingDataSource] POST /api/v1/fare/estimate-all ERROR: $e');
+      print('[BookingDataSource] POST /api/v1/fare/available ERROR: $e');
       throw Exception('Failed to estimate fares: $e');
     }
   }

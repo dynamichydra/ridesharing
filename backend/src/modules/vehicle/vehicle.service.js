@@ -18,9 +18,9 @@ async function mirrorToDriver(driverId, vehicle) {
   await db.update(drivers).set({
     vehicleTypeId: vehicle.vehicleTypeId,
     vehicleNumber: vehicle.registrationNumber,
-    vehicleModel:  vehicle.model,
-    vehicleYear:   vehicle.year,
-    updatedAt:     new Date(),
+    vehicleModel: vehicle.model,
+    vehicleYear: vehicle.year,
+    updatedAt: new Date(),
   }).where(eq(drivers.id, driverId));
 }
 

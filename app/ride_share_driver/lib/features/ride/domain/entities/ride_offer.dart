@@ -37,21 +37,33 @@ class RideOffer {
   });
 
   factory RideOffer.fromJson(Map<String, dynamic> json) {
+    double parseDouble(dynamic val) {
+      if (val == null) return 0.0;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? 0.0;
+    }
+
+    int parseInt(dynamic val) {
+      if (val == null) return 1;
+      if (val is int) return val;
+      return int.tryParse(val.toString()) ?? 1;
+    }
+
     return RideOffer(
-      rideId: json['rideId'] as String,
-      ring: json['ring'] as int? ?? 1,
-      radiusKm: (json['radiusKm'] as num?)?.toDouble() ?? 0,
+      rideId: json['rideId']?.toString() ?? '',
+      ring: parseInt(json['ring']),
+      radiusKm: parseDouble(json['radiusKm']),
       pickupAddress: json['pickupAddress'] as String?,
       dropAddress: json['dropAddress'] as String?,
-      estimatedFare: (json['estimatedFare'] as num?)?.toDouble() ?? 0,
+      estimatedFare: parseDouble(json['estimatedFare']),
       currencyCode: json['currency'] as String? ?? '',
-      distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
+      distanceKm: parseDouble(json['distanceKm']),
       polyline: json['polyline'] as String?,
-      pickupLat: (json['pickupLat'] as num).toDouble(),
-      pickupLng: (json['pickupLng'] as num).toDouble(),
-      dropLat: (json['dropLat'] as num).toDouble(),
-      dropLng: (json['dropLng'] as num).toDouble(),
-      myDistanceKm: (json['myDistanceKm'] as num?)?.toDouble() ?? 0,
+      pickupLat: parseDouble(json['pickupLat']),
+      pickupLng: parseDouble(json['pickupLng']),
+      dropLat: parseDouble(json['dropLat']),
+      dropLng: parseDouble(json['dropLng']),
+      myDistanceKm: parseDouble(json['myDistanceKm']),
       expiresAt: json['expiresAt'] != null ? DateTime.tryParse(json['expiresAt'].toString()) : null,
     );
   }

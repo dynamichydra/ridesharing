@@ -240,61 +240,66 @@ class _OtpPageState extends State<OtpPage> {
                             // Displays the actual code UI boxes
                             GestureDetector(
                               onTap: () => _focusNode.requestFocus(),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: List.generate(6, (index) {
-                                  final text = _otpController.text;
-                                  String char = '';
-                                  if (index < text.length) {
-                                    char = text[index];
-                                  }
-                                  final isFocused = _focusNode.hasFocus && index == text.length;
-                                  final hasValue = char.isNotEmpty;
+                              child: ValueListenableBuilder<TextEditingValue>(
+                                valueListenable: _otpController,
+                                builder: (context, value, _) {
+                                  final text = value.text;
+                                  return Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: List.generate(6, (index) {
+                                      String char = '';
+                                      if (index < text.length) {
+                                        char = text[index];
+                                      }
+                                      final isFocused = _focusNode.hasFocus && index == text.length;
+                                      final hasValue = char.isNotEmpty;
 
-                                  return Container(
-                                    width: 48,
-                                    height: 56,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: !_isValid
-                                            ? const Color(0xFFE53935)
-                                            : isFocused
-                                                ? const Color(0xFF009048) // Green when active
-                                                : const Color(0xFFE2E8F0), // Light grey when inactive
-                                        width: isFocused ? 2 : 1.5,
-                                      ),
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: isLoading && index == text.length - 1
-                                        ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF009048)),
-                                            ),
-                                          )
-                                        : isFocused
-                                            ? const Text(
-                                                '|',
-                                                style: TextStyle(
-                                                  fontSize: 20,
-                                                  color: Color(0xFF009048),
-                                                  fontWeight: FontWeight.w300,
+                                      return Container(
+                                        width: 48,
+                                        height: 56,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: !_isValid
+                                                ? const Color(0xFFE53935)
+                                                : isFocused
+                                                    ? const Color(0xFF009048)
+                                                    : const Color(0xFFE2E8F0),
+                                            width: isFocused ? 2 : 1.5,
+                                          ),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: isLoading && index == text.length - 1
+                                            ? const SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF009048)),
                                                 ),
                                               )
-                                            : Text(
-                                                hasValue ? char : '-',
-                                                style: TextStyle(
-                                                  fontSize: 20,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: hasValue ? const Color(0xFF009048) : const Color(0xFF94A3B8),
-                                                ),
-                                              ),
+                                            : isFocused
+                                                ? const Text(
+                                                    '|',
+                                                    style: TextStyle(
+                                                      fontSize: 20,
+                                                      color: Color(0xFF009048),
+                                                      fontWeight: FontWeight.w300,
+                                                    ),
+                                                  )
+                                                : Text(
+                                                    hasValue ? char : '-',
+                                                    style: TextStyle(
+                                                      fontSize: 20,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: hasValue ? const Color(0xFF009048) : const Color(0xFF94A3B8),
+                                                    ),
+                                                  ),
+                                      );
+                                    }),
                                   );
-                                }),
+                                },
                               ),
                             ),
                           ],

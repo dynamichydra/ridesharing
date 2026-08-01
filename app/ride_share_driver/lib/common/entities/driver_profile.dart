@@ -19,6 +19,7 @@ class DriverProfile extends Equatable {
   final String subscriptionStatus;
   final String? approvalNote;
   final double rating;
+  final bool isOnline;
 
   const DriverProfile({
     required this.id,
@@ -37,6 +38,7 @@ class DriverProfile extends Equatable {
     required this.subscriptionStatus,
     this.approvalNote,
     required this.rating,
+    this.isOnline = false,
   });
 
   factory DriverProfile.fromJson(Map<String, dynamic> json) {
@@ -57,6 +59,7 @@ class DriverProfile extends Equatable {
       subscriptionStatus: json['subscriptionStatus'] as String? ?? 'inactive',
       approvalNote: json['approvalNote'] as String?,
       rating: double.tryParse(json['rating']?.toString() ?? '5.0') ?? 5.0,
+      isOnline: json['isOnline'] as bool? ?? false,
     );
   }
 

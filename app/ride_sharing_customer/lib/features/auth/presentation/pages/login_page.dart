@@ -105,6 +105,146 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  void _showCountryPickerBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (BuildContext context) {
+        String searchQuery = '';
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            final filteredCountries = CountryConfig.supportedCountries.where((c) {
+              final query = searchQuery.toLowerCase();
+              return c.name.toLowerCase().contains(query) ||
+                  c.dialCode.contains(query) ||
+                  c.isoCode.toLowerCase().contains(query);
+            }).toList();
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.7,
+              padding: const EdgeInsets.only(top: 16),
+              child: Column(
+                children: [
+                  // Bottom Sheet Handle Bar
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Select Country / Region',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0A2540),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Search Bar
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: TextField(
+                      onChanged: (value) {
+                        setModalState(() {
+                          searchQuery = value;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Search country or code...',
+                        prefixIcon: const Icon(Icons.search, color: Color(0xFF4A5568)),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(height: 1),
+                  // Full-width Country List
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: filteredCountries.length,
+                      separatorBuilder: (context, index) => const Divider(
+                        height: 1,
+                        indent: 64,
+                        endIndent: 20,
+                        color: Color(0xFFF1F5F9),
+                      ),
+                      itemBuilder: (context, index) {
+                        final country = filteredCountries[index];
+                        final isSelected = country.isoCode == _selectedCountry.isoCode;
+                        final flagEmoji = country.isoCode.toUpperCase().replaceAllMapped(
+                              RegExp(r'[A-Z]'),
+                              (match) => String.fromCharCode(
+                                  match.group(0)!.codeUnitAt(0) + 127397),
+                            );
+
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 4,
+                          ),
+                          leading: Text(
+                            flagEmoji,
+                            style: const TextStyle(fontSize: 26),
+                          ),
+                          title: Text(
+                            country.name,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                              color: isSelected ? const Color(0xFF009048) : const Color(0xFF0A2540),
+                            ),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                country.dialCode,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: isSelected ? const Color(0xFF009048) : const Color(0xFF64748B),
+                                ),
+                              ),
+                              if (isSelected) ...[
+                                const SizedBox(width: 8),
+                                const Icon(Icons.check_circle, color: Color(0xFF009048), size: 20),
+                              ],
+                            ],
+                          ),
+                          onTap: () {
+                            setState(() {
+                              _selectedCountry = country;
+                            });
+                            Navigator.pop(context);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     _phoneController.dispose();
@@ -221,7 +361,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 32),
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -237,30 +377,45 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                               child: Row(
                                 children: [
-                                  // Auto-selected Country Prefix
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16.0,
-                                      vertical: 16.0,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Text(
-                                          _selectedCountry.isoCode == 'CA' ? '🇨🇦' : '🇮🇳',
-                                          style: const TextStyle(fontSize: 20),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          _selectedCountry.dialCode,
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF0A2540),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                   // Interactive Country Prefix Picker that opens a wide, full-name Bottom Sheet picker
+                                   InkWell(
+                                     onTap: _showCountryPickerBottomSheet,
+                                     borderRadius: BorderRadius.circular(12),
+                                     child: Padding(
+                                       padding: const EdgeInsets.symmetric(
+                                         horizontal: 14.0,
+                                         vertical: 14.0,
+                                       ),
+                                       child: Row(
+                                         mainAxisSize: MainAxisSize.min,
+                                         children: [
+                                           Text(
+                                             _selectedCountry.isoCode.toUpperCase().replaceAllMapped(
+                                                   RegExp(r'[A-Z]'),
+                                                   (match) => String.fromCharCode(
+                                                       match.group(0)!.codeUnitAt(0) + 127397),
+                                                 ),
+                                             style: const TextStyle(fontSize: 18),
+                                           ),
+                                           const SizedBox(width: 6),
+                                           Text(
+                                             _selectedCountry.dialCode,
+                                             style: const TextStyle(
+                                               fontSize: 16,
+                                               fontWeight: FontWeight.bold,
+                                               color: Color(0xFF0A2540),
+                                             ),
+                                           ),
+                                           const SizedBox(width: 4),
+                                           const Icon(
+                                             Icons.arrow_drop_down,
+                                             color: Color(0xFF4A5568),
+                                             size: 20,
+                                           ),
+                                         ],
+                                       ),
+                                     ),
+                                   ),
                                   // Vertical Divider
                                   Container(
                                     height: 24,

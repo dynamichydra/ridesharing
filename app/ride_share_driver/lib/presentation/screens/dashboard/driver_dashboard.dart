@@ -5,9 +5,14 @@ import '../../../../common/widgets/custom_toast.dart';
 import '../../../../injection_container.dart' as di;
 import '../../../../features/dashboard/presentation/bloc/driver_status_bloc.dart';
 import '../../../../features/ride/presentation/bloc/ride_bloc.dart';
+import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../../features/ride/presentation/widgets/ride_offer_overlay.dart';
 import '../../../../features/ride/presentation/screens/active_ride_screen.dart';
 import '../../../../features/ride/domain/entities/active_ride.dart';
+import '../../../../features/profile/presentation/pages/profile_page.dart';
+import '../../../../features/wallet/presentation/pages/wallet_page.dart';
+import '../../../../features/ride_history/presentation/pages/ride_history_page.dart';
+import '../settings/settings_page.dart';
 
 class DriverDashboard extends StatefulWidget {
   final VoidCallback onLogout;
@@ -20,14 +25,25 @@ class DriverDashboard extends StatefulWidget {
 class _DriverDashboardState extends State<DriverDashboard> {
   late final DriverStatusBloc _driverStatusBloc = di.sl<DriverStatusBloc>();
   late final RideBloc _rideBloc = di.sl<RideBloc>();
+  late final AuthBloc _authBloc = di.sl<AuthBloc>();
   double _todayEarnings = 1850.50;
   int _todayTrips = 8;
   final double _onlineHours = 6.5;
 
   @override
+  void initState() {
+    super.initState();
+    final authState = _authBloc.state;
+    if (authState is Authenticated && authState.driver.isOnline) {
+      _rideBloc.add(ConnectRideSocket());
+    }
+  }
+
+  @override
   void dispose() {
     _driverStatusBloc.close();
     _rideBloc.close();
+    _authBloc.close();
     super.dispose();
   }
 
@@ -150,19 +166,30 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   Widget _buildDashboard(BuildContext context) {
-    return BlocConsumer<DriverStatusBloc, DriverStatusState>(
-      bloc: _driverStatusBloc,
-      listener: (context, state) {
-        if (state is DriverStatusError) {
-          CustomToast.show(context, state.message);
-        } else if (state is DriverStatusOnline) {
-          // Ride offers only arrive over the /driver socket connection — see
-          // RideSocketDataSource. Only keep it open while actually online.
+    return BlocConsumer<AuthBloc, AuthState>(
+      bloc: _authBloc,
+      listener: (context, authState) {
+        if (authState is Authenticated && authState.driver.isOnline) {
           _rideBloc.add(ConnectRideSocket());
-        } else if (state is DriverStatusOffline) {
-          _rideBloc.add(DisconnectRideSocket());
         }
       },
+      builder: (context, authState) {
+        final String driverName = (authState is Authenticated) ? (authState.driver.name ?? 'Driver') : 'Driver';
+        final String driverRating = (authState is Authenticated) ? authState.driver.rating.toStringAsFixed(2) : '5.00';
+
+        return BlocConsumer<DriverStatusBloc, DriverStatusState>(
+          bloc: _driverStatusBloc,
+          listener: (context, state) {
+            if (state is DriverStatusError) {
+              CustomToast.show(context, state.message);
+            } else if (state is DriverStatusOnline) {
+              // Ride offers only arrive over the /driver socket connection — see
+              // RideSocketDataSource. Only keep it open while actually online.
+              _rideBloc.add(ConnectRideSocket());
+            } else if (state is DriverStatusOffline) {
+              _rideBloc.add(DisconnectRideSocket());
+            }
+          },
       builder: (context, state) {
         final isOnline = state is DriverStatusOnline;
         final isTransitioning = state is DriverStatusTransitioning;
@@ -182,7 +209,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
               ),
             ),
           ),
-          drawer: _buildDrawer(context),
+          drawer: _buildDrawer(context, driverName, driverRating),
           body: SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16.0),
@@ -199,9 +226,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
                         style: TextStyle(fontSize: 14, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
                       ),
                       const SizedBox(height: 2),
-                      const Text(
-                        'Arijit Bose',
-                        style: TextStyle(fontSize: 24, color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+                      Text(
+                        driverName,
+                        style: const TextStyle(fontSize: 24, color: AppColors.textPrimary, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -397,6 +424,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
         );
       },
     );
+      },
+    );
   }
 
   Widget _buildStatCard(String label, String value, IconData icon, Color iconColor, Color valueColor, {String? subtext}) {
@@ -534,7 +563,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
-  Widget _buildDrawer(BuildContext context) {
+  Widget _buildDrawer(BuildContext context, String driverName, String driverRating) {
     return BlocBuilder<DriverStatusBloc, DriverStatusState>(
       bloc: _driverStatusBloc,
       builder: (context, state) {
@@ -587,9 +616,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    const Text(
-                      'Arijit Bose',
-                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    Text(
+                      driverName,
+                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
                     Row(
@@ -597,7 +626,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                         const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
                         const SizedBox(width: 4),
                         Text(
-                          '4.88 Rating',
+                          '$driverRating Rating',
                           style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13, fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(width: 8),
@@ -639,25 +668,43 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       icon: Icons.history_rounded,
                       title: 'Ride History',
                       iconColor: AppColors.primary,
-                      onTap: () => Navigator.pop(context),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const RideHistoryPage()));
+                      },
                     ),
                     _buildDrawerItem(
                       icon: Icons.account_balance_wallet_rounded,
                       title: 'Wallet & Earnings',
                       iconColor: AppColors.secondary,
-                      onTap: () => Navigator.pop(context),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const WalletPage()));
+                      },
                     ),
                     _buildDrawerItem(
                       icon: Icons.person_rounded,
                       title: 'Profile Settings',
                       iconColor: AppColors.primary,
-                      onTap: () => Navigator.pop(context),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage()));
+                      },
                     ),
                     _buildDrawerItem(
-                      icon: Icons.help_outline_rounded,
-                      title: 'Help & Support',
+                      icon: Icons.settings_rounded,
+                      title: 'Settings',
                       iconColor: Colors.teal,
-                      onTap: () => Navigator.pop(context),
+                      onTap: () {
+                        Navigator.pop(context);
+                        // Pass driver from authBloc
+                        final authState = _authBloc.state;
+                        final driver = authState is Authenticated ? authState.driver : null;
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => SettingsPage(driver: driver, onLogout: widget.onLogout)),
+                        );
+                      },
                     ),
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8.0),

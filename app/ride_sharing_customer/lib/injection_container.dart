@@ -25,6 +25,7 @@ import 'features/booking/domain/repositories/booking_repository.dart';
 import 'features/booking/presentation/bloc/booking_bloc.dart';
 
 // Ride Tracking
+import 'features/ride_tracking/data/datasources/ride_tracking_socket_datasource.dart';
 import 'features/ride_tracking/data/repositories/ride_tracking_repository_impl.dart';
 import 'features/ride_tracking/domain/repositories/ride_tracking_repository.dart';
 import 'features/ride_tracking/presentation/bloc/ride_tracking_bloc.dart';
@@ -88,7 +89,8 @@ Future<void> init() async {
   // ==========================================
   // Ride Tracking Feature
   // ==========================================
-  sl.registerLazySingleton<RideTrackingRepository>(() => RideTrackingRepositoryImpl());
+  sl.registerLazySingleton<RideTrackingSocketDataSource>(() => RideTrackingSocketDataSource(storageService: sl<StorageService>()));
+  sl.registerLazySingleton<RideTrackingRepository>(() => RideTrackingRepositoryImpl(socketDataSource: sl<RideTrackingSocketDataSource>()));
   sl.registerFactory(() => RideTrackingBloc(sl<RideTrackingRepository>()));
 
   // ==========================================
