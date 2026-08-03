@@ -163,9 +163,13 @@ class _ProfilePageState extends State<ProfilePage> {
                     icon: Icons.logout_rounded,
                     title: 'Logout',
                     titleColor: const Color(0xFFE53935),
-                    onTap: () {
+                    onTap: () async {
                       context.read<AuthBloc>().add(LoggedOut());
-                      context.go('/login');
+                      // Small delay to ensure clearAuth finishes before router redirect runs
+                      await Future.delayed(const Duration(milliseconds: 100));
+                      if (context.mounted) {
+                        context.go('/login');
+                      }
                     },
                     showDivider: false,
                     showRightArrow: false,

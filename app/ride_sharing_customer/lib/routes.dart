@@ -66,22 +66,31 @@ class AppRoutes {
       final token = await storage.getToken();
       final isLoggedIn = token != null;
 
-      final authPaths = [login, signup, forgotPassword, otp, onboarding, splash, locationPermission];
+      final authPaths = [
+        login,
+        signup,
+        forgotPassword,
+        otp,
+        onboarding,
+        splash,
+        locationPermission,
+      ];
       final isGoingToAuth = authPaths.contains(state.matchedLocation);
 
       if (!isLoggedIn && !isGoingToAuth) {
         return login;
       }
-      if (isLoggedIn && isGoingToAuth && state.matchedLocation != splash && state.matchedLocation != signup && state.matchedLocation != onboarding) {
+      if (isLoggedIn &&
+          isGoingToAuth &&
+          state.matchedLocation != splash &&
+          state.matchedLocation != signup &&
+          state.matchedLocation != onboarding) {
         return home;
       }
       return null;
     },
     routes: [
-      GoRoute(
-        path: splash,
-        builder: (context, state) => const SplashPage(),
-      ),
+      GoRoute(path: splash, builder: (context, state) => const SplashPage()),
       GoRoute(
         path: onboarding,
         builder: (context, state) => const OnboardingPage(),
@@ -93,14 +102,8 @@ class AppRoutes {
           return LocationPermissionPage(onPermissionGranted: onGranted);
         },
       ),
-      GoRoute(
-        path: login,
-        builder: (context, state) => const LoginPage(),
-      ),
-      GoRoute(
-        path: signup,
-        builder: (context, state) => const SignupPage(),
-      ),
+      GoRoute(path: login, builder: (context, state) => const LoginPage()),
+      GoRoute(path: signup, builder: (context, state) => const SignupPage()),
       GoRoute(
         path: otp,
         builder: (context, state) {
@@ -118,10 +121,7 @@ class AppRoutes {
           return MainLayout(child: child);
         },
         routes: [
-          GoRoute(
-            path: home,
-            builder: (context, state) => const HomePage(),
-          ),
+          GoRoute(path: home, builder: (context, state) => const HomePage()),
           GoRoute(
             path: rideHistory,
             builder: (context, state) => const RideHistoryPage(),
@@ -204,4 +204,3 @@ class AppRoutes {
     ],
   );
 }
-

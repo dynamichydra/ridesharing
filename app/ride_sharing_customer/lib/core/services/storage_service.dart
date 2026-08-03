@@ -3,7 +3,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 class StorageService {
   final FlutterSecureStorage _secureStorage;
-  
+
   static const String _tokenKey = 'auth_token';
   static const String _refreshTokenKey = 'refresh_token';
   static const String _userIdKey = 'user_id';

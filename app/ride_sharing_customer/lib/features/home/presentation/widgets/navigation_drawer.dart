@@ -96,7 +96,10 @@ class AppNavigationDrawer extends StatelessWidget {
                   onTap: () async {
                     Navigator.of(context).pop(); // Dismiss drawer
                     context.read<AuthBloc>().add(LoggedOut());
-                    context.go('/login');
+                    await Future.delayed(const Duration(milliseconds: 100));
+                    if (context.mounted) {
+                      context.go('/login');
+                    }
                   },
                 ),
               ],
@@ -137,7 +140,12 @@ class AppNavigationDrawer extends StatelessWidget {
           : null,
       onTap: () {
         context.pop(); // Close drawer
-        context.push(route);
+        const tabRoutes = ['/home', '/ride-history', '/wallet', '/profile'];
+        if (tabRoutes.contains(route)) {
+          context.go(route);
+        } else {
+          context.push(route);
+        }
       },
     );
   }
