@@ -13,8 +13,6 @@ export function generateOtp() {
 
 /** Throws if the phone is resend-cooling-down, hourly-capped, or locked out from too many wrong attempts. */
 export async function assertCanSendOtp(phone) {
-  if (process.env.NODE_ENV === 'development') return;
-
   const locked = await redis.get(REDIS_KEYS.otpLock(phone));
   if (locked) throw { statusCode: 429, code: 'OTP_MAX_ATTEMPTS', message: 'Too many attempts. Try again later.' };
 
@@ -46,14 +44,8 @@ export async function storeOtp(phone, otp) {
  * wrong-attempt count is exhausted (locks the phone out for LOCKOUT_SECONDS).
  */
 export async function verifyOtp(phone, otp) {
-  if (process.env.NODE_ENV === 'development' && (otp === '123456' || otp === '000000')) {
-    return true;
-  }
-
   const locked = await redis.get(REDIS_KEYS.otpLock(phone));
-  if (locked && process.env.NODE_ENV !== 'development') {
-    throw { statusCode: 429, code: 'OTP_MAX_ATTEMPTS', message: 'Too many attempts. Try again later.' };
-  }
+  if (locked) throw { statusCode: 429, code: 'OTP_MAX_ATTEMPTS', message: 'Too many attempts. Try again later.' };
 
   const stored = await redis.get(REDIS_KEYS.otpCode(phone));
   if (!stored || stored !== otp) {

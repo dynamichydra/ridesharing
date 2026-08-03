@@ -73,9 +73,11 @@ export async function rideRoutes(app) {
     return sendSuccess(reply, data);
   });
 
-  // POST /api/v1/rides/:id/start
+  // POST /api/v1/rides/:id/start  — driver must submit the OTP the rider shared
   app.post('/:id/start', { preHandler: [authenticateDriver] }, async (request, reply) => {
-    const data = await rideService.startRide(request.params.id, request.user.id);
+    const { otp } = request.body || {};
+    if (!otp) return sendError(reply, 'otp is required');
+    const data = await rideService.startRide(request.params.id, request.user.id, otp);
     return sendSuccess(reply, data);
   });
 

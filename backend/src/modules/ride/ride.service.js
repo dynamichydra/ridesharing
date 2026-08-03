@@ -30,6 +30,13 @@ import { removeDriverFromIndex, upsertDriverCell } from '../matching/driver-geo-
 import { bufferGpsPing } from '../trip-gps/gps-ping.service.js';
 import { finalizeTripDistance } from '../trip-gps/finalize-trip.job.js';
 
+/** Driver-facing ride payloads must never carry the rider's start OTP. */
+function stripOtp(ride) {
+  if (!ride) return ride;
+  const { startOtp, startOtpVerifiedAt, ...rest } = ride;
+  return rest;
+}
+
 /** Re-adds a driver to the available geo-index if they're still online — called
  * after a ride ends (completed / cancelled-by-driver / cancelled-by-rider/admin
  * while a driver was already assigned) so they go back to receiving offers. */
@@ -189,9 +196,13 @@ export async function acceptRide(rideId, driverId) {
   const offer = await acceptOffer(rideId, driverId);
   if (!offer) throw { statusCode: 409, message: 'This ride offer is no longer available' };
 
+  // Rider reads this off the app and reads it aloud to the driver, who must
+  // enter it to start the trip — confirms the driver picked up the right rider.
+  const startOtp = String(Math.floor(1000 + Math.random() * 9000));
+
   // Atomic update — prevents two drivers accepting simultaneously
   const [updated] = await db.update(rides).set({
-    driverId, status: 'accepted', acceptedAt: new Date(),
+    driverId, status: 'accepted', acceptedAt: new Date(), startOtp,
   }).where(and(eq(rides.id, rideId), eq(rides.status, 'searching'))).returning();
   if (!updated) throw { statusCode: 409, message: 'Ride was just accepted by another driver' };
 
@@ -241,10 +252,10 @@ export async function acceptRide(rideId, driverId) {
     userType: 'rider', userId: ride.riderId,
     type: 'RIDE_ACCEPTED',
     title: 'Driver Found!',
-    body: `${driver.name} is on the way — ${driver.vehicleModel} ${driver.vehicleNumber}`,
+    body: `${driver.name} is on the way — ${driver.vehicleModel} ${driver.vehicleNumber}. Share OTP ${startOtp} with the driver to start your ride.`,
   });
 
-  return updated;
+  return stripOtp(updated);
 }
 
 export async function markArriving(rideId, driverId) {
@@ -264,10 +275,10 @@ export async function markArriving(rideId, driverId) {
     title: 'Driver has arrived!',
     body: 'Your driver is at the pickup point.',
   });
-  return updated;
+  return stripOtp(updated);
 }
 
-export async function startRide(rideId, driverId) {
+export async function startRide(rideId, driverId, otp) {
   const [ride] = await db.select().from(rides).where(
     and(eq(rides.id, rideId), eq(rides.driverId, driverId)),
   ).limit(1);
@@ -275,9 +286,12 @@ export async function startRide(rideId, driverId) {
   if (ride.status !== 'accepted' && ride.status !== 'arriving') {
     throw { statusCode: 409, message: `Cannot start ride in status: ${ride.status}` };
   }
+  if (!otp || String(otp) !== ride.startOtp) {
+    throw { statusCode: 400, message: 'Invalid or missing OTP. Ask the rider for the ride start OTP.' };
+  }
 
   const [updated] = await db.update(rides).set({
-    status: 'started', startedAt: new Date(),
+    status: 'started', startedAt: new Date(), startOtpVerifiedAt: new Date(),
   }).where(eq(rides.id, rideId)).returning();
 
   await recordStatusChange({
@@ -297,7 +311,7 @@ export async function startRide(rideId, driverId) {
     title: 'Your ride has started',
     body: 'Enjoy your trip!',
   });
-  return updated;
+  return stripOtp(updated);
 }
 
 export async function completeRide(rideId, driverId) {
@@ -483,7 +497,7 @@ export async function getDriverActiveRide(driverId) {
   if (!raw) return null;
   const { rideId } = JSON.parse(raw);
   const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
-  return ride || null;
+  return stripOtp(ride) || null;
 }
 
 export async function getRideById(rideId) {

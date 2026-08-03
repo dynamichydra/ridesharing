@@ -311,7 +311,9 @@ GET  /rides/driver/offers          → pending offers for this driver
 POST /rides/:id/accept             (or socket event 'ride:accept' → 'ride:accept_ok'/'ride:accept_error')
 POST /rides/:id/decline            (or socket event 'ride:decline' → 'ride:decline_ok')
 POST /rides/:id/arriving           → notify rider driver is close
-POST /rides/:id/start               → trip begins
+POST /rides/:id/start  { otp }      → trip begins — requires the 4-digit OTP the rider
+                                       was shown on accept; ask the rider to read it aloud
+                                       and enter it, wrong/missing OTP returns 400
 POST /rides/:id/complete           → trip ends, triggers fare finalization
 POST /rides/:id/driver-cancel       → driver-initiated cancellation (post-accept)
 GET  /rides/driver/active          → currently active ride, if any (for app-resume/crash recovery)

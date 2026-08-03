@@ -30,6 +30,8 @@ export const rides = pgTable('rides', {
   polyline:       text('polyline'),               // encoded Google route
   status:         varchar('status').default('requested'),
   // requested | searching | accepted | arriving | started | completed | cancelled | expired
+  startOtp:       varchar('start_otp', { length: 4 }),   // shown to rider on accept; driver must enter it to start the ride
+  startOtpVerifiedAt: timestamp('start_otp_verified_at'),
   paymentMethod:  varchar('payment_method', { length: 10 }),   // online | cash — set once a payment action is taken
   paymentStatus:  varchar('payment_status', { length: 20 }).default('pending'),
   // pending | processing | paid | failed
