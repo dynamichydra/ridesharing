@@ -74,13 +74,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       final position = await locService.getCurrentPosition();
       
       _CountryCode? detectedCountry;
-      // Canada bounding box: lat 41 to 83, lng -141 to -52
       if (position.latitude >= 41.0 && position.latitude <= 83.0 &&
           position.longitude >= -141.0 && position.longitude <= -52.0) {
         detectedCountry = _countries[1]; // Canada (+1)
-      } 
-      // India bounding box: lat 6 to 37, lng 68 to 97
-      else if (position.latitude >= 6.0 && position.latitude <= 37.0 &&
+      } else if (position.latitude >= 6.0 && position.latitude <= 37.0 &&
                  position.longitude >= 68.0 && position.longitude <= 97.0) {
         detectedCountry = _countries[0]; // India (+91)
       }
@@ -88,38 +85,61 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       if (mounted) {
         setState(() {
           _isCheckingLocation = false;
-          if (detectedCountry != null) {
-            _selectedCountry = detectedCountry;
-            _locationError = null;
-          } else {
-            _selectedCountry = null;
-            _locationError = 'Service is not available in your location (Only India and Canada are supported).';
-          }
+          _selectedCountry = detectedCountry ?? _countries[0];
+          _locationError = null;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _isCheckingLocation = false;
-          // If we could not fetch position or permission denied
-          if (_selectedCountry == null) {
-            _locationError = 'Location access is required to determine service availability.';
-          }
+          _selectedCountry ??= _countries[0];
+          _locationError = null;
         });
       }
     }
   }
 
-  void _submit() {
-    if (_selectedCountry == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_locationError ?? 'Service is not available in your location.'),
-          backgroundColor: Colors.red,
+  void _showCountryPicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Select Country',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            ..._countries.map(
+              (c) => ListTile(
+                leading: Text(c.flag, style: const TextStyle(fontSize: 24)),
+                title: Text('${c.name} (${c.dialCode})'),
+                trailing: _selectedCountry?.code == c.code
+                    ? const Icon(Icons.check_circle, color: AppColors.primary)
+                    : null,
+                onTap: () {
+                  setState(() {
+                    _selectedCountry = c;
+                  });
+                  Navigator.pop(ctx);
+                },
+              ),
+            ),
+          ],
         ),
-      );
-      return;
-    }
+      ),
+    );
+  }
+
+  void _submit() {
+    _selectedCountry ??= _countries[0];
     final phone = _phoneController.text.trim();
     if (phone.length == 10 && RegExp(r'^[0-9]+$').hasMatch(phone)) {
       widget.onPhoneSubmitted('${_selectedCountry!.dialCode}$phone');
@@ -268,35 +288,39 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Read-only Country Prefix Pill based on live location
-                      Container(
-                        height: 52,
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: _isValid
-                                ? Colors.grey.shade300
-                                : Colors.redAccent,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _selectedCountry != null
-                                  ? '${_selectedCountry!.flag} ${_selectedCountry!.code} (${_selectedCountry!.dialCode})'
-                                  : '🚫 N/A',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: _selectedCountry != null
-                                    ? AppColors.textPrimary
-                                    : Colors.red.shade700,
-                              ),
+                      // Interactive Country Selector Pill
+                      InkWell(
+                        onTap: _showCountryPicker,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          height: 52,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _isValid
+                                  ? Colors.grey.shade300
+                                  : Colors.redAccent,
                             ),
-                          ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _selectedCountry != null
+                                    ? '${_selectedCountry!.flag} ${_selectedCountry!.dialCode}'
+                                    : '🇮🇳 +91',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary, size: 20),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -355,6 +379,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                                 _isValid = true;
                               }
                             });
+                            if (val.length == 10) {
+                              _submit();
+                            }
                           },
                         ),
                       ),

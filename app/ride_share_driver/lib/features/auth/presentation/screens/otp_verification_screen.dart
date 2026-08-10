@@ -52,6 +52,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       });
     }
     _otpController.text = '';
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
     _startTimer();
   }
 
@@ -206,6 +209,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                     _isValid = true;
                                   }
                                 });
+                                if (val.length == 6) {
+                                  _submit();
+                                }
                               },
                             ),
                           ),

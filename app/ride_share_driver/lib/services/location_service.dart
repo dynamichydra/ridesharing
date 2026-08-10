@@ -28,4 +28,13 @@ class LocationService {
       desiredAccuracy: LocationAccuracy.high,
     );
   }
+
+  Stream<Position> getPositionStream({LocationSettings? locationSettings}) {
+    final settings = locationSettings ??
+        const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 3,
+        );
+    return Geolocator.getPositionStream(locationSettings: settings);
+  }
 }

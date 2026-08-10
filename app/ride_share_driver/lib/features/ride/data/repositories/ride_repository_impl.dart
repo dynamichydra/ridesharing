@@ -39,7 +39,20 @@ class RideRepositoryImpl implements RideRepository {
   void declineOffer(String rideId, {String? reason}) => socketDataSource.declineOffer(rideId, reason: reason);
 
   @override
-  void sendLocationUpdate(double lat, double lng) => socketDataSource.emitLocationUpdate(lat, lng);
+  void sendLocationUpdate(
+    double lat,
+    double lng, {
+    double? accuracy,
+    double? speedKmh,
+    int? recordedAt,
+  }) =>
+      socketDataSource.emitLocationUpdate(
+        lat,
+        lng,
+        accuracy: accuracy,
+        speedKmh: speedKmh,
+        recordedAt: recordedAt,
+      );
 
   @override
   Future<ActiveRide> markArriving(String rideId) async {
@@ -48,8 +61,8 @@ class RideRepositoryImpl implements RideRepository {
   }
 
   @override
-  Future<ActiveRide> startRide(String rideId) async {
-    final json = await remoteDataSource.startRide(rideId);
+  Future<ActiveRide> startRide(String rideId, String otp) async {
+    final json = await remoteDataSource.startRide(rideId, otp);
     return ActiveRide.fromJson(json);
   }
 

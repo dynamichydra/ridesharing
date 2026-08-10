@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../style/appcolors.dart';
 import '../../../../common/widgets/custom_toast.dart';
 import '../../../../injection_container.dart' as di;
@@ -10,8 +11,12 @@ import '../../../../features/ride/presentation/widgets/ride_offer_overlay.dart';
 import '../../../../features/ride/presentation/screens/active_ride_screen.dart';
 import '../../../../features/ride/domain/entities/active_ride.dart';
 import '../../../../features/profile/presentation/pages/profile_page.dart';
+import '../../../../features/profile/presentation/bloc/profile_bloc.dart';
+import '../../../../common/entities/driver_profile.dart';
 import '../../../../features/wallet/presentation/pages/wallet_page.dart';
 import '../../../../features/ride_history/presentation/pages/ride_history_page.dart';
+import '../../../../features/wallet/presentation/bloc/wallet_bloc.dart';
+import '../../../../features/ride_history/presentation/bloc/ride_history_bloc.dart';
 import '../settings/settings_page.dart';
 
 class DriverDashboard extends StatefulWidget {
@@ -26,6 +31,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
   late final DriverStatusBloc _driverStatusBloc = di.sl<DriverStatusBloc>();
   late final RideBloc _rideBloc = di.sl<RideBloc>();
   late final AuthBloc _authBloc = di.sl<AuthBloc>();
+  late final ProfileBloc _profileBloc = di.sl<ProfileBloc>();
+  late final WalletBloc _walletBloc = di.sl<WalletBloc>();
+  late final RideHistoryBloc _rideHistoryBloc = di.sl<RideHistoryBloc>();
 
   int _selectedNavIndex = 0;
 
@@ -43,6 +51,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
   @override
   void initState() {
     super.initState();
+    _profileBloc.add(LoadProfile());
+    _walletBloc.add(LoadWalletData());
+    _rideHistoryBloc.add(LoadRideHistory());
     final authState = _authBloc.state;
     if (authState is Authenticated && authState.driver.isOnline) {
       _rideBloc.add(ConnectRideSocket());
@@ -54,6 +65,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
     _driverStatusBloc.close();
     _rideBloc.close();
     _authBloc.close();
+    _profileBloc.close();
+    _walletBloc.close();
+    _rideHistoryBloc.close();
     super.dispose();
   }
 
@@ -78,6 +92,66 @@ class _DriverDashboardState extends State<DriverDashboard> {
     }
   }
 
+  Future<void> _promptStartOtpAndDispatch(BuildContext context) async {
+    final otpController = TextEditingController();
+    final otp = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Enter Rider OTP', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Ask the rider for their 4-digit start OTP to begin the trip.', style: TextStyle(fontSize: 14)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: otpController,
+              keyboardType: TextInputType.number,
+              maxLength: 4,
+              autofocus: true,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 4),
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                labelText: '4-Digit OTP',
+                hintText: '1234',
+                counterText: '',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = otpController.text.trim();
+              if (text.length == 4) {
+                Navigator.pop(ctx, text);
+              } else {
+                CustomToast.show(context, 'Please enter a valid 4-digit OTP');
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Start Trip'),
+          ),
+        ],
+      ),
+    );
+
+    if (otp != null && otp.isNotEmpty) {
+      _rideBloc.add(StartRideRequested(otp: otp));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<RideBloc, RideState>(
@@ -96,9 +170,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
           final ActiveRide ride = rideState is RideActive ? rideState.ride : (rideState as RideActionInProgress).ride;
           return ActiveRideScreen(
             ride: ride,
+            driverPosition: rideState is RideActive ? rideState.driverPosition : null,
+            driverBearing: rideState is RideActive ? rideState.driverBearing : 0.0,
+            traveledPath: rideState is RideActive ? rideState.traveledPath : const [],
             isBusy: rideState is RideActionInProgress,
             onMarkArriving: () => _rideBloc.add(MarkArrivingRequested()),
-            onStart: () => _rideBloc.add(StartRideRequested()),
+            onStart: () => _promptStartOtpAndDispatch(context),
             onComplete: () => _rideBloc.add(CompleteRideRequested()),
             onCancel: () => _confirmCancelRide(context),
           );
@@ -112,11 +189,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
           children: [
             _buildDashboard(context),
             if (rideState is RideOfferPending)
-              RideOfferOverlay(
-                offer: rideState.offer,
-                onAccept: () => _rideBloc.add(AcceptOfferRequested(rideId: rideState.offer.rideId)),
-                onDecline: () => _rideBloc.add(DeclineOfferRequested(rideId: rideState.offer.rideId)),
-                onExpired: () => _rideBloc.add(OfferExpiredLocally(rideId: rideState.offer.rideId)),
+              RideOfferOverlay.multi(
+                offers: rideState.offers,
+                onAccept: (rideId) => _rideBloc.add(AcceptOfferRequested(rideId: rideId)),
+                onDecline: (rideId) => _rideBloc.add(DeclineOfferRequested(rideId: rideId)),
+                onExpired: (rideId) => _rideBloc.add(OfferExpiredLocally(rideId: rideId)),
               ),
             if (rideState is RideAccepting)
               Container(
@@ -176,28 +253,53 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   Widget _buildDashboard(BuildContext context) {
-    return BlocConsumer<AuthBloc, AuthState>(
-      bloc: _authBloc,
-      listener: (context, authState) {
-        if (authState is Authenticated && authState.driver.isOnline) {
-          _rideBloc.add(ConnectRideSocket());
-        }
-      },
-      builder: (context, authState) {
-        final String driverName = (authState is Authenticated) ? (authState.driver.name ?? 'Ramesh Kumar') : 'Ramesh Kumar';
-        final String driverRating = (authState is Authenticated) ? authState.driver.rating.toStringAsFixed(1) : '4.8';
-
-        return BlocConsumer<DriverStatusBloc, DriverStatusState>(
-          bloc: _driverStatusBloc,
-          listener: (context, state) {
-            if (state is DriverStatusError) {
-              CustomToast.show(context, state.message);
-            } else if (state is DriverStatusOnline) {
+    return BlocBuilder<ProfileBloc, ProfileState>(
+      bloc: _profileBloc,
+      builder: (context, profileState) {
+        return BlocConsumer<AuthBloc, AuthState>(
+          bloc: _authBloc,
+          listener: (context, authState) {
+            if (authState is Authenticated && authState.driver.isOnline) {
               _rideBloc.add(ConnectRideSocket());
-            } else if (state is DriverStatusOffline) {
-              _rideBloc.add(DisconnectRideSocket());
             }
           },
+          builder: (context, authState) {
+            DriverProfile? driver;
+            if (profileState is ProfileLoaded) {
+              driver = profileState.profile;
+            } else if (profileState is ProfileUpdateSuccess) {
+              driver = profileState.profile;
+            } else if (authState is Authenticated) {
+              driver = authState.driver;
+            }
+
+            final name = driver?.name?.trim();
+            final phone = driver?.phone?.trim();
+            final email = driver?.email?.trim();
+
+            final String driverName = (name != null && name.isNotEmpty)
+                ? name
+                : (phone != null && phone.isNotEmpty)
+                    ? phone
+                    : 'Driver Partner';
+
+            final String driverRating = driver != null ? driver.rating.toStringAsFixed(1) : '5.0';
+            final String? profilePhoto = driver?.profilePhoto;
+            final String subTitleText = (email != null && email.isNotEmpty)
+                ? email
+                : (phone ?? '');
+
+            return BlocConsumer<DriverStatusBloc, DriverStatusState>(
+              bloc: _driverStatusBloc,
+              listener: (context, state) {
+                if (state is DriverStatusError) {
+                  CustomToast.show(context, state.message);
+                } else if (state is DriverStatusOnline) {
+                  _rideBloc.add(ConnectRideSocket());
+                } else if (state is DriverStatusOffline) {
+                  _rideBloc.add(DisconnectRideSocket());
+                }
+              },
           builder: (context, state) {
             final isOnline = state is DriverStatusOnline;
             final isTransitioning = state is DriverStatusTransitioning;
@@ -247,14 +349,26 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   const SizedBox(width: 4),
                 ],
               ),
-              drawer: _buildDrawer(context, driverName, driverRating),
+              drawer: _buildDrawer(
+                context,
+                driverName: driverName,
+                driverRating: driverRating,
+                profilePhoto: profilePhoto,
+                subTitleText: subTitleText,
+              ),
               body: SafeArea(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    _profileBloc.add(LoadProfile());
+                    _walletBloc.add(LoadWalletData());
+                    _rideHistoryBloc.add(LoadRideHistory());
+                  },
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                       // Driver Profile Header Row
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
@@ -264,12 +378,27 @@ class _DriverDashboardState extends State<DriverDashboard> {
                             height: 56,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: Colors.grey.shade200,
-                              image: const DecorationImage(
-                                image: NetworkImage('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?fit=crop&w=200&h=200'),
-                                fit: BoxFit.cover,
-                              ),
+                              color: const Color(0xFF0052CC).withOpacity(0.1),
+                              border: Border.all(color: const Color(0xFF0052CC).withOpacity(0.3), width: 1.5),
+                              image: (profilePhoto != null && profilePhoto.isNotEmpty)
+                                  ? DecorationImage(
+                                      image: NetworkImage(profilePhoto),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
                             ),
+                            child: (profilePhoto == null || profilePhoto.isEmpty)
+                                ? Center(
+                                    child: Text(
+                                      driverName.isNotEmpty ? driverName[0].toUpperCase() : 'D',
+                                      style: const TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF0052CC),
+                                      ),
+                                    ),
+                                  )
+                                : null,
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -365,106 +494,135 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Today's Earnings Card
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0052CC), // Blue background
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF0052CC).withOpacity(0.3),
-                              blurRadius: 16,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "Today's Earnings",
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  '₹${_todayEarnings.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: -0.5,
-                                  ),
-                                ),
-                                IconButton(
-                                  onPressed: () {
-                                    Navigator.push(context, MaterialPageRoute(builder: (_) => const WalletPage()));
-                                  },
-                                  icon: const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 28),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              '$_completedRidesCount Rides Completed',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.9),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                      // Today's Earnings Card with dynamic WalletBloc & RideHistoryBloc data
+                      BlocBuilder<WalletBloc, WalletState>(
+                        bloc: _walletBloc,
+                        builder: (context, walletState) {
+                          double earnings = _todayEarnings;
+                          String currency = '₹';
+                          if (walletState is WalletLoaded && walletState.walletInfo != null) {
+                            earnings = walletState.walletInfo!.balanceAmount;
+                            currency = walletState.walletInfo!.currencyCode == 'USD' ? '\$' : '₹';
+                          }
 
-                      // Stats Summary Box
-                      Container(
-                        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFF1F5F9)),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.02),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _buildSummaryStatItem(
-                                title: _onlineHoursStr,
-                                label: 'Online Hours',
-                              ),
-                            ),
-                            Container(width: 1, height: 36, color: const Color(0xFFE2E8F0)),
-                            Expanded(
-                              child: _buildSummaryStatItem(
-                                title: '$_totalRidesToday',
-                                label: 'Rides',
-                              ),
-                            ),
-                            Container(width: 1, height: 36, color: const Color(0xFFE2E8F0)),
-                            Expanded(
-                              child: _buildSummaryStatItem(
-                                title: '₹${_avgPerRide.toInt()}',
-                                label: 'Avg. per Ride',
-                              ),
-                            ),
-                          ],
-                        ),
+                          return BlocBuilder<RideHistoryBloc, RideHistoryState>(
+                            bloc: _rideHistoryBloc,
+                            builder: (context, historyState) {
+                              int completedCount = _completedRidesCount;
+                              int totalRides = _totalRidesToday;
+                              if (historyState is RideHistoryLoaded) {
+                                completedCount = historyState.rides.where((r) => r['status'] == 'completed').length;
+                                totalRides = historyState.rides.length;
+                              }
+                              double avgPerRide = completedCount > 0 ? (earnings / completedCount) : 0.0;
+
+                              return Column(
+                                children: [
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(20),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0052CC),
+                                      borderRadius: BorderRadius.circular(20),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF0052CC).withValues(alpha: 0.3),
+                                          blurRadius: 16,
+                                          offset: const Offset(0, 8),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          "Today's Earnings",
+                                          style: TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              '$currency${earnings.toStringAsFixed(2)}',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 32,
+                                                fontWeight: FontWeight.bold,
+                                                letterSpacing: -0.5,
+                                              ),
+                                            ),
+                                            IconButton(
+                                              onPressed: () {
+                                                Navigator.push(context, MaterialPageRoute(builder: (_) => const WalletPage()));
+                                              },
+                                              icon: const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 28),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          '$completedCount Rides Completed',
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(alpha: 0.9),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Stats Summary Box
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: const Color(0xFFF1F5F9)),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.02),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildSummaryStatItem(
+                                            title: _onlineHoursStr,
+                                            label: 'Online Hours',
+                                          ),
+                                        ),
+                                        Container(width: 1, height: 36, color: const Color(0xFFE2E8F0)),
+                                        Expanded(
+                                          child: _buildSummaryStatItem(
+                                            title: '$totalRides',
+                                            label: 'Rides',
+                                          ),
+                                        ),
+                                        Container(width: 1, height: 36, color: const Color(0xFFE2E8F0)),
+                                        Expanded(
+                                          child: _buildSummaryStatItem(
+                                            title: '$currency${avgPerRide.toInt()}',
+                                            label: 'Avg. per Ride',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
                       ),
                       const SizedBox(height: 16),
 
@@ -598,7 +756,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                             bgColor: const Color(0xFFF0FDF4),
                             iconColor: const Color(0xFF16A34A),
                             onTap: () {
-                              Navigator.push(context, MaterialPageRoute(builder: (_) => const WalletPage()));
+                              context.go('/wallet');
                             },
                           ),
                           _buildQuickActionButton(
@@ -607,7 +765,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                             bgColor: const Color(0xFFEFF6FF),
                             iconColor: const Color(0xFF2563EB),
                             onTap: () {
-                              Navigator.push(context, MaterialPageRoute(builder: (_) => const RideHistoryPage()));
+                              context.go('/ride-history');
                             },
                           ),
                           _buildQuickActionButton(
@@ -616,7 +774,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                             bgColor: const Color(0xFFEFF6FF),
                             iconColor: const Color(0xFF2563EB),
                             onTap: () {
-                              Navigator.push(context, MaterialPageRoute(builder: (_) => const WalletPage()));
+                              context.go('/wallet');
                             },
                           ),
                         ],
@@ -626,54 +784,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   ),
                 ),
               ),
-
-              // Bottom Navigation Bar matching design
-              bottomNavigationBar: BottomNavigationBar(
-                currentIndex: _selectedNavIndex,
-                onTap: (index) {
-                  setState(() {
-                    _selectedNavIndex = index;
-                  });
-                  if (index == 1) {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const WalletPage()));
-                  } else if (index == 2) {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const RideHistoryPage()));
-                  } else if (index == 3) {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage()));
-                  }
-                },
-                type: BottomNavigationBarType.fixed,
-                backgroundColor: Colors.white,
-                selectedItemColor: const Color(0xFF16A34A), // Green selected icon & label
-                unselectedItemColor: const Color(0xFF64748B),
-                selectedFontSize: 12,
-                unselectedFontSize: 12,
-                elevation: 8,
-                items: const [
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.home_filled),
-                    label: 'Home',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.show_chart_rounded),
-                    label: 'Earnings',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.assignment_outlined),
-                    label: 'Trips',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.person_outline_rounded),
-                    label: 'Profile',
-                  ),
-                ],
-              ),
-            );
+            ));
           },
         );
       },
     );
-  }
+  },
+);
+}
 
   Widget _buildSummaryStatItem({required String title, required String label}) {
     return Column(
@@ -733,7 +851,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
-  Widget _buildDrawer(BuildContext context, String driverName, String driverRating) {
+  Widget _buildDrawer(
+    BuildContext context, {
+    required String driverName,
+    required String driverRating,
+    String? profilePhoto,
+    String? subTitleText,
+  }) {
     return BlocBuilder<DriverStatusBloc, DriverStatusState>(
       bloc: _driverStatusBloc,
       builder: (context, state) {
@@ -759,15 +883,31 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     Stack(
                       children: [
                         Container(
+                          width: 64,
+                          height: 64,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
+                            color: Colors.white,
                             border: Border.all(color: Colors.white, width: 2),
+                            image: (profilePhoto != null && profilePhoto.isNotEmpty)
+                                ? DecorationImage(
+                                    image: NetworkImage(profilePhoto),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
                           ),
-                          child: const CircleAvatar(
-                            radius: 32,
-                            backgroundColor: Colors.white,
-                            child: Icon(Icons.person, color: Color(0xFF0052CC), size: 36),
-                          ),
+                          child: (profilePhoto == null || profilePhoto.isEmpty)
+                              ? Center(
+                                  child: Text(
+                                    driverName.isNotEmpty ? driverName[0].toUpperCase() : 'D',
+                                    style: const TextStyle(
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0052CC),
+                                    ),
+                                  ),
+                                )
+                              : null,
                         ),
                         Positioned(
                           bottom: 0,
@@ -784,12 +924,19 @@ class _DriverDashboardState extends State<DriverDashboard> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
                     Text(
                       driverName,
                       style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 4),
+                    if (subTitleText != null && subTitleText.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subTitleText,
+                        style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13),
+                      ),
+                    ],
+                    const SizedBox(height: 6),
                     Row(
                       children: [
                         const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
@@ -830,7 +977,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       icon: Icons.dashboard_rounded,
                       title: 'Dashboard',
                       iconColor: const Color(0xFF0052CC),
-                      onTap: () => Navigator.pop(context),
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.go('/dashboard');
+                      },
                     ),
                     _buildDrawerItem(
                       icon: Icons.history_rounded,
@@ -838,7 +988,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       iconColor: const Color(0xFF2563EB),
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const RideHistoryPage()));
+                        context.go('/ride-history');
                       },
                     ),
                     _buildDrawerItem(
@@ -847,7 +997,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       iconColor: const Color(0xFF16A34A),
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const WalletPage()));
+                        context.go('/wallet');
                       },
                     ),
                     _buildDrawerItem(
@@ -856,7 +1006,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       iconColor: const Color(0xFF2563EB),
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage()));
+                        context.go('/profile');
                       },
                     ),
                     _buildDrawerItem(
@@ -865,12 +1015,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       iconColor: Colors.teal,
                       onTap: () {
                         Navigator.pop(context);
-                        final authState = _authBloc.state;
-                        final driver = authState is Authenticated ? authState.driver : null;
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => SettingsPage(driver: driver, onLogout: widget.onLogout)),
-                        );
+                        context.push('/settings');
                       },
                     ),
                     const Padding(

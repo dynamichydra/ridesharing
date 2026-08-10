@@ -110,8 +110,20 @@ class RideSocketDataSource {
   /// currently on a ride) forwards approach/trip progress to the rider —
   /// see `handleDriverLocationUpdate` in `ride.service.js`. No-op if the
   /// socket isn't connected.
-  void emitLocationUpdate(double lat, double lng) {
-    _socket?.emit('location_update', {'lat': lat, 'lng': lng});
+  void emitLocationUpdate(
+    double lat,
+    double lng, {
+    double? accuracy,
+    double? speedKmh,
+    int? recordedAt,
+  }) {
+    _socket?.emit('location_update', {
+      'lat': lat,
+      'lng': lng,
+      if (accuracy != null) 'accuracy': accuracy,
+      if (speedKmh != null) 'speedKmh': speedKmh,
+      'recordedAt': recordedAt ?? DateTime.now().millisecondsSinceEpoch,
+    });
   }
 
   void declineOffer(String rideId, {String? reason}) {

@@ -29,6 +29,7 @@ import 'features/profile/presentation/bloc/profile_bloc.dart';
 import 'features/wallet/data/datasources/wallet_remote_datasource.dart';
 import 'features/wallet/presentation/bloc/wallet_bloc.dart';
 import 'features/ride_history/data/datasources/ride_history_datasource.dart';
+import 'features/ride_history/presentation/bloc/ride_history_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -84,4 +85,5 @@ Future<void> init() async {
   sl.registerFactory(() => RideBloc(rideRepository: sl(), locationService: sl()));
   sl.registerFactory(() => ProfileBloc(dataSource: sl()));
   sl.registerFactory(() => WalletBloc(dataSource: sl()));
+  sl.registerFactory(() => RideHistoryBloc(dataSource: sl()));
 }

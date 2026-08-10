@@ -2,15 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../presentation/screens/onboarding/onboarding_wizard.dart';
 import '../../presentation/screens/dashboard/driver_dashboard.dart';
+import '../../presentation/screens/dashboard/driver_main_layout.dart';
+import '../../presentation/screens/settings/settings_page.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/subscription/presentation/screens/subscription_plans_screen.dart';
+import '../../features/ride_history/presentation/pages/ride_history_page.dart';
+import '../../features/wallet/presentation/pages/wallet_page.dart';
+import '../../features/profile/presentation/pages/profile_page.dart';
 
 class AppRouter {
   final AuthBloc authBloc;
 
   AppRouter(this.authBloc);
 
+  static final GlobalKey<NavigatorState> _rootNavigatorKey =
+      GlobalKey<NavigatorState>(debugLabel: 'driver_root');
+
   late final GoRouter router = GoRouter(
+    navigatorKey: _rootNavigatorKey,
     initialLocation: '/',
     refreshListenable: _BlocRefreshListenable(authBloc),
     redirect: (context, state) {
@@ -22,13 +31,10 @@ class AppRouter {
                                 authState.driver.registrationStatus == 'active';
 
         if (!isFullyApproved) {
-          // If not approved yet, they must complete onboarding
           if (!isOnboarding) return '/onboarding';
           return null;
         }
 
-        // Approved, but one more gate before the dashboard: an active
-        // subscription (backend enforces the same gate on go-online).
         if (!authState.driver.hasActiveSubscription) {
           if (state.matchedLocation != '/subscription') return '/subscription';
           return null;
@@ -53,6 +59,7 @@ class AppRouter {
         ),
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         path: '/onboarding',
         builder: (context, state) => OnboardingWizard(
           onComplete: () {
@@ -61,17 +68,13 @@ class AppRouter {
         ),
       ),
       GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         path: '/subscription',
         builder: (context, state) {
           final authState = authBloc.state;
           final countryId = authState is Authenticated ? (authState.driver.countryId ?? '') : '';
           return SubscriptionPlansScreen(
             countryId: countryId,
-            // No explicit navigation here: PurchaseSucceeded already triggers
-            // AuthBloc.CheckAuthStatus() to refresh the driver profile, and
-            // `redirect` above reacts to that once hasActiveSubscription
-            // flips true. Navigating here directly would race ahead of that
-            // refresh and could bounce straight back to `/subscription`.
             onSubscribed: () {},
             onLogout: () {
               authBloc.add(LogoutRequested());
@@ -79,13 +82,50 @@ class AppRouter {
           );
         },
       ),
+
+      // ShellRoute wraps the 4 main index tab pages inside DriverMainLayout
+      ShellRoute(
+        builder: (context, state, child) {
+          return DriverMainLayout(child: child);
+        },
+        routes: [
+          GoRoute(
+            path: '/dashboard',
+            builder: (context, state) => DriverDashboard(
+              onLogout: () {
+                authBloc.add(LogoutRequested());
+              },
+            ),
+          ),
+          GoRoute(
+            path: '/ride-history',
+            builder: (context, state) => const RideHistoryPage(),
+          ),
+          GoRoute(
+            path: '/wallet',
+            builder: (context, state) => const WalletPage(),
+          ),
+          GoRoute(
+            path: '/profile',
+            builder: (context, state) => const ProfilePage(),
+          ),
+        ],
+      ),
+
+      // Sub-pages pushed over the root navigator (full-screen without bottom nav bar)
       GoRoute(
-        path: '/dashboard',
-        builder: (context, state) => DriverDashboard(
-          onLogout: () {
-            authBloc.add(LogoutRequested());
-          },
-        ),
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/settings',
+        builder: (context, state) {
+          final authState = authBloc.state;
+          final driver = authState is Authenticated ? authState.driver : null;
+          return SettingsPage(
+            driver: driver,
+            onLogout: () {
+              authBloc.add(LogoutRequested());
+            },
+          );
+        },
       ),
     ],
   );

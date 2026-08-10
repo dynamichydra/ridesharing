@@ -17,11 +17,17 @@ abstract class RideRepository {
   void acceptOffer(String rideId);
   void declineOffer(String rideId, {String? reason});
   Stream<RideAcceptResult> get onAcceptResult;
-  void sendLocationUpdate(double lat, double lng);
+  void sendLocationUpdate(
+    double lat,
+    double lng, {
+    double? accuracy,
+    double? speedKmh,
+    int? recordedAt,
+  });
 
   // ── REST lifecycle actions ────────────────────────────────────────────────
   Future<ActiveRide> markArriving(String rideId);
-  Future<ActiveRide> startRide(String rideId);
+  Future<ActiveRide> startRide(String rideId, String otp);
   Future<ActiveRide> completeRide(String rideId);
   Future<void> cancelRideByDriver(String rideId, {String? reason});
   Future<ActiveRide?> getActiveRide();

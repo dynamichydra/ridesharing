@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../../../services/app_logger.dart';
 import '../../../../services/location_service.dart';
 import '../../domain/entities/active_ride.dart';
@@ -35,7 +38,10 @@ class OfferExpiredLocally extends RideEvent {
 
 class MarkArrivingRequested extends RideEvent {}
 
-class StartRideRequested extends RideEvent {}
+class StartRideRequested extends RideEvent {
+  final String otp;
+  StartRideRequested({required this.otp});
+}
 
 class CompleteRideRequested extends RideEvent {}
 
@@ -72,6 +78,11 @@ class _SocketErrorArrived extends RideEvent {
   _SocketErrorArrived(this.message);
 }
 
+class _DriverLocationChanged extends RideEvent {
+  final Position position;
+  _DriverLocationChanged(this.position);
+}
+
 // ── States ──────────────────────────────────────────────────────────────────
 abstract class RideState {}
 
@@ -79,8 +90,9 @@ abstract class RideState {}
 class RideIdle extends RideState {}
 
 class RideOfferPending extends RideState {
+  final List<RideOffer> offers;
   final RideOffer offer;
-  RideOfferPending({required this.offer});
+  RideOfferPending({required this.offers}) : offer = offers.isNotEmpty ? offers.first : throw ArgumentError('offers cannot be empty');
 }
 
 /// The offer went away for a reason other than the driver's own action
@@ -93,11 +105,34 @@ class RideOfferGone extends RideState {
 class RideAccepting extends RideState {}
 
 /// `ride.status` (accepted | arriving | started) drives which sub-screen /
-/// primary action the UI shows — mirrors how the backend itself models it,
-/// rather than inventing parallel Accepted/Arriving/Started state classes.
+/// primary action the UI shows — carries driver position, bearing, and
+/// the registered car path (breadcrumbs array).
 class RideActive extends RideState {
   final ActiveRide ride;
-  RideActive({required this.ride});
+  final LatLng? driverPosition;
+  final double driverBearing;
+  final List<LatLng> traveledPath;
+
+  RideActive({
+    required this.ride,
+    this.driverPosition,
+    this.driverBearing = 0.0,
+    this.traveledPath = const [],
+  });
+
+  RideActive copyWith({
+    ActiveRide? ride,
+    LatLng? driverPosition,
+    double? driverBearing,
+    List<LatLng>? traveledPath,
+  }) {
+    return RideActive(
+      ride: ride ?? this.ride,
+      driverPosition: driverPosition ?? this.driverPosition,
+      driverBearing: driverBearing ?? this.driverBearing,
+      traveledPath: traveledPath ?? this.traveledPath,
+    );
+  }
 }
 
 /// A REST lifecycle call (arriving/start/complete/cancel) is in flight —
@@ -128,17 +163,18 @@ class RideBloc extends Bloc<RideEvent, RideState> {
   final RideRepository rideRepository;
   final LocationService locationService;
 
-  static const _locationPingInterval = Duration(seconds: 5);
-
   StreamSubscription<RideOffer>? _offerSub;
   StreamSubscription<String>? _takenSub;
   StreamSubscription<String>? _cancelledSub;
   StreamSubscription<RideAcceptResult>? _acceptResultSub;
   StreamSubscription<String>? _socketErrorSub;
-  Timer? _locationTimer;
+  StreamSubscription<Position>? _locationSub;
 
   ActiveRide? _currentRide;
-  String? _pendingOfferRideId;
+  final List<RideOffer> _pendingOffers = [];
+  LatLng? _lastDriverPos;
+  double _lastDriverBearing = 0.0;
+  final List<LatLng> _traveledPath = [];
 
   RideBloc({required this.rideRepository, required this.locationService}) : super(RideIdle()) {
     on<ConnectRideSocket>(_onConnect);
@@ -150,23 +186,32 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     on<StartRideRequested>(_onStartRideRequested);
     on<CompleteRideRequested>(_onCompleteRideRequested);
     on<DriverCancelRequested>(_onDriverCancelRequested);
+    on<_DriverLocationChanged>(_onDriverLocationChanged);
     on<AcknowledgeCompletionRequested>((event, emit) {
       _currentRide = null;
+      _traveledPath.clear();
+      _pendingOffers.clear();
       emit(RideIdle());
     });
 
     on<_OfferArrived>((event, emit) {
-      _pendingOfferRideId = event.offer.rideId;
-      emit(RideOfferPending(offer: event.offer));
+      _pendingOffers.removeWhere((o) => o.rideId == event.offer.rideId);
+      _pendingOffers.insert(0, event.offer);
+      emit(RideOfferPending(offers: List.unmodifiable(_pendingOffers)));
     });
     on<_OfferTakenByOther>((event, emit) {
-      if (_pendingOfferRideId != event.rideId) return;
-      _pendingOfferRideId = null;
-      emit(RideOfferGone(message: 'Another driver accepted this ride.'));
+      _pendingOffers.removeWhere((o) => o.rideId == event.rideId);
+      if (_pendingOffers.isEmpty) {
+        emit(RideOfferGone(message: 'Another driver accepted this ride.'));
+        emit(RideIdle());
+      } else {
+        emit(RideOfferPending(offers: List.unmodifiable(_pendingOffers)));
+      }
     });
     on<_CancelledByRider>((event, emit) {
       if (_currentRide?.id != event.rideId) return;
       _currentRide = null;
+      _traveledPath.clear();
       emit(RideCancelledByRider(message: 'The rider cancelled this trip.'));
     });
     on<_AcceptResultArrived>(_onAcceptResultArrived);
@@ -182,32 +227,78 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     _acceptResultSub ??= rideRepository.onAcceptResult.listen((result) => add(_AcceptResultArrived(result)));
     _socketErrorSub ??= rideRepository.onSocketError.listen((message) => add(_SocketErrorArrived(message)));
 
-    // Keeps the backend's live Redis position fresh, and (if this driver is
-    // currently on a ride) drives the rider-facing approach/trip tracking —
-    // see `handleDriverLocationUpdate` in `ride.service.js`. Runs for the
-    // whole time the driver is online, not just during an active trip, same
-    // as a real driver app.
-    _locationTimer ??= Timer.periodic(_locationPingInterval, (_) async {
-      try {
-        final position = await locationService.getCurrentPosition();
-        rideRepository.sendLocationUpdate(position.latitude, position.longitude);
-      } catch (e) {
-        AppLogger.w('[RideBloc] location ping failed: $e');
-      }
-    });
+    _locationSub ??= locationService.getPositionStream().listen(
+      (pos) => add(_DriverLocationChanged(pos)),
+      onError: (e) => AppLogger.w('[RideBloc] location stream error: $e'),
+    );
 
     // Restore an in-progress ride if the app was killed/restarted mid-trip.
     try {
       final active = await rideRepository.getActiveRide();
       if (active != null) {
         _currentRide = active;
-        emit(RideActive(ride: active));
+        emit(RideActive(
+          ride: active,
+          driverPosition: _lastDriverPos,
+          driverBearing: _lastDriverBearing,
+          traveledPath: List.unmodifiable(_traveledPath),
+        ));
         return;
       }
     } catch (e) {
       AppLogger.w('[RideBloc] getActiveRide check failed: $e');
     }
     emit(RideIdle());
+  }
+
+  void _onDriverLocationChanged(_DriverLocationChanged event, Emitter<RideState> emit) {
+    final pos = event.position;
+    final newPos = LatLng(pos.latitude, pos.longitude);
+
+    if (_lastDriverPos != null) {
+      _lastDriverBearing = _calculateBearing(
+        _lastDriverPos!.latitude,
+        _lastDriverPos!.longitude,
+        newPos.latitude,
+        newPos.longitude,
+      );
+    }
+    _lastDriverPos = newPos;
+
+    if (_currentRide != null) {
+      _traveledPath.add(newPos);
+    } else {
+      _traveledPath.clear();
+    }
+
+    rideRepository.sendLocationUpdate(
+      pos.latitude,
+      pos.longitude,
+      accuracy: pos.accuracy,
+      speedKmh: pos.speed * 3.6,
+      recordedAt: pos.timestamp.millisecondsSinceEpoch,
+    );
+
+    final currentState = state;
+    if (currentState is RideActive) {
+      emit(currentState.copyWith(
+        driverPosition: newPos,
+        driverBearing: _lastDriverBearing,
+        traveledPath: List.unmodifiable(_traveledPath),
+      ));
+    }
+  }
+
+  double _calculateBearing(double startLat, double startLng, double endLat, double endLng) {
+    final startLatRad = startLat * math.pi / 180;
+    final startLngRad = startLng * math.pi / 180;
+    final endLatRad = endLat * math.pi / 180;
+    final endLngRad = endLng * math.pi / 180;
+    final dLng = endLngRad - startLngRad;
+    final y = math.sin(dLng) * math.cos(endLatRad);
+    final x = math.cos(startLatRad) * math.sin(endLatRad) -
+        math.sin(startLatRad) * math.cos(endLatRad) * math.cos(dLng);
+    return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
   }
 
   void _onDisconnect(DisconnectRideSocket event, Emitter<RideState> emit) {
@@ -221,13 +312,13 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     _cancelledSub?.cancel();
     _acceptResultSub?.cancel();
     _socketErrorSub?.cancel();
-    _locationTimer?.cancel();
+    _locationSub?.cancel();
     _offerSub = null;
     _takenSub = null;
     _cancelledSub = null;
     _acceptResultSub = null;
     _socketErrorSub = null;
-    _locationTimer = null;
+    _locationSub = null;
   }
 
   void _onAcceptOfferRequested(AcceptOfferRequested event, Emitter<RideState> emit) {
@@ -236,15 +327,22 @@ class RideBloc extends Bloc<RideEvent, RideState> {
   }
 
   void _onDeclineOfferRequested(DeclineOfferRequested event, Emitter<RideState> emit) {
-    _pendingOfferRideId = null;
+    _pendingOffers.removeWhere((o) => o.rideId == event.rideId);
     rideRepository.declineOffer(event.rideId, reason: event.reason);
-    emit(RideIdle());
+    if (_pendingOffers.isEmpty) {
+      emit(RideIdle());
+    } else {
+      emit(RideOfferPending(offers: List.unmodifiable(_pendingOffers)));
+    }
   }
 
   void _onOfferExpiredLocally(OfferExpiredLocally event, Emitter<RideState> emit) {
-    if (_pendingOfferRideId != event.rideId) return;
-    _pendingOfferRideId = null;
-    emit(RideIdle());
+    _pendingOffers.removeWhere((o) => o.rideId == event.rideId);
+    if (_pendingOffers.isEmpty) {
+      emit(RideIdle());
+    } else {
+      emit(RideOfferPending(offers: List.unmodifiable(_pendingOffers)));
+    }
   }
 
   Future<void> _onAcceptResultArrived(_AcceptResultArrived event, Emitter<RideState> emit) async {
@@ -288,7 +386,7 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     if (ride == null) return;
     emit(RideActionInProgress(ride: ride));
     try {
-      final updated = await rideRepository.startRide(ride.id);
+      final updated = await rideRepository.startRide(ride.id, event.otp);
       _currentRide = updated;
       emit(RideActive(ride: updated));
     } catch (e) {

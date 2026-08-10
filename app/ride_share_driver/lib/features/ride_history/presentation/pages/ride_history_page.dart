@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../style/appcolors.dart';
 import '../../../../injection_container.dart' as di;
-import '../../data/datasources/ride_history_datasource.dart';
+import '../bloc/ride_history_bloc.dart';
 
 class RideHistoryPage extends StatefulWidget {
   const RideHistoryPage({super.key});
@@ -11,23 +12,15 @@ class RideHistoryPage extends StatefulWidget {
 }
 
 class _RideHistoryPageState extends State<RideHistoryPage> {
-  late final RideHistoryDataSource _dataSource = di.sl<RideHistoryDataSource>();
-
-  List<Map<String, dynamic>> _rides = [];
-  bool _loading = true;
-  String? _error;
-  int _page = 1;
-  bool _hasMore = true;
-  bool _loadingMore = false;
+  late final RideHistoryBloc _bloc = di.sl<RideHistoryBloc>();
   final ScrollController _scrollCtrl = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _load();
     _scrollCtrl.addListener(() {
-      if (_scrollCtrl.position.pixels > _scrollCtrl.position.maxScrollExtent - 120 && _hasMore && !_loadingMore) {
-        _loadMore();
+      if (_scrollCtrl.position.pixels > _scrollCtrl.position.maxScrollExtent - 120) {
+        _bloc.add(LoadMoreRideHistory());
       }
     });
   }
@@ -35,94 +28,88 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
   @override
   void dispose() {
     _scrollCtrl.dispose();
+    _bloc.close();
     super.dispose();
-  }
-
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      final result = await _dataSource.getRideHistory(page: 1, limit: 20);
-      final rows = (result['MESSAGE'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      final pagination = result['PAGINATION'] as Map<String, dynamic>?;
-      setState(() {
-        _rides = rows;
-        _page = 1;
-        _hasMore = rows.length == 20 && (pagination?['totalPages'] ?? 1) > 1;
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() { _error = e.toString(); _loading = false; });
-    }
-  }
-
-  Future<void> _loadMore() async {
-    if (_loadingMore || !_hasMore) return;
-    setState(() => _loadingMore = true);
-    try {
-      final nextPage = _page + 1;
-      final result = await _dataSource.getRideHistory(page: nextPage, limit: 20);
-      final rows = (result['MESSAGE'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      setState(() {
-        _rides.addAll(rows);
-        _page = nextPage;
-        _hasMore = rows.length == 20;
-        _loadingMore = false;
-      });
-    } catch (_) {
-      setState(() => _loadingMore = false);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text('Ride History', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: AppColors.border.withOpacity(0.4), height: 1),
+    return BlocProvider.value(
+      value: _bloc..add(LoadRideHistory()),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          title: const Text('Ride History', style: TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.white,
+          foregroundColor: AppColors.textPrimary,
+          elevation: 0,
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(1),
+            child: Container(color: AppColors.border.withOpacity(0.4), height: 1),
+          ),
+        ),
+        body: BlocBuilder<RideHistoryBloc, RideHistoryState>(
+          builder: (context, state) {
+            if (state is RideHistoryLoading || state is RideHistoryInitial) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (state is RideHistoryError) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+                    const SizedBox(height: 12),
+                    Text(state.message, textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => _bloc.add(LoadRideHistory()),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            if (state is RideHistoryLoaded) {
+              final rides = state.rides;
+              if (rides.isEmpty) {
+                return const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.directions_car_outlined, size: 64, color: AppColors.textSecondary),
+                      SizedBox(height: 16),
+                      Text('No rides yet', style: TextStyle(fontSize: 16, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
+                      SizedBox(height: 4),
+                      Text('Your completed rides will appear here', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                    ],
+                  ),
+                );
+              }
+
+              return RefreshIndicator(
+                onRefresh: () async {
+                  _bloc.add(LoadRideHistory());
+                },
+                child: ListView.builder(
+                  controller: _scrollCtrl,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: rides.length + (state.isLoadingMore ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == rides.length) {
+                      return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
+                    }
+                    return _buildRideCard(rides[index]);
+                  },
+                ),
+              );
+            }
+
+            return const SizedBox();
+          },
         ),
       ),
-      body: () {
-        if (_loading) return const Center(child: CircularProgressIndicator());
-        if (_error != null) {
-          return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-            const SizedBox(height: 12),
-            Text(_error!, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            ElevatedButton(onPressed: _load, child: const Text('Retry')),
-          ]));
-        }
-        if (_rides.isEmpty) {
-          return const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.directions_car_outlined, size: 64, color: AppColors.textSecondary),
-            SizedBox(height: 16),
-            Text('No rides yet', style: TextStyle(fontSize: 16, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
-            SizedBox(height: 4),
-            Text('Your completed rides will appear here', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-          ]));
-        }
-
-        return RefreshIndicator(
-          onRefresh: _load,
-          child: ListView.builder(
-            controller: _scrollCtrl,
-            padding: const EdgeInsets.all(16),
-            itemCount: _rides.length + (_loadingMore ? 1 : 0),
-            itemBuilder: (context, index) {
-              if (index == _rides.length) {
-                return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
-              }
-              return _buildRideCard(_rides[index]);
-            },
-          ),
-        );
-      }(),
     );
   }
 

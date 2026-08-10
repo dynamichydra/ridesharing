@@ -109,50 +109,56 @@ class _WalletPageState extends State<WalletPage> {
               else if (state is WalletSubmitting) { bank = state.bankDetails; payout = state.payoutAccount; isBusy = true; }
               else if (state is WalletSubmitSuccess) { bank = state.bankDetails; }
 
-              return SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Wallet balance card
-                    _buildBalanceCard(wallet),
-                    const SizedBox(height: 16),
-
-                    // Payout account status card
-                    _buildPayoutStatusCard(payout),
-                    const SizedBox(height: 16),
-
-                    // Bank details card
-                    _buildBankDetailsCard(bank),
-                    const SizedBox(height: 16),
-
-                    // Add/Update bank details form
-                    if (_showForm) ...[
-                      _buildBankForm(isBusy),
+              return RefreshIndicator(
+                onRefresh: () async {
+                  _bloc.add(LoadWalletData());
+                },
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Wallet balance card
+                      _buildBalanceCard(wallet),
                       const SizedBox(height: 16),
-                    ],
 
-                    if (!_showForm)
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () => setState(() => _showForm = true),
-                          icon: const Icon(Icons.add_card_rounded),
-                          label: Text(bank == null ? 'Add Bank / UPI Details' : 'Update Bank / UPI Details'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            elevation: 0,
+                      // Payout account status card
+                      _buildPayoutStatusCard(payout),
+                      const SizedBox(height: 16),
+
+                      // Bank details card
+                      _buildBankDetailsCard(bank),
+                      const SizedBox(height: 16),
+
+                      // Add/Update bank details form
+                      if (_showForm) ...[
+                        _buildBankForm(isBusy),
+                        const SizedBox(height: 16),
+                      ],
+
+                      if (!_showForm)
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => setState(() => _showForm = true),
+                            icon: const Icon(Icons.add_card_rounded),
+                            label: Text(bank == null ? 'Add Bank / UPI Details' : 'Update Bank / UPI Details'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 0,
+                            ),
                           ),
                         ),
-                      ),
 
-                    const SizedBox(height: 16),
-                    // Explanation card
-                    _buildInfoCard(),
-                  ],
+                      const SizedBox(height: 16),
+                      // Explanation card
+                      _buildInfoCard(),
+                    ],
+                  ),
                 ),
               );
             }(),

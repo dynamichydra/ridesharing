@@ -19,9 +19,11 @@ class RideRemoteDataSource {
     }
   }
 
-  Future<Map<String, dynamic>> startRide(String rideId) async {
+  Future<Map<String, dynamic>> startRide(String rideId, String otp) async {
     try {
-      final response = await apiClient.dio.post('/rides/$rideId/start');
+      final response = await apiClient.dio.post('/rides/$rideId/start', data: {
+        'otp': otp,
+      });
       if (response.data['SUCCESS'] != true) {
         throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to start ride');
       }
