@@ -1,7 +1,8 @@
 /**
  * Expanding-radius driver matching engine.
  *
- * Ring progression:  5 km → 10 km → 15 km
+ * Ring progression:  1 km → 2 km → 3 km
+
  * Per ring:
  *   1. Look up the candidate driver-ID pool from the H3 availability index
  *      (driver-geo-index.service.js) — bounded gridDisk lookup, not a full-table
@@ -47,7 +48,8 @@ import { scoreDrivers } from './scoring.service.js';
 import { getActiveWeights } from './matching-weights.service.js';
 import { metrics } from '../../utils/metrics.js';
 
-const RADII_KM = [5, 10, 15];
+const RADII_KM = [1, 2, 3];
+
 const ACCEPT_TIMEOUT_MS = 25_000;   // 25 s per ring
 const MAX_CANDIDATES = 5;
 const CANDIDATE_BUFFER = Math.min(10, ETA_MATRIX_MAX_DESTINATIONS); // fetched pool size — gives lock-loss backfill spares without re-querying
@@ -415,7 +417,8 @@ async function _expireRide(rideId) {
 
   await recordStatusChange({
     rideId, fromStatus: 'searching', toStatus: 'expired',
-    changedBy: 'system', reason: 'No driver found in any search radius (5/10/15 km exhausted)',
+    changedBy: 'system', reason: 'No driver found in any search radius (1/2/3 km exhausted)',
+
   });
 
   await redis.del(REDIS_KEYS.rideRequest(rideId));

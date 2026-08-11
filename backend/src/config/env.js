@@ -69,6 +69,7 @@ export const isTwilioConfigured = !!(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_T
 export const isRazorpayConfigured = !!(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET);
 // Payouts draw from a separate RazorpayX current account — standard Razorpay keys alone
 // (used for orders/payments) aren't enough to call the Contacts/Fund Accounts/Payouts APIs.
-export const isRazorpayXConfigured = !!(isRazorpayConfigured && env.RAZORPAYX_ACCOUNT_NUMBER);
+export const isRazorpayXConfigured = !!(isRazorpayConfigured && (env.RAZORPAYX_ACCOUNT_NUMBER || env.NODE_ENV === 'development'));
+
 export const isSmtpConfigured = !!(env.SMTP_HOST && env.SMTP_PORT && env.SMTP_USER && env.SMTP_PASSWORD && env.EMAIL_FROM);
 export const isStripeConfigured = !!(env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY);

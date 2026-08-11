@@ -1,5 +1,5 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
-import { authenticateRider, authenticateDriver, authenticateAdmin } from '../../middleware/authenticate.js';
+import { authenticateRider, authenticateDriver, authenticateAdmin, authenticateAny } from '../../middleware/authenticate.js';
 import * as rideService from './ride.service.js';
 import { signalRideAccepted, signalRideCancelled } from '../matching/matching.service.js';
 
@@ -55,13 +55,28 @@ export async function rideRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  // GET /api/v1/rides/:id/receipt
+  app.get('/:id/receipt', { preHandler: [authenticateAny] }, async (request, reply) => {
+    const data = await rideService.getRideReceipt(request.params.id, request.user.id);
+    return sendSuccess(reply, data);
+  });
+
   // POST /api/v1/rides/:id/rate
   app.post('/:id/rate', { preHandler: [authenticateRider] }, async (request, reply) => {
-    const { rating, review } = request.body;
+    const { rating, review } = request.body || {};
     if (!rating || rating < 1 || rating > 5) return sendError(reply, 'rating must be between 1 and 5');
     const data = await rideService.rateDriver(request.params.id, request.user.id, rating, review);
     return sendSuccess(reply, data);
   });
+
+  // POST /api/v1/rides/:id/rate-rider (driver rates rider)
+  app.post('/:id/rate-rider', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const { rating, review } = request.body || {};
+    if (!rating || rating < 1 || rating > 5) return sendError(reply, 'rating must be between 1 and 5');
+    const data = await rideService.rateRider(request.params.id, request.user.id, rating, review);
+    return sendSuccess(reply, data);
+  });
+
 
   // GET /api/v1/rides/:id/offers — full broadcast history (rider sees own ride)
   app.get('/:id/offers', { preHandler: [authenticateRider] }, async (request, reply) => {

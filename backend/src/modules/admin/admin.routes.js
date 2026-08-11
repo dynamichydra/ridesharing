@@ -38,4 +38,11 @@ export async function adminRoutes(app) {
     const { rows, pagination } = await listHistoryPaginated(filters, page, limit, offset);
     return sendList(reply, rows, pagination);
   });
+
+  // GET /api/v1/admin/analytics/supply-demand-heatmap
+  app.get('/analytics/supply-demand-heatmap', async (request, reply) => {
+    const data = await adminService.getSupplyDemandHeatmap();
+    return sendSuccess(reply, data);
+  });
+
 }

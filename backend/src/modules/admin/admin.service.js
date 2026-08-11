@@ -1,4 +1,4 @@
-import { eq, count, desc, and, gte, sql } from 'drizzle-orm';
+import { eq, count, desc, and, gte, sql, or } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { drivers, users, rides, subscriptions, auditLogs } from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
@@ -79,3 +79,48 @@ export async function listAuditLogs(page, limit, offset, filters = {}) {
 export async function writeAuditLog(entry) {
   return db.insert(auditLogs).values(entry).returning();
 }
+
+export async function getSupplyDemandHeatmap() {
+  const onlineDrivers = await db.select({
+    id: drivers.id,
+    name: drivers.name,
+    currentLat: drivers.currentLat,
+    currentLng: drivers.currentLng,
+    lastLocationAt: drivers.lastLocationAt,
+  }).from(drivers).where(eq(drivers.isOnline, true));
+
+  const activeRides = await db.select({
+    id: rides.id,
+    status: rides.status,
+    pickupLat: rides.pickupLat,
+    pickupLng: rides.pickupLng,
+    pickupAddress: rides.pickupAddress,
+    requestedAt: rides.requestedAt,
+  }).from(rides).where(or(
+    eq(rides.status, 'searching'),
+    eq(rides.status, 'accepted'),
+    eq(rides.status, 'arriving'),
+    eq(rides.status, 'started'),
+  ));
+
+  return {
+    supply: {
+      onlineDriversCount: onlineDrivers.length,
+      drivers: onlineDrivers.map((d) => ({
+        id: d.id,
+        lat: parseFloat(d.currentLat || '0'),
+        lng: parseFloat(d.currentLng || '0'),
+      })),
+    },
+    demand: {
+      activeRidesCount: activeRides.length,
+      rides: activeRides.map((r) => ({
+        id: r.id,
+        status: r.status,
+        lat: parseFloat(r.pickupLat || '0'),
+        lng: parseFloat(r.pickupLng || '0'),
+      })),
+    },
+  };
+}
+

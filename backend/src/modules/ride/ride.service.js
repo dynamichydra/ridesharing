@@ -1,9 +1,11 @@
 import { eq, desc, count, and, or, sql } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { rides, drivers, users } from '../../../drizzle/schema/index.js';
+import { rides, drivers, users, rideFareSplits } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { calculateFare } from '../fare/fare.service.js';
+import { detectZone } from '../zone/zone.service.js';
+
 import {
   startMatchingProcess,
   validateDriverCanAccept
@@ -83,7 +85,15 @@ export async function requestRide({
     isScheduled = true;
   }
 
+  // Geofence restriction check
+  const pickupZone = await detectZone(parseFloat(pickupLat), parseFloat(pickupLng));
+  const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
+  if (pickupZone?.type === 'restricted' || dropZone?.type === 'restricted') {
+    throw { statusCode: 400, message: 'Pickup or drop-off is in a restricted geofenced area' };
+  }
+
   // Fare snapshot
+
   const fareData = await calculateFare({
     pickupLat: parseFloat(pickupLat), pickupLng: parseFloat(pickupLng),
     dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
@@ -123,7 +133,8 @@ export async function requestRide({
 
   await publishEvent(TOPICS.RIDE_REQUESTED, { id: ride.id, ...ride });
 
-  // Non-blocking — kicks off 5→10→15 km ring search
+  // Non-blocking — kicks off 1→2→3 km ring search
+
   startMatchingProcess(ride);
 
   return { ride, fareEstimate: fareData };
@@ -241,6 +252,99 @@ export async function rateDriver(rideId, riderId, rating, review) {
   }
   return { rated: true };
 }
+
+export async function rateRider(rideId, driverId, rating, review) {
+  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+  if (ride.driverId !== driverId) throw { statusCode: 403, message: 'Not your ride' };
+  if (ride.status !== 'completed') throw { statusCode: 409, message: 'Can only rate completed rides' };
+  if (ride.riderRating) throw { statusCode: 409, message: 'Already rated' };
+
+  await db.update(rides).set({ riderRating: rating, riderReview: review }).where(eq(rides.id, rideId));
+
+  if (review) {
+    const { scanTextForProfanity, flagContentForReview } = await import('../moderation/moderation.service.js');
+    const scan = scanTextForProfanity(review);
+    if (scan.flagged) {
+      await flagContentForReview({
+        contentType: 'review',
+        contentId: rideId,
+        authorId: driverId,
+        authorType: 'driver',
+        flagReason: scan.reasons.join(','),
+        flaggedText: review,
+      }).catch((err) => console.error('[Moderation] flag error:', err.message));
+    }
+  }
+
+  const [rider] = await db.select({ rating: users.rating, totalRides: users.totalRides })
+    .from(users).where(eq(users.id, ride.riderId)).limit(1);
+  const currentCount = parseInt(rider?.totalRides || '1', 10);
+  const newRating = ((parseFloat(rider?.rating || '5.00') * currentCount) + rating) / (currentCount + 1);
+  await db.update(users).set({
+    rating: String(newRating.toFixed(2)),
+  }).where(eq(users.id, ride.riderId));
+
+  return { rated: true };
+}
+
+export async function getRideReceipt(rideId, requesterId) {
+  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+  if (ride.riderId !== requesterId && ride.driverId !== requesterId) {
+    throw { statusCode: 403, message: 'Not authorized to access receipt for this ride' };
+  }
+  if (ride.status !== 'completed') {
+    throw { statusCode: 400, message: `Receipt is only available for completed rides (current status: ${ride.status})` };
+  }
+
+  const [rider] = await db.select({ name: users.name, email: users.email, phone: users.phone })
+    .from(users).where(eq(users.id, ride.riderId)).limit(1);
+
+  let driverInfo = null;
+  if (ride.driverId) {
+    const [driver] = await db.select({
+      name: drivers.name,
+      vehicleModel: drivers.vehicleModel,
+      vehicleNumber: drivers.vehicleNumber,
+    }).from(drivers).where(eq(drivers.id, ride.driverId)).limit(1);
+    driverInfo = driver;
+  }
+
+  const splits = await db.select().from(rideFareSplits).where(eq(rideFareSplits.rideId, rideId));
+  const acceptedSplits = splits.filter((s) => s.status === 'accepted');
+
+  const totalFareMinor = ride.finalFareMinor || ride.estimatedFareMinor || 0;
+  const splitParticipants = acceptedSplits.length + 1;
+  const sharePerRiderMinor = Math.floor(totalFareMinor / splitParticipants);
+
+  return {
+    receiptId: `REC-${ride.id.slice(0, 8).toUpperCase()}`,
+    rideId: ride.id,
+    completedAt: ride.completedAt || ride.updatedAt,
+    rider: rider || null,
+    driver: driverInfo || null,
+    pickupAddress: ride.pickupAddress,
+    dropAddress: ride.dropAddress,
+    distanceKm: ride.actualDistanceKm || ride.distanceKm,
+    durationMin: ride.actualDurationMin || ride.durationMin,
+    currencyCode: ride.currencyCode || 'USD',
+    itemization: {
+      fareSnapshot: ride.fareSnapshot,
+      baseFareMinor: ride.fareSnapshot?.baseFareMinor || totalFareMinor,
+      distanceChargeMinor: ride.fareSnapshot?.distanceChargeMinor || 0,
+      timeChargeMinor: ride.fareSnapshot?.timeChargeMinor || 0,
+      surgeMultiplier: ride.fareSnapshot?.surgeMultiplier || '1.00',
+      promoDiscountMinor: ride.fareSnapshot?.promoDiscountMinor || 0,
+      finalFareMinor: totalFareMinor,
+      fareSplitCount: acceptedSplits.length,
+      yourShareMinor: acceptedSplits.length > 0 ? sharePerRiderMinor : totalFareMinor,
+    },
+    paymentMethod: ride.paymentMethod || 'online',
+    paymentStatus: ride.paymentStatus || 'paid',
+  };
+}
+
 
 
 // ── Driver actions ─────────────────────────────────────────────────────────────
