@@ -17,11 +17,34 @@ export async function rideRoutes(app) {
     return sendSuccess(reply, data, 201);
   });
 
+  // POST /api/v1/rides/schedule
+  app.post('/schedule', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const { vehicleTypeId, pickupLat, pickupLng, dropLat, dropLng, scheduledAt } = request.body || {};
+    if (!vehicleTypeId || !pickupLat || !pickupLng || !dropLat || !dropLng || !scheduledAt) {
+      return sendError(reply, 'vehicleTypeId, pickupLat, pickupLng, dropLat, dropLng, scheduledAt are required', 400);
+    }
+    const data = await rideService.requestRide({ riderId: request.user.id, ...request.body, scheduledAt });
+    return sendSuccess(reply, data, 201);
+  });
+
+  // GET /api/v1/rides/scheduled/mine
+  app.get('/scheduled/mine', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const data = await rideService.listMyScheduledRides(request.user.id);
+    return sendSuccess(reply, data);
+  });
+
+  // DELETE /api/v1/rides/scheduled/:id
+  app.delete('/scheduled/:id', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const data = await rideService.cancelScheduledRide(request.params.id, request.user.id);
+    return sendSuccess(reply, data);
+  });
+
   // GET /api/v1/rides/:id
   app.get('/:id', { preHandler: [authenticateRider] }, async (request, reply) => {
     const data = await rideService.getRideById(request.params.id);
     return sendSuccess(reply, data);
   });
+
 
   // POST /api/v1/rides/:id/cancel  (rider)
   // Fix 3: call signalRideCancelled so matching loop aborts immediately

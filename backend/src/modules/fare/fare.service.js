@@ -19,14 +19,15 @@ import { fromMinor, roundToIncrement } from '../../utils/money.js';
  * so this can't come from a stored profile field.
  * Returns full breakdown; snapshot is stored on the ride row at request time.
  */
-export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId }) {
+export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId, promoCode = null, userId = null }) {
   // Cache key — round coords to ~100 m precision
   const cacheKey = REDIS_KEYS.fareCache(
     `${vehicleTypeId}:${(+pickupLat).toFixed(3)},${(+pickupLng).toFixed(3)}` +
-    `:${(+dropLat).toFixed(3)},${(+dropLng).toFixed(3)}`,
+    `:${(+dropLat).toFixed(3)},${(+dropLng).toFixed(3)}:${promoCode || ''}:${userId || ''}`,
   );
   const cached = await redis.get(cacheKey);
   if (cached) return JSON.parse(cached);
+
 
   // 1. Vehicle type catalog — name/capacity plus its flat, global rate (no per-country cards)
   const [vt] = await db.select().from(vehicleTypes)
@@ -111,6 +112,22 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
 
   const estimatedFareMinor = roundToIncrement(preTaxFareMinor + taxMinor, country.roundingIncrementMinor);
 
+  let promoDetails = null;
+  let finalEstimatedFareMinor = estimatedFareMinor;
+
+  if (promoCode) {
+    const { validatePromoCode } = await import('../promo/promo.service.js');
+    const promoResult = await validatePromoCode(promoCode, estimatedFareMinor, userId, country.id);
+    promoDetails = {
+      promoId: promoResult.promoId,
+      code: promoResult.code,
+      discountType: promoResult.discountType,
+      discountValue: promoResult.discountValue,
+      discountAmountMinor: promoResult.discountAmountMinor,
+    };
+    finalEstimatedFareMinor = promoResult.finalFareMinor;
+  }
+
   const result = {
     vehicleTypeId,
     vehicleTypeName: vt.name,
@@ -123,9 +140,6 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
     polyline,
     bounds,
     breakdown: {
-      // The vehicle type's rate at request time, snapshotted here (not re-read live) so
-      // finalize-trip.job.js can recompute the actual fare against the SAME numbers this
-      // ride was quoted with, even if the rate is edited later — see recomputeActualFare().
       rate: {
         baseRateMinor:   vt.baseRateMinor,
         perKmRateMinor:  vt.perKmRateMinor,
@@ -145,9 +159,12 @@ export async function calculateFare({ pickupLat, pickupLng, dropLat, dropLng, ve
       minFareApplied,
       taxMinor,
       taxRules: taxRulesList.map((r) => ({ name: r.name, rate: r.rate, isInclusive: r.isInclusive })),
+      promo: promoDetails,
     },
-    estimatedFareMinor,
-    estimatedFare: fromMinor(estimatedFareMinor, currencyCode), // major-unit convenience field for display
+    estimatedFareMinor: finalEstimatedFareMinor,
+    originalEstimatedFareMinor: estimatedFareMinor,
+    discountAmountMinor: promoDetails?.discountAmountMinor || 0,
+    estimatedFare: fromMinor(finalEstimatedFareMinor, currencyCode),
     currency: currencyCode,
   };
 

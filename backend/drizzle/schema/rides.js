@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, decimal, integer, text, smallint, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, decimal, integer, text, smallint, jsonb, boolean } from 'drizzle-orm/pg-core';
 import { users } from './users.js';
 import { drivers } from './drivers.js';
 import { vehicleTypes } from './vehicle-types.js';
@@ -29,7 +29,9 @@ export const rides = pgTable('rides', {
   gpsNoiseRejectedCount:  integer('gps_noise_rejected_count'),
   polyline:       text('polyline'),               // encoded Google route
   status:         varchar('status').default('requested'),
-  // requested | searching | accepted | arriving | started | completed | cancelled | expired
+  // scheduled | requested | searching | accepted | arriving | started | completed | cancelled | expired
+  isScheduled:    boolean('is_scheduled').default(false).notNull(),
+  scheduledAt:    timestamp('scheduled_at'),
   startOtp:       varchar('start_otp', { length: 4 }),   // shown to rider on accept; driver must enter it to start the ride
   startOtpVerifiedAt: timestamp('start_otp_verified_at'),
   paymentMethod:  varchar('payment_method', { length: 10 }),   // online | cash — set once a payment action is taken
@@ -47,3 +49,4 @@ export const rides = pgTable('rides', {
   completedAt:    timestamp('completed_at'),
   cancelledAt:    timestamp('cancelled_at'),
 });
+

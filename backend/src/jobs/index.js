@@ -121,6 +121,32 @@ ledgerVerificationWorker.on('failed', (job, err) => {
   console.error('[Job] ledger-verification failed:', err.message);
 });
 
+import { dispatchDueScheduledRides } from './scheduled-ride-dispatch.job.js';
+
+// ── Scheduled ride dispatch job ───────────────────────────────────────────────
+
+const scheduledRideDispatchQueue = new Queue('scheduled-ride-dispatch', { connection });
+
+export async function scheduleScheduledRideDispatch() {
+  await scheduledRideDispatchQueue.obliterate({ force: true }).catch(() => { });
+  await scheduledRideDispatchQueue.add('dispatch-due-rides', {}, { repeat: { every: 30_000 } }); // every 30s
+  console.log('✅ Scheduled ride dispatch job scheduled (every 30s)');
+}
+
+const scheduledRideDispatchWorker = new Worker(
+  'scheduled-ride-dispatch',
+  async () => {
+    await dispatchDueScheduledRides().catch((err) =>
+      console.error('[Job] dispatchDueScheduledRides failed:', err.message),
+    );
+  },
+  { connection },
+);
+
+scheduledRideDispatchWorker.on('failed', (job, err) => {
+  console.error('[Job] scheduled-ride-dispatch failed:', err.message);
+});
+
 export async function startJobs() {
   await scheduleSubscriptionExpiry();
   await scheduleGpsFlush();
@@ -129,5 +155,7 @@ export async function startJobs() {
   await schedulePayoutBatch();
   await scheduleOutboxRelay();
   await scheduleOutboxPrune();
+  await scheduleScheduledRideDispatch();
   console.log('✅ BullMQ workers running');
 }
+

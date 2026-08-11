@@ -28,6 +28,8 @@ import { paginate } from '../../utils/response.js';
 import { fromMinor, formatMoney } from '../../utils/money.js';
 import { removeDriverFromIndex, upsertDriverCell } from '../matching/driver-geo-index.service.js';
 import { bufferGpsPing } from '../trip-gps/gps-ping.service.js';
+import { expirePendingFareSplits } from '../ride-payment/ride-payment.service.js';
+
 import { finalizeTripDistance } from '../trip-gps/finalize-trip.job.js';
 
 /** Driver-facing ride payloads must never carry the rider's start OTP. */
@@ -55,6 +57,8 @@ export async function requestRide({
   riderId, vehicleTypeId,
   pickupLat, pickupLng, pickupAddress,
   dropLat, dropLng, dropAddress,
+  promoCode = null,
+  scheduledAt = null,
 }) {
   // Guard: rider cannot have two active rides
   const [active] = await db.select({ id: rides.id }).from(rides).where(and(
@@ -68,12 +72,27 @@ export async function requestRide({
   )).limit(1);
   if (active) throw { statusCode: 409, message: 'You already have an active ride' };
 
+  let isScheduled = false;
+  let scheduledDate = null;
+  if (scheduledAt) {
+    scheduledDate = new Date(scheduledAt);
+    if (isNaN(scheduledDate.getTime())) throw { statusCode: 400, message: 'Invalid scheduledAt date format' };
+    if (scheduledDate.getTime() < Date.now() + 25 * 60 * 1000) {
+      throw { statusCode: 400, message: 'Scheduled rides must be booked at least 30 minutes in advance' };
+    }
+    isScheduled = true;
+  }
+
   // Fare snapshot
   const fareData = await calculateFare({
     pickupLat: parseFloat(pickupLat), pickupLng: parseFloat(pickupLng),
     dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
     vehicleTypeId,
+    promoCode,
+    userId: riderId,
   });
+
+  const initialStatus = isScheduled ? 'scheduled' : 'searching';
 
   const [ride] = await db.insert(rides).values({
     riderId, vehicleTypeId,
@@ -87,17 +106,20 @@ export async function requestRide({
     polyline: fareData.polyline,
     fareSnapshot: fareData,
     appliedFareRuleIds: fareData.appliedFareRuleIds,
-    status: 'searching',
+    status: initialStatus,
+    isScheduled,
+    scheduledAt: scheduledDate,
   }).returning();
 
-  // Anchors the very start of this ride's status_history timeline.
-  // Every subsequent transition (accepted/started/completed/cancelled/expired)
-  // is recorded at its respective call site below and in matching.service.js.
   await recordStatusChange({
-    rideId: ride.id, fromStatus: null, toStatus: 'searching',
+    rideId: ride.id, fromStatus: null, toStatus: initialStatus,
     changedBy: 'rider', changedById: riderId,
-    reason: 'Ride requested by rider',
+    reason: isScheduled ? 'Ride scheduled by rider' : 'Ride requested by rider',
   });
+
+  if (isScheduled) {
+    return { ride, fareEstimate: fareData, scheduled: true };
+  }
 
   await publishEvent(TOPICS.RIDE_REQUESTED, { id: ride.id, ...ride });
 
@@ -106,6 +128,35 @@ export async function requestRide({
 
   return { ride, fareEstimate: fareData };
 }
+
+export async function listMyScheduledRides(riderId) {
+  return db.select().from(rides).where(and(
+    eq(rides.riderId, riderId),
+    eq(rides.status, 'scheduled'),
+  )).orderBy(desc(rides.scheduledAt));
+}
+
+export async function cancelScheduledRide(rideId, riderId) {
+  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+  if (ride.riderId !== riderId) throw { statusCode: 403, message: 'Not your ride' };
+  if (ride.status !== 'scheduled') throw { statusCode: 409, message: `Cannot cancel scheduled ride in status: ${ride.status}` };
+
+  const [updated] = await db.update(rides).set({
+    status: 'cancelled',
+    cancelledBy: 'rider',
+    cancelReason: 'Cancelled scheduled ride',
+    cancelledAt: new Date(),
+  }).where(eq(rides.id, rideId)).returning();
+
+  await recordStatusChange({
+    rideId, fromStatus: 'scheduled', toStatus: 'cancelled',
+    changedBy: 'rider', changedById: riderId, reason: 'Cancelled scheduled ride',
+  });
+
+  return updated;
+}
+
 
 export async function cancelRideByRider(rideId, riderId, reason) {
   const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
@@ -150,6 +201,7 @@ export async function cancelRideByRider(rideId, riderId, reason) {
     id: rideId, rideId, riderId: ride.riderId, driverId: ride.driverId,
     cancelledBy: 'rider', reason,
   });
+  await expirePendingFareSplits(rideId, true).catch((err) => console.error('[FareSplit] expire error:', err.message));
   return updated;
 }
 
@@ -161,6 +213,21 @@ export async function rateDriver(rideId, riderId, rating, review) {
   if (ride.driverRating) throw { statusCode: 409, message: 'Already rated' };
 
   await db.update(rides).set({ driverRating: rating, driverReview: review }).where(eq(rides.id, rideId));
+
+  if (review) {
+    const { scanTextForProfanity, flagContentForReview } = await import('../moderation/moderation.service.js');
+    const scan = scanTextForProfanity(review);
+    if (scan.flagged) {
+      await flagContentForReview({
+        contentType: 'review',
+        contentId: rideId,
+        authorId: riderId,
+        authorType: 'rider',
+        flagReason: scan.reasons.join(','),
+        flaggedText: review,
+      }).catch((err) => console.error('[Moderation] flag error:', err.message));
+    }
+  }
 
   if (ride.driverId) {
     const [driver] = await db.select({ rating: drivers.rating, totalRatings: drivers.totalRatings })
@@ -174,6 +241,7 @@ export async function rateDriver(rideId, riderId, rating, review) {
   }
   return { rated: true };
 }
+
 
 // ── Driver actions ─────────────────────────────────────────────────────────────
 
@@ -379,6 +447,22 @@ export async function completeRide(rideId, driverId) {
     title: 'Ride Completed',
     body: `Your ride is complete. Total fare: ${formatMoney(finalFareMinor, ride.currencyCode)}`,
   });
+
+  if (snapshot.breakdown?.promo?.promoId) {
+    const { recordPromoUsage } = await import('../promo/promo.service.js');
+    await recordPromoUsage(
+      snapshot.breakdown.promo.promoId,
+      ride.riderId,
+      rideId,
+      snapshot.breakdown.promo.discountAmountMinor || 0,
+    ).catch((err) => console.error('[Promo] record usage error:', err.message));
+  }
+
+  const { processReferralRewardOnFirstRide } = await import('../promo/promo.service.js');
+  await processReferralRewardOnFirstRide(ride.riderId, ride.currencyCode)
+    .catch((err) => console.error('[Referral] reward error:', err.message));
+
+  await expirePendingFareSplits(rideId).catch((err) => console.error('[FareSplit] expire error:', err.message));
   return updated;
 }
 
@@ -576,5 +660,6 @@ export async function cancelRideByAdmin(rideId, adminId, reason) {
     action: 'RIDE_CANCELLED_BY_ADMIN', entityType: 'ride', entityId: rideId,
     meta: { reason },
   });
+  await expirePendingFareSplits(rideId, true).catch((err) => console.error('[FareSplit] expire error:', err.message));
   return updated;
 }

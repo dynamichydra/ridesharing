@@ -1,4 +1,4 @@
-import { eq, and, desc, count, isNotNull } from 'drizzle-orm';
+import { eq, and, desc, count, isNotNull, inArray } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { rides, payments, users, drivers, rideFareSplits } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
@@ -11,6 +11,8 @@ import { getOrCreateWallet } from '../wallet/wallet.service.js';
 import { handleDisputeEvent } from '../dispute/dispute.service.js';
 import { resolveCommissionRule, computeCommission } from '../commission/commission.service.js';
 import { publishNotification } from '../notification/notification-events.js';
+import { emitToRider, emitToRideRoom } from '../../kafka/consumers/index.js';
+
 
 // ── Rider — pay online ─────────────────────────────────────────────────────────
 
@@ -263,6 +265,8 @@ export async function listRidePaymentsAdmin(filters, page, limit, offset) {
   return { rows, pagination: paginate(page, limit, total) };
 }
 
+// ── Fare Split ───────────────────────────────────────────────────────────────
+
 export async function inviteToFareSplit(rideId, inviterId, phone) {
   const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
   if (!ride) throw { statusCode: 404, message: 'Ride not found' };
@@ -285,7 +289,8 @@ export async function inviteToFareSplit(rideId, inviterId, phone) {
     .from(rideFareSplits)
     .where(and(
       eq(rideFareSplits.rideId, rideId),
-      eq(rideFareSplits.inviteeId, invitee.id)
+      eq(rideFareSplits.inviteeId, invitee.id),
+      inArray(rideFareSplits.status, ['pending', 'accepted'])
     )).limit(1);
 
   if (existing) {
@@ -297,17 +302,36 @@ export async function inviteToFareSplit(rideId, inviterId, phone) {
     inviterId,
     inviteeId: invitee.id,
     status: 'pending',
+    paymentStatus: 'pending',
   }).returning();
+
+  const [inviter] = await db.select({ name: users.name, phone: users.phone })
+    .from(users).where(eq(users.id, inviterId)).limit(1);
+
+  const payload = {
+    rideId,
+    splitId: split.id,
+    inviterId,
+    inviterName: inviter?.name || 'Primary Rider',
+    inviteeId: invitee.id,
+    inviteeName: invitee.name,
+    status: 'pending',
+    createdAt: split.createdAt,
+  };
 
   await publishEvent(TOPICS.NOTIF_PUSH, {
     userType: 'rider',
     userId: invitee.id,
     type: 'FARE_SPLIT_INVITE',
     title: 'Fare Split Invitation',
-    body: `A rider has invited you to split a ride fare.`,
+    body: `${inviter?.name || 'A rider'} has invited you to split a ride fare.`,
+    rideId,
   }).catch((err) => console.error('[FareSplit] publish event failed:', err.message));
 
-  return split;
+  emitToRider(invitee.id, 'fare_split:invited', payload);
+  emitToRideRoom(rideId, 'fare_split:updated', payload);
+
+  return { ...split, invitee: { id: invitee.id, name: invitee.name, phone: invitee.phone } };
 }
 
 export async function respondToFareSplit(rideId, inviteeId, accept) {
@@ -319,37 +343,193 @@ export async function respondToFareSplit(rideId, inviteeId, accept) {
 
   if (!split) throw { statusCode: 404, message: 'No pending split invitation found for this ride' };
 
+  const newStatus = accept ? 'accepted' : 'declined';
   const [updated] = await db.update(rideFareSplits)
     .set({
-      status: accept ? 'accepted' : 'declined',
+      status: newStatus,
       updatedAt: new Date(),
     })
     .where(eq(rideFareSplits.id, split.id))
     .returning();
+
+  const [invitee] = await db.select({ name: users.name }).from(users).where(eq(users.id, inviteeId)).limit(1);
+
+  const payload = {
+    rideId,
+    splitId: split.id,
+    inviterId: split.inviterId,
+    inviteeId: split.inviteeId,
+    inviteeName: invitee?.name || 'Co-rider',
+    status: newStatus,
+    updatedAt: updated.updatedAt,
+  };
 
   await publishEvent(TOPICS.NOTIF_PUSH, {
     userType: 'rider',
     userId: split.inviterId,
     type: 'FARE_SPLIT_RESPONSE',
     title: 'Fare Split Update',
-    body: `A co-rider has ${accept ? 'accepted' : 'declined'} your fare split invitation.`,
+    body: `${invitee?.name || 'A co-rider'} has ${accept ? 'accepted' : 'declined'} your fare split invitation.`,
+    rideId,
   }).catch((err) => console.error('[FareSplit] publish event failed:', err.message));
+
+  emitToRider(split.inviterId, 'fare_split:responded', payload);
+  emitToRideRoom(rideId, 'fare_split:updated', payload);
+
+  return updated;
+}
+
+export async function cancelFareSplitInvite(rideId, requesterId, splitId) {
+  const [split] = await db.select().from(rideFareSplits).where(and(
+    eq(rideFareSplits.id, splitId),
+    eq(rideFareSplits.rideId, rideId)
+  )).limit(1);
+
+  if (!split) throw { statusCode: 404, message: 'Fare split invitation not found' };
+
+  if (split.inviterId !== requesterId && split.inviteeId !== requesterId) {
+    throw { statusCode: 403, message: 'Not authorized to cancel this fare split invitation' };
+  }
+
+  if (split.status === 'cancelled' || split.status === 'expired') {
+    throw { statusCode: 409, message: `Fare split invitation is already ${split.status}` };
+  }
+
+  const [updated] = await db.update(rideFareSplits)
+    .set({
+      status: 'cancelled',
+      updatedAt: new Date(),
+    })
+    .where(eq(rideFareSplits.id, split.id))
+    .returning();
+
+  const payload = {
+    rideId,
+    splitId: split.id,
+    inviterId: split.inviterId,
+    inviteeId: split.inviteeId,
+    status: 'cancelled',
+  };
+
+  emitToRider(split.inviterId, 'fare_split:cancelled', payload);
+  emitToRider(split.inviteeId, 'fare_split:cancelled', payload);
+  emitToRideRoom(rideId, 'fare_split:updated', payload);
 
   return updated;
 }
 
 export async function getRideFareSplits(rideId, userId) {
-  const rows = await db.select().from(rideFareSplits).where(eq(rideFareSplits.rideId, rideId));
-  const isParticipant = rows.some(r => r.inviterId === userId || r.inviteeId === userId);
-
   const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
   if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+
+  const splits = await db.select({
+    id: rideFareSplits.id,
+    rideId: rideFareSplits.rideId,
+    inviterId: rideFareSplits.inviterId,
+    inviteeId: rideFareSplits.inviteeId,
+    status: rideFareSplits.status,
+    splitAmountMinor: rideFareSplits.splitAmountMinor,
+    paymentStatus: rideFareSplits.paymentStatus,
+    paymentMethod: rideFareSplits.paymentMethod,
+    createdAt: rideFareSplits.createdAt,
+    updatedAt: rideFareSplits.updatedAt,
+    inviteeName: users.name,
+    inviteePhone: users.phone,
+  })
+  .from(rideFareSplits)
+  .leftJoin(users, eq(rideFareSplits.inviteeId, users.id))
+  .where(eq(rideFareSplits.rideId, rideId));
+
+  const isParticipant = splits.some(r => r.inviterId === userId || r.inviteeId === userId);
 
   if (ride.riderId !== userId && !isParticipant) {
     throw { statusCode: 403, message: 'Not authorized to view fare splits for this ride' };
   }
 
-  return rows;
+  const acceptedSplits = splits.filter(s => s.status === 'accepted');
+  const totalParticipants = acceptedSplits.length + 1;
+  const targetFare = ride.finalFareMinor || ride.estimatedFareMinor || 0;
+  const projectedShare = Math.floor(targetFare / totalParticipants);
+  const primaryShare = targetFare - (projectedShare * acceptedSplits.length);
+
+  return {
+    rideId: ride.id,
+    rideStatus: ride.status,
+    totalFareMinor: targetFare,
+    totalParticipants,
+    primaryRiderShareMinor: primaryShare,
+    coRiderShareMinor: projectedShare,
+    splits,
+  };
+}
+
+export async function payFareSplitWithWallet(rideId, riderId, idempotencyKey) {
+  return withIdempotency('fare_split_wallet_pay', idempotencyKey, riderId, async () => {
+    const { ride, isPrimary } = await _loadPayableRideForUser(rideId, riderId);
+
+    const acceptedSplits = await db.select()
+      .from(rideFareSplits)
+      .where(and(eq(rideFareSplits.rideId, rideId), eq(rideFareSplits.status, 'accepted')));
+
+    let payAmountMinor = ride.finalFareMinor;
+    if (acceptedSplits.length > 0) {
+      const totalParticipants = acceptedSplits.length + 1;
+      const baseShare = Math.floor(ride.finalFareMinor / totalParticipants);
+      if (isPrimary) {
+        payAmountMinor = ride.finalFareMinor - (baseShare * acceptedSplits.length);
+      } else {
+        payAmountMinor = baseShare;
+      }
+    }
+
+    const wallet = await getOrCreateWallet('rider', riderId);
+    if (wallet.balanceMinor < payAmountMinor) {
+      throw { statusCode: 422, message: `Insufficient wallet balance (${wallet.balanceMinor} < ${payAmountMinor})` };
+    }
+
+    const currencyCode = ride.currencyCode;
+    const [walletAccount, clearingAccount] = await Promise.all([
+      getOrCreateWalletAccount(wallet.id, currencyCode),
+      getOrCreateSystemAccount('processor_clearing:wallet', currencyCode),
+    ]);
+
+    await postTransaction({
+      businessType: 'ride_fare_wallet',
+      idempotencyKey: `ride_fare_wallet:${rideId}:${riderId}`,
+      referenceType: 'ride',
+      referenceId: rideId,
+      entries: [
+        {
+          accountId: walletAccount.id, direction: 'debit', amountMinor: payAmountMinor, currencyCode,
+          reason: 'ride_fare_wallet', description: `Wallet payment for split ride ${rideId}`,
+        },
+        { accountId: clearingAccount.id, direction: 'credit', amountMinor: payAmountMinor, currencyCode },
+      ],
+    });
+
+    if (!isPrimary) {
+      await db.update(rideFareSplits)
+        .set({ paymentStatus: 'paid', paymentMethod: 'wallet', updatedAt: new Date() })
+        .where(and(eq(rideFareSplits.rideId, rideId), eq(rideFareSplits.inviteeId, riderId)));
+    }
+
+    return _markRidePaid(ride, {
+      method: 'wallet', gateway: 'wallet', gatewayPaymentId: `wallet_pay_${Date.now()}`,
+      amountMinor: payAmountMinor, payerId: riderId,
+    });
+  });
+}
+
+export async function expirePendingFareSplits(rideId, isCancelled = false) {
+  const newStatus = isCancelled ? 'cancelled' : 'expired';
+  const targetStatuses = isCancelled ? ['pending', 'accepted'] : ['pending'];
+
+  await db.update(rideFareSplits)
+    .set({ status: newStatus, updatedAt: new Date() })
+    .where(and(
+      eq(rideFareSplits.rideId, rideId),
+      inArray(rideFareSplits.status, targetStatuses)
+    ));
 }
 
 // ── Internals ───────────────────────────────────────────────────────────────────

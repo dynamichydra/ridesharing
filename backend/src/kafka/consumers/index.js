@@ -22,6 +22,19 @@ function parse(msg) {
 
 let _io = null;
 export function setSocketIO(io) { _io = io; }
+export function getSocketIO() { return _io; }
+
+export function emitToRider(riderId, eventName, payload) {
+  if (_io) {
+    _io.of('/rider').to(`rider:${riderId}`).emit(eventName, payload);
+  }
+}
+
+export function emitToRideRoom(rideId, eventName, payload) {
+  if (_io) {
+    _io.of('/rider').to(`ride:${rideId}`).emit(eventName, payload);
+  }
+}
 
 // ── Notification ──────────────────────────────────────────────────────────────
 // Two payload shapes land here:

@@ -53,11 +53,28 @@ export async function ridePaymentRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  // POST /api/v1/ride-payments/:rideId/fare-split/cancel
+  app.post('/:rideId/fare-split/cancel', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const { splitId } = request.body || {};
+    if (!splitId) return sendError(reply, 'splitId is required', 400);
+    const data = await ridePaymentService.cancelFareSplitInvite(request.params.rideId, request.user.id, splitId);
+    return sendSuccess(reply, data);
+  });
+
+  // POST /api/v1/ride-payments/:rideId/fare-split/pay-wallet
+  app.post('/:rideId/fare-split/pay-wallet', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const idempotencyKey = request.headers['idempotency-key'];
+    if (!idempotencyKey) return sendError(reply, 'Idempotency-Key header is required', 400);
+    const data = await ridePaymentService.payFareSplitWithWallet(request.params.rideId, request.user.id, idempotencyKey);
+    return sendSuccess(reply, data);
+  });
+
   // GET /api/v1/ride-payments/:rideId/fare-split
   app.get('/:rideId/fare-split', { preHandler: [authenticateRider] }, async (request, reply) => {
     const data = await ridePaymentService.getRideFareSplits(request.params.rideId, request.user.id);
     return sendSuccess(reply, data);
   });
+
 
   // ── Driver — cash payment ────────────────────────────────────────────────────
 

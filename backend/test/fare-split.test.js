@@ -99,3 +99,28 @@ test('balances split ledger entries perfectly when commission is zero', () => {
   const validation = validateBalancedEntries(entries);
   assert.equal(validation.balanced, true);
 });
+
+test('calculates correct per-rider shares for 4-way fare split', () => {
+  const finalFareMinor = 2500; // $25.00
+  const acceptedSplitsCount = 3; // 1 primary + 3 co-riders = 4 total
+  const totalParticipants = acceptedSplitsCount + 1;
+  const baseShare = Math.floor(finalFareMinor / totalParticipants); // 625
+  const primaryShare = finalFareMinor - (baseShare * acceptedSplitsCount); // 2500 - 1875 = 625
+
+  assert.equal(baseShare, 625);
+  assert.equal(primaryShare, 625);
+  assert.equal(primaryShare + (baseShare * 3), 2500);
+});
+
+test('calculates remainder correctly when fare is not evenly divisible', () => {
+  const finalFareMinor = 1001; // 1001 minor units split 3 ways
+  const acceptedSplitsCount = 2;
+  const totalParticipants = 3;
+  const baseShare = Math.floor(finalFareMinor / totalParticipants); // 333
+  const primaryShare = finalFareMinor - (baseShare * acceptedSplitsCount); // 1001 - 666 = 335
+
+  assert.equal(baseShare, 333);
+  assert.equal(primaryShare, 335);
+  assert.equal(primaryShare + (baseShare * 2), 1001);
+});
+
