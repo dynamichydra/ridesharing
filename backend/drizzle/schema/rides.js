@@ -4,7 +4,10 @@ import { drivers } from './drivers.js';
 import { vehicleTypes } from './vehicle-types.js';
 import { countries } from './countries.js';
 
+import { rideStatusEnum } from './enums.js';
+
 export const rides = pgTable('rides', {
+
   id:             uuid('id').primaryKey().defaultRandom(),
   riderId:        uuid('rider_id').references(() => users.id).notNull(),
   driverId:       uuid('driver_id').references(() => drivers.id),
@@ -28,7 +31,8 @@ export const rides = pgTable('rides', {
   gpsPingCount:           integer('gps_ping_count'),
   gpsNoiseRejectedCount:  integer('gps_noise_rejected_count'),
   polyline:       text('polyline'),               // encoded Google route
-  status:         varchar('status').default('requested'),
+  status:         rideStatusEnum('status').default('requested'),
+
   // scheduled | requested | searching | accepted | arriving | started | completed | cancelled | expired
   isScheduled:    boolean('is_scheduled').default(false).notNull(),
   scheduledAt:    timestamp('scheduled_at'),

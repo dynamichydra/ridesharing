@@ -4,12 +4,16 @@ import { countries } from './countries.js';
 import { states } from './states.js';
 import { cities } from './cities.js';
 
+import { driverStatusEnum, subscriptionStatusEnum } from './enums.js';
+
 export const drivers = pgTable('drivers', {
   id:                 uuid('id').primaryKey().defaultRandom(),
   phone:              varchar('phone', { length: 20 }).unique(), // nullable — email-first signups may not have one yet
   name:               varchar('name', { length: 100 }),
   email:              varchar('email', { length: 255 }).unique(),
   profilePhoto:       text('profile_photo'),
+  status:             driverStatusEnum('status').default('pending_approval'),
+
   // ── Personal info (Step 2) ──────────────────────────────────────────────
   dateOfBirth:        date('date_of_birth'),
   gender:             varchar('gender', { length: 20 }),   // male | female | other | prefer_not_to_say
@@ -48,7 +52,8 @@ export const drivers = pgTable('drivers', {
   rating:             decimal('rating', { precision: 3, scale: 2 }).default('5.00'),
   totalRatings:       smallint('total_ratings').default(0),
   totalRides:         integer('total_rides').default(0),
-  subscriptionStatus: varchar('subscription_status').default('inactive'),
+  subscriptionStatus: subscriptionStatusEnum('subscription_status').default('inactive'),
+
   // active | inactive | expired
   createdAt:          timestamp('created_at').defaultNow(),
   updatedAt:          timestamp('updated_at').defaultNow(),
