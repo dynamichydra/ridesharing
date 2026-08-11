@@ -35,6 +35,30 @@ export async function ridePaymentRoutes(app) {
     return sendList(reply, rows, pagination);
   });
 
+  // ── Fare Split ───────────────────────────────────────────────────────────────
+
+  // POST /api/v1/ride-payments/:rideId/fare-split/invite
+  app.post('/:rideId/fare-split/invite', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const { phone } = request.body || {};
+    if (!phone) return sendError(reply, 'phone is required', 400);
+    const data = await ridePaymentService.inviteToFareSplit(request.params.rideId, request.user.id, phone);
+    return sendSuccess(reply, data, 201);
+  });
+
+  // POST /api/v1/ride-payments/:rideId/fare-split/respond
+  app.post('/:rideId/fare-split/respond', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const { accept } = request.body || {};
+    if (accept === undefined) return sendError(reply, 'accept is required (true/false)', 400);
+    const data = await ridePaymentService.respondToFareSplit(request.params.rideId, request.user.id, accept);
+    return sendSuccess(reply, data);
+  });
+
+  // GET /api/v1/ride-payments/:rideId/fare-split
+  app.get('/:rideId/fare-split', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const data = await ridePaymentService.getRideFareSplits(request.params.rideId, request.user.id);
+    return sendSuccess(reply, data);
+  });
+
   // ── Driver — cash payment ────────────────────────────────────────────────────
 
   // POST /api/v1/ride-payments/:rideId/cash-collect

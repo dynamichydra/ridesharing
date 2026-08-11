@@ -1,6 +1,6 @@
 import { eq, and, desc, count, isNotNull } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { rides, payments, users, drivers } from '../../../drizzle/schema/index.js';
+import { rides, payments, users, drivers, rideFareSplits } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
 import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
@@ -19,18 +19,33 @@ import { publishNotification } from '../notification/notification-events.js';
 // original gateway order instead of creating a second one.
 export async function initiateRidePayment(riderId, rideId, idempotencyKey) {
   return withIdempotency('ride_payment_initiate', idempotencyKey, riderId, async () => {
-    const ride = await _loadPayableRide(and(eq(rides.id, rideId), eq(rides.riderId, riderId)));
+    const { ride, isPrimary } = await _loadPayableRideForUser(rideId, riderId);
+
+    const acceptedSplits = await db.select()
+      .from(rideFareSplits)
+      .where(and(eq(rideFareSplits.rideId, rideId), eq(rideFareSplits.status, 'accepted')));
+
+    let payAmountMinor = ride.finalFareMinor;
+    if (acceptedSplits.length > 0) {
+      const totalParticipants = acceptedSplits.length + 1;
+      const baseShare = Math.floor(ride.finalFareMinor / totalParticipants);
+      if (isPrimary) {
+        payAmountMinor = ride.finalFareMinor - (baseShare * acceptedSplits.length);
+      } else {
+        payAmountMinor = baseShare;
+      }
+    }
 
     const gateway = gatewayForCurrency(ride.currencyCode);
     if (!gateway) {
-      // Dev mode — this currency's gateway has no keys configured, mark paid directly
       return _markRidePaid(ride, {
         method: 'online', gateway: 'none', gatewayPaymentId: 'dev_payment_' + Date.now(), gatewayOrderId: null,
+        amountMinor: payAmountMinor, payerId: riderId,
       });
     }
 
     const order = await gateway.createOrder({
-      amountMinor: ride.finalFareMinor,
+      amountMinor: payAmountMinor,
       currencyCode: ride.currencyCode,
       metadata: { rideId, riderId },
       idempotencyKey,
@@ -41,9 +56,10 @@ export async function initiateRidePayment(riderId, rideId, idempotencyKey) {
       countryId: _requireCountryId(ride),
       gateway: gateway.name,
       currencyCode: ride.currencyCode,
-      amountMinor: ride.finalFareMinor,
+      amountMinor: payAmountMinor,
       status: 'created',
       gatewayOrderId: order.gatewayOrderId,
+      metadata: { payerId: riderId },
     }).returning();
 
     await db.update(rides).set({ paymentMethod: 'online', paymentStatus: 'processing' }).where(eq(rides.id, rideId));
@@ -53,12 +69,26 @@ export async function initiateRidePayment(riderId, rideId, idempotencyKey) {
 }
 
 export async function verifyRidePayment(riderId, rideId, orderRef, paymentRef, signature) {
-  const ride = await _loadPayableRide(and(eq(rides.id, rideId), eq(rides.riderId, riderId)));
+  const { ride } = await _loadPayableRideForUser(rideId, riderId);
 
   const gateway = gatewayForCurrency(ride.currencyCode);
   if (!gateway) {
+    const acceptedSplits = await db.select()
+      .from(rideFareSplits)
+      .where(and(eq(rideFareSplits.rideId, rideId), eq(rideFareSplits.status, 'accepted')));
+    let payAmountMinor = ride.finalFareMinor;
+    if (acceptedSplits.length > 0) {
+      const totalParticipants = acceptedSplits.length + 1;
+      const baseShare = Math.floor(ride.finalFareMinor / totalParticipants);
+      if (ride.riderId === riderId) {
+        payAmountMinor = ride.finalFareMinor - (baseShare * acceptedSplits.length);
+      } else {
+        payAmountMinor = baseShare;
+      }
+    }
     return _markRidePaid(ride, {
       method: 'online', gateway: 'none', gatewayPaymentId: paymentRef, gatewayOrderId: orderRef,
+      amountMinor: payAmountMinor, payerId: riderId,
     });
   }
 
@@ -71,6 +101,7 @@ export async function verifyRidePayment(riderId, rideId, orderRef, paymentRef, s
   return _markRidePaid(ride, {
     method: 'online', gateway: gateway.name, gatewayPaymentId: paymentRef, gatewayOrderId: orderRef,
     paymentAttemptId: attempt?.id,
+    amountMinor: attempt?.amountMinor, payerId: riderId,
   });
 }
 
@@ -232,6 +263,95 @@ export async function listRidePaymentsAdmin(filters, page, limit, offset) {
   return { rows, pagination: paginate(page, limit, total) };
 }
 
+export async function inviteToFareSplit(rideId, inviterId, phone) {
+  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+  if (ride.riderId !== inviterId) {
+    throw { statusCode: 403, message: 'Only the primary rider can invite co-riders to split the fare' };
+  }
+
+  const allowedStatuses = ['searching', 'accepted', 'arriving', 'started'];
+  if (!allowedStatuses.includes(ride.status)) {
+    throw { statusCode: 400, message: `Cannot split fare for a ride in status: ${ride.status}` };
+  }
+
+  const [invitee] = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+  if (!invitee) throw { statusCode: 404, message: 'Invitee user not found' };
+  if (invitee.id === inviterId) {
+    throw { statusCode: 400, message: 'You cannot invite yourself to split the fare' };
+  }
+
+  const [existing] = await db.select()
+    .from(rideFareSplits)
+    .where(and(
+      eq(rideFareSplits.rideId, rideId),
+      eq(rideFareSplits.inviteeId, invitee.id)
+    )).limit(1);
+
+  if (existing) {
+    throw { statusCode: 409, message: `This rider is already invited to split (status: ${existing.status})` };
+  }
+
+  const [split] = await db.insert(rideFareSplits).values({
+    rideId,
+    inviterId,
+    inviteeId: invitee.id,
+    status: 'pending',
+  }).returning();
+
+  await publishEvent(TOPICS.NOTIF_PUSH, {
+    userType: 'rider',
+    userId: invitee.id,
+    type: 'FARE_SPLIT_INVITE',
+    title: 'Fare Split Invitation',
+    body: `A rider has invited you to split a ride fare.`,
+  }).catch((err) => console.error('[FareSplit] publish event failed:', err.message));
+
+  return split;
+}
+
+export async function respondToFareSplit(rideId, inviteeId, accept) {
+  const [split] = await db.select().from(rideFareSplits).where(and(
+    eq(rideFareSplits.rideId, rideId),
+    eq(rideFareSplits.inviteeId, inviteeId),
+    eq(rideFareSplits.status, 'pending')
+  )).limit(1);
+
+  if (!split) throw { statusCode: 404, message: 'No pending split invitation found for this ride' };
+
+  const [updated] = await db.update(rideFareSplits)
+    .set({
+      status: accept ? 'accepted' : 'declined',
+      updatedAt: new Date(),
+    })
+    .where(eq(rideFareSplits.id, split.id))
+    .returning();
+
+  await publishEvent(TOPICS.NOTIF_PUSH, {
+    userType: 'rider',
+    userId: split.inviterId,
+    type: 'FARE_SPLIT_RESPONSE',
+    title: 'Fare Split Update',
+    body: `A co-rider has ${accept ? 'accepted' : 'declined'} your fare split invitation.`,
+  }).catch((err) => console.error('[FareSplit] publish event failed:', err.message));
+
+  return updated;
+}
+
+export async function getRideFareSplits(rideId, userId) {
+  const rows = await db.select().from(rideFareSplits).where(eq(rideFareSplits.rideId, rideId));
+  const isParticipant = rows.some(r => r.inviterId === userId || r.inviteeId === userId);
+
+  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+
+  if (ride.riderId !== userId && !isParticipant) {
+    throw { statusCode: 403, message: 'Not authorized to view fare splits for this ride' };
+  }
+
+  return rows;
+}
+
 // ── Internals ───────────────────────────────────────────────────────────────────
 
 function _requireCountryId(ride) {
@@ -245,6 +365,31 @@ async function _loadPayableRide(ownershipCondition) {
   if (ride.status !== 'completed') throw { statusCode: 409, message: 'Ride is not completed yet' };
   if (ride.paymentStatus === 'paid') throw { statusCode: 409, message: 'Ride has already been paid for' };
   return ride;
+}
+
+async function _loadPayableRideForUser(rideId, userId) {
+  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+  if (ride.status !== 'completed') throw { statusCode: 409, message: 'Ride is not completed yet' };
+  if (ride.paymentStatus === 'paid') throw { statusCode: 409, message: 'Ride has already been paid for' };
+
+  if (ride.riderId === userId) {
+    return { ride, isPrimary: true };
+  }
+
+  const [split] = await db.select()
+    .from(rideFareSplits)
+    .where(and(
+      eq(rideFareSplits.rideId, rideId),
+      eq(rideFareSplits.inviteeId, userId),
+      eq(rideFareSplits.status, 'accepted')
+    )).limit(1);
+
+  if (split) {
+    return { ride, isPrimary: false };
+  }
+
+  throw { statusCode: 403, message: 'You are not authorized to pay for this ride' };
 }
 
 // Resolves the commission rule for this ride and the driver's subscription status *at
@@ -286,26 +431,57 @@ async function _postRideFareLedger(ride, paymentInfo) {
   const currencyCode = ride.currencyCode;
   const commission = await _resolveRideCommission(ride);
 
+  const acceptedSplits = await db.select()
+    .from(rideFareSplits)
+    .where(and(eq(rideFareSplits.rideId, ride.id), eq(rideFareSplits.status, 'accepted')));
+
+  let splitAmount = null;
+  let inviterShare = ride.finalFareMinor;
+
+  if (acceptedSplits.length > 0) {
+    const totalParticipants = acceptedSplits.length + 1;
+    splitAmount = Math.floor(ride.finalFareMinor / totalParticipants);
+    inviterShare = ride.finalFareMinor - (splitAmount * acceptedSplits.length);
+
+    for (const split of acceptedSplits) {
+      await db.update(rideFareSplits)
+        .set({ splitAmountMinor: splitAmount, updatedAt: new Date() })
+        .where(eq(rideFareSplits.id, split.id));
+    }
+  }
+
   if (paymentInfo.method === 'online') {
-    if (!ride.driverId) return; // no driver to credit — shouldn't happen for a completed ride
+    if (!ride.driverId) return;
     const driverWallet = await getOrCreateWallet('driver', ride.driverId);
-    const [clearingAccount, driverWalletAccount, commissionAccount] = await Promise.all([
-      getOrCreateSystemAccount(`processor_clearing:${paymentInfo.gateway}`, currencyCode),
+    const [driverWalletAccount, commissionAccount] = await Promise.all([
       getOrCreateWalletAccount(driverWallet.id, currencyCode),
       getOrCreateSystemAccount('platform_commission_revenue', currencyCode),
     ]);
-    const entries = [
-      { accountId: clearingAccount.id, direction: 'debit', amountMinor: ride.finalFareMinor, currencyCode },
-      {
-        accountId: driverWalletAccount.id, direction: 'credit', amountMinor: commission.driverEarningsMinor, currencyCode,
-        reason: 'ride_fare_online', description: `Fare for ride ${ride.id}`,
-      },
-    ];
-    // No cut this ride (e.g. a 0% rule) -> driverEarningsMinor already equals finalFareMinor,
-    // so the entries above alone balance; only add a third leg when there's really a fee to book.
+
+    const entries = [];
+
+    if (acceptedSplits.length === 0) {
+      const clearingAccount = await getOrCreateSystemAccount(`processor_clearing:${paymentInfo.gateway}`, currencyCode);
+      entries.push({ accountId: clearingAccount.id, direction: 'debit', amountMinor: ride.finalFareMinor, currencyCode });
+    } else {
+      const primaryClearing = await getOrCreateSystemAccount(`processor_clearing:${paymentInfo.gateway}`, currencyCode);
+      entries.push({ accountId: primaryClearing.id, direction: 'debit', amountMinor: inviterShare, currencyCode });
+
+      for (const split of acceptedSplits) {
+        const inviteeClearing = await getOrCreateSystemAccount(`processor_clearing:${paymentInfo.gateway}`, currencyCode);
+        entries.push({ accountId: inviteeClearing.id, direction: 'debit', amountMinor: splitAmount, currencyCode });
+      }
+    }
+
+    entries.push({
+      accountId: driverWalletAccount.id, direction: 'credit', amountMinor: commission.driverEarningsMinor, currencyCode,
+      reason: 'ride_fare_online', description: `Fare for ride ${ride.id}`,
+    });
+
     if (commission.commissionMinor > 0) {
       entries.push({ accountId: commissionAccount.id, direction: 'credit', amountMinor: commission.commissionMinor, currencyCode });
     }
+
     await postTransaction({
       businessType: 'ride_fare_online',
       idempotencyKey: `ride_fare_online:${ride.id}`,
@@ -353,6 +529,9 @@ async function _postRideFareLedger(ride, paymentInfo) {
 }
 
 async function _markRidePaid(ride, paymentInfo) {
+  const payerId = paymentInfo.payerId;
+  const payAmountMinor = paymentInfo.amountMinor;
+
   if (paymentInfo.paymentAttemptId) {
     await db.update(payments)
       .set({ status: 'captured', gatewayPaymentId: paymentInfo.gatewayPaymentId, updatedAt: new Date() })
@@ -363,34 +542,60 @@ async function _markRidePaid(ride, paymentInfo) {
       countryId: _requireCountryId(ride),
       gateway: paymentInfo.gateway,
       currencyCode: ride.currencyCode,
-      amountMinor: ride.finalFareMinor,
+      amountMinor: payAmountMinor || ride.finalFareMinor,
       status: 'captured',
       gatewayOrderId: paymentInfo.gatewayOrderId,
       gatewayPaymentId: paymentInfo.gatewayPaymentId,
+      metadata: payerId ? { payerId } : null,
     });
   }
 
-  await _postRideFareLedger(ride, paymentInfo);
+  const allCaptured = await db.select({ amountMinor: payments.amountMinor })
+    .from(payments)
+    .where(and(eq(payments.rideId, ride.id), eq(payments.status, 'captured')));
 
-  const [updated] = await db.update(rides)
-    .set({ paymentMethod: paymentInfo.method, paymentStatus: 'paid' })
-    .where(eq(rides.id, ride.id)).returning();
+  const totalCaptured = allCaptured.reduce((sum, p) => sum + p.amountMinor, 0);
 
-  await publishEvent(TOPICS.PAYMENT_SUCCESS, {
-    id: ride.id, rideId: ride.id, riderId: ride.riderId, driverId: ride.driverId,
-    amountMinor: ride.finalFareMinor, currencyCode: ride.currencyCode, method: paymentInfo.method,
-  });
-  const amountLabel = formatMoney(ride.finalFareMinor, ride.currencyCode);
-  await publishNotification('PAYMENT_SUCCESS', {
-    userId: ride.riderId, userType: 'rider', rideId: ride.id,
-    variables: { amount: amountLabel, method: paymentInfo.method },
-  });
-  if (ride.driverId) {
+  if (totalCaptured >= ride.finalFareMinor) {
+    await _postRideFareLedger(ride, paymentInfo);
+
+    const [updated] = await db.update(rides)
+      .set({ paymentMethod: paymentInfo.method, paymentStatus: 'paid' })
+      .where(eq(rides.id, ride.id)).returning();
+
+    await publishEvent(TOPICS.PAYMENT_SUCCESS, {
+      id: ride.id, rideId: ride.id, riderId: ride.riderId, driverId: ride.driverId,
+      amountMinor: ride.finalFareMinor, currencyCode: ride.currencyCode, method: paymentInfo.method,
+    });
+
+    const amountLabel = formatMoney(ride.finalFareMinor, ride.currencyCode);
     await publishNotification('PAYMENT_SUCCESS', {
-      userId: ride.driverId, userType: 'driver', rideId: ride.id,
+      userId: ride.riderId, userType: 'rider', rideId: ride.id,
       variables: { amount: amountLabel, method: paymentInfo.method },
     });
-  }
 
-  return updated;
+    if (ride.driverId) {
+      await publishNotification('PAYMENT_SUCCESS', {
+        userId: ride.driverId, userType: 'driver', rideId: ride.id,
+        variables: { amount: amountLabel, method: paymentInfo.method },
+      });
+    }
+
+    const acceptedSplits = await db.select()
+      .from(rideFareSplits)
+      .where(and(eq(rideFareSplits.rideId, ride.id), eq(rideFareSplits.status, 'accepted')));
+    for (const split of acceptedSplits) {
+      await publishNotification('PAYMENT_SUCCESS', {
+        userId: split.inviteeId, userType: 'rider', rideId: ride.id,
+        variables: { amount: amountLabel, method: paymentInfo.method },
+      }).catch(() => {});
+    }
+
+    return updated;
+  } else {
+    const [updated] = await db.update(rides)
+      .set({ paymentStatus: 'processing' })
+      .where(eq(rides.id, ride.id)).returning();
+    return { ...updated, partial: true, totalCaptured, finalFareMinor: ride.finalFareMinor };
+  }
 }

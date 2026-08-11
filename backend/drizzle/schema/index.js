@@ -56,3 +56,5 @@ export * from './flagged-trips.js';
 export * from './notification-templates.js';
 export * from './notifications.js';
 export * from './outbox-events.js';
+export * from './ride-fare-splits.js';
+

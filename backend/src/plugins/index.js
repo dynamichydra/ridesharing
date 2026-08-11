@@ -28,7 +28,7 @@ export async function registerPlugins(app) {
   });
 
   await app.register(rateLimit, {
-    max: 100,
+    max: 100000,
     timeWindow: '1 minute',
     redis,
     keyGenerator: (request) => request.ip,
