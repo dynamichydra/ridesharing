@@ -12,9 +12,12 @@ export const redis = new Redis(env.REDIS_URL, {
 export const redisPub = new Redis(env.REDIS_URL, { lazyConnect: true });
 export const redisSub = new Redis(env.REDIS_URL, { lazyConnect: true });
 
-redis.on('connect', () => console.log('✅ Redis connected'));
-redis.on('error', (err) => console.error('❌ Redis error:', err.message));
-redis.on('reconnecting', () => console.log('🔄 Redis reconnecting...'));
+[redis, redisPub, redisSub].forEach((client, idx) => {
+  const name = idx === 0 ? 'Main' : idx === 1 ? 'Pub' : 'Sub';
+  client.on('connect', () => console.log(`✅ Redis (${name}) connected`));
+  client.on('error', (err) => console.error(`❌ Redis (${name}) error:`, err.message));
+  client.on('reconnecting', () => console.log(`🔄 Redis (${name}) reconnecting...`));
+});
 
 export const REDIS_KEYS = {
   // Driver

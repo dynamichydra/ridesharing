@@ -137,10 +137,14 @@ async function start() {
   // Bug 2 fix: pass Fastify's underlying Node.js http.Server — no extra createServer()
   initSocketIO(app.server, app);
 
-  // Connect all Redis clients
-  // await redis.connect();
-  await redisPub.connect();
-  await redisSub.connect();
+  // Connect all Redis clients safely
+  try {
+    if (redis.status === 'wait') await redis.connect();
+    if (redisPub.status === 'wait') await redisPub.connect();
+    if (redisSub.status === 'wait') await redisSub.connect();
+  } catch (err) {
+    app.log.warn(`Redis connection warning: ${err.message}`);
+  }
 
   // Kafka consumers
   try { await startAllConsumers(); }

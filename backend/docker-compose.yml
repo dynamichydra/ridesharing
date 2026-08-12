@@ -1,39 +1,42 @@
 version: '3.9'
 
 services:
-  # api:
-  #   build: .
-  #   container_name: rideshare-api
-  #   ports:
-  #     - "3000:3000"
-  #   env_file: .env
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #     kafka:
-  #       condition: service_started
-  #   restart: unless-stopped
-  #   networks: [rideshare]
+  api:
+    build: .
+    container_name: rideshare-api
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    restart: unless-stopped
+    networks: [rideshare]
 
-  # postgres:
-  #   image: postgres:16-alpine
-  #   container_name: rideshare-postgres
-  #   environment:
-  #     POSTGRES_DB:       rideshare
-  #     POSTGRES_USER:     postgres
-  #     POSTGRES_PASSWORD: password
-  #   volumes:
-  #     - pgdata:/var/lib/postgresql/data
-  #   ports:
-  #     - "5432:5432"
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U postgres"]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 5
-  #   networks: [rideshare]
+  postgres:
+    image: postgres:16-alpine
+    container_name: rideshare-postgres
+    environment:
+      POSTGRES_DB:       rideshare
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks: [rideshare]
 
   redis:
     image: redis:7-alpine
