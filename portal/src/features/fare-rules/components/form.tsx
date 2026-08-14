@@ -54,8 +54,7 @@ export default function FareRuleForm({
 
   useEffect(() => {
     form.reset(defaultValues);
-
-  }, [defaultValues]);
+  }, [defaultValues, form]);
 
   const ruleType = form.watch("ruleType");
   const daysOfWeek = form.watch("daysOfWeek") || [];
@@ -147,7 +146,7 @@ export default function FareRuleForm({
                   Multiplier <span className="text-red-500">*</span>
                 </FormLabel>
                 <FormControl>
-                  <Input type="number" step="0.1" min="0" placeholder="e.g. 1.5" {...field} />
+                  <Input type="number" step="0.1" min="0" placeholder="e.g. 1.5" {...field} onChange={(e) => field.onChange(e.target.valueAsNumber)} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -162,7 +161,7 @@ export default function FareRuleForm({
                   Priority <span className="text-red-500">*</span>
                 </FormLabel>
                 <FormControl>
-                  <Input type="number" step="1" placeholder="e.g. 1" {...field} />
+                  <Input type="number" step="1" placeholder="e.g. 1" {...field} onChange={(e) => field.onChange(e.target.valueAsNumber)} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -250,9 +249,9 @@ export default function FareRuleForm({
                   </button>
                 ))}
               </div>
-              {form.formState.errors.daysOfWeek && (
+              {form.formState.errors.daysOfWeek && "message" in form.formState.errors.daysOfWeek && (
                 <p className="text-xs font-medium text-destructive">
-                  {form.formState.errors.daysOfWeek.message as string}
+                  {form.formState.errors.daysOfWeek.message}
                 </p>
               )}
             </div>
@@ -269,7 +268,7 @@ export default function FareRuleForm({
                   Traffic Delay (seconds) <span className="text-red-500">*</span>
                 </FormLabel>
                 <FormControl>
-                  <Input type="number" step="1" min="0" placeholder="e.g. 300" {...field} />
+                  <Input type="number" step="1" min="0" placeholder="e.g. 300" {...field} onChange={(e) => field.onChange(e.target.valueAsNumber)} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

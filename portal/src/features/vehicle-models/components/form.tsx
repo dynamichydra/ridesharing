@@ -23,7 +23,7 @@ export function VehicleModelForm({ form }: VehicleModelFormProps) {
     <div className="space-y-4 py-4">
       <div className="space-y-2">
         <Label htmlFor="vm-vehicleTypeId">Vehicle Type</Label>
-        <Controller
+        <Controller<VehicleModelFormValues, "vehicleTypeId">
           name="vehicleTypeId"
           control={control}
           render={({ field }) => (
@@ -61,8 +61,8 @@ export function VehicleModelForm({ form }: VehicleModelFormProps) {
 
       <div className="space-y-2">
         <Label htmlFor="vm-sortOrder">Sort Order</Label>
-        <Input id="vm-sortOrder" type="number" min={0} {...register("sortOrder")} />
-        {errors.sortOrder && <p className="text-xs text-destructive">{errors.sortOrder.message}</p>}
+        <Input id="vm-sortOrder" type="number" min={0} {...register("sortOrder", { valueAsNumber: true })} />
+        {errors.sortOrder?.message && <p className="text-xs text-destructive">{errors.sortOrder.message}</p>}
       </div>
     </div>
   );

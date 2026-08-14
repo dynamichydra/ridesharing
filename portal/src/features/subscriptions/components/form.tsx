@@ -169,7 +169,7 @@ export function SubscriptionPlanForm({
           <Label htmlFor="priceMinor">
             Price (minor units) <span className="text-red-500">*</span>
           </Label>
-          <Input id="priceMinor" type="number" step="1" min="0" placeholder="e.g. 29900" {...register("priceMinor")} />
+          <Input id="priceMinor" type="number" step="1" min="0" placeholder="e.g. 29900" {...register("priceMinor", { valueAsNumber: true })} />
           {errors.priceMinor && <p className="text-xs text-red-500">{errors.priceMinor.message}</p>}
         </div>
       </div>
@@ -193,26 +193,28 @@ export function SubscriptionPlanForm({
           <Label htmlFor="trialDays">
             Trial Days <span className="text-red-500">*</span>
           </Label>
-          <Input id="trialDays" type="number" step="1" min="0" placeholder="0" {...register("trialDays")} />
+          <Input id="trialDays" type="number" step="1" min="0" placeholder="0" {...register("trialDays", { valueAsNumber: true })} />
           {errors.trialDays && <p className="text-xs text-red-500">{errors.trialDays.message}</p>}
         </div>
       </div>
 
       <div className="space-y-2">
         <Label>Features (marketing copy — not enforced)</Label>
-        <Controller
+        <Controller<SubscriptionPlanFormValues, "features">
           control={control}
           name="features"
           render={({ field }) => (
             <FeatureChipsInput value={field.value} onChange={field.onChange} />
           )}
         />
-        {errors.features && <p className="text-xs text-red-500">{errors.features.message}</p>}
+        {errors.features && "message" in errors.features && (
+          <p className="text-xs text-red-500">{errors.features.message}</p>
+        )}
       </div>
 
       <div className="space-y-2">
         <Label>Allowed Vehicle Types (empty = all types)</Label>
-        <Controller
+        <Controller<SubscriptionPlanFormValues, "vehicleTypeIds">
           control={control}
           name="vehicleTypeIds"
           render={({ field }) => (
@@ -238,7 +240,7 @@ export function SubscriptionPlanForm({
           <Label htmlFor="sortOrder">
             Sort Order <span className="text-red-500">*</span>
           </Label>
-          <Input id="sortOrder" type="number" step="1" {...register("sortOrder")} />
+          <Input id="sortOrder" type="number" step="1" {...register("sortOrder", { valueAsNumber: true })} />
           {errors.sortOrder && <p className="text-xs text-red-500">{errors.sortOrder.message}</p>}
         </div>
       </div>

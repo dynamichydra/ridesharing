@@ -30,7 +30,7 @@ export async function registerPlugins(app) {
   await app.register(rateLimit, {
     max: 100,
     timeWindow: '1 minute',
-    redis,
+    redis: redis && redis.status === 'ready' ? redis : undefined,
     keyGenerator: (request) => request.ip,
     errorResponseBuilder: () => ({
       SUCCESS: false,

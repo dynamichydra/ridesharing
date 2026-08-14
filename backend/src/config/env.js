@@ -1,75 +1,66 @@
-import { z } from 'zod';
+export const env = {
+  PORT: process.env.PORT || '3000',
+  NODE_ENV: process.env.NODE_ENV || 'development',
+  API_VERSION: process.env.API_VERSION || 'v1',
 
-const schema = z.object({
-  PORT: z.string().default('3000'),
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  API_VERSION: z.string().default('v1'),
-  DB_HOST: z.string(),
-  DB_PORT: z.string().default('5432'),
-  DB_NAME: z.string(),
-  DB_USER: z.string(),
-  DB_PASSWORD: z.string(),
-  DB_SSL: z.string().default('false'), // 'true' for managed/cloud Postgres (Aiven, RDS, etc.)
-  REDIS_URL: z.string(),
-  KAFKA_BROKERS: z.string(),
-  KAFKA_CLIENT_ID: z.string().default('rideshare-api'),
-  KAFKA_GROUP_ID: z.string().default('rideshare-group'),
-  JWT_SECRET: z.string(),
-  JWT_REFRESH_SECRET: z.string(),
-  JWT_EXPIRES_IN: z.string().default('15m'),
-  JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
-  TWILIO_ACCOUNT_SID: z.string().optional(),
-  TWILIO_AUTH_TOKEN: z.string().optional(),
-  TWILIO_PHONE_NUMBER: z.string().optional(),
-  GOOGLE_MAPS_KEY: z.string().optional(),
-  RAZORPAY_KEY_ID: z.string().optional(),
-  RAZORPAY_KEY_SECRET: z.string().optional(),
-  RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
-  RAZORPAYX_ACCOUNT_NUMBER: z.string().optional(), // RazorpayX current account that driver payouts are drawn from
-  BANK_DETAILS_ENC_KEY: z.string().optional(),      // base64, 32 bytes — see utils/encryption.js
-  SMTP_HOST: z.string().optional(),
-  SMTP_PORT: z.string().optional(),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASSWORD: z.string().optional(),
-  EMAIL_FROM: z.string().optional(),
-  STRIPE_SECRET_KEY: z.string().optional(),
-  STRIPE_PUBLISHABLE_KEY: z.string().optional(),
-  STRIPE_WEBHOOK_SECRET: z.string().optional(),
-  STRIPE_CONNECT_WEBHOOK_SECRET: z.string().optional(),
-  FIREBASE_PROJECT_ID: z.string().optional(),
-  FIREBASE_PRIVATE_KEY: z.string().optional(),
-  FIREBASE_CLIENT_EMAIL: z.string().optional(),
-  S3_ENDPOINT: z.string().optional(),
-  S3_ACCESS_KEY: z.string().optional(),
-  S3_SECRET_KEY: z.string().optional(),
-  S3_BUCKET: z.string().optional(),
-  S3_PUBLIC_URL: z.string().optional(),
-  APP_BASE_URL: z.string().optional(),
-  // Stripe Connect onboarding return targets — see payout-account.service.js
-  // startStripeOnboarding. Unset falls back to the backend's own placeholder acknowledgement
-  // routes (POST/GET .../stripe/onboarding-return|refresh); set these to real driver-app deep
-  // links (e.g. rideshare-driver://onboarding-return) once a driver app exists to redirect to.
-  DRIVER_APP_ONBOARDING_RETURN_URL: z.string().optional(),
-  DRIVER_APP_ONBOARDING_REFRESH_URL: z.string().optional(),
-});
+  // Database Configuration
+  DB_HOST: process.env.DB_HOST || 'pg-eca863e-courier-app.j.aivencloud.com',
+  DB_PORT: process.env.DB_PORT || '18641',
+  DB_NAME: process.env.DB_NAME || 'defaultdb',
+  DB_USER: process.env.DB_USER || 'avnadmin',
+  DB_PASSWORD: process.env.DB_PASSWORD || 'AVNS_6vmELQHLWotgsatBTt8',
+  DB_SSL: process.env.DB_SSL || 'true',
 
-const parsed = schema.safeParse(process.env);
-if (!parsed.success) {
-  console.error('❌ Invalid environment variables:');
-  console.error(parsed.error.flatten().fieldErrors);
-  process.exit(1);
-}
+  // Redis & Kafka Configuration
+  REDIS_URL: process.env.REDIS_URL || 'redis://localhost:6379',
+  KAFKA_BROKERS: process.env.KAFKA_BROKERS || 'localhost:29092',
+  KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID || 'rideshare-api',
+  KAFKA_GROUP_ID: process.env.KAFKA_GROUP_ID || 'rideshare-group',
 
-export const env = parsed.data;
+  // JWT Configuration
+  JWT_SECRET: process.env.JWT_SECRET || 'ce017f96b5713a0e37dec3c476883bae09a2e0bf422683a39e6876e663103f296c5209c0afec18e28074fe1dc598a0867173564e94111f30beb337da4add3e1d',
+  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'ce017f96b5713a0e37dec3c476883bae09a2e0bf422683a39e6876e663103f296c5209c0afec18e28074fe1dc598a0867173564e94111f30beb337da4add3e1d',
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
+  JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
+
+  // Integrations & API Keys
+  TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || undefined,
+  TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || undefined,
+  TWILIO_PHONE_NUMBER: process.env.TWILIO_PHONE_NUMBER || undefined,
+  GOOGLE_MAPS_KEY: process.env.GOOGLE_MAPS_KEY || 'AIzaSyCa9c3EMWliRd2AUcZA-LpJF7VwhEjsd7g',
+  RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || 'rzp_test_TJFQ9bAdEGvc8K',
+  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || '7izpBh3Ax4jfCqxFdWQfhexE',
+  RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || undefined,
+  RAZORPAYX_ACCOUNT_NUMBER: process.env.RAZORPAYX_ACCOUNT_NUMBER || '233434343434',
+  BANK_DETAILS_ENC_KEY: process.env.BANK_DETAILS_ENC_KEY || undefined,
+  SMTP_HOST: process.env.SMTP_HOST || undefined,
+  SMTP_PORT: process.env.SMTP_PORT || undefined,
+  SMTP_USER: process.env.SMTP_USER || undefined,
+  SMTP_PASSWORD: process.env.SMTP_PASSWORD || undefined,
+  EMAIL_FROM: process.env.EMAIL_FROM || undefined,
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || 'sk_test_51RbecsR1ylYVNeuXxpvAjesQJ0XMharciNLwKpqS45GdOxPYk401z8Qo6ONK5aRTSvCwrAQn2XeF6lvozkQjWQai00DpVJV1ZS',
+  STRIPE_PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY || 'pk_test_51RbecsR1ylYVNeuXLVleTgOqCCYrBDFxv3qxOSUaGXNrESLbUuZgzmE7SKy63vPSgBEEeIJuFVFQNIFkPmIwe99X00LDoRXsSf',
+  STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || undefined,
+  STRIPE_CONNECT_WEBHOOK_SECRET: process.env.STRIPE_CONNECT_WEBHOOK_SECRET || undefined,
+  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'your_project_id',
+  FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || 'your_private_key',
+  FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || 'your_client_email',
+  S3_ENDPOINT: process.env.S3_ENDPOINT || undefined,
+  S3_ACCESS_KEY: process.env.S3_ACCESS_KEY || undefined,
+  S3_SECRET_KEY: process.env.S3_SECRET_KEY || undefined,
+  S3_BUCKET: process.env.S3_BUCKET || undefined,
+  S3_PUBLIC_URL: process.env.S3_PUBLIC_URL || undefined,
+  APP_BASE_URL: process.env.APP_BASE_URL || undefined,
+  DRIVER_APP_ONBOARDING_RETURN_URL: process.env.DRIVER_APP_ONBOARDING_RETURN_URL || undefined,
+  DRIVER_APP_ONBOARDING_REFRESH_URL: process.env.DRIVER_APP_ONBOARDING_REFRESH_URL || undefined,
+};
 
 // Each of these flips a dependency service from its local/dummy dev fallback to the
-// real integration the moment its keys are present in .env — no other flag to flip.
+// real integration the moment its keys are present — no other flag to flip.
 export const isS3Configured = !!(env.S3_ENDPOINT && env.S3_ACCESS_KEY && env.S3_SECRET_KEY && env.S3_BUCKET);
 export const isTwilioConfigured = !!(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_PHONE_NUMBER);
 export const isRazorpayConfigured = !!(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET);
-// Payouts draw from a separate RazorpayX current account — standard Razorpay keys alone
-// (used for orders/payments) aren't enough to call the Contacts/Fund Accounts/Payouts APIs.
 export const isRazorpayXConfigured = !!(isRazorpayConfigured && (env.RAZORPAYX_ACCOUNT_NUMBER || env.NODE_ENV === 'development'));
-
 export const isSmtpConfigured = !!(env.SMTP_HOST && env.SMTP_PORT && env.SMTP_USER && env.SMTP_PASSWORD && env.EMAIL_FROM);
 export const isStripeConfigured = !!(env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY);
+

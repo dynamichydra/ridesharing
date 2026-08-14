@@ -9,14 +9,14 @@ export const fareRuleSchema = z
     name: z.string().min(1, { message: "Rule name is required" }),
     countryId: z.string().min(1, { message: "Country is required" }),
     ruleType: z.enum(["time", "traffic", "zone"], { message: "Rule type is required" }),
-    multiplier: z.coerce.number().positive({ message: "Multiplier must be greater than 0" }),
-    priority: z.coerce.number().int({ message: "Priority must be a whole number" }),
+    multiplier: z.number().positive({ message: "Multiplier must be greater than 0" }),
+    priority: z.number().int({ message: "Priority must be a whole number" }),
     vehicleTypeId: z.string().min(1, { message: "Vehicle type is required" }),
     zoneId: z.string().optional(),
     startTime: z.string().optional(),
     endTime: z.string().optional(),
-    daysOfWeek: z.array(z.coerce.number()).optional(),
-    trafficDelayS: z.coerce.number().optional(),
+    daysOfWeek: z.array(z.number()).optional(),
+    trafficDelayS: z.number().optional(),
     isActive: z.boolean().optional(),
   })
   .superRefine((values, ctx) => {

@@ -8,15 +8,15 @@ export const riderPlanSchema = z
     countryId: z.string().min(1, { message: "Country is required" }),
     type: z.enum(riderPlanTypeOptions, { message: "Plan type is required" }),
     currencyCode: z.string().min(1, { message: "Currency is required" }),
-    priceMinor: z.coerce
+    priceMinor: z
       .number({ message: "Price is required" })
       .positive({ message: "Price must be greater than 0" }),
     durationDays: z.string(),
-    trialDays: z.coerce.number({ message: "Trial days is required" }).min(0, {
-      message: "Trial days can't be negative",
-    }),
+    trialDays: z
+      .number({ message: "Trial days is required" })
+      .min(0, { message: "Trial days can't be negative" }),
     featuresText: z.string(),
-    sortOrder: z.coerce.number({ message: "Sort order is required" }),
+    sortOrder: z.number({ message: "Sort order is required" }),
   })
   .superRefine((values, ctx) => {
     if (values.type !== "lifetime" && !values.durationDays.trim()) {

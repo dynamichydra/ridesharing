@@ -101,7 +101,7 @@ export function RiderPlanForm({ formId, defaultValues, countries, onSubmit }: Ri
           <Label htmlFor="priceMinor">
             Price (minor units) <span className="text-red-500">*</span>
           </Label>
-          <Input id="priceMinor" type="number" step="1" min="0" placeholder="e.g. 19900" {...register("priceMinor")} />
+          <Input id="priceMinor" type="number" step="1" min="0" placeholder="e.g. 19900" {...register("priceMinor", { valueAsNumber: true })} />
           {errors.priceMinor && <p className="text-xs text-red-500">{errors.priceMinor.message}</p>}
         </div>
       </div>
@@ -125,7 +125,7 @@ export function RiderPlanForm({ formId, defaultValues, countries, onSubmit }: Ri
           <Label htmlFor="trialDays">
             Trial Days <span className="text-red-500">*</span>
           </Label>
-          <Input id="trialDays" type="number" step="1" min="0" placeholder="0" {...register("trialDays")} />
+          <Input id="trialDays" type="number" step="1" min="0" placeholder="0" {...register("trialDays", { valueAsNumber: true })} />
           {errors.trialDays && <p className="text-xs text-red-500">{errors.trialDays.message}</p>}
         </div>
       </div>
@@ -143,7 +143,7 @@ export function RiderPlanForm({ formId, defaultValues, countries, onSubmit }: Ri
         <Label htmlFor="sortOrder">
           Sort Order <span className="text-red-500">*</span>
         </Label>
-        <Input id="sortOrder" type="number" step="1" {...register("sortOrder")} />
+        <Input id="sortOrder" type="number" step="1" {...register("sortOrder", { valueAsNumber: true })} />
         {errors.sortOrder && <p className="text-xs text-red-500">{errors.sortOrder.message}</p>}
       </div>
     </form>
