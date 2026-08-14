@@ -17,6 +17,26 @@ import { setSocketIO } from '../kafka/consumers/index.js';
 import { handleDriverLocationUpdate } from '../modules/ride/ride.service.js';
 import { upsertDriverCell, removeDriverFromIndex } from '../modules/matching/driver-geo-index.service.js';
 
+let ioInstance = null;
+
+export function getSocketStats() {
+  if (!ioInstance) return { initialized: false, totalClients: 0 };
+  const driverSockets = ioInstance.of('/driver').sockets.size;
+  const riderSockets = ioInstance.of('/rider').sockets.size;
+  const rootSockets = ioInstance.of('/').sockets.size;
+  const testSockets = ioInstance.of('/test').sockets.size;
+  return {
+    initialized: true,
+    totalClients: rootSockets + testSockets + driverSockets + riderSockets,
+    byNamespace: {
+      '/': rootSockets,
+      '/test': testSockets,
+      '/driver': driverSockets,
+      '/rider': riderSockets,
+    },
+  };
+}
+
 function verifyJwt(app, token) {
   try { return app.jwt.verify(token); } catch { return null; }
 }
@@ -25,15 +45,54 @@ export function initSocketIO(fastifyServer, app) {
   // Bug 2 fix: pass Fastify's raw Node.js http.Server directly
   const io = new Server(fastifyServer, {
     cors: {
-      origin: env.NODE_ENV === 'production' ? ['https://yourdomain.com'] : '*',
+      origin: process.env.SOCKET_CORS_ORIGIN || '*',
       methods: ['GET', 'POST'],
+      credentials: true,
     },
     transports: ['websocket', 'polling'],
     pingTimeout: 20000,
     pingInterval: 10000,
   });
 
+  ioInstance = io;
   setSocketIO(io);
+
+  // ── Public / Root namespace ────────────────────────────────────────────────
+  io.on('connection', (socket) => {
+    console.log(`[Socket/root] connected: ${socket.id}`);
+    socket.emit('welcome', {
+      message: 'Connected to RideShare Socket.IO Server',
+      socketId: socket.id,
+      timestamp: new Date().toISOString(),
+    });
+
+    socket.on('ping', (data) => {
+      socket.emit('pong', { ...(typeof data === 'object' ? data : {}), serverTime: new Date().toISOString() });
+    });
+
+    socket.on('echo', (data) => {
+      socket.emit('echo_reply', { data, serverTime: new Date().toISOString() });
+    });
+  });
+
+  // ── /test public test namespace ───────────────────────────────────────────
+  const testNS = io.of('/test');
+  testNS.on('connection', (socket) => {
+    console.log(`[Socket/test] connected: ${socket.id}`);
+    socket.emit('welcome', {
+      message: 'Connected to RideShare Test Namespace',
+      socketId: socket.id,
+      timestamp: new Date().toISOString(),
+    });
+
+    socket.on('ping', (data) => {
+      socket.emit('pong', { ...(typeof data === 'object' ? data : {}), serverTime: new Date().toISOString() });
+    });
+
+    socket.on('echo', (data) => {
+      socket.emit('echo_reply', { data, serverTime: new Date().toISOString() });
+    });
+  });
 
   // ── /driver namespace ──────────────────────────────────────────────────────
   const driverNS = io.of('/driver');

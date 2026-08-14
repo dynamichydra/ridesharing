@@ -45,6 +45,7 @@ import { promoRoutes } from './modules/promo/promo.routes.js';
 import { emergencyRoutes } from './modules/emergency/emergency.routes.js';
 import { savedPlaceRoutes } from './modules/saved-place/saved-place.routes.js';
 import { moderationRoutes } from './modules/moderation/moderation.routes.js';
+import { socketTestRoutes } from './modules/socket-test/socket-test.routes.js';
 
 
 
@@ -110,6 +111,8 @@ async function build() {
   await app.register(emergencyRoutes, { prefix: `${PREFIX}` });
   await app.register(savedPlaceRoutes, { prefix: `${PREFIX}/saved-places` });
   await app.register(moderationRoutes, { prefix: `${PREFIX}/admin/moderation` });
+  await app.register(socketTestRoutes, { prefix: `${PREFIX}` });
+  await app.register(socketTestRoutes); // also accessible at /socket-test and /socket-test/ui
 
 
 
