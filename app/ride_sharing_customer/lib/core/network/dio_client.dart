@@ -57,9 +57,9 @@ class DioClient {
   /// Platform-aware local API URL (Android emulator vs iOS/web/desktop)
   static String get baseUrl {
     if (Platform.isAndroid) {
-      return 'http://10.0.2.2:3000';
+      return 'https://rideshareapi.dokume.in';
     }
-    return 'http://localhost:3000';
+    return 'https://rideshareapi.dokume.in';
   }
 
   /// Retained mock data fallback for unimplemented APIs

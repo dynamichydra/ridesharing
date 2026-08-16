@@ -3,6 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../../../../injection_container.dart';
+import '../../../../core/services/storage_service.dart';
+import '../../../ride_tracking/presentation/bloc/ride_tracking_bloc.dart';
 import '../bloc/auth_bloc.dart';
 
 class SplashPage extends StatefulWidget {
@@ -88,7 +91,15 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
 
     if (_pendingState is AuthAuthenticated) {
       Future.delayed(const Duration(milliseconds: 1000), () {
-        if (mounted) context.go('/home');
+        if (!mounted) return;
+        final storage = sl<StorageService>();
+        final activeRide = storage.getCachedData('active_ride_tracking');
+        if (activeRide != null) {
+          context.read<RideTrackingBloc>().add(RestoreActiveRide());
+          context.go('/ride-tracking');
+        } else {
+          context.go('/home');
+        }
       });
     } else if (_pendingState is AuthUnauthenticated) {
       Future.delayed(const Duration(milliseconds: 1000), () {

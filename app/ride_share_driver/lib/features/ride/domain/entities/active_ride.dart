@@ -5,6 +5,8 @@
 /// (confirmed in `ride.service.js` — they all `select().from(rides)` with no
 /// join), so this entity deliberately has no rider-identity fields. Showing
 /// "your rider" without a name is a real backend gap, not an oversight here.
+import 'ride_offer.dart';
+
 class ActiveRide {
   final String id;
   final String riderId;
@@ -42,22 +44,53 @@ class ActiveRide {
   });
 
   factory ActiveRide.fromJson(Map<String, dynamic> json) {
+    int? parseInt(dynamic val) {
+      if (val == null) return null;
+      if (val is int) return val;
+      if (val is double) return val.toInt();
+      return int.tryParse(val.toString());
+    }
+
+    double parseDouble(dynamic val, {double fallback = 0.0}) {
+      if (val == null) return fallback;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? fallback;
+    }
+
     return ActiveRide(
-      id: json['id'] as String,
-      riderId: json['riderId'] as String,
-      status: json['status'] as String? ?? 'requested',
-      pickupLat: double.tryParse(json['pickupLat']?.toString() ?? '') ?? 0,
-      pickupLng: double.tryParse(json['pickupLng']?.toString() ?? '') ?? 0,
-      pickupAddress: json['pickupAddress'] as String?,
-      dropLat: double.tryParse(json['dropLat']?.toString() ?? '') ?? 0,
-      dropLng: double.tryParse(json['dropLng']?.toString() ?? '') ?? 0,
-      dropAddress: json['dropAddress'] as String?,
-      estimatedFareMinor: json['estimatedFareMinor'] as int?,
-      finalFareMinor: json['finalFareMinor'] as int?,
-      currencyCode: json['currencyCode'] as String?,
-      distanceKm: double.tryParse(json['distanceKm']?.toString() ?? ''),
-      durationMin: json['durationMin'] as int?,
-      polyline: json['polyline'] as String?,
+      id: json['id']?.toString() ?? json['rideId']?.toString() ?? '',
+      riderId: json['riderId']?.toString() ?? json['rider_id']?.toString() ?? '',
+      status: json['status']?.toString() ?? 'accepted',
+      pickupLat: parseDouble(json['pickupLat'] ?? json['pickup_lat']),
+      pickupLng: parseDouble(json['pickupLng'] ?? json['pickup_lng']),
+      pickupAddress: json['pickupAddress']?.toString() ?? json['pickup_address']?.toString(),
+      dropLat: parseDouble(json['dropLat'] ?? json['drop_lat']),
+      dropLng: parseDouble(json['dropLng'] ?? json['drop_lng']),
+      dropAddress: json['dropAddress']?.toString() ?? json['drop_address']?.toString(),
+      estimatedFareMinor: parseInt(json['estimatedFareMinor'] ?? json['estimated_fare_minor']),
+      finalFareMinor: parseInt(json['finalFareMinor'] ?? json['final_fare_minor']),
+      currencyCode: json['currencyCode']?.toString() ?? json['currency_code']?.toString() ?? json['currency']?.toString(),
+      distanceKm: parseDouble(json['distanceKm'] ?? json['distance_km']),
+      durationMin: parseInt(json['durationMin'] ?? json['duration_min']),
+      polyline: json['polyline']?.toString(),
+    );
+  }
+
+  factory ActiveRide.fromOffer(RideOffer offer, {String status = 'accepted'}) {
+    return ActiveRide(
+      id: offer.rideId,
+      riderId: '',
+      status: status,
+      pickupLat: offer.pickupLat,
+      pickupLng: offer.pickupLng,
+      pickupAddress: offer.pickupAddress,
+      dropLat: offer.dropLat,
+      dropLng: offer.dropLng,
+      dropAddress: offer.dropAddress,
+      estimatedFareMinor: (offer.estimatedFare * 100).round(),
+      currencyCode: offer.currencyCode,
+      distanceKm: offer.distanceKm,
+      polyline: offer.polyline,
     );
   }
 }

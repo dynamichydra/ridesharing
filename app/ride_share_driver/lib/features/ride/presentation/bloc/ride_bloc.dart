@@ -321,8 +321,16 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     _locationSub = null;
   }
 
+  RideOffer? _acceptedOffer;
+
   void _onAcceptOfferRequested(AcceptOfferRequested event, Emitter<RideState> emit) {
     emit(RideAccepting());
+    for (final o in _pendingOffers) {
+      if (o.rideId == event.rideId) {
+        _acceptedOffer = o;
+        break;
+      }
+    }
     rideRepository.acceptOffer(event.rideId);
   }
 
@@ -349,19 +357,45 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     switch (event.result) {
       case RideAcceptSucceeded(:final rideId):
         try {
-          final ride = await rideRepository.getActiveRide();
-          if (ride == null || ride.id != rideId) {
+          ActiveRide? ride;
+          try {
+            ride = await rideRepository.getActiveRide();
+          } catch (e) {
+            AppLogger.w('[RideBloc] getActiveRide after accept failed, using fallback: $e');
+          }
+
+          if (ride == null && _acceptedOffer != null) {
+            ride = ActiveRide.fromOffer(_acceptedOffer!);
+          } else if (ride == null && _pendingOffers.isNotEmpty) {
+            try {
+              final matched = _pendingOffers.firstWhere((o) => o.rideId == rideId);
+              ride = ActiveRide.fromOffer(matched);
+            } catch (_) {
+              ride = ActiveRide.fromOffer(_pendingOffers.first);
+            }
+          }
+
+          if (ride == null) {
             emit(RideOperationFailed(message: 'Ride was accepted but details could not be loaded.'));
             emit(RideIdle());
             return;
           }
+
           _currentRide = ride;
-          emit(RideActive(ride: ride));
+          _pendingOffers.clear();
+          _acceptedOffer = null;
+          emit(RideActive(
+            ride: ride,
+            driverPosition: _lastDriverPos,
+            driverBearing: _lastDriverBearing,
+            traveledPath: List.unmodifiable(_traveledPath),
+          ));
         } catch (e) {
           emit(RideOperationFailed(message: e.toString()));
           emit(RideIdle());
         }
       case RideAcceptFailed(:final message):
+        _acceptedOffer = null;
         emit(RideOperationFailed(message: message));
         emit(RideIdle());
     }

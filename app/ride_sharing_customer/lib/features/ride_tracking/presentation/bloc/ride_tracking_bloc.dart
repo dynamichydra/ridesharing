@@ -64,6 +64,8 @@ class RideCompleted extends RideTrackingEvent {
 
 class CancelRide extends RideTrackingEvent {}
 
+class RestoreActiveRide extends RideTrackingEvent {}
+
 // ==========================================
 // Ride Tracking States
 // ==========================================
@@ -175,15 +177,16 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     on<RideStarted>(_onRideStarted);
     on<RideCompleted>(_onRideCompleted);
     on<CancelRide>(_onCancelRide);
+    on<RestoreActiveRide>(_onRestoreActiveRide);
   }
 
-  Future<void> _onStartRideTracking(StartRideTracking event, Emitter<RideTrackingState> emit) async {
-    _initialRideData = event;
-    emit(RideTrackingSearching());
-    
-    await _rideTrackingRepository.connectToRide(event.rideId);
+  void _subscribeSocketEvents() {
+    _driverAssignedSub?.cancel();
+    _driverLocationSub?.cancel();
+    _rideStartedSub?.cancel();
+    _rideCompletedSub?.cancel();
+    _rideCancelledSub?.cancel();
 
-    // Subscribe to socket streams
     _driverAssignedSub = _rideTrackingRepository.onDriverAssigned.listen((data) {
       add(DriverAssigned(data));
     });
@@ -210,24 +213,117 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     });
   }
 
+  Future<void> _onStartRideTracking(StartRideTracking event, Emitter<RideTrackingState> emit) async {
+    _initialRideData = event;
+    emit(RideTrackingSearching());
+
+    try {
+      final storage = sl<StorageService>();
+      await storage.cacheData('active_ride_tracking', {
+        'rideId': event.rideId,
+        'pickupLat': event.pickup.latitude,
+        'pickupLng': event.pickup.longitude,
+        'pickupName': event.pickupName,
+        'dropLat': event.destination.latitude,
+        'dropLng': event.destination.longitude,
+        'destinationName': event.destinationName,
+        'vehicleName': event.vehicleName,
+        'fare': event.fare,
+        'trackingState': 'searching',
+      });
+    } catch (_) {}
+    
+    await _rideTrackingRepository.connectToRide(event.rideId);
+    _subscribeSocketEvents();
+  }
+
+  Future<void> _onRestoreActiveRide(RestoreActiveRide event, Emitter<RideTrackingState> emit) async {
+    try {
+      final storage = sl<StorageService>();
+      final cached = storage.getCachedData('active_ride_tracking');
+      if (cached == null) return;
+      final map = Map<String, dynamic>.from(cached as Map);
+
+      final String rideId = map['rideId']?.toString() ?? '';
+      if (rideId.isEmpty) return;
+
+      final pickup = LatLng(
+        (map['pickupLat'] as num).toDouble(),
+        (map['pickupLng'] as num).toDouble(),
+      );
+      final destination = LatLng(
+        (map['dropLat'] as num).toDouble(),
+        (map['dropLng'] as num).toDouble(),
+      );
+      final pickupName = map['pickupName']?.toString() ?? 'Pickup';
+      final destinationName = map['destinationName']?.toString() ?? 'Destination';
+      final vehicleName = map['vehicleName']?.toString() ?? 'Car';
+      final fare = (map['fare'] as num).toDouble();
+      final trackingState = map['trackingState']?.toString() ?? 'searching';
+
+      _initialRideData = StartRideTracking(
+        rideId: rideId,
+        pickup: pickup,
+        pickupName: pickupName,
+        destination: destination,
+        destinationName: destinationName,
+        vehicleName: vehicleName,
+        fare: fare,
+      );
+
+      await _rideTrackingRepository.connectToRide(rideId);
+      _subscribeSocketEvents();
+
+      if (trackingState == 'searching' || map['driver'] == null) {
+        emit(RideTrackingSearching());
+      } else {
+        final driver = Map<String, dynamic>.from(map['driver'] as Map);
+        final driverPosition = LatLng(
+          (driver['lat'] as num).toDouble(),
+          (driver['lng'] as num).toDouble(),
+        );
+        final points = _rideTrackingRepository.getRoutePoints(
+          driverPosition,
+          trackingState == 'driverArriving' ? pickup : destination,
+        );
+
+        emit(RideTrackingActive(
+          rideId: rideId,
+          driverName: driver['name']?.toString() ?? 'Your Driver',
+          driverRating: (driver['rating'] as num?)?.toDouble() ?? 5.0,
+          driverAvatar: driver['avatar']?.toString() ?? '',
+          driverVehicle: driver['vehicle']?.toString() ?? 'Car',
+          plateNumber: driver['plateNumber']?.toString() ?? '—',
+          pickup: pickup,
+          pickupName: pickupName,
+          destination: destination,
+          destinationName: destinationName,
+          driverPosition: driverPosition,
+          driverBearing: LocationHelper.calculateBearing(
+            driverPosition.latitude,
+            driverPosition.longitude,
+            (trackingState == 'driverArriving' ? pickup : destination).latitude,
+            (trackingState == 'driverArriving' ? pickup : destination).longitude,
+          ),
+          routePoints: points,
+          trackingState: trackingState,
+          fare: fare,
+          vehicleName: vehicleName,
+        ));
+      }
+    } catch (_) {}
+  }
+
   Future<void> _onDriverAssigned(DriverAssigned event, Emitter<RideTrackingState> emit) async {
-    // The backend emits { rideId, driver: { id, name, phone, vehicleNumber,
-    // vehicleModel, rating, profilePhoto, currentLat, currentLng } }
-    // from RIDE_ACCEPTED → Kafka → ride:driver_assigned socket event.
     final raw = event.driverData;
 
-    // The socket payload wraps the driver under a 'driver' key
     final driver = (raw['driver'] is Map)
         ? Map<String, dynamic>.from(raw['driver'] as Map)
-        : raw; // fallback: the whole payload IS the driver object
+        : raw;
 
-    // Real driver position from the backend
     final double? driverLat = double.tryParse(driver['currentLat']?.toString() ?? '');
     final double? driverLng = double.tryParse(driver['currentLng']?.toString() ?? '');
 
-    // If backend didn't include live lat/lng yet, fall back to a small offset
-    // from pickup so the map still renders — the first location_update event
-    // will correct it within seconds.
     final driverPosition = (driverLat != null && driverLng != null)
         ? LatLng(driverLat, driverLng)
         : LatLng(
@@ -237,7 +333,7 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
 
     final points = _rideTrackingRepository.getRoutePoints(driverPosition, _initialRideData.pickup);
 
-    emit(RideTrackingActive(
+    final activeState = RideTrackingActive(
       rideId: _initialRideData.rideId,
       driverName: driver['name']?.toString() ?? 'Your Driver',
       driverRating: double.tryParse(driver['rating']?.toString() ?? '5.0') ?? 5.0,
@@ -259,9 +355,27 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       trackingState: 'driverArriving',
       fare: _initialRideData.fare,
       vehicleName: _initialRideData.vehicleName,
-    ));
-  }
+    );
 
+    try {
+      final storage = sl<StorageService>();
+      final cached = storage.getCachedData('active_ride_tracking');
+      final Map<String, dynamic> map = cached != null ? Map<String, dynamic>.from(cached as Map) : {};
+      map['trackingState'] = 'driverArriving';
+      map['driver'] = {
+        'name': activeState.driverName,
+        'rating': activeState.driverRating,
+        'avatar': activeState.driverAvatar,
+        'vehicle': activeState.driverVehicle,
+        'plateNumber': activeState.plateNumber,
+        'lat': driverPosition.latitude,
+        'lng': driverPosition.longitude,
+      };
+      await storage.cacheData('active_ride_tracking', map);
+    } catch (_) {}
+
+    emit(activeState);
+  }
 
   void _onDriverLocationUpdated(DriverLocationUpdated event, Emitter<RideTrackingState> emit) {
     final currentState = state;
@@ -272,10 +386,27 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         event.location.latitude,
         event.location.longitude,
       );
-      emit(currentState.copyWith(
+      final updatedState = currentState.copyWith(
         driverPosition: event.location,
         driverBearing: bearing,
-      ));
+      );
+
+      try {
+        final storage = sl<StorageService>();
+        final cached = storage.getCachedData('active_ride_tracking');
+        if (cached != null) {
+          final Map<String, dynamic> map = Map<String, dynamic>.from(cached as Map);
+          if (map['driver'] is Map) {
+            final driverMap = Map<String, dynamic>.from(map['driver'] as Map);
+            driverMap['lat'] = event.location.latitude;
+            driverMap['lng'] = event.location.longitude;
+            map['driver'] = driverMap;
+            storage.cacheData('active_ride_tracking', map);
+          }
+        }
+      } catch (_) {}
+
+      emit(updatedState);
     }
   }
 
@@ -286,7 +417,7 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         currentState.pickup,
         currentState.destination,
       );
-      emit(currentState.copyWith(
+      final updatedState = currentState.copyWith(
         trackingState: 'rideInProgress',
         routePoints: pointsToDestination,
         driverBearing: LocationHelper.calculateBearing(
@@ -295,7 +426,19 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
           currentState.destination.latitude,
           currentState.destination.longitude,
         ),
-      ));
+      );
+
+      try {
+        final storage = sl<StorageService>();
+        final cached = storage.getCachedData('active_ride_tracking');
+        if (cached != null) {
+          final Map<String, dynamic> map = Map<String, dynamic>.from(cached as Map);
+          map['trackingState'] = 'rideInProgress';
+          storage.cacheData('active_ride_tracking', map);
+        }
+      } catch (_) {}
+
+      emit(updatedState);
     }
   }
 
@@ -309,6 +452,10 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         fare: finalFare,
       );
       await _completeRideInCache(completedState);
+      try {
+        final storage = sl<StorageService>();
+        await storage.cacheData('active_ride_tracking', null);
+      } catch (_) {}
       emit(completedState);
     }
   }
