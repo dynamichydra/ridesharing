@@ -48,7 +48,7 @@ import { scoreDrivers } from './scoring.service.js';
 import { getActiveWeights } from './matching-weights.service.js';
 import { metrics } from '../../utils/metrics.js';
 
-const RADII_KM = [1, 2, 3];
+const RADII_KM = [1, 2, 3, 15];
 
 const ACCEPT_TIMEOUT_MS = 25_000;   // 25 s per ring
 const MAX_CANDIDATES = 5;

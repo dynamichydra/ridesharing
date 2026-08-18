@@ -86,13 +86,17 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   }
 
   Future<void> _onLoadHomeData(LoadHomeData event, Emitter<HomeState> emit) async {
-    emit(HomeLoading());
+    if (state is! HomeLoaded) {
+      emit(HomeLoading());
+    }
     try {
       final position = await _homeRepository.getCurrentLocation();
       final saved = await _homeRepository.getSavedPlaces();
       emit(HomeLoaded(currentPosition: position, savedPlaces: saved));
     } catch (e) {
-      emit(HomeError(e.toString()));
+      if (state is! HomeLoaded) {
+        emit(HomeError(e.toString()));
+      }
     }
   }
 

@@ -115,24 +115,41 @@ class AppRoutes {
         path: forgotPassword,
         builder: (context, state) => const ForgotPasswordPage(),
       ),
-      // ShellRoute wraps ONLY the 4 main tab pages with MainLayout (bottom nav + drawer)
-      ShellRoute(
-        builder: (context, state, child) {
-          return MainLayout(child: child);
+      // StatefulShellRoute preserves the state of all 4 main tabs (Map, history, wallet, profile)
+      // preventing unnecessary re-creation of Google Map and avoiding loading flickers
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          return MainLayout(navigationShell: navigationShell);
         },
-        routes: [
-          GoRoute(path: home, builder: (context, state) => const HomePage()),
-          GoRoute(
-            path: rideHistory,
-            builder: (context, state) => const RideHistoryPage(),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: home, builder: (context, state) => const HomePage()),
+            ],
           ),
-          GoRoute(
-            path: wallet,
-            builder: (context, state) => const WalletPage(),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: rideHistory,
+                builder: (context, state) => const RideHistoryPage(),
+              ),
+            ],
           ),
-          GoRoute(
-            path: profile,
-            builder: (context, state) => const ProfilePage(),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: wallet,
+                builder: (context, state) => const WalletPage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: profile,
+                builder: (context, state) => const ProfilePage(),
+              ),
+            ],
           ),
         ],
       ),

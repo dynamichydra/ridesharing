@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
 import '../services/storage_service.dart';
+import '../services/app_logger.dart';
 import '../../injection_container.dart';
 
 class DioClient {
@@ -13,7 +14,7 @@ class DioClient {
     dio.options.connectTimeout = const Duration(seconds: 15);
     dio.options.receiveTimeout = const Duration(seconds: 15);
     
-    dio.interceptors.add(
+    dio.interceptors.addAll([
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           final storage = sl<StorageService>();
@@ -51,15 +52,26 @@ class DioClient {
           return handler.next(error);
         },
       ),
-    );
+      LogInterceptor(
+        request: true,
+        requestHeader: true,
+        requestBody: true,
+        responseHeader: false,
+        responseBody: true,
+        error: true,
+        logPrint: (obj) => AppLogger.d(obj.toString()),
+      ),
+    ]);
   }
 
   /// Platform-aware local API URL (Android emulator vs iOS/web/desktop)
   static String get baseUrl {
     if (Platform.isAndroid) {
-      return 'https://rideshareapi.dokume.in';
+      return 'http://10.0.2.2:3000';
+      // return 'https://rideshareapi.dokume.in';
     }
-    return 'https://rideshareapi.dokume.in';
+    return 'http://localhost:3000';
+    // return 'https://rideshareapi.dokume.in';
   }
 
   /// Retained mock data fallback for unimplemented APIs

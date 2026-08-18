@@ -12,7 +12,8 @@ class ApiConfig {
 
   static String get baseUrl {
     if (_overrideBaseUrl.isNotEmpty) return _overrideBaseUrl;
-    return Platform.isAndroid ? 'https://rideshareapi.dokume.in/api/v1' : 'https://rideshareapi.dokume.in/api/v1';
+    // return Platform.isAndroid ? 'https://rideshareapi.dokume.in/api/v1' : 'https://rideshareapi.dokume.in/api/v1';
+    return Platform.isAndroid ? 'http://10.0.2.2:3000/api/v1' : 'http://localhost:3000/api/v1';
   }
 
   /// Socket.IO is mounted directly on the raw HTTP server (see

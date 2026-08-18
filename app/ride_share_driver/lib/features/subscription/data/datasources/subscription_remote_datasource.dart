@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/error/app_exception.dart';
 
@@ -21,7 +22,14 @@ class SubscriptionRemoteDataSource {
 
   Future<Map<String, dynamic>> initiateSubscription(String planId) async {
     try {
-      final response = await apiClient.dio.post('/subscriptions/initiate', data: {'planId': planId});
+      final idempotencyKey = const Uuid().v4();
+      final response = await apiClient.dio.post(
+        '/subscriptions/initiate',
+        data: {'planId': planId},
+        options: Options(
+          headers: {'Idempotency-Key': idempotencyKey},
+        ),
+      );
       if (response.data['SUCCESS'] != true) {
         throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to start subscription purchase');
       }

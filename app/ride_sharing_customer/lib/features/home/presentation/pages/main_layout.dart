@@ -3,38 +3,17 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/navigation_drawer.dart';
 
-class MainLayout extends StatefulWidget {
-  final Widget child;
-  const MainLayout({super.key, required this.child});
+class MainLayout extends StatelessWidget {
+  final StatefulNavigationShell navigationShell;
 
-  @override
-  State<MainLayout> createState() => _MainLayoutState();
-}
+  const MainLayout({super.key, required this.navigationShell});
 
-class _MainLayoutState extends State<MainLayout> {
-  int _calculateSelectedIndex(BuildContext context) {
-    final String location = GoRouterState.of(context).uri.path;
-    if (location.startsWith('/ride-history')) return 1;
-    if (location.startsWith('/wallet')) return 2;
-    if (location.startsWith('/profile')) return 3;
-    return 0; // Default to Home
-  }
-
-  void _onItemTapped(int index, BuildContext context) {
-    switch (index) {
-      case 0:
-        context.go('/home');
-        break;
-      case 1:
-        context.go('/ride-history');
-        break;
-      case 2:
-        context.go('/wallet');
-        break;
-      case 3:
-        context.go('/profile');
-        break;
-    }
+  void _onItemTapped(int index) {
+    navigationShell.goBranch(
+      index,
+      // A common pattern when tapping the current tab is to navigate to the initial location of that branch
+      initialLocation: index == navigationShell.currentIndex,
+    );
   }
 
   Widget _buildNavIcon(String assetName, bool isSelected) {
@@ -54,11 +33,11 @@ class _MainLayoutState extends State<MainLayout> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = _calculateSelectedIndex(context);
+    final selectedIndex = navigationShell.currentIndex;
 
     return Scaffold(
       drawer: const AppNavigationDrawer(),
-      body: widget.child,
+      body: navigationShell,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -75,7 +54,7 @@ class _MainLayoutState extends State<MainLayout> {
         ),
         child: BottomNavigationBar(
           currentIndex: selectedIndex,
-          onTap: (index) => _onItemTapped(index, context),
+          onTap: _onItemTapped,
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.white,
           elevation: 0,

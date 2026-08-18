@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/services/storage_service.dart';
+import '../../../../core/services/app_logger.dart';
 
 class RideTrackingSocketDataSource {
   final StorageService storageService;
@@ -45,50 +46,62 @@ class RideTrackingSocketDataSource {
     );
 
     socket.onConnect((_) {
-      print('[RideTrackingSocket] connected to /rider namespace');
+      AppLogger.i('[RideTrackingSocket] connected to /rider namespace');
+      AppLogger.d('[RideTrackingSocket] emitting ride:subscribe with rideId: $rideId');
       // Subscribe to the specific ride updates
       socket.emit('ride:subscribe', {'rideId': rideId});
     });
 
     socket.onConnectError((data) {
-      print('[RideTrackingSocket] connection error: $data');
+      AppLogger.w('[RideTrackingSocket] connection error: $data');
       _socketErrorController.add('Connection failed: $data');
     });
 
     socket.onDisconnect((reason) {
-      print('[RideTrackingSocket] disconnected: $reason');
+      AppLogger.i('[RideTrackingSocket] disconnected: $reason');
+    });
+
+    socket.onError((data) {
+      AppLogger.w('[RideTrackingSocket] socket error: $data');
+      _socketErrorController.add('Socket error: $data');
     });
 
     socket.on('error', (data) {
+      AppLogger.w('[RideTrackingSocket] error event received: $data');
       final message = (data is Map) ? data['message']?.toString() : data?.toString();
       _socketErrorController.add(message ?? 'Unknown socket error.');
     });
 
     socket.on('ride:driver_assigned', (data) {
+      AppLogger.d('[RideTrackingSocket] event: ride:driver_assigned -> $data');
       if (data is Map) {
         _driverAssignedController.add(Map<String, dynamic>.from(data));
       }
     });
 
     socket.on('driver:location', (data) {
+      AppLogger.d('[RideTrackingSocket] event: driver:location -> $data');
       if (data is Map) {
         _driverLocationController.add(Map<String, dynamic>.from(data));
       }
     });
 
     socket.on('ride:started', (data) {
+      AppLogger.d('[RideTrackingSocket] event: ride:started -> $data');
       if (data is Map) {
         _rideStartedController.add(Map<String, dynamic>.from(data));
       }
     });
 
     socket.on('ride:completed', (data) {
+      AppLogger.d('[RideTrackingSocket] event: ride:completed -> $data');
       if (data is Map) {
         _rideCompletedController.add(Map<String, dynamic>.from(data));
       }
     });
 
     socket.on('ride:cancelled', (data) {
+      AppLogger.d('[RideTrackingSocket] event: ride:cancelled -> $data');
       if (data is Map) {
         _rideCancelledController.add(Map<String, dynamic>.from(data));
       }
