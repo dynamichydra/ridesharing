@@ -23,6 +23,7 @@ class AppMapView extends StatefulWidget {
   final double driverBearing;
   final List<LatLng> routePoints;
   final bool useGoogleMaps;
+  final double initialZoom;
   final Function(LatLng)? onTap;
   final Function(GoogleMapController)? onMapCreated;
 
@@ -34,6 +35,7 @@ class AppMapView extends StatefulWidget {
     this.driverBearing = 0.0,
     this.routePoints = const [],
     this.useGoogleMaps = true,
+    this.initialZoom = 15.0,
     this.onTap,
     this.onMapCreated,
   });
@@ -167,7 +169,7 @@ class _AppMapViewState extends State<AppMapView> {
         target: widget.driverPosition ??
             widget.pickup ??
             const LatLng(22.5726, 88.3639),
-        zoom: 15.0,
+        zoom: widget.initialZoom,
       ),
 
       markers: {

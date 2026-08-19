@@ -12,4 +12,5 @@ abstract class RideTrackingRepository {
 
   Future<Map<String, dynamic>> getDriverDetails(); // Keeping fallback
   List<LatLng> getRoutePoints(LatLng start, LatLng end); // Keeping fallback for ui tests
+  Future<void> cancelRide(String rideId, [String reason = 'Cancelled by rider']);
 }

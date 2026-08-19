@@ -53,6 +53,13 @@ class DriverLocationUpdated extends RideTrackingEvent {
   List<Object?> get props => [location];
 }
 
+class UpdateTrackingStep extends RideTrackingEvent {
+  final String step;
+  const UpdateTrackingStep(this.step);
+  @override
+  List<Object?> get props => [step];
+}
+
 class RideStarted extends RideTrackingEvent {}
 
 class RideCompleted extends RideTrackingEvent {
@@ -80,7 +87,39 @@ class RideTrackingInitial extends RideTrackingState {}
 class RideTrackingLoading extends RideTrackingState {}
 
 // Represents the state when we are waiting for a driver to be assigned by backend
-class RideTrackingSearching extends RideTrackingState {}
+class RideTrackingSearching extends RideTrackingState {
+  final String rideId;
+  final LatLng pickup;
+  final String pickupName;
+  final LatLng destination;
+  final String destinationName;
+  final String vehicleName;
+  final double fare;
+  final List<LatLng> routePoints;
+
+  const RideTrackingSearching({
+    required this.rideId,
+    required this.pickup,
+    required this.pickupName,
+    required this.destination,
+    required this.destinationName,
+    required this.vehicleName,
+    required this.fare,
+    this.routePoints = const [],
+  });
+
+  @override
+  List<Object?> get props => [
+        rideId,
+        pickup,
+        pickupName,
+        destination,
+        destinationName,
+        vehicleName,
+        fare,
+        routePoints,
+      ];
+}
 
 class RideTrackingActive extends RideTrackingState {
   final String rideId;
@@ -96,9 +135,10 @@ class RideTrackingActive extends RideTrackingState {
   final LatLng driverPosition;
   final double driverBearing;
   final List<LatLng> routePoints;
-  final String trackingState; // 'driverArriving' or 'rideInProgress' or 'rideCompleted'
+  final String trackingState; // 'driverAccepted', 'driverArriving', 'driverArrived', 'otpVerification', 'rideInProgress', 'rideCompleted'
   final double fare;
   final String vehicleName;
+  final String otp;
 
   const RideTrackingActive({
     required this.rideId,
@@ -117,6 +157,7 @@ class RideTrackingActive extends RideTrackingState {
     required this.trackingState,
     required this.fare,
     required this.vehicleName,
+    required this.otp,
   });
 
   RideTrackingActive copyWith({
@@ -125,6 +166,7 @@ class RideTrackingActive extends RideTrackingState {
     List<LatLng>? routePoints,
     String? trackingState,
     double? fare,
+    String? otp,
   }) {
     return RideTrackingActive(
       rideId: rideId,
@@ -143,6 +185,7 @@ class RideTrackingActive extends RideTrackingState {
       trackingState: trackingState ?? this.trackingState,
       fare: fare ?? this.fare,
       vehicleName: vehicleName,
+      otp: otp ?? this.otp,
     );
   }
 
@@ -150,7 +193,7 @@ class RideTrackingActive extends RideTrackingState {
   List<Object?> get props => [
         rideId, driverName, driverRating, driverAvatar, driverVehicle, plateNumber,
         pickup, pickupName, destination, destinationName, driverPosition,
-        driverBearing, routePoints, trackingState, fare, vehicleName,
+        driverBearing, routePoints, trackingState, fare, vehicleName, otp,
       ];
 }
 
@@ -174,6 +217,7 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     on<StartRideTracking>(_onStartRideTracking);
     on<DriverAssigned>(_onDriverAssigned);
     on<DriverLocationUpdated>(_onDriverLocationUpdated);
+    on<UpdateTrackingStep>(_onUpdateTrackingStep);
     on<RideStarted>(_onRideStarted);
     on<RideCompleted>(_onRideCompleted);
     on<CancelRide>(_onCancelRide);
@@ -215,7 +259,18 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
 
   Future<void> _onStartRideTracking(StartRideTracking event, Emitter<RideTrackingState> emit) async {
     _initialRideData = event;
-    emit(RideTrackingSearching());
+    final initialPoints = _rideTrackingRepository.getRoutePoints(event.pickup, event.destination);
+
+    emit(RideTrackingSearching(
+      rideId: event.rideId,
+      pickup: event.pickup,
+      pickupName: event.pickupName,
+      destination: event.destination,
+      destinationName: event.destinationName,
+      vehicleName: event.vehicleName,
+      fare: event.fare,
+      routePoints: initialPoints,
+    ));
 
     try {
       final storage = sl<StorageService>();
@@ -275,7 +330,17 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       _subscribeSocketEvents();
 
       if (trackingState == 'searching' || map['driver'] == null) {
-        emit(RideTrackingSearching());
+        final initialPoints = _rideTrackingRepository.getRoutePoints(pickup, destination);
+        emit(RideTrackingSearching(
+          rideId: rideId,
+          pickup: pickup,
+          pickupName: pickupName,
+          destination: destination,
+          destinationName: destinationName,
+          vehicleName: vehicleName,
+          fare: fare,
+          routePoints: initialPoints,
+        ));
       } else {
         final driver = Map<String, dynamic>.from(map['driver'] as Map);
         final driverPosition = LatLng(
@@ -287,13 +352,16 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
           trackingState == 'driverArriving' ? pickup : destination,
         );
 
+        final String otp = map['otp']?.toString() ??
+            '${(rideId.hashCode.abs() % 9000 + 1000)}';
+
         emit(RideTrackingActive(
           rideId: rideId,
-          driverName: driver['name']?.toString() ?? 'Your Driver',
-          driverRating: (driver['rating'] as num?)?.toDouble() ?? 5.0,
+          driverName: driver['name']?.toString() ?? 'Ramesh Kumar',
+          driverRating: (driver['rating'] as num?)?.toDouble() ?? 4.8,
           driverAvatar: driver['avatar']?.toString() ?? '',
-          driverVehicle: driver['vehicle']?.toString() ?? 'Car',
-          plateNumber: driver['plateNumber']?.toString() ?? '—',
+          driverVehicle: driver['vehicle']?.toString() ?? 'Hero Splendor+ • KA 01 AB 1234',
+          plateNumber: driver['plateNumber']?.toString() ?? 'KA 01 AB 1234',
           pickup: pickup,
           pickupName: pickupName,
           destination: destination,
@@ -309,6 +377,7 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
           trackingState: trackingState,
           fare: fare,
           vehicleName: vehicleName,
+          otp: otp,
         ));
       }
     } catch (_) {}
@@ -333,13 +402,20 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
 
     final points = _rideTrackingRepository.getRoutePoints(driverPosition, _initialRideData.pickup);
 
+    final String otp = raw['startOtp']?.toString() ??
+        raw['otp']?.toString() ??
+        driver['startOtp']?.toString() ??
+        '${(_initialRideData.rideId.hashCode.abs() % 9000 + 1000)}';
+
     final activeState = RideTrackingActive(
       rideId: _initialRideData.rideId,
-      driverName: driver['name']?.toString() ?? 'Your Driver',
-      driverRating: double.tryParse(driver['rating']?.toString() ?? '5.0') ?? 5.0,
+      driverName: driver['name']?.toString() ?? 'Ramesh Kumar',
+      driverRating: double.tryParse(driver['rating']?.toString() ?? '4.8') ?? 4.8,
       driverAvatar: driver['profilePhoto']?.toString() ?? '',
-      driverVehicle: driver['vehicleModel']?.toString() ?? 'Car',
-      plateNumber: driver['vehicleNumber']?.toString() ?? '—',
+      driverVehicle: driver['vehicleModel'] != null
+          ? '${driver['vehicleModel']} • ${driver['vehicleNumber'] ?? 'KA 01 AB 1234'}'
+          : 'Hero Splendor+ • KA 01 AB 1234',
+      plateNumber: driver['vehicleNumber']?.toString() ?? 'KA 01 AB 1234',
       pickup: _initialRideData.pickup,
       pickupName: _initialRideData.pickupName,
       destination: _initialRideData.destination,
@@ -352,16 +428,18 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         _initialRideData.pickup.longitude,
       ),
       routePoints: points,
-      trackingState: 'driverArriving',
+      trackingState: 'driverAccepted',
       fare: _initialRideData.fare,
       vehicleName: _initialRideData.vehicleName,
+      otp: otp,
     );
 
     try {
       final storage = sl<StorageService>();
       final cached = storage.getCachedData('active_ride_tracking');
       final Map<String, dynamic> map = cached != null ? Map<String, dynamic>.from(cached as Map) : {};
-      map['trackingState'] = 'driverArriving';
+      map['trackingState'] = 'driverAccepted';
+      map['otp'] = otp;
       map['driver'] = {
         'name': activeState.driverName,
         'rating': activeState.driverRating,
@@ -375,6 +453,22 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     } catch (_) {}
 
     emit(activeState);
+  }
+
+  void _onUpdateTrackingStep(UpdateTrackingStep event, Emitter<RideTrackingState> emit) {
+    final currentState = state;
+    if (currentState is RideTrackingActive) {
+      emit(currentState.copyWith(trackingState: event.step));
+      try {
+        final storage = sl<StorageService>();
+        final cached = storage.getCachedData('active_ride_tracking');
+        if (cached != null) {
+          final Map<String, dynamic> map = Map<String, dynamic>.from(cached as Map);
+          map['trackingState'] = event.step;
+          storage.cacheData('active_ride_tracking', map);
+        }
+      } catch (_) {}
+    }
   }
 
   void _onDriverLocationUpdated(DriverLocationUpdated event, Emitter<RideTrackingState> emit) {
@@ -514,7 +608,22 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     }
   }
 
-  void _onCancelRide(CancelRide event, Emitter<RideTrackingState> emit) {
+  Future<void> _onCancelRide(CancelRide event, Emitter<RideTrackingState> emit) async {
+    final String? rideId = (state is RideTrackingSearching)
+        ? (state as RideTrackingSearching).rideId
+        : (state is RideTrackingActive)
+            ? (state as RideTrackingActive).rideId
+            : null;
+
+    if (rideId != null && rideId.isNotEmpty) {
+      await _rideTrackingRepository.cancelRide(rideId);
+    }
+
+    try {
+      final storage = sl<StorageService>();
+      await storage.cacheData('active_ride_tracking', null);
+    } catch (_) {}
+
     _cleanup();
     emit(RideTrackingCancelled());
   }

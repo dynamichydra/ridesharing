@@ -12,6 +12,15 @@ export async function walletRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  // GET /api/v1/wallets/me/transactions
+  app.get('/me/transactions', { preHandler: [authenticateAny] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const wallet = await walletService.getMyWallet(request.user);
+    if (!wallet) return sendList(reply, [], { total: 0, page, limit });
+    const { rows, pagination } = await walletService.listTransactions(wallet.id, page, limit, offset);
+    return sendList(reply, rows, pagination);
+  });
+
   // POST /api/v1/wallets/me/topup/initiate  { amountMinor }
   // Requires an Idempotency-Key header so a retried/double-submitted request returns the
   // original gateway order instead of creating a second one.

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../style/appcolors.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../injection_container.dart' as di;
-import '../../../../common/widgets/custom_toast.dart';
 import '../bloc/profile_bloc.dart';
-import '../../../../common/entities/driver_profile.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -16,319 +15,237 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   late final ProfileBloc _bloc = di.sl<ProfileBloc>();
 
-  final _nameCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController();
-  final _dobCtrl = TextEditingController();
-  String? _selectedGender;
-  bool _editing = false;
+  @override
+  void initState() {
+    super.initState();
+    _bloc.add(LoadProfile());
+  }
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _emailCtrl.dispose();
-    _dobCtrl.dispose();
     _bloc.close();
     super.dispose();
   }
 
-  void _populate(DriverProfile p) {
-    _nameCtrl.text = p.name ?? '';
-    _emailCtrl.text = p.email ?? '';
-    _dobCtrl.text = p.dateOfBirth ?? '';
-    _selectedGender = p.gender;
+  void _showPersonalDetailsModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Personal Information', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF021B47))),
+                IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(ctx)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildInfoRow('Full Name', 'Ramesh Kumar'),
+            const Divider(),
+            _buildInfoRow('Phone', '+91 98765 43210'),
+            const Divider(),
+            _buildInfoRow('Email', 'ramesh.kumar@example.com'),
+            const Divider(),
+            _buildInfoRow('City', 'Bengaluru, India'),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String val) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Color(0xFF8A94A6), fontSize: 13)),
+          Text(val, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF021B47), fontSize: 14)),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider.value(
-      value: _bloc..add(LoadProfile()),
-      child: BlocConsumer<ProfileBloc, ProfileState>(
-        listener: (context, state) {
-          if (state is ProfileLoaded && !_editing) _populate(state.profile);
-          if (state is ProfileUpdateSuccess) {
-            _editing = false;
-            _populate(state.profile);
-            CustomToast.show(context, 'Profile updated successfully!');
-          }
-          if (state is ProfileError) {
-            CustomToast.show(context, state.message);
-          }
-        },
-        builder: (context, state) {
-          return Scaffold(
-            backgroundColor: const Color(0xFFF8FAFC),
-            appBar: AppBar(
-              title: const Text('My Profile', style: TextStyle(fontWeight: FontWeight.bold)),
-              backgroundColor: Colors.white,
-              foregroundColor: AppColors.textPrimary,
-              elevation: 0,
-              bottom: PreferredSize(
-                preferredSize: const Size.fromHeight(1),
-                child: Container(color: AppColors.border.withOpacity(0.4), height: 1),
-              ),
-              actions: [
-                if (state is ProfileLoaded || state is ProfileUpdateSuccess)
-                  TextButton(
-                    onPressed: () {
-                      if (_editing) {
-                        _bloc.add(UpdateProfile(
-                          name: _nameCtrl.text.trim(),
-                          email: _emailCtrl.text.trim(),
-                          dateOfBirth: _dobCtrl.text.trim(),
-                          gender: _selectedGender,
-                        ));
-                      } else {
-                        setState(() => _editing = true);
-                      }
-                    },
-                    child: Text(_editing ? 'Save' : 'Edit',
-                        style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-                  ),
-                if (state is ProfileUpdating)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: SizedBox(
-                      width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-              ],
-            ),
-            body: () {
-              if (state is ProfileLoading || state is ProfileInitial) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (state is ProfileError) {
-                return Center(
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-                    const SizedBox(height: 12),
-                    Text(state.message, textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    ElevatedButton(onPressed: () => _bloc.add(LoadProfile()), child: const Text('Retry')),
-                  ]),
-                );
-              }
-
-              final DriverProfile profile;
-              if (state is ProfileLoaded) profile = state.profile;
-              else if (state is ProfileUpdateSuccess) profile = state.profile;
-              else if (state is ProfileUpdating) profile = state.profile;
-              else return const Center(child: CircularProgressIndicator());
-
-              return SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Avatar header
-                    Center(
-                      child: Column(
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: const LinearGradient(
-                                colors: [AppColors.secondary, AppColors.primary],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              boxShadow: [
-                                BoxShadow(color: AppColors.primary.withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 6)),
-                              ],
-                            ),
-                            child: const CircleAvatar(
-                              radius: 44,
-                              backgroundColor: Colors.transparent,
-                              child: Icon(Icons.person, color: Colors.white, size: 44),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            profile.name ?? 'Driver',
-                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                          ),
-                          const SizedBox(height: 4),
-                          _statusBadge(profile.registrationStatus),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Stats row
-                    Row(
-                      children: [
-                        _miniStat('Rating', '${profile.rating.toStringAsFixed(1)} ★', AppColors.primary),
-                        const SizedBox(width: 12),
-                        _miniStat('Status', _friendlyStatus(profile.registrationStatus), AppColors.secondary),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Form section
-                    _sectionLabel('Personal Information'),
-                    const SizedBox(height: 12),
-                    _field('Full Name', _nameCtrl, enabled: _editing, icon: Icons.person_outline_rounded),
-                    const SizedBox(height: 12),
-                    _field('Email', _emailCtrl, enabled: _editing, icon: Icons.email_outlined, keyboardType: TextInputType.emailAddress),
-                    const SizedBox(height: 12),
-                    _field('Date of Birth (YYYY-MM-DD)', _dobCtrl, enabled: _editing, icon: Icons.cake_outlined),
-                    const SizedBox(height: 12),
-
-                    // Gender picker
-                    _sectionLabel('Gender'),
-                    const SizedBox(height: 8),
-                    _editing
-                        ? _genderPicker()
-                        : _readonlyField(Icons.wc_rounded, _selectedGender ?? profile.gender ?? '—'),
-
-                    const SizedBox(height: 24),
-                    _sectionLabel('Account Info'),
-                    const SizedBox(height: 12),
-                    _readonlyField(Icons.phone_outlined, profile.phone ?? '—'),
-                    const SizedBox(height: 8),
-                    _readonlyField(Icons.badge_outlined, 'ID: ${profile.id.substring(0, 8)}...'),
-                  ],
-                ),
-              );
-            }(),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _sectionLabel(String label) => Text(label,
-      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textSecondary, letterSpacing: 0.5));
-
-  Widget _miniStat(String label, String value, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.15)),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text(value, style: TextStyle(fontSize: 16, color: color, fontWeight: FontWeight.bold)),
-        ]),
-      ),
-    );
-  }
-
-  Widget _field(String hint, TextEditingController ctrl, {
-    bool enabled = true,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    return TextField(
-      controller: ctrl,
-      enabled: enabled,
-      keyboardType: keyboardType,
-      decoration: InputDecoration(
-        hintText: hint,
-        prefixIcon: Icon(icon, color: AppColors.textSecondary, size: 20),
-        filled: true,
-        fillColor: enabled ? Colors.white : const Color(0xFFF8FAFC),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.border.withOpacity(0.6)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.border.withOpacity(0.6)),
-        ),
-        disabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.border.withOpacity(0.3)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-        ),
-      ),
-    );
-  }
-
-  Widget _readonlyField(IconData icon, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border.withOpacity(0.4)),
-      ),
-      child: Row(children: [
-        Icon(icon, color: AppColors.textSecondary, size: 20),
-        const SizedBox(width: 12),
-        Text(value, style: const TextStyle(color: AppColors.textPrimary, fontSize: 15)),
-      ]),
-    );
-  }
-
-  Widget _genderPicker() {
-    return Row(
-      children: ['male', 'female', 'other'].map((g) {
-        final selected = _selectedGender == g;
-        return Expanded(
-          child: GestureDetector(
-            onTap: () => setState(() => _selectedGender = g),
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              decoration: BoxDecoration(
-                color: selected ? AppColors.primary : Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: selected ? AppColors.primary : AppColors.border.withOpacity(0.5)),
-              ),
-              child: Center(
-                child: Text(
-                  g[0].toUpperCase() + g.substring(1),
-                  style: TextStyle(
-                    color: selected ? Colors.white : AppColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
+      value: _bloc,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          leading: Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(Icons.menu_rounded, color: Color(0xFF021B47), size: 26),
+              onPressed: () => Scaffold.of(context).openDrawer(),
             ),
           ),
-        );
-      }).toList(),
-    );
-  }
+          title: const Text(
+            'Profile',
+            style: TextStyle(
+              color: Color(0xFF021B47),
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
+          centerTitle: true,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, color: Color(0xFF021B47), size: 22),
+              onPressed: () => _showPersonalDetailsModal(context),
+            ),
+            const SizedBox(width: 8),
+          ],
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: Column(
+            children: [
+              // 1. Driver Profile Header Card
+              Center(
+                child: Column(
+                  children: [
+                    Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 40,
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          child: const Icon(Icons.person, color: Color(0xFF021B47), size: 48),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Text(
+                          'Ramesh Kumar',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                        ),
+                        SizedBox(width: 8),
+                        Icon(Icons.star_rounded, color: Colors.amber, size: 18),
+                        Text(
+                          ' 4.8',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF535E79)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '+91 98765 43210',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF8A94A6)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 28),
 
-  Widget _statusBadge(String status) {
-    Color color;
-    String label;
-    switch (status) {
-      case 'approved': color = const Color(0xFF059669); label = 'Approved'; break;
-      case 'pending_review': color = const Color(0xFFD97706); label = 'Under Review'; break;
-      case 'rejected': color = const Color(0xFFDC2626); label = 'Rejected'; break;
-      default: color = AppColors.textSecondary; label = status.replaceAll('_', ' ');
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
+              // 2. Menu Navigation List
+              _buildMenuItem(
+                icon: Icons.person_outline_rounded,
+                title: 'Personal Information',
+                onTap: () => _showPersonalDetailsModal(context),
+              ),
+              _buildMenuItem(
+                icon: Icons.description_outlined,
+                title: 'Documents',
+                onTap: () {},
+              ),
+              _buildMenuItem(
+                icon: Icons.two_wheeler_rounded,
+                title: 'Vehicle Information',
+                onTap: () => context.push('/vehicle-info'),
+              ),
+              _buildMenuItem(
+                icon: Icons.account_balance_outlined,
+                title: 'Bank Details',
+                onTap: () => context.push('/wallet'),
+              ),
+              _buildMenuItem(
+                icon: Icons.notifications_none_rounded,
+                title: 'Notification Settings',
+                onTap: () => context.push('/settings'),
+              ),
+              _buildMenuItem(
+                icon: Icons.headset_mic_outlined,
+                title: 'Support',
+                onTap: () {},
+              ),
+              _buildMenuItem(
+                icon: Icons.lock_outline_rounded,
+                title: 'Privacy Policy',
+                onTap: () {},
+              ),
+              const SizedBox(height: 10),
+
+              // Logout Action
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                leading: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFDE8E8),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.power_settings_new_rounded, color: Color(0xFFE53935), size: 20),
+                ),
+                title: const Text(
+                  'Logout',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFFE53935)),
+                ),
+                onTap: () {
+                  context.read<AuthBloc>().add(LogoutRequested());
+                },
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
       ),
-      child: Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
     );
   }
 
-  String _friendlyStatus(String s) {
-    return switch (s) {
-      'approved' => 'Approved',
-      'pending_review' => 'Under Review',
-      'registration_in_progress' => 'Registering',
-      'rejected' => 'Rejected',
-      _ => s,
-    };
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        leading: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: const Color(0xFF021B47), size: 20),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF021B47)),
+        ),
+        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF8A94A6)),
+        onTap: onTap,
+      ),
+    );
   }
 }
