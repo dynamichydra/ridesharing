@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 // Core
 import 'core/services/storage_service.dart';
 import 'core/network/dio_client.dart';
+import 'core/services/google_routes_service.dart';
 
 // Auth
 import 'features/auth/data/datasources/auth_datasource.dart';
@@ -64,6 +65,7 @@ Future<void> init() async {
   final dio = Dio();
   sl.registerLazySingleton<Dio>(() => dio);
   sl.registerLazySingleton<DioClient>(() => DioClient(sl<Dio>()));
+  sl.registerLazySingleton<GoogleRoutesService>(() => GoogleRoutesService());
 
   // ==========================================
   // Auth Feature
@@ -93,6 +95,7 @@ Future<void> init() async {
   sl.registerLazySingleton<RideTrackingRepository>(() => RideTrackingRepositoryImpl(
         socketDataSource: sl<RideTrackingSocketDataSource>(),
         dioClient: sl<DioClient>(),
+        routesService: sl<GoogleRoutesService>(),
       ));
   sl.registerFactory(() => RideTrackingBloc(sl<RideTrackingRepository>()));
 

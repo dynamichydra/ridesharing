@@ -34,12 +34,8 @@ class ActiveRideScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pickupPos = (ride.pickupLat != null && ride.pickupLng != null)
-        ? LatLng(ride.pickupLat!, ride.pickupLng!)
-        : null;
-    final dropPos = (ride.dropLat != null && ride.dropLng != null)
-        ? LatLng(ride.dropLat!, ride.dropLng!)
-        : null;
+    final pickupPos = LatLng(ride.pickupLat, ride.pickupLng);
+    final dropPos = LatLng(ride.dropLat, ride.dropLng);
 
     return Scaffold(
       backgroundColor: Colors.white,

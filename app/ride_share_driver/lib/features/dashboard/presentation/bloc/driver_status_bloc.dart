@@ -5,6 +5,11 @@ import '../../domain/repositories/driver_status_repository.dart';
 // ── Events ──────────────────────────────────────────────────────────────────
 abstract class DriverStatusEvent {}
 
+class RestoreOnlineStatus extends DriverStatusEvent {
+  final bool isOnline;
+  RestoreOnlineStatus({required this.isOnline});
+}
+
 class GoOnlineRequested extends DriverStatusEvent {}
 
 class GoOfflineRequested extends DriverStatusEvent {}
@@ -41,6 +46,13 @@ class DriverStatusBloc extends Bloc<DriverStatusEvent, DriverStatusState> {
     required this.driverStatusRepository,
     required this.locationService,
   }) : super(DriverStatusOffline()) {
+    on<RestoreOnlineStatus>((event, emit) {
+      if (event.isOnline) {
+        emit(DriverStatusOnline());
+      } else {
+        emit(DriverStatusOffline());
+      }
+    });
     on<GoOnlineRequested>(_onGoOnlineRequested);
     on<GoOfflineRequested>(_onGoOfflineRequested);
   }

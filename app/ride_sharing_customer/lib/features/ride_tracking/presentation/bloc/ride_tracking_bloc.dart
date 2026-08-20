@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/utils/location_helper.dart';
+import '../../../../core/models/route_model.dart';
 import '../../domain/repositories/ride_tracking_repository.dart';
 import '../../../../core/services/storage_service.dart';
 import '../../../../injection_container.dart';
@@ -257,9 +258,23 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     });
   }
 
+  AppTravelMode _getTravelMode(String? vehicleName) {
+    if (vehicleName == null) return AppTravelMode.drive;
+    final lower = vehicleName.toLowerCase();
+    if (lower.contains('bike') || lower.contains('moto') || lower.contains('two')) {
+      return AppTravelMode.twoWheeler;
+    }
+    return AppTravelMode.drive;
+  }
+
   Future<void> _onStartRideTracking(StartRideTracking event, Emitter<RideTrackingState> emit) async {
     _initialRideData = event;
-    final initialPoints = _rideTrackingRepository.getRoutePoints(event.pickup, event.destination);
+    final travelMode = _getTravelMode(event.vehicleName);
+    final initialPoints = await _rideTrackingRepository.fetchRoutePoints(
+      event.pickup,
+      event.destination,
+      travelMode: travelMode,
+    );
 
     emit(RideTrackingSearching(
       rideId: event.rideId,
@@ -329,8 +344,14 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       await _rideTrackingRepository.connectToRide(rideId);
       _subscribeSocketEvents();
 
+      final travelMode = _getTravelMode(vehicleName);
+
       if (trackingState == 'searching' || map['driver'] == null) {
-        final initialPoints = _rideTrackingRepository.getRoutePoints(pickup, destination);
+        final initialPoints = await _rideTrackingRepository.fetchRoutePoints(
+          pickup,
+          destination,
+          travelMode: travelMode,
+        );
         emit(RideTrackingSearching(
           rideId: rideId,
           pickup: pickup,
@@ -347,9 +368,10 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
           (driver['lat'] as num).toDouble(),
           (driver['lng'] as num).toDouble(),
         );
-        final points = _rideTrackingRepository.getRoutePoints(
+        final points = await _rideTrackingRepository.fetchRoutePoints(
           driverPosition,
           trackingState == 'driverArriving' ? pickup : destination,
+          travelMode: travelMode,
         );
 
         final String otp = map['otp']?.toString() ??
@@ -400,7 +422,14 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
             _initialRideData.pickup.longitude + 0.008,
           );
 
-    final points = _rideTrackingRepository.getRoutePoints(driverPosition, _initialRideData.pickup);
+    final travelMode = _getTravelMode(
+      driver['vehicleModel']?.toString() ?? _initialRideData.vehicleName,
+    );
+    final points = await _rideTrackingRepository.fetchRoutePoints(
+      driverPosition,
+      _initialRideData.pickup,
+      travelMode: travelMode,
+    );
 
     final String otp = raw['startOtp']?.toString() ??
         raw['otp']?.toString() ??
@@ -504,12 +533,14 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     }
   }
 
-  void _onRideStarted(RideStarted event, Emitter<RideTrackingState> emit) {
+  Future<void> _onRideStarted(RideStarted event, Emitter<RideTrackingState> emit) async {
     final currentState = state;
     if (currentState is RideTrackingActive) {
-      final pointsToDestination = _rideTrackingRepository.getRoutePoints(
+      final travelMode = _getTravelMode(currentState.vehicleName);
+      final pointsToDestination = await _rideTrackingRepository.fetchRoutePoints(
         currentState.pickup,
         currentState.destination,
+        travelMode: travelMode,
       );
       final updatedState = currentState.copyWith(
         trackingState: 'rideInProgress',

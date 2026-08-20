@@ -1,0 +1,3 @@
+-dontwarn com.google.j2objc.annotations.**
+-dontwarn javax.annotation.**
+-dontwarn org.checkerframework.**

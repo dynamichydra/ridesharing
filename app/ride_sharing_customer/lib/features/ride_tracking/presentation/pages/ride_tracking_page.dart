@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/app_map_view.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../bloc/ride_tracking_bloc.dart';
@@ -632,7 +631,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
             destination: state.destination,
             driverPosition: state.pickup,
             driverBearing: 0,
-            routePoints: const [],
+            routePoints: state.routePoints,
           ),
         ),
 

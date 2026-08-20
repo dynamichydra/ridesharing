@@ -374,13 +374,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                             ),
                           ),
                           onChanged: (val) {
-                            setState(() {
-                              if (!_isValid && val.length == 10) {
+                            if (!_isValid && val.length == 10) {
+                              setState(() {
                                 _isValid = true;
-                              }
-                            });
-                            if (val.length == 10) {
-                              _submit();
+                              });
                             }
                           },
                         ),

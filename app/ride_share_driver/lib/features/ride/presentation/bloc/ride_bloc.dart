@@ -92,7 +92,10 @@ class RideIdle extends RideState {}
 class RideOfferPending extends RideState {
   final List<RideOffer> offers;
   final RideOffer offer;
-  RideOfferPending({required this.offers}) : offer = offers.isNotEmpty ? offers.first : throw ArgumentError('offers cannot be empty');
+  RideOfferPending({required this.offers})
+    : offer = offers.isNotEmpty
+          ? offers.first
+          : throw ArgumentError('offers cannot be empty');
 }
 
 /// The offer went away for a reason other than the driver's own action
@@ -176,7 +179,8 @@ class RideBloc extends Bloc<RideEvent, RideState> {
   double _lastDriverBearing = 0.0;
   final List<LatLng> _traveledPath = [];
 
-  RideBloc({required this.rideRepository, required this.locationService}) : super(RideIdle()) {
+  RideBloc({required this.rideRepository, required this.locationService})
+    : super(RideIdle()) {
     on<ConnectRideSocket>(_onConnect);
     on<DisconnectRideSocket>(_onDisconnect);
     on<AcceptOfferRequested>(_onAcceptOfferRequested);
@@ -215,17 +219,32 @@ class RideBloc extends Bloc<RideEvent, RideState> {
       emit(RideCancelledByRider(message: 'The rider cancelled this trip.'));
     });
     on<_AcceptResultArrived>(_onAcceptResultArrived);
-    on<_SocketErrorArrived>((event, emit) => emit(RideOperationFailed(message: event.message)));
+    on<_SocketErrorArrived>(
+      (event, emit) => emit(RideOperationFailed(message: event.message)),
+    );
   }
 
-  Future<void> _onConnect(ConnectRideSocket event, Emitter<RideState> emit) async {
+  Future<void> _onConnect(
+    ConnectRideSocket event,
+    Emitter<RideState> emit,
+  ) async {
     rideRepository.connect();
 
-    _offerSub ??= rideRepository.onRideOffer.listen((offer) => add(_OfferArrived(offer)));
-    _takenSub ??= rideRepository.onRideTaken.listen((rideId) => add(_OfferTakenByOther(rideId)));
-    _cancelledSub ??= rideRepository.onRideCancelledByRider.listen((rideId) => add(_CancelledByRider(rideId)));
-    _acceptResultSub ??= rideRepository.onAcceptResult.listen((result) => add(_AcceptResultArrived(result)));
-    _socketErrorSub ??= rideRepository.onSocketError.listen((message) => add(_SocketErrorArrived(message)));
+    _offerSub ??= rideRepository.onRideOffer.listen(
+      (offer) => add(_OfferArrived(offer)),
+    );
+    _takenSub ??= rideRepository.onRideTaken.listen(
+      (rideId) => add(_OfferTakenByOther(rideId)),
+    );
+    _cancelledSub ??= rideRepository.onRideCancelledByRider.listen(
+      (rideId) => add(_CancelledByRider(rideId)),
+    );
+    _acceptResultSub ??= rideRepository.onAcceptResult.listen(
+      (result) => add(_AcceptResultArrived(result)),
+    );
+    _socketErrorSub ??= rideRepository.onSocketError.listen(
+      (message) => add(_SocketErrorArrived(message)),
+    );
 
     _locationSub ??= locationService.getPositionStream().listen(
       (pos) => add(_DriverLocationChanged(pos)),
@@ -237,12 +256,14 @@ class RideBloc extends Bloc<RideEvent, RideState> {
       final active = await rideRepository.getActiveRide();
       if (active != null) {
         _currentRide = active;
-        emit(RideActive(
-          ride: active,
-          driverPosition: _lastDriverPos,
-          driverBearing: _lastDriverBearing,
-          traveledPath: List.unmodifiable(_traveledPath),
-        ));
+        emit(
+          RideActive(
+            ride: active,
+            driverPosition: _lastDriverPos,
+            driverBearing: _lastDriverBearing,
+            traveledPath: List.unmodifiable(_traveledPath),
+          ),
+        );
         return;
       }
     } catch (e) {
@@ -251,7 +272,10 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     emit(RideIdle());
   }
 
-  void _onDriverLocationChanged(_DriverLocationChanged event, Emitter<RideState> emit) {
+  void _onDriverLocationChanged(
+    _DriverLocationChanged event,
+    Emitter<RideState> emit,
+  ) {
     final pos = event.position;
     final newPos = LatLng(pos.latitude, pos.longitude);
 
@@ -281,22 +305,30 @@ class RideBloc extends Bloc<RideEvent, RideState> {
 
     final currentState = state;
     if (currentState is RideActive) {
-      emit(currentState.copyWith(
-        driverPosition: newPos,
-        driverBearing: _lastDriverBearing,
-        traveledPath: List.unmodifiable(_traveledPath),
-      ));
+      emit(
+        currentState.copyWith(
+          driverPosition: newPos,
+          driverBearing: _lastDriverBearing,
+          traveledPath: List.unmodifiable(_traveledPath),
+        ),
+      );
     }
   }
 
-  double _calculateBearing(double startLat, double startLng, double endLat, double endLng) {
+  double _calculateBearing(
+    double startLat,
+    double startLng,
+    double endLat,
+    double endLng,
+  ) {
     final startLatRad = startLat * math.pi / 180;
     final startLngRad = startLng * math.pi / 180;
     final endLatRad = endLat * math.pi / 180;
     final endLngRad = endLng * math.pi / 180;
     final dLng = endLngRad - startLngRad;
     final y = math.sin(dLng) * math.cos(endLatRad);
-    final x = math.cos(startLatRad) * math.sin(endLatRad) -
+    final x =
+        math.cos(startLatRad) * math.sin(endLatRad) -
         math.sin(startLatRad) * math.cos(endLatRad) * math.cos(dLng);
     return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
   }
@@ -323,7 +355,10 @@ class RideBloc extends Bloc<RideEvent, RideState> {
 
   RideOffer? _acceptedOffer;
 
-  void _onAcceptOfferRequested(AcceptOfferRequested event, Emitter<RideState> emit) {
+  void _onAcceptOfferRequested(
+    AcceptOfferRequested event,
+    Emitter<RideState> emit,
+  ) {
     emit(RideAccepting());
     for (final o in _pendingOffers) {
       if (o.rideId == event.rideId) {
@@ -334,7 +369,10 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     rideRepository.acceptOffer(event.rideId);
   }
 
-  void _onDeclineOfferRequested(DeclineOfferRequested event, Emitter<RideState> emit) {
+  void _onDeclineOfferRequested(
+    DeclineOfferRequested event,
+    Emitter<RideState> emit,
+  ) {
     _pendingOffers.removeWhere((o) => o.rideId == event.rideId);
     rideRepository.declineOffer(event.rideId, reason: event.reason);
     if (_pendingOffers.isEmpty) {
@@ -344,7 +382,10 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     }
   }
 
-  void _onOfferExpiredLocally(OfferExpiredLocally event, Emitter<RideState> emit) {
+  void _onOfferExpiredLocally(
+    OfferExpiredLocally event,
+    Emitter<RideState> emit,
+  ) {
     _pendingOffers.removeWhere((o) => o.rideId == event.rideId);
     if (_pendingOffers.isEmpty) {
       emit(RideIdle());
@@ -353,7 +394,10 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     }
   }
 
-  Future<void> _onAcceptResultArrived(_AcceptResultArrived event, Emitter<RideState> emit) async {
+  Future<void> _onAcceptResultArrived(
+    _AcceptResultArrived event,
+    Emitter<RideState> emit,
+  ) async {
     switch (event.result) {
       case RideAcceptSucceeded(:final rideId):
         try {
@@ -361,14 +405,18 @@ class RideBloc extends Bloc<RideEvent, RideState> {
           try {
             ride = await rideRepository.getActiveRide();
           } catch (e) {
-            AppLogger.w('[RideBloc] getActiveRide after accept failed, using fallback: $e');
+            AppLogger.w(
+              '[RideBloc] getActiveRide after accept failed, using fallback: $e',
+            );
           }
 
           if (ride == null && _acceptedOffer != null) {
             ride = ActiveRide.fromOffer(_acceptedOffer!);
           } else if (ride == null && _pendingOffers.isNotEmpty) {
             try {
-              final matched = _pendingOffers.firstWhere((o) => o.rideId == rideId);
+              final matched = _pendingOffers.firstWhere(
+                (o) => o.rideId == rideId,
+              );
               ride = ActiveRide.fromOffer(matched);
             } catch (_) {
               ride = ActiveRide.fromOffer(_pendingOffers.first);
@@ -376,7 +424,11 @@ class RideBloc extends Bloc<RideEvent, RideState> {
           }
 
           if (ride == null) {
-            emit(RideOperationFailed(message: 'Ride was accepted but details could not be loaded.'));
+            emit(
+              RideOperationFailed(
+                message: 'Ride was accepted but details could not be loaded.',
+              ),
+            );
             emit(RideIdle());
             return;
           }
@@ -384,12 +436,14 @@ class RideBloc extends Bloc<RideEvent, RideState> {
           _currentRide = ride;
           _pendingOffers.clear();
           _acceptedOffer = null;
-          emit(RideActive(
-            ride: ride,
-            driverPosition: _lastDriverPos,
-            driverBearing: _lastDriverBearing,
-            traveledPath: List.unmodifiable(_traveledPath),
-          ));
+          emit(
+            RideActive(
+              ride: ride,
+              driverPosition: _lastDriverPos,
+              driverBearing: _lastDriverBearing,
+              traveledPath: List.unmodifiable(_traveledPath),
+            ),
+          );
         } catch (e) {
           emit(RideOperationFailed(message: e.toString()));
           emit(RideIdle());
@@ -401,59 +455,103 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     }
   }
 
-  Future<void> _onMarkArrivingRequested(MarkArrivingRequested event, Emitter<RideState> emit) async {
+  Future<void> _onMarkArrivingRequested(
+    MarkArrivingRequested event,
+    Emitter<RideState> emit,
+  ) async {
     final ride = _currentRide;
     if (ride == null) return;
     emit(RideActionInProgress(ride: ride));
     try {
       final updated = await rideRepository.markArriving(ride.id);
       _currentRide = updated;
-      emit(RideActive(ride: updated));
+      emit(RideActive(
+        ride: updated,
+        driverPosition: _lastDriverPos,
+        driverBearing: _lastDriverBearing,
+        traveledPath: List.unmodifiable(_traveledPath),
+      ));
     } catch (e) {
       emit(RideOperationFailed(message: e.toString()));
-      emit(RideActive(ride: ride));
+      emit(RideActive(
+        ride: ride,
+        driverPosition: _lastDriverPos,
+        driverBearing: _lastDriverBearing,
+        traveledPath: List.unmodifiable(_traveledPath),
+      ));
     }
   }
 
-  Future<void> _onStartRideRequested(StartRideRequested event, Emitter<RideState> emit) async {
+  Future<void> _onStartRideRequested(
+    StartRideRequested event,
+    Emitter<RideState> emit,
+  ) async {
     final ride = _currentRide;
     if (ride == null) return;
     emit(RideActionInProgress(ride: ride));
     try {
       final updated = await rideRepository.startRide(ride.id, event.otp);
       _currentRide = updated;
-      emit(RideActive(ride: updated));
+      emit(RideActive(
+        ride: updated,
+        driverPosition: _lastDriverPos,
+        driverBearing: _lastDriverBearing,
+        traveledPath: List.unmodifiable(_traveledPath),
+      ));
     } catch (e) {
       emit(RideOperationFailed(message: e.toString()));
-      emit(RideActive(ride: ride));
+      emit(RideActive(
+        ride: ride,
+        driverPosition: _lastDriverPos,
+        driverBearing: _lastDriverBearing,
+        traveledPath: List.unmodifiable(_traveledPath),
+      ));
     }
   }
 
-  Future<void> _onCompleteRideRequested(CompleteRideRequested event, Emitter<RideState> emit) async {
+  Future<void> _onCompleteRideRequested(
+    CompleteRideRequested event,
+    Emitter<RideState> emit,
+  ) async {
     final ride = _currentRide;
     if (ride == null) return;
     emit(RideActionInProgress(ride: ride));
     try {
       final updated = await rideRepository.completeRide(ride.id);
-      _currentRide = updated;
+      _currentRide = null;
+      _traveledPath.clear();
       emit(RideCompleted(ride: updated));
     } catch (e) {
       emit(RideOperationFailed(message: e.toString()));
-      emit(RideActive(ride: ride));
+      emit(RideActive(
+        ride: ride,
+        driverPosition: _lastDriverPos,
+        driverBearing: _lastDriverBearing,
+        traveledPath: List.unmodifiable(_traveledPath),
+      ));
     }
   }
 
-  Future<void> _onDriverCancelRequested(DriverCancelRequested event, Emitter<RideState> emit) async {
+  Future<void> _onDriverCancelRequested(
+    DriverCancelRequested event,
+    Emitter<RideState> emit,
+  ) async {
     final ride = _currentRide;
     if (ride == null) return;
     emit(RideActionInProgress(ride: ride));
     try {
       await rideRepository.cancelRideByDriver(ride.id, reason: event.reason);
       _currentRide = null;
+      _traveledPath.clear();
       emit(RideIdle());
     } catch (e) {
       emit(RideOperationFailed(message: e.toString()));
-      emit(RideActive(ride: ride));
+      emit(RideActive(
+        ride: ride,
+        driverPosition: _lastDriverPos,
+        driverBearing: _lastDriverBearing,
+        traveledPath: List.unmodifiable(_traveledPath),
+      ));
     }
   }
 

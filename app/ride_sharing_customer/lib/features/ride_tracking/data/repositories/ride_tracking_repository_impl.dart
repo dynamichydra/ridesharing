@@ -3,14 +3,18 @@ import '../../domain/repositories/ride_tracking_repository.dart';
 import '../datasources/ride_tracking_socket_datasource.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/services/app_logger.dart';
+import '../../../../core/services/google_routes_service.dart';
+import '../../../../core/models/route_model.dart';
 
 class RideTrackingRepositoryImpl implements RideTrackingRepository {
   final RideTrackingSocketDataSource socketDataSource;
   final DioClient? dioClient;
+  final GoogleRoutesService? routesService;
 
   RideTrackingRepositoryImpl({
     required this.socketDataSource,
     this.dioClient,
+    this.routesService,
   });
 
   @override
@@ -67,6 +71,24 @@ class RideTrackingRepositoryImpl implements RideTrackingRepository {
       ));
     }
     return points;
+  }
+
+  @override
+  Future<List<LatLng>> fetchRoutePoints(
+    LatLng start,
+    LatLng end, {
+    AppTravelMode travelMode = AppTravelMode.drive,
+  }) async {
+    try {
+      final service = routesService ?? GoogleRoutesService();
+      final route = await service.computeRoute(start, end, travelMode: travelMode);
+      if (route != null && route.decodedPoints.isNotEmpty) {
+        return route.decodedPoints;
+      }
+    } catch (e) {
+      AppLogger.w('[RideTrackingRepo] Failed to fetch Google Routes: $e');
+    }
+    return getRoutePoints(start, end);
   }
 
   @override

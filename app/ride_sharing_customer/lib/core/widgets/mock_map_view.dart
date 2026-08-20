@@ -151,9 +151,16 @@ class MapPainter extends CustomPainter {
 
     // 4. Draw Route Line Path if available
     if (routePoints.isNotEmpty) {
+      final borderPathPaint = Paint()
+        ..color = const Color(0xFF005B2D)
+        ..strokeWidth = 8
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+
       final routePathPaint = Paint()
         ..color = AppColors.primaryBlue
-        ..strokeWidth = 6
+        ..strokeWidth = 5
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
@@ -163,6 +170,7 @@ class MapPainter extends CustomPainter {
       for (int i = 1; i < routePoints.length; i++) {
         path.lineTo(getX(routePoints[i].longitude, width), getY(routePoints[i].latitude, height));
       }
+      canvas.drawPath(path, borderPathPaint);
       canvas.drawPath(path, routePathPaint);
     }
 

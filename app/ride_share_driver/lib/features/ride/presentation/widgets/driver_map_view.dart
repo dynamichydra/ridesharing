@@ -28,29 +28,43 @@ class DriverMapView extends StatefulWidget {
 class _DriverMapViewState extends State<DriverMapView> {
   GoogleMapController? _mapController;
 
+  bool _isValidLatLng(LatLng? pos) {
+    if (pos == null) return false;
+    if (pos.latitude == 0.0 && pos.longitude == 0.0) return false;
+    return pos.latitude >= -90.0 &&
+        pos.latitude <= 90.0 &&
+        pos.longitude >= -180.0 &&
+        pos.longitude <= 180.0;
+  }
+
   @override
   void didUpdateWidget(covariant DriverMapView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.driverPosition != null &&
+        _isValidLatLng(widget.driverPosition) &&
         widget.driverPosition != oldWidget.driverPosition &&
-        _mapController != null) {
-      _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: widget.driverPosition!,
-            zoom: 16.0,
-            bearing: widget.driverBearing,
+        _mapController != null &&
+        mounted) {
+      try {
+        _mapController?.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: widget.driverPosition!,
+              zoom: 16.0,
+              bearing: widget.driverBearing,
+            ),
           ),
-        ),
-      );
+        );
+      } catch (_) {}
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final initialPos = widget.driverPosition ??
-        widget.pickup ??
-        const LatLng(22.5726, 88.3639);
+    const defaultPos = LatLng(22.5726, 88.3639);
+    final initialPos = _isValidLatLng(widget.driverPosition)
+        ? widget.driverPosition!
+        : (_isValidLatLng(widget.pickup) ? widget.pickup! : defaultPos);
 
     return GoogleMap(
       onMapCreated: (controller) {
@@ -70,7 +84,9 @@ class _DriverMapViewState extends State<DriverMapView> {
           Marker(
             markerId: const MarkerId('pickup'),
             position: widget.pickup!,
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueGreen,
+            ),
             infoWindow: const InfoWindow(title: 'Pickup Location'),
             zIndexInt: 3,
           ),
@@ -78,7 +94,9 @@ class _DriverMapViewState extends State<DriverMapView> {
           Marker(
             markerId: const MarkerId('destination'),
             position: widget.destination!,
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueRed,
+            ),
             infoWindow: const InfoWindow(title: 'Drop Location'),
             zIndexInt: 3,
           ),
@@ -86,7 +104,9 @@ class _DriverMapViewState extends State<DriverMapView> {
           Marker(
             markerId: const MarkerId('driver_car'),
             position: widget.driverPosition!,
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueAzure,
+            ),
             rotation: widget.driverBearing,
             flat: true,
             anchor: const Offset(0.5, 0.5),

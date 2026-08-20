@@ -206,19 +206,33 @@ class _AppMapViewState extends State<AppMapView> {
       },
 
       polylines: {
-        if (widget.routePoints.isNotEmpty)
+        if (widget.routePoints.isNotEmpty) ...[
+          // Outer pipeline outline / casing (Google Maps route pipeline border)
+          Polyline(
+            polylineId: const PolylineId('route_border'),
+            points: widget.routePoints,
+            color: const Color(0xFF005B2D),
+            width: 8,
+            geodesic: true,
+            jointType: JointType.round,
+            startCap: Cap.roundCap,
+            endCap: Cap.roundCap,
+            zIndex: 1,
+          ),
+          // Inner route pipeline
           Polyline(
             polylineId: const PolylineId('route'),
             points: widget.routePoints,
             // Ryva Ride primary brand green
             color: const Color(0xFF009048),
-            width: 6,
+            width: 5,
             geodesic: true,
             jointType: JointType.round,
             startCap: Cap.roundCap,
             endCap: Cap.roundCap,
             zIndex: 2,
           ),
+        ],
       },
     );
   }

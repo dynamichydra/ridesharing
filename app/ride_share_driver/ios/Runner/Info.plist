@@ -28,6 +28,15 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>We use your location to match you with nearby ride requests while you're online.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>We use your location to track your rides in real time while you're driving.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>We use your location to match you with nearby ride requests and track your rides in real time.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -1,4 +1,5 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../../../core/models/route_model.dart';
 
 abstract class RideTrackingRepository {
   Future<void> connectToRide(String rideId);
@@ -12,5 +13,10 @@ abstract class RideTrackingRepository {
 
   Future<Map<String, dynamic>> getDriverDetails(); // Keeping fallback
   List<LatLng> getRoutePoints(LatLng start, LatLng end); // Keeping fallback for ui tests
+  Future<List<LatLng>> fetchRoutePoints(
+    LatLng start,
+    LatLng end, {
+    AppTravelMode travelMode = AppTravelMode.drive,
+  });
   Future<void> cancelRide(String rideId, [String reason = 'Cancelled by rider']);
 }
