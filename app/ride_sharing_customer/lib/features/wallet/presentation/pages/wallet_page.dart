@@ -17,6 +17,45 @@ class _WalletPageState extends State<WalletPage> {
     context.read<WalletBloc>().add(LoadWalletDetails());
   }
 
+  String _monthName(int month) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[(month - 1).clamp(0, 11)];
+  }
+
+  String _formatTime(DateTime dt) {
+    final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
+  }
+
+  List<Map<String, dynamic>> _parseTransactions(List<Map<String, dynamic>> raw) {
+    return raw.map((t) {
+      final amount = (t['amount'] as num?)?.toDouble() ?? 0.0;
+      final type = t['type']?.toString().toLowerCase() ?? '';
+      final isAdd = type.contains('topup') ||
+          type.contains('credit') ||
+          type.contains('add') ||
+          type.contains('bonus') ||
+          type.contains('deposit');
+      final desc = t['description']?.toString() ?? (isAdd ? 'Added Money' : 'Ride Payment');
+      final dateStr = t['date']?.toString() ?? '';
+      DateTime? dt = DateTime.tryParse(dateStr);
+      final formattedDate = dt != null
+          ? '${dt.day} ${_monthName(dt.month)}, ${_formatTime(dt)}'
+          : (dateStr.isNotEmpty ? dateStr : 'Recent');
+
+      return {
+        'id': t['id']?.toString() ?? '',
+        'title': desc,
+        'date': formattedDate,
+        'amount': amount.toStringAsFixed(amount.truncateToDouble() == amount ? 0 : 2),
+        'isAdd': isAdd,
+        'rawDate': dt ?? DateTime.now(),
+      };
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -46,40 +85,14 @@ class _WalletPageState extends State<WalletPage> {
       ),
       body: BlocBuilder<WalletBloc, WalletState>(
         builder: (context, state) {
-          double balance = 320.50;
-          List<Map<String, dynamic>> recentTxs = [
-            {
-              'title': 'Added Money',
-              'date': '14 May, 06:20 PM',
-              'amount': 200,
-              'isAdd': true,
-              'icon': Icons.add_card_rounded,
-            },
-            {
-              'title': 'Ride Payment',
-              'date': '14 May, 10:30 AM',
-              'amount': 125,
-              'isAdd': false,
-              'icon': Icons.directions_car_filled_rounded,
-            },
-            {
-              'title': 'Ride Payment',
-              'date': '14 May, 11:10 AM',
-              'amount': 80,
-              'isAdd': false,
-              'icon': Icons.directions_car_filled_rounded,
-            },
-            {
-              'title': 'Added Money',
-              'date': '12 May, 09:15 PM',
-              'amount': 300,
-              'isAdd': true,
-              'icon': Icons.add_card_rounded,
-            },
-          ];
+          double balance = 0.0;
+          List<Map<String, dynamic>> recentTxs = [];
 
           if (state is WalletLoaded) {
             balance = state.balance;
+            recentTxs = _parseTransactions(state.transactions);
+          } else if (state is WalletLoading) {
+            // Keep previous data if any
           }
 
           return RefreshIndicator(
@@ -104,7 +117,7 @@ class _WalletPageState extends State<WalletPage> {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF0165B7).withOpacity(0.2),
+                          color: const Color(0xFF0165B7).withValues(alpha: 0.2),
                           blurRadius: 16,
                           offset: const Offset(0, 6),
                         ),
@@ -192,9 +205,9 @@ class _WalletPageState extends State<WalletPage> {
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(color: const Color(0xFFE2E8F0)),
                             ),
-                            child: Column(
+                            child: const Column(
                               mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
+                              children: [
                                 Icon(
                                   Icons.format_list_bulleted_rounded,
                                   color: Color(0xFF0A2540),
@@ -230,32 +243,59 @@ class _WalletPageState extends State<WalletPage> {
                           color: Color(0xFF0A2540),
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () => context.push('/transactions'),
-                        child: const Text(
-                          'View All',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF0065B3),
+                      if (recentTxs.isNotEmpty)
+                        GestureDetector(
+                          onTap: () => context.push('/transactions'),
+                          child: const Text(
+                            'View All',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0065B3),
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
 
-                  // Transactions List separated by thin line
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: recentTxs.length,
-                    separatorBuilder: (context, index) =>
-                        const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                    itemBuilder: (context, index) {
-                      return _buildTransactionItem(recentTxs[index]);
-                    },
-                  ),
+                  // Transactions List or Empty State
+                  if (recentTxs.isEmpty)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        children: const [
+                          Icon(Icons.receipt_long_rounded, size: 40, color: Color(0xFF94A3B8)),
+                          SizedBox(height: 10),
+                          Text(
+                            'No transactions yet',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0A2540)),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Add money or take a ride to see transactions here',
+                            style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: recentTxs.take(5).length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                      itemBuilder: (context, index) {
+                        return _buildTransactionItem(recentTxs[index]);
+                      },
+                    ),
                   const SizedBox(height: 20),
                 ],
               ),

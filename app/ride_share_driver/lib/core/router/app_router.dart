@@ -7,8 +7,12 @@ import '../../presentation/screens/settings/settings_page.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/subscription/presentation/screens/subscription_plans_screen.dart';
 import '../../features/ride_history/presentation/pages/ride_history_page.dart';
+import '../../features/ride_history/presentation/pages/ride_details_page.dart';
+import '../../features/earnings/presentation/pages/earnings_page.dart';
 import '../../features/wallet/presentation/pages/wallet_page.dart';
+import '../../features/wallet/presentation/pages/transactions_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
+import '../../features/profile/presentation/pages/vehicle_info_page.dart';
 
 class AppRouter {
   final AuthBloc authBloc;
@@ -83,7 +87,7 @@ class AppRouter {
         },
       ),
 
-      // ShellRoute wraps the 4 main index tab pages inside DriverMainLayout
+      // ShellRoute wraps the 5 main index tab pages inside DriverMainLayout
       ShellRoute(
         builder: (context, state, child) {
           return DriverMainLayout(child: child);
@@ -102,6 +106,10 @@ class AppRouter {
             builder: (context, state) => const RideHistoryPage(),
           ),
           GoRoute(
+            path: '/earnings',
+            builder: (context, state) => const EarningsPage(),
+          ),
+          GoRoute(
             path: '/wallet',
             builder: (context, state) => const WalletPage(),
           ),
@@ -112,7 +120,25 @@ class AppRouter {
         ],
       ),
 
-      // Sub-pages pushed over the root navigator (full-screen without bottom nav bar)
+      // Full-screen pages
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/ride-details',
+        builder: (context, state) {
+          final rideData = state.extra as Map<String, dynamic>?;
+          return RideDetailsPage(rideData: rideData);
+        },
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/transactions',
+        builder: (context, state) => const TransactionsPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/vehicle-info',
+        builder: (context, state) => const VehicleInfoPage(),
+      ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/settings',

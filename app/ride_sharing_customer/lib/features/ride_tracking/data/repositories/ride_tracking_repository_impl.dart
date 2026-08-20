@@ -1,11 +1,17 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../domain/repositories/ride_tracking_repository.dart';
 import '../datasources/ride_tracking_socket_datasource.dart';
+import '../../../../core/network/dio_client.dart';
+import '../../../../core/services/app_logger.dart';
 
 class RideTrackingRepositoryImpl implements RideTrackingRepository {
   final RideTrackingSocketDataSource socketDataSource;
+  final DioClient? dioClient;
 
-  RideTrackingRepositoryImpl({required this.socketDataSource});
+  RideTrackingRepositoryImpl({
+    required this.socketDataSource,
+    this.dioClient,
+  });
 
   @override
   Future<void> connectToRide(String rideId) async {
@@ -61,5 +67,20 @@ class RideTrackingRepositoryImpl implements RideTrackingRepository {
       ));
     }
     return points;
+  }
+
+  @override
+  Future<void> cancelRide(String rideId, [String reason = 'Cancelled by rider']) async {
+    if (dioClient == null) return;
+    try {
+      AppLogger.i('[RideTrackingRepo] Cancelling ride $rideId...');
+      final response = await dioClient!.dio.post(
+        '/api/v1/rides/$rideId/cancel',
+        data: {'reason': reason},
+      );
+      AppLogger.i('[RideTrackingRepo] Cancel ride response: ${response.statusCode} - ${response.data}');
+    } catch (e) {
+      AppLogger.w('[RideTrackingRepo] Cancel ride error: $e');
+    }
   }
 }

@@ -90,7 +90,10 @@ Future<void> init() async {
   // Ride Tracking Feature
   // ==========================================
   sl.registerLazySingleton<RideTrackingSocketDataSource>(() => RideTrackingSocketDataSource(storageService: sl<StorageService>()));
-  sl.registerLazySingleton<RideTrackingRepository>(() => RideTrackingRepositoryImpl(socketDataSource: sl<RideTrackingSocketDataSource>()));
+  sl.registerLazySingleton<RideTrackingRepository>(() => RideTrackingRepositoryImpl(
+        socketDataSource: sl<RideTrackingSocketDataSource>(),
+        dioClient: sl<DioClient>(),
+      ));
   sl.registerFactory(() => RideTrackingBloc(sl<RideTrackingRepository>()));
 
   // ==========================================
