@@ -202,7 +202,7 @@ export const razorpayGateway = {
   // they currently have on file.
   async createContact({ name, email, phone, referenceId }) {
     const contact = await _call(client.api.post({ url: '/contacts', data: {
-      name, email, contact: phone, type: 'driver', reference_id: referenceId,
+      name, email, contact: phone, type: 'vendor', reference_id: referenceId,
     } }));
     return { razorpayContactId: contact.id };
   },

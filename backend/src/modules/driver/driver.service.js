@@ -1,4 +1,4 @@
-import { eq, desc, count, and, or, ilike } from 'drizzle-orm';
+import { eq, desc, count, and, or, ilike, ne } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { drivers, subscriptions, cities, driverPayoutAccounts, vehicleModels } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
@@ -340,3 +340,90 @@ export async function unblockDriver(driverId, adminId) {
   });
   return { blocked: false };
 }
+
+export async function setDriverPending(driverId, adminId, note) {
+  const [driver] = await db.update(drivers).set({
+    approvalStatus: 'pending',
+    registrationStatus: 'pending_review',
+    approvedBy: adminId,
+    approvalNote: note || 'Reset to pending review by admin',
+    updatedAt: new Date(),
+  }).where(eq(drivers.id, driverId)).returning();
+
+  if (!driver) throw { statusCode: 404, message: 'Driver not found' };
+
+  await publishEvent(TOPICS.NOTIF_PUSH, {
+    userId: driverId, userType: 'driver',
+    title: 'Application Status Updated',
+    body: note || 'Your driver application has been reset to pending review.',
+    type: 'ACCOUNT_PENDING_REVIEW',
+  });
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin',
+    action: 'DRIVER_STATUS_RESET_PENDING', entityType: 'driver', entityId: driverId,
+    meta: { note },
+  });
+  return driver;
+}
+
+export async function adminUpdateDriver(driverId, adminId, data) {
+  const [existingDriver] = await db.select().from(drivers).where(eq(drivers.id, driverId)).limit(1);
+  if (!existingDriver) throw { statusCode: 404, message: 'Driver not found' };
+
+  if (data.phone && data.phone !== existingDriver.phone) {
+    const [existing] = await db.select({ id: drivers.id }).from(drivers)
+      .where(and(eq(drivers.phone, data.phone), ne(drivers.id, driverId))).limit(1);
+    if (existing) throw { statusCode: 409, code: 'PHONE_TAKEN', message: 'A driver with this phone already exists' };
+  }
+
+  if (data.email && data.email !== existingDriver.email) {
+    const [existing] = await db.select({ id: drivers.id }).from(drivers)
+      .where(and(eq(drivers.email, data.email), ne(drivers.id, driverId))).limit(1);
+    if (existing) throw { statusCode: 409, code: 'EMAIL_TAKEN', message: 'A driver with this email already exists' };
+  }
+
+  const allowedFields = [
+    'name', 'phone', 'email', 'profilePhoto', 'status',
+    'dateOfBirth', 'gender', 'referralCode', 'preferredLanguageCode',
+    'countryId', 'stateId', 'cityId',
+    'registrationStatus', 'registrationStep',
+    'licenseNumber', 'licenseDoc', 'aadharNumber', 'aadharDoc',
+    'vehicleTypeId', 'vehicleNumber', 'vehicleModel', 'vehiclePhoto', 'vehicleYear',
+    'approvalStatus', 'approvalNote',
+    'isOnline', 'isBlocked',
+    'rating', 'totalRatings', 'totalRides',
+    'subscriptionStatus',
+  ];
+
+  const updates = {};
+  for (const field of allowedFields) {
+    if (data[field] !== undefined) {
+      updates[field] = data[field];
+    }
+  }
+
+  if (updates.approvalStatus === 'approved' && existingDriver.approvalStatus !== 'approved') {
+    updates.approvedBy = adminId;
+    updates.approvedAt = new Date();
+    if (!updates.registrationStatus) updates.registrationStatus = 'approved';
+  } else if (updates.approvalStatus === 'rejected' && existingDriver.approvalStatus !== 'rejected') {
+    updates.approvedBy = adminId;
+    if (!updates.registrationStatus) updates.registrationStatus = 'rejected';
+  } else if (updates.approvalStatus === 'pending' && existingDriver.approvalStatus !== 'pending') {
+    updates.approvedBy = adminId;
+    if (!updates.registrationStatus) updates.registrationStatus = 'pending_review';
+  }
+
+  updates.updatedAt = new Date();
+
+  const [updatedDriver] = await db.update(drivers).set(updates).where(eq(drivers.id, driverId)).returning();
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin',
+    action: 'DRIVER_UPDATED_BY_ADMIN', entityType: 'driver', entityId: driverId,
+    meta: { changes: Object.keys(updates) },
+  });
+
+  return updatedDriver;
+}
+

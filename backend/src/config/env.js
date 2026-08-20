@@ -32,7 +32,7 @@ export const env = {
   RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || '7izpBh3Ax4jfCqxFdWQfhexE',
   RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || undefined,
   RAZORPAYX_ACCOUNT_NUMBER: process.env.RAZORPAYX_ACCOUNT_NUMBER || '233434343434',
-  BANK_DETAILS_ENC_KEY: process.env.BANK_DETAILS_ENC_KEY || undefined,
+  BANK_DETAILS_ENC_KEY: process.env.BANK_DETAILS_ENC_KEY || '0123456789abcdef0123456789abcdef',
   SMTP_HOST: process.env.SMTP_HOST || undefined,
   SMTP_PORT: process.env.SMTP_PORT || undefined,
   SMTP_USER: process.env.SMTP_USER || undefined,

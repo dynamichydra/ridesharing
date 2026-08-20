@@ -2,6 +2,7 @@ import { eq, and } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { driverVehicles, drivers, vehicleModels } from '../../../drizzle/schema/index.js';
 import { advanceRegistration, REGISTRATION_STEP } from '../../utils/registration.js';
+import { publishEvent, TOPICS } from '../../config/kafka.js';
 
 // vehicleTypeId/brand/model are never taken from the client — they're resolved here from the
 // admin-curated vehicle_models catalog, so a driver can't self-declare a base vehicle as a
@@ -72,3 +73,103 @@ export async function removeVehicle(driverId, vehicleId) {
 export async function listDriverVehicles(driverId) {
   return db.select().from(driverVehicles).where(eq(driverVehicles.driverId, driverId));
 }
+
+export async function adminAddVehicle(driverId, adminId, data) {
+  const { vehicleTypeId, brand, model, ...rest } = data;
+  let vm = null;
+  if (data.vehicleModelId) {
+    vm = await resolveVehicleModel(data.vehicleModelId);
+  }
+
+  const shouldBeActive = data.isActive !== false;
+  if (shouldBeActive) {
+    await db.update(driverVehicles).set({ isActive: false })
+      .where(and(eq(driverVehicles.driverId, driverId), eq(driverVehicles.isActive, true)));
+  }
+
+  const [vehicle] = await db.insert(driverVehicles).values({
+    ...rest,
+    driverId,
+    isActive: shouldBeActive,
+    vehicleModelId: vm ? vm.id : data.vehicleModelId || null,
+    vehicleTypeId: vm ? vm.vehicleTypeId : data.vehicleTypeId || null,
+    brand: vm ? vm.brand : data.brand || null,
+    model: vm ? vm.name : data.model || 'Unknown',
+  }).returning();
+
+  if (shouldBeActive) {
+    await mirrorToDriver(driverId, vehicle);
+  }
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin',
+    action: 'DRIVER_VEHICLE_ADDED_BY_ADMIN', entityType: 'driver_vehicle', entityId: vehicle.id,
+    meta: { driverId },
+  });
+
+  return vehicle;
+}
+
+export async function adminUpdateVehicle(driverId, vehicleId, adminId, data) {
+  const { vehicleTypeId, brand, model, ...rest } = data;
+  if (data.vehicleModelId) {
+    const vm = await resolveVehicleModel(data.vehicleModelId);
+    rest.vehicleModelId = vm.id;
+    rest.vehicleTypeId = vm.vehicleTypeId;
+    rest.brand = vm.brand;
+    rest.model = vm.name;
+  }
+
+  if (data.isActive === true) {
+    await db.update(driverVehicles).set({ isActive: false })
+      .where(and(eq(driverVehicles.driverId, driverId), eq(driverVehicles.isActive, true)));
+  }
+
+  const [vehicle] = await db.update(driverVehicles).set({ ...rest, updatedAt: new Date() })
+    .where(and(eq(driverVehicles.id, vehicleId), eq(driverVehicles.driverId, driverId))).returning();
+  if (!vehicle) throw { statusCode: 404, message: 'Vehicle not found' };
+
+  if (vehicle.isActive) await mirrorToDriver(driverId, vehicle);
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin',
+    action: 'DRIVER_VEHICLE_UPDATED_BY_ADMIN', entityType: 'driver_vehicle', entityId: vehicleId,
+    meta: { driverId },
+  });
+
+  return vehicle;
+}
+
+export async function adminRemoveVehicle(driverId, vehicleId, adminId) {
+  const [vehicle] = await db.delete(driverVehicles)
+    .where(and(eq(driverVehicles.id, vehicleId), eq(driverVehicles.driverId, driverId))).returning();
+  if (!vehicle) throw { statusCode: 404, message: 'Vehicle not found' };
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin',
+    action: 'DRIVER_VEHICLE_DELETED_BY_ADMIN', entityType: 'driver_vehicle', entityId: vehicleId,
+    meta: { driverId },
+  });
+
+  return { deleted: true };
+}
+
+export async function adminActivateVehicle(driverId, vehicleId, adminId) {
+  await db.update(driverVehicles).set({ isActive: false })
+    .where(and(eq(driverVehicles.driverId, driverId), eq(driverVehicles.isActive, true)));
+
+  const [vehicle] = await db.update(driverVehicles).set({ isActive: true, updatedAt: new Date() })
+    .where(and(eq(driverVehicles.id, vehicleId), eq(driverVehicles.driverId, driverId))).returning();
+  if (!vehicle) throw { statusCode: 404, message: 'Vehicle not found' };
+
+  await mirrorToDriver(driverId, vehicle);
+
+  await publishEvent(TOPICS.AUDIT_LOG, {
+    actorId: adminId, actorType: 'admin',
+    action: 'DRIVER_VEHICLE_ACTIVATED_BY_ADMIN', entityType: 'driver_vehicle', entityId: vehicleId,
+    meta: { driverId },
+  });
+
+  return vehicle;
+}
+

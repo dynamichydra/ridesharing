@@ -34,4 +34,24 @@ export async function vehicleRoutes(app) {
     const data = await vehicleService.listDriverVehicles(request.params.driverId);
     return sendSuccess(reply, data);
   });
+
+  app.post('/admin/drivers/:driverId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await vehicleService.adminAddVehicle(request.params.driverId, request.user.id, request.body);
+    return sendSuccess(reply, data, 201);
+  });
+
+  app.patch('/admin/drivers/:driverId/:vehicleId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await vehicleService.adminUpdateVehicle(request.params.driverId, request.params.vehicleId, request.user.id, request.body);
+    return sendSuccess(reply, data);
+  });
+
+  app.delete('/admin/drivers/:driverId/:vehicleId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await vehicleService.adminRemoveVehicle(request.params.driverId, request.params.vehicleId, request.user.id);
+    return sendSuccess(reply, data);
+  });
+
+  app.post('/admin/drivers/:driverId/:vehicleId/activate', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await vehicleService.adminActivateVehicle(request.params.driverId, request.params.vehicleId, request.user.id);
+    return sendSuccess(reply, data);
+  });
 }

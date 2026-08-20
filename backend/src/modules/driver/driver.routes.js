@@ -109,13 +109,23 @@ export async function driverRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  app.patch('/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await driverService.adminUpdateDriver(request.params.id, request.user.id, request.body);
+    return sendSuccess(reply, data);
+  });
+
+  app.post('/:id/pending', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await driverService.setDriverPending(request.params.id, request.user.id, request.body?.note);
+    return sendSuccess(reply, data);
+  });
+
   app.post('/:id/approve', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await driverService.approveDriver(request.params.id, request.user.id, request.body.note);
+    const data = await driverService.approveDriver(request.params.id, request.user.id, request.body?.note);
     return sendSuccess(reply, data);
   });
 
   app.post('/:id/reject', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const { note } = request.body;
+    const { note } = request.body || {};
     if (!note) return sendError(reply, 'Rejection note is required');
     const data = await driverService.rejectDriver(request.params.id, request.user.id, note);
     return sendSuccess(reply, data);
