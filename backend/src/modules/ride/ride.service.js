@@ -419,6 +419,7 @@ export async function acceptRide(rideId, driverId) {
   await publishEvent(TOPICS.RIDE_ACCEPTED, {
     id: rideId, rideId, driverId, driver,
     riderId: ride.riderId,
+    startOtp,
   });
   await publishEvent(TOPICS.NOTIF_PUSH, {
     userType: 'rider', userId: ride.riderId,

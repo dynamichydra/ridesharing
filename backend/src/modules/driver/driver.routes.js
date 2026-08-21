@@ -6,6 +6,11 @@ export async function driverRoutes(app) {
 
   // ── Driver self ──────────────────────────────────────────────────────────────
 
+  app.get('/dashboard-summary', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const data = await driverService.getDashboardSummary(request.user.id);
+    return sendSuccess(reply, data);
+  });
+
   app.get('/profile', { preHandler: [authenticateDriver] }, async (request, reply) => {
     const data = await driverService.getProfile(request.user.id);
     return sendSuccess(reply, data);

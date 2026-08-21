@@ -214,6 +214,7 @@ async function startRideConsumer() {
         _io.of('/rider').to(`rider:${payload.riderId}`).emit('ride:driver_assigned', {
           rideId: payload.rideId,
           driver: payload.driver,
+          startOtp: payload.startOtp,
         });
         // Bug 4 fix: notify OTHER candidates the ride is taken
         _io.of('/driver').to(`ride:candidates:${payload.rideId}`).emit('ride:taken', {

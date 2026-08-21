@@ -1,6 +1,6 @@
-import { eq, desc, count, and, or, ilike, ne } from 'drizzle-orm';
+import { eq, desc, count, and, or, ilike, ne, sql } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { drivers, subscriptions, cities, driverPayoutAccounts, vehicleModels } from '../../../drizzle/schema/index.js';
+import { drivers, subscriptions, cities, driverPayoutAccounts, vehicleModels, rides } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
@@ -9,6 +9,82 @@ import { createUploadUrl, verifyObjectExists } from '../../utils/storage.js';
 import * as vehicleService from '../vehicle/vehicle.service.js';
 import * as documentsService from '../documents/documents.service.js';
 import * as onboardingService from '../onboarding/onboarding.service.js';
+
+export async function getDashboardSummary(driverId) {
+  const [driver] = await db.select({
+    id: drivers.id,
+    name: drivers.name,
+    phone: drivers.phone,
+    profilePhoto: drivers.profilePhoto,
+    rating: drivers.rating,
+    isOnline: drivers.isOnline,
+    vehicleModel: drivers.vehicleModel,
+    vehicleNumber: drivers.vehicleNumber,
+  }).from(drivers).where(eq(drivers.id, driverId)).limit(1);
+
+  if (!driver) throw { statusCode: 404, message: 'Driver not found' };
+
+  // Calculate start of today (midnight)
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+
+  // Completed rides today
+  const todayCompletedRides = await db.select({
+    id: rides.id,
+    finalFareMinor: rides.finalFareMinor,
+    estimatedFareMinor: rides.estimatedFareMinor,
+    actualDurationMin: rides.actualDurationMin,
+    durationMin: rides.durationMin,
+    completedAt: rides.completedAt,
+    startedAt: rides.startedAt,
+  }).from(rides).where(
+    and(
+      eq(rides.driverId, driverId),
+      eq(rides.status, 'completed'),
+      sql`${rides.completedAt} >= ${startOfToday}`,
+    ),
+  );
+
+  const totalRidesToday = todayCompletedRides.length;
+  let totalEarningsMinor = 0;
+  let totalMinutes = 0;
+
+  for (const r of todayCompletedRides) {
+    totalEarningsMinor += (r.finalFareMinor || r.estimatedFareMinor || 0);
+    if (r.actualDurationMin) {
+      totalMinutes += r.actualDurationMin;
+    } else if (r.startedAt && r.completedAt) {
+      const mins = Math.ceil((new Date(r.completedAt) - new Date(r.startedAt)) / 60000);
+      totalMinutes += (mins > 0 ? mins : 0);
+    } else if (r.durationMin) {
+      totalMinutes += r.durationMin;
+    }
+  }
+
+  const totalEarnings = totalEarningsMinor / 100;
+  const hoursNum = parseFloat((totalMinutes / 60).toFixed(1));
+  const formattedHours = totalMinutes >= 60
+    ? `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`
+    : `${totalMinutes}m`;
+
+  return {
+    id: driver.id,
+    name: driver.name || 'Driver',
+    phone: driver.phone,
+    profilePhoto: driver.profilePhoto || null,
+    rating: driver.rating ? parseFloat(driver.rating).toFixed(1) : '5.0',
+    isOnline: !!driver.isOnline,
+    vehicleModel: driver.vehicleModel || null,
+    vehicleNumber: driver.vehicleNumber || null,
+    today: {
+      totalRides: totalRidesToday,
+      totalEarnings: totalEarnings,
+      totalWorkingMinutes: totalMinutes,
+      totalWorkingHours: hoursNum,
+      formattedWorkingHours: formattedHours,
+    },
+  };
+}
 
 export async function getProfile(driverId) {
   const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId)).limit(1);
