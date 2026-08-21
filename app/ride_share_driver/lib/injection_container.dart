@@ -80,7 +80,7 @@ Future<void> init() async {
   // ── BLoCs ─────────────────────────────────────────────────────────────────
   sl.registerFactory(() => AuthBloc(authRepository: sl()));
   sl.registerFactory(() => OnboardingBloc(onboardingRepository: sl()));
-  sl.registerFactory(() => DriverStatusBloc(driverStatusRepository: sl(), locationService: sl()));
+  sl.registerFactory(() => DriverStatusBloc(driverStatusRepository: sl(), locationService: sl(), secureStorage: sl()));
   sl.registerFactory(() => SubscriptionBloc(subscriptionRepository: sl()));
   sl.registerFactory(() => RideBloc(rideRepository: sl(), locationService: sl()));
   sl.registerFactory(() => ProfileBloc(dataSource: sl()));

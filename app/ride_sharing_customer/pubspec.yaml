@@ -80,6 +80,7 @@ flutter:
     - assets/logos/
     - assets/icons/
     - assets/bottom-nav-icons/
+    - assets/ride-option/
   fonts:
     - family: SF Pro Display
       fonts:

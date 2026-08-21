@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../services/location_service.dart';
+import '../../../../core/storage/secure_storage.dart';
 import '../../domain/repositories/driver_status_repository.dart';
 
 // ── Events ──────────────────────────────────────────────────────────────────
@@ -41,12 +42,15 @@ class DriverStatusError extends DriverStatusState {
 class DriverStatusBloc extends Bloc<DriverStatusEvent, DriverStatusState> {
   final DriverStatusRepository driverStatusRepository;
   final LocationService locationService;
+  final SecureStorage secureStorage;
 
   DriverStatusBloc({
     required this.driverStatusRepository,
     required this.locationService,
+    required this.secureStorage,
   }) : super(DriverStatusOffline()) {
-    on<RestoreOnlineStatus>((event, emit) {
+    on<RestoreOnlineStatus>((event, emit) async {
+      await secureStorage.saveOnlineStatus(event.isOnline);
       if (event.isOnline) {
         emit(DriverStatusOnline());
       } else {
@@ -62,6 +66,7 @@ class DriverStatusBloc extends Bloc<DriverStatusEvent, DriverStatusState> {
     try {
       final position = await locationService.getCurrentPosition();
       await driverStatusRepository.goOnline(lat: position.latitude, lng: position.longitude);
+      await secureStorage.saveOnlineStatus(true);
       emit(DriverStatusOnline());
     } catch (e) {
       emit(DriverStatusError(message: e.toString(), wasOnline: false));
@@ -72,6 +77,7 @@ class DriverStatusBloc extends Bloc<DriverStatusEvent, DriverStatusState> {
     emit(DriverStatusTransitioning(goingOnline: false));
     try {
       await driverStatusRepository.goOffline();
+      await secureStorage.saveOnlineStatus(false);
       emit(DriverStatusOffline());
     } catch (e) {
       emit(DriverStatusError(message: e.toString(), wasOnline: true));

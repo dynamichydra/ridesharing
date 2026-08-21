@@ -1,7 +1,9 @@
-import 'dart:typed_data';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../features/location/utils/map_styles.dart';
 import '../constants/constants.dart';
 import 'mock_map_view.dart';
 
@@ -21,8 +23,13 @@ class AppMapView extends StatefulWidget {
   final LatLng? destination;
   final LatLng? driverPosition;
   final double driverBearing;
+  final String? driverVehicleType;
+  final String? mapStyle;
   final List<LatLng> routePoints;
   final bool useGoogleMaps;
+  final bool showPickupPulse;
+  final bool myLocationEnabled;
+  final bool myLocationButtonEnabled;
   final double initialZoom;
   final Function(LatLng)? onTap;
   final Function(GoogleMapController)? onMapCreated;
@@ -33,8 +40,13 @@ class AppMapView extends StatefulWidget {
     this.destination,
     this.driverPosition,
     this.driverBearing = 0.0,
+    this.driverVehicleType,
+    this.mapStyle,
     this.routePoints = const [],
     this.useGoogleMaps = true,
+    this.showPickupPulse = false,
+    this.myLocationEnabled = false,
+    this.myLocationButtonEnabled = false,
     this.initialZoom = 15.0,
     this.onTap,
     this.onMapCreated,
@@ -44,101 +56,119 @@ class AppMapView extends StatefulWidget {
   State<AppMapView> createState() => _AppMapViewState();
 }
 
-class _AppMapViewState extends State<AppMapView> {
-  /// Custom marker icon for the pickup location (primary green).
-  BitmapDescriptor _pickupIcon = BitmapDescriptor.defaultMarker;
-
-  /// Custom marker icon for the destination location (rose red).
-  BitmapDescriptor _destinationIcon = BitmapDescriptor.defaultMarker;
-
-  bool _iconsReady = false;
+class _AppMapViewState extends State<AppMapView> with SingleTickerProviderStateMixin {
+  BitmapDescriptor _carIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
+  late final AnimationController _pulseController;
+  double _currentZoom = 15.0;
 
   @override
   void initState() {
     super.initState();
-    _generateMarkerIcons();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Custom marker generation
-  // ---------------------------------------------------------------------------
-
-  Future<void> _generateMarkerIcons() async {
-    // Use a temporary BuildContext-independent size; pixel ratio resolved in _createCircleMarker
-    final pickup = await _createCircleMarker(
-      fillColor: const Color(0xFF009048), // Primary brand green
-      strokeColor: Colors.white,
-      size: 48,
-      innerDotColor: Colors.white,
+    _currentZoom = widget.initialZoom;
+    _loadCarIcon();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
     );
-    final destination = await _createCircleMarker(
-      fillColor: const Color(0xFFE11D48), // Destination rose-red
-      strokeColor: Colors.white,
-      size: 48,
-      innerDotColor: Colors.white,
-    );
-
-    if (mounted) {
-      setState(() {
-        _pickupIcon = pickup;
-        _destinationIcon = destination;
-        _iconsReady = true;
-      });
+    if (widget.showPickupPulse) {
+      _pulseController.repeat();
     }
   }
 
-  /// Draws a solid filled circle marker with a small inner dot using Canvas,
-  /// then converts it to a [BitmapDescriptor] for use as a Google Maps marker.
-  Future<BitmapDescriptor> _createCircleMarker({
-    required Color fillColor,
-    required Color strokeColor,
-    required double size,
-    required Color innerDotColor,
-  }) async {
-    // Default to 3x for crisp rendering on high-density screens
-    const double devicePixelRatio = 3.0;
-    final int px = (size * devicePixelRatio).round();
+  @override
+  void didUpdateWidget(AppMapView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.driverVehicleType != widget.driverVehicleType) {
+      _loadCarIcon();
+    }
+    if (oldWidget.showPickupPulse != widget.showPickupPulse) {
+      if (widget.showPickupPulse) {
+        _pulseController.repeat();
+      } else {
+        _pulseController.stop();
+      }
+    }
+  }
 
-    final ui.PictureRecorder recorder = ui.PictureRecorder();
-    final Canvas canvas = Canvas(recorder);
-    final double radius = px / 2.0;
-    final Offset center = Offset(radius, radius);
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
 
-    // Outer shadow
-    canvas.drawCircle(
-      center,
-      radius,
-      Paint()
-        ..color = fillColor.withValues(alpha: 0.25)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+  /// Converts desired screen pixels into ground meters for Google Maps Circle
+  /// at the current camera zoom level and latitude (Web Mercator projection).
+  double _getMetersForPixels(double pixels, double zoom, double lat) {
+    final latRad = lat * math.pi / 180.0;
+    final metersPerPixel = (156543.03392 * math.cos(latRad)) / math.pow(2.0, zoom);
+    return pixels * metersPerPixel;
+  }
+
+  /// Builds a smooth, steady expanding radar wave that emerges continuously
+  Circle _buildPulseCircle({
+    required String id,
+    required double phase,
+    required double maxRadiusPixels,
+    required double baseAlpha,
+    required double zoom,
+    required LatLng center,
+  }) {
+    final curvedProgress = Curves.easeOutCubic.transform(phase);
+    final radiusPixels = 16.0 + (maxRadiusPixels - 16.0) * curvedProgress;
+    final alpha = (1.0 - phase) * baseAlpha;
+
+    return Circle(
+      circleId: CircleId(id),
+      center: center,
+      radius: _getMetersForPixels(radiusPixels, zoom, center.latitude),
+      fillColor: const Color(0xFF009048).withValues(alpha: alpha.clamp(0.0, 1.0)),
+      strokeColor: const Color(0xFF009048).withValues(alpha: (alpha * 1.3).clamp(0.0, 1.0)),
+      strokeWidth: 1,
+      zIndex: 1,
     );
+  }
 
-    // Main filled circle
-    canvas.drawCircle(center, radius * 0.78, Paint()..color = fillColor);
+  void _handleCameraMove(CameraPosition position) {
+    _currentZoom = position.zoom;
+  }
 
-    // White stroke ring
-    canvas.drawCircle(
-      center,
-      radius * 0.78,
-      Paint()
-        ..color = strokeColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = radius * 0.18,
-    );
+  Future<void> _loadCarIcon() async {
+    if (widget.driverVehicleType == null) return;
+    
+    final type = widget.driverVehicleType!.toLowerCase();
+    String assetPath = 'assets/ride-option/cab.png'; // default
+    
+    if (type.contains('auto')) {
+      assetPath = 'assets/ride-option/auto.png';
+    } else if (type.contains('bike') || type.contains('moto') || type.contains('two')) {
+      assetPath = 'assets/ride-option/bike.png';
+    } else if (type.contains('premium')) {
+      assetPath = 'assets/ride-option/premium-cab.png';
+    } else {
+      assetPath = 'assets/ride-option/cab.png';
+    }
 
-    // Inner white dot
-    canvas.drawCircle(center, radius * 0.22, Paint()..color = innerDotColor);
+    try {
+      final ByteData byteData = await rootBundle.load(assetPath);
+      // Decode image maintaining original aspect ratio without any cropping
+      final ui.Codec codec = await ui.instantiateImageCodec(
+        byteData.buffer.asUint8List(),
+        targetWidth: 24, // Scaled down to compact marker icon size
+      );
+      final ui.FrameInfo frameInfo = await codec.getNextFrame();
+      final ByteData? pngBytes = await frameInfo.image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
 
-    final ui.Image image =
-        await recorder.endRecording().toImage(px, px);
-    final ByteData? byteData =
-        await image.toByteData(format: ui.ImageByteFormat.png);
-
-    return BitmapDescriptor.bytes(
-      byteData!.buffer.asUint8List(),
-      width: size,
-      height: size,
-    );
+      if (pngBytes != null && mounted) {
+        final icon = BitmapDescriptor.bytes(pngBytes.buffer.asUint8List());
+        setState(() {
+          _carIcon = icon;
+        });
+      }
+    } catch (e) {
+      // Fallback to default marker if asset fails to load
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -157,82 +187,108 @@ class _AppMapViewState extends State<AppMapView> {
       );
     }
 
-    return GoogleMap(
-      onMapCreated: widget.onMapCreated,
-      onTap: widget.onTap,
-      myLocationEnabled: true,
-      myLocationButtonEnabled: true,
-      // Platform-specific Google Cloud Map ID
-      mapId: AppConstants.cloudMapId,
+    return AnimatedBuilder(
+      animation: _pulseController,
+      builder: (context, child) {
+        return GoogleMap(
+          onMapCreated: widget.onMapCreated,
+          onCameraMove: _handleCameraMove,
+          onTap: widget.onTap,
+          myLocationEnabled: widget.myLocationEnabled,
+          myLocationButtonEnabled: widget.myLocationButtonEnabled,
+          // Platform-specific Google Cloud Map ID with custom style fallback
+          mapId: AppConstants.cloudMapId,
+          style: widget.mapStyle ?? AppMapStyles.uberSilver,
 
-      initialCameraPosition: CameraPosition(
-        target: widget.driverPosition ??
-            widget.pickup ??
-            const LatLng(22.5726, 88.3639),
-        zoom: widget.initialZoom,
-      ),
+          initialCameraPosition: CameraPosition(
+            target: widget.driverPosition ??
+                widget.pickup ??
+                const LatLng(22.5726, 88.3639),
+            zoom: widget.initialZoom,
+          ),
 
-      markers: {
-        if (widget.pickup != null)
-          Marker(
-            markerId: const MarkerId('pickup'),
-            position: widget.pickup!,
-            icon: _iconsReady
-                ? _pickupIcon
-                : BitmapDescriptor.defaultMarkerWithHue(150.0),
-            infoWindow: const InfoWindow(title: 'Pickup'),
-            zIndexInt: 3,
-          ),
-        if (widget.destination != null)
-          Marker(
-            markerId: const MarkerId('destination'),
-            position: widget.destination!,
-            icon: _iconsReady
-                ? _destinationIcon
-                : BitmapDescriptor.defaultMarkerWithHue(
-                    BitmapDescriptor.hueRed),
-            infoWindow: const InfoWindow(title: 'Destination'),
-            zIndexInt: 3,
-          ),
-        if (widget.driverPosition != null)
-          Marker(
-            markerId: const MarkerId('driver'),
-            position: widget.driverPosition!,
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueGreen),
-            rotation: widget.driverBearing,
-            zIndexInt: 4,
-          ),
-      },
+          circles: {
+            if (widget.showPickupPulse && widget.pickup != null) ...[
+              // Primary Wave
+              _buildPulseCircle(
+                id: 'pickup_pulse_wave1',
+                phase: _pulseController.value,
+                maxRadiusPixels: 95.0,
+                baseAlpha: 0.25,
+                zoom: _currentZoom,
+                center: widget.pickup!,
+              ),
+              // Staggered Secondary Wave (offset by 50% for seamless continuous flow)
+              _buildPulseCircle(
+                id: 'pickup_pulse_wave2',
+                phase: (_pulseController.value + 0.5) % 1.0,
+                maxRadiusPixels: 95.0,
+                baseAlpha: 0.25,
+                zoom: _currentZoom,
+                center: widget.pickup!,
+              ),
+              // Center Core Anchor at pin base
+              Circle(
+                circleId: const CircleId('pickup_pulse_core'),
+                center: widget.pickup!,
+                radius: _getMetersForPixels(
+                  20.0,
+                  _currentZoom,
+                  widget.pickup!.latitude,
+                ),
+                fillColor: const Color(0xFF009048).withValues(alpha: 0.12),
+                strokeColor: const Color(0xFF009048).withValues(alpha: 0.25),
+                strokeWidth: 1,
+                zIndex: 1,
+              ),
+            ],
+          },
 
-      polylines: {
-        if (widget.routePoints.isNotEmpty) ...[
-          // Outer pipeline outline / casing (Google Maps route pipeline border)
-          Polyline(
-            polylineId: const PolylineId('route_border'),
-            points: widget.routePoints,
-            color: const Color(0xFF005B2D),
-            width: 8,
-            geodesic: true,
-            jointType: JointType.round,
-            startCap: Cap.roundCap,
-            endCap: Cap.roundCap,
-            zIndex: 1,
-          ),
-          // Inner route pipeline
-          Polyline(
-            polylineId: const PolylineId('route'),
-            points: widget.routePoints,
-            // Ryva Ride primary brand green
-            color: const Color(0xFF009048),
-            width: 5,
-            geodesic: true,
-            jointType: JointType.round,
-            startCap: Cap.roundCap,
-            endCap: Cap.roundCap,
-            zIndex: 2,
-          ),
-        ],
+          markers: {
+            if (widget.pickup != null)
+              Marker(
+                markerId: const MarkerId('pickup'),
+                position: widget.pickup!,
+                icon: BitmapDescriptor.defaultMarkerWithHue(150.0), // Green hue
+                infoWindow: const InfoWindow(title: 'Pickup'),
+                zIndexInt: 3,
+              ),
+            if (widget.destination != null)
+              Marker(
+                markerId: const MarkerId('destination'),
+                position: widget.destination!,
+                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+                infoWindow: const InfoWindow(title: 'Destination'),
+                zIndexInt: 3,
+              ),
+            if (widget.driverPosition != null)
+              Marker(
+                markerId: const MarkerId('driver'),
+                position: widget.driverPosition!,
+                icon: _carIcon,
+                anchor: const Offset(0.5, 0.5),
+                flat: true,
+                rotation: widget.driverBearing,
+                zIndexInt: 4,
+              ),
+          },
+
+          polylines: {
+            if (widget.routePoints.isNotEmpty)
+              Polyline(
+                polylineId: const PolylineId('route'),
+                points: widget.routePoints,
+                // Ryva Ride primary brand green
+                color: const Color(0xFF009048),
+                width: 6,
+                geodesic: true,
+                jointType: JointType.round,
+                startCap: Cap.roundCap,
+                endCap: Cap.roundCap,
+                zIndex: 2,
+              ),
+          },
+        );
       },
     );
   }

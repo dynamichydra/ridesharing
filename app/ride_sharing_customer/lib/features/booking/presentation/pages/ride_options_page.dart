@@ -208,7 +208,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    vehicle.name.startsWith('Ryva') ? vehicle.name : 'Ryva ${vehicle.name}',
+                                    vehicle.name,
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 15,
@@ -297,10 +297,10 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                                 size: 18,
                               ),
                               const SizedBox(width: 8),
-                              Expanded(
+                              const Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: const [
+                                  children: [
                                     Text('Cash', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF021B47))),
                                     SizedBox(height: 1),
                                     Text('Pay to driver', style: TextStyle(fontSize: 10, color: Color(0xFF8A94A6))),
@@ -475,7 +475,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        state.selectedVehicle.name.startsWith('Ryva') ? state.selectedVehicle.name : 'Ryva ${state.selectedVehicle.name}',
+                        state.selectedVehicle.name,
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
                       ),
                       const SizedBox(height: 2),
@@ -568,8 +568,8 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                 const SizedBox(height: 12),
                 const Divider(),
                 const SizedBox(height: 6),
-                Row(
-                  children: const [
+                const Row(
+                  children: [
                     Icon(Icons.near_me_rounded, size: 14, color: Color(0xFF8A94A6)),
                     SizedBox(width: 4),
                     Text('6.2 km', style: TextStyle(fontSize: 12, color: Color(0xFF8A94A6))),

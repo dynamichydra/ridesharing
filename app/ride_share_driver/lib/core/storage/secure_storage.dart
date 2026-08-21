@@ -9,6 +9,17 @@ class SecureStorage {
   static const String _phoneKey = 'driver_phone_number';
   static const String _languageCodeKey = 'driver_language_code';
   static const String _deviceIdKey = 'driver_device_id';
+  static const String _onlineStatusKey = 'driver_is_online';
+
+  Future<void> saveOnlineStatus(bool isOnline) async {
+    await _storage.write(key: _onlineStatusKey, value: isOnline ? 'true' : 'false');
+  }
+
+  Future<bool?> getOnlineStatus() async {
+    final val = await _storage.read(key: _onlineStatusKey);
+    if (val == null) return null;
+    return val == 'true';
+  }
 
   Future<void> saveToken(String token) async {
     await _storage.write(key: _tokenKey, value: token);

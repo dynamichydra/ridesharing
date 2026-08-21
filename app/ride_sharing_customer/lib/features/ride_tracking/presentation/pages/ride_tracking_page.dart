@@ -1,6 +1,8 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/utils/location_helper.dart';
 import '../../../../core/widgets/app_map_view.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../bloc/ride_tracking_bloc.dart';
@@ -99,51 +101,15 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
   Widget _buildConnectingDriverView(BuildContext context, RideTrackingSearching state) {
     return Stack(
       children: [
-        // 1. Zoomed out Map View with pickup in center
+        // 1. Zoomed out Map View with pickup in center and geographic radar pulse
         Positioned.fill(
           child: AppMapView(
             pickup: state.pickup,
             destination: state.destination,
             routePoints: state.routePoints,
+            driverVehicleType: state.vehicleName,
+            showPickupPulse: true,
             initialZoom: 14.0,
-          ),
-        ),
-
-        // 2. Center Animated Radar Pulse
-        Center(
-          child: AnimatedBuilder(
-            animation: _radarController,
-            builder: (context, child) {
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: 140 * _radarController.value,
-                    height: 140 * _radarController.value,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFF009048).withValues(alpha: (1.0 - _radarController.value) * 0.25),
-                    ),
-                  ),
-                  Container(
-                    width: 90 * _radarController.value,
-                    height: 90 * _radarController.value,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFF009048).withValues(alpha: (1.0 - _radarController.value) * 0.35),
-                    ),
-                  ),
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF009048).withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ],
-              );
-            },
           ),
         ),
 
@@ -152,8 +118,8 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
           top: MediaQuery.of(context).padding.top + 8,
           left: 16,
           right: 16,
-          child: Column(
-            children: const [
+          child: const Column(
+            children: [
               Text(
                 'Connecting you to the driver',
                 style: TextStyle(
@@ -195,8 +161,8 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: const [
+                const Row(
+                  children: [
                     SizedBox(
                       width: 28,
                       height: 28,
@@ -261,16 +227,29 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
   Widget _buildDriverAcceptedView(BuildContext context, RideTrackingActive state) {
     final spacedOtp = state.otp.padLeft(4, '0').split('').join('  ');
 
+    final distanceKm = LocationHelper.calculateDistance(
+      state.driverPosition.latitude,
+      state.driverPosition.longitude,
+      state.pickup.latitude,
+      state.pickup.longitude,
+    );
+    final distanceStr = distanceKm < 1.0
+        ? '${(distanceKm * 1000).round()} m'
+        : '${distanceKm.toStringAsFixed(1)} km';
+    final etaMins = max(1, (distanceKm / 25 * 60).round());
+    final etaStr = '$etaMins min';
+
     return Stack(
       children: [
-        // 1. Live Map View
+        // 1. Live Map View: shows driver coming to pickup location
         Positioned.fill(
           child: AppMapView(
             pickup: state.pickup,
-            destination: state.destination,
+            destination: null, // Only show pickup when driver is approaching
             driverPosition: state.driverPosition,
             driverBearing: state.driverBearing,
             routePoints: state.routePoints,
+            driverVehicleType: state.vehicleName,
           ),
         ),
 
@@ -385,9 +364,9 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildPillItem('2.4 km', 'away'),
+                      _buildPillItem(distanceStr, 'away'),
                       _buildPillDivider(),
-                      _buildPillItem('5 min', 'away'),
+                      _buildPillItem(etaStr, 'away'),
                     ],
                   ),
                 ),
@@ -443,16 +422,29 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
   Widget _buildDriverEnRouteView(BuildContext context, RideTrackingActive state) {
     final spacedOtp = state.otp.padLeft(4, '0').split('').join('  ');
 
+    final distanceKm = LocationHelper.calculateDistance(
+      state.driverPosition.latitude,
+      state.driverPosition.longitude,
+      state.pickup.latitude,
+      state.pickup.longitude,
+    );
+    final distanceStr = distanceKm < 1.0
+        ? '${(distanceKm * 1000).round()} m'
+        : '${distanceKm.toStringAsFixed(1)} km';
+    final etaMins = max(1, (distanceKm / 25 * 60).round());
+    final etaStr = '$etaMins min';
+
     return Stack(
       children: [
-        // 1. Live Map View
+        // 1. Live Map View: shows driver coming to pickup location
         Positioned.fill(
           child: AppMapView(
             pickup: state.pickup,
-            destination: state.destination,
+            destination: null, // Only show pickup when driver is approaching
             driverPosition: state.driverPosition,
             driverBearing: state.driverBearing,
             routePoints: state.routePoints,
+            driverVehicleType: state.vehicleName,
           ),
         ),
 
@@ -565,9 +557,9 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildPillItem('1.2 km', 'away'),
+                      _buildPillItem(distanceStr, 'away'),
                       _buildPillDivider(),
-                      _buildPillItem('3 min', 'away'),
+                      _buildPillItem(etaStr, 'away'),
                     ],
                   ),
                 ),
@@ -624,14 +616,15 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
 
     return Stack(
       children: [
-        // 1. Live Map View
+        // 1. Live Map View: driver has arrived at pickup location
         Positioned.fill(
           child: AppMapView(
             pickup: state.pickup,
-            destination: state.destination,
+            destination: null, // Keep destination hidden until OTP verified and ride starts
             driverPosition: state.pickup,
             driverBearing: 0,
-            routePoints: state.routePoints,
+            routePoints: const [],
+            driverVehicleType: state.vehicleName,
           ),
         ),
 
@@ -860,6 +853,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
             driverPosition: state.driverPosition,
             driverBearing: state.driverBearing,
             routePoints: state.routePoints,
+            driverVehicleType: state.vehicleName,
           ),
         ),
 

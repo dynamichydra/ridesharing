@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../config/map_config.dart';
 
 class RideDetailsPage extends StatefulWidget {
   final Map<String, dynamic>? rideData;
@@ -79,6 +80,8 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
               height: 220,
               width: double.infinity,
               child: GoogleMap(
+                mapId: MapConfig.cloudMapId,
+                style: MapConfig.uberSilver,
                 initialCameraPosition: CameraPosition(
                   target: LatLng((_pickup.latitude + _drop.latitude) / 2, (_pickup.longitude + _drop.longitude) / 2),
                   zoom: 12.0,

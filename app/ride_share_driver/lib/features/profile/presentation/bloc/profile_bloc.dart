@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/datasources/profile_remote_datasource.dart';
 import '../../../../common/entities/driver_profile.dart';
+import '../../../../common/entities/driver_dashboard_summary.dart';
 
 // ── Events ───────────────────────────────────────────────────────────────────
 abstract class ProfileEvent {}
@@ -24,7 +25,8 @@ class ProfileLoading extends ProfileState {}
 
 class ProfileLoaded extends ProfileState {
   final DriverProfile profile;
-  ProfileLoaded(this.profile);
+  final DriverDashboardSummary? summary;
+  ProfileLoaded(this.profile, {this.summary});
 }
 
 class ProfileUpdating extends ProfileState {
@@ -34,7 +36,8 @@ class ProfileUpdating extends ProfileState {
 
 class ProfileUpdateSuccess extends ProfileState {
   final DriverProfile profile;
-  ProfileUpdateSuccess(this.profile);
+  final DriverDashboardSummary? summary;
+  ProfileUpdateSuccess(this.profile, {this.summary});
 }
 
 class ProfileError extends ProfileState {
@@ -54,8 +57,15 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   Future<void> _onLoadProfile(LoadProfile event, Emitter<ProfileState> emit) async {
     emit(ProfileLoading());
     try {
-      final json = await dataSource.getProfile();
-      emit(ProfileLoaded(DriverProfile.fromJson(json)));
+      final results = await Future.wait([
+        dataSource.getProfile(),
+        dataSource.getDashboardSummary().catchError((_) => <String, dynamic>{}),
+      ]);
+      final profileJson = results[0];
+      final summaryJson = results[1];
+      final profile = DriverProfile.fromJson(profileJson);
+      final summary = summaryJson.isNotEmpty ? DriverDashboardSummary.fromJson(summaryJson) : null;
+      emit(ProfileLoaded(profile, summary: summary));
     } catch (e) {
       emit(ProfileError(e.toString()));
     }

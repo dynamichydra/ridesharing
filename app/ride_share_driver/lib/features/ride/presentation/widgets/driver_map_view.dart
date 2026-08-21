@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../../../config/map_config.dart';
 
 class DriverMapView extends StatefulWidget {
   final LatLng? pickup;
@@ -71,6 +72,8 @@ class _DriverMapViewState extends State<DriverMapView> {
         _mapController = controller;
         widget.onMapCreated?.call(controller);
       },
+      mapId: MapConfig.cloudMapId,
+      style: MapConfig.uberSilver,
       myLocationEnabled: true,
       myLocationButtonEnabled: true,
       compassEnabled: true,

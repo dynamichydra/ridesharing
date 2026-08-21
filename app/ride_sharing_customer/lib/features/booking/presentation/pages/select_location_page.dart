@@ -718,9 +718,6 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
                     destination: _currentStep == SelectionStep.destSelected
                         ? _destLatLng
                         : null,
-                    driverPosition: _currentStep == SelectionStep.pickupSelected
-                        ? _pickupLatLng
-                        : null,
                     routePoints: routePoints,
                   ),
           ),
@@ -803,38 +800,24 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
                       // Route node graphic
                       Column(
                         children: [
-                          Container(
-                            width: 14,
-                            height: 14,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                  color: const Color(0xFF009048), width: 3),
-                              color: _currentStep == SelectionStep.destSelected
-                                  ? const Color(0xFF009048)
-                                  : Colors.white,
-                            ),
+                          const Icon(
+                            Icons.location_on,
+                            color: Color(0xFF009048),
+                            size: 18,
                           ),
                           Container(
                             height: 28,
                             width: 2,
-                            margin: const EdgeInsets.symmetric(vertical: 3),
+                            margin: const EdgeInsets.symmetric(vertical: 2),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade300,
                               borderRadius: BorderRadius.circular(1),
                             ),
                           ),
-                          Container(
-                            width: 14,
-                            height: 14,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                  color: const Color(0xFFE11D48), width: 3),
-                              color: _currentStep == SelectionStep.destSelected
-                                  ? const Color(0xFFE11D48)
-                                  : Colors.white,
-                            ),
+                          const Icon(
+                            Icons.location_on,
+                            color: Color(0xFFE11D48),
+                            size: 18,
                           ),
                         ],
                       ),

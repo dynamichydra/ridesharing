@@ -141,10 +141,10 @@ class _PulsingRadarViewState extends State<PulsingRadarView>
                           fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) =>
                               const Icon(
-                            Icons.directions_car_rounded,
-                            color: Color(0xFF01A34D),
-                            size: 32,
-                          ),
+                                Icons.directions_car_rounded,
+                                color: Color(0xFF01A34D),
+                                size: 32,
+                              ),
                         ),
                       ),
                     ),
@@ -343,7 +343,13 @@ class _PremiumRadarPainter extends CustomPainter {
     canvas.drawCircle(center, maxRadius * 0.34, ring1Paint);
 
     // Ring 2: radius ~ 48% (Dashed thin green ring)
-    _drawDashedCircle(canvas, center, maxRadius * 0.48, primaryGreen.withValues(alpha: 0.14), dashCount: 40);
+    _drawDashedCircle(
+      canvas,
+      center,
+      maxRadius * 0.48,
+      primaryGreen.withValues(alpha: 0.14),
+      dashCount: 40,
+    );
 
     // Ring 3: radius ~ 64% (Solid medium green ring)
     final ring3Paint = Paint()
@@ -353,7 +359,13 @@ class _PremiumRadarPainter extends CustomPainter {
     canvas.drawCircle(center, maxRadius * 0.64, ring3Paint);
 
     // Ring 4: radius ~ 80% (Dashed light green ring)
-    _drawDashedCircle(canvas, center, maxRadius * 0.80, primaryGreen.withValues(alpha: 0.12), dashCount: 48);
+    _drawDashedCircle(
+      canvas,
+      center,
+      maxRadius * 0.80,
+      primaryGreen.withValues(alpha: 0.12),
+      dashCount: 48,
+    );
 
     // Ring 5: radius ~ 94% (Outer perimeter solid hairline)
     final ring5Paint = Paint()
@@ -430,7 +442,8 @@ class _PremiumRadarPainter extends CustomPainter {
     final tYellow = yellowOrbitProgress.value * 2 * math.pi;
 
     // ── A. Blue Node (travels along outer perimeter ~94% radius) ───────────
-    final blueAngle = (-math.pi / 4.5) + (math.sin(t1) * 0.5 + 0.5) * (math.pi / 2.2);
+    final blueAngle =
+        (-math.pi / 4.5) + (math.sin(t1) * 0.5 + 0.5) * (math.pi / 2.2);
     final bluePos = Offset(
       center.dx + (maxRadius * 0.94) * math.cos(blueAngle),
       center.dy + (maxRadius * 0.94) * math.sin(blueAngle),
@@ -443,14 +456,11 @@ class _PremiumRadarPainter extends CustomPainter {
       Paint()..color = accentBlue.withValues(alpha: 0.16),
     );
     // Blue Node solid center
-    canvas.drawCircle(
-      bluePos,
-      4.2,
-      Paint()..color = accentBlue,
-    );
+    canvas.drawCircle(bluePos, 4.2, Paint()..color = accentBlue);
 
     // ── B. Yellow Accent Node (travels along ~80% radius) ─────────────────
-    final yellowAngle = (math.pi * 0.65) + (math.sin(tYellow) * 0.5 + 0.5) * (math.pi * 0.55);
+    final yellowAngle =
+        (math.pi * 0.65) + (math.sin(tYellow) * 0.5 + 0.5) * (math.pi * 0.55);
     final yellowPos = Offset(
       center.dx + (maxRadius * 0.80) * math.cos(yellowAngle),
       center.dy + (maxRadius * 0.80) * math.sin(yellowAngle),
@@ -463,11 +473,7 @@ class _PremiumRadarPainter extends CustomPainter {
       Paint()..color = accentYellow.withValues(alpha: 0.20),
     );
     // Yellow Node solid center
-    canvas.drawCircle(
-      yellowPos,
-      3.2,
-      Paint()..color = accentYellow,
-    );
+    canvas.drawCircle(yellowPos, 3.2, Paint()..color = accentYellow);
 
     // ── C. Green Tracking Nodes (Searching indicator dots) ────────────────
     // Green Node 1 (Mid ring ~64% radius, rotates counter-clockwise slowly)
@@ -476,7 +482,11 @@ class _PremiumRadarPainter extends CustomPainter {
       center.dx + (maxRadius * 0.64) * math.cos(g1Angle),
       center.dy + (maxRadius * 0.64) * math.sin(g1Angle),
     );
-    canvas.drawCircle(g1Pos, 6.0, Paint()..color = primaryGreen.withValues(alpha: 0.18));
+    canvas.drawCircle(
+      g1Pos,
+      6.0,
+      Paint()..color = primaryGreen.withValues(alpha: 0.18),
+    );
     canvas.drawCircle(g1Pos, 3.6, Paint()..color = primaryGreen);
 
     // Green Node 2 (Inner-mid ring ~48% radius, rotates clockwise)
@@ -485,7 +495,11 @@ class _PremiumRadarPainter extends CustomPainter {
       center.dx + (maxRadius * 0.48) * math.cos(g2Angle),
       center.dy + (maxRadius * 0.48) * math.sin(g2Angle),
     );
-    canvas.drawCircle(g2Pos, 3.0, Paint()..color = primaryGreen.withValues(alpha: 0.7));
+    canvas.drawCircle(
+      g2Pos,
+      3.0,
+      Paint()..color = primaryGreen.withValues(alpha: 0.7),
+    );
 
     // Green Node 3 (Outer ring ~94% radius, subtle satellite)
     final g3Angle = t1 * 0.4 + 2.6;
@@ -493,7 +507,11 @@ class _PremiumRadarPainter extends CustomPainter {
       center.dx + (maxRadius * 0.94) * math.cos(g3Angle),
       center.dy + (maxRadius * 0.94) * math.sin(g3Angle),
     );
-    canvas.drawCircle(g3Pos, 2.5, Paint()..color = primaryGreen.withValues(alpha: 0.5));
+    canvas.drawCircle(
+      g3Pos,
+      2.5,
+      Paint()..color = primaryGreen.withValues(alpha: 0.5),
+    );
   }
 
   @override
