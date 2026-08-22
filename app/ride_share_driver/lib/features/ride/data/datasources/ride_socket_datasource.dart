@@ -46,7 +46,7 @@ class RideSocketDataSource {
     final socket = io.io(
       '${ApiConfig.socketBaseUrl}/driver',
       io.OptionBuilder()
-          .setTransports(['websocket'])
+          .setTransports(['websocket','polling'])
           .disableAutoConnect()
           .setAuth({'token': token})
           .build(),

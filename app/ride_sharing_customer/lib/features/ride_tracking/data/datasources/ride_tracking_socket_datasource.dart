@@ -39,7 +39,7 @@ class RideTrackingSocketDataSource {
     final socket = io.io(
       '${DioClient.baseUrl}/rider',
       io.OptionBuilder()
-          .setTransports(['websocket'])
+          .setTransports(['websocket','polling'])
           .disableAutoConnect()
           .setAuth({'token': token})
           .build(),
