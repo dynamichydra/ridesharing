@@ -33,6 +33,15 @@ export async function walletRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  // POST /api/v1/wallets/me/topup/demo  { amountMinor }
+  // Instant demo/sandbox money topup
+  app.post('/me/topup/demo', { preHandler: [authenticateAny] }, async (request, reply) => {
+    const { amountMinor } = request.body;
+    if (!amountMinor) return sendError(reply, 'amountMinor is required');
+    const data = await walletService.creditDemoTopup(request.user, amountMinor);
+    return sendSuccess(reply, data);
+  });
+
   // POST /api/v1/wallets/me/topup/verify  { orderRef, paymentRef, signature }
   app.post('/me/topup/verify', { preHandler: [authenticateAny] }, async (request, reply) => {
     const { orderRef, paymentRef, signature } = request.body;

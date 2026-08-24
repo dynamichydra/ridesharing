@@ -1,4 +1,4 @@
-import { eq, desc, count, and, or, ilike, ne, sql } from 'drizzle-orm';
+import { eq, desc, count, and, or, ilike, ne, sql, gte } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { drivers, subscriptions, cities, driverPayoutAccounts, vehicleModels, rides } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
@@ -41,7 +41,7 @@ export async function getDashboardSummary(driverId) {
     and(
       eq(rides.driverId, driverId),
       eq(rides.status, 'completed'),
-      sql`${rides.completedAt} >= ${startOfToday}`,
+      gte(rides.completedAt, startOfToday),
     ),
   );
 

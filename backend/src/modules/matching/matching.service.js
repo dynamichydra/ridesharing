@@ -370,6 +370,7 @@ async function _runMatchingRings(ride) {
         currency: ride.currencyCode,
         distanceKm: ride.distanceKm,
         polyline: ride.polyline,
+        paymentMethod: ride.paymentMethod || 'cash',
         expiresAt: Date.now() + ACCEPT_TIMEOUT_MS,
       }, rideId);
       console.log(`[Matching] Ride ${rideId} — RIDE_MATCHED published OK`);

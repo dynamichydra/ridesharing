@@ -61,6 +61,7 @@ export async function requestRide({
   dropLat, dropLng, dropAddress,
   promoCode = null,
   scheduledAt = null,
+  paymentMethod = 'cash',
 }) {
   // Guard: rider cannot have two active rides
   const [active] = await db.select({ id: rides.id }).from(rides).where(and(
@@ -117,6 +118,7 @@ export async function requestRide({
     fareSnapshot: fareData,
     appliedFareRuleIds: fareData.appliedFareRuleIds,
     status: initialStatus,
+    paymentMethod: (paymentMethod || 'cash').toLowerCase(),
     isScheduled,
     scheduledAt: scheduledDate,
   }).returning();
@@ -568,6 +570,17 @@ export async function completeRide(rideId, driverId) {
     .catch((err) => console.error('[Referral] reward error:', err.message));
 
   await expirePendingFareSplits(rideId).catch((err) => console.error('[FareSplit] expire error:', err.message));
+
+  // Auto-debit customer wallet if paymentMethod was set to 'wallet'
+  if (ride.paymentMethod === 'wallet') {
+    try {
+      const { payRideWithWallet } = await import('../ride-payment/ride-payment.service.js');
+      await payRideWithWallet(rideId, ride.riderId, `wallet_auto_pay_${rideId}`);
+    } catch (err) {
+      console.error('[RidePayment] auto wallet payment error:', err.message);
+    }
+  }
+
   return updated;
 }
 

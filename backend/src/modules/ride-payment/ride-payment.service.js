@@ -520,6 +520,10 @@ export async function payFareSplitWithWallet(rideId, riderId, idempotencyKey) {
   });
 }
 
+export async function payRideWithWallet(rideId, riderId, idempotencyKey) {
+  return payFareSplitWithWallet(rideId, riderId, idempotencyKey);
+}
+
 export async function expirePendingFareSplits(rideId, isCancelled = false) {
   const newStatus = isCancelled ? 'cancelled' : 'expired';
   const targetStatuses = isCancelled ? ['pending', 'accepted'] : ['pending'];
@@ -596,17 +600,10 @@ async function _resolveRideCommission(ride) {
   return breakdown;
 }
 
-// Online fares: Dr the gateway's processor-clearing account, Cr the driver's wallet for their
-// post-commission earnings, Cr platform_commission_revenue for the booking fee + rate cut —
-// this is what actually makes an online fare payable to the driver (previously nothing did,
-// and nothing deducted a platform cut either).
+// Online/Wallet fares: Dr the gateway's processor-clearing account, Cr the driver's wallet for their
+// post-commission earnings, Cr platform_commission_revenue for the booking fee + rate cut.
 // Cash fares: the existing net-zero memo (driver already holds the cash, wallet untouched)
-// still records that revenue was recognized without the platform custodying funds — plus a
-// real debit against the driver's wallet for the commission they owe on cash already in hand,
-// which can legitimately run the wallet negative (allowNegative) for a mostly-cash driver, the
-// same way a refund clawback already can elsewhere in this codebase.
-// `idempotencyKey` is per-ride so a duplicate call (e.g. verify + webhook both landing) posts
-// once, not twice.
+// plus a debit against the driver's wallet for commission.
 async function _postRideFareLedger(ride, paymentInfo) {
   const currencyCode = ride.currencyCode;
   const commission = await _resolveRideCommission(ride);
@@ -630,7 +627,7 @@ async function _postRideFareLedger(ride, paymentInfo) {
     }
   }
 
-  if (paymentInfo.method === 'online') {
+  if (paymentInfo.method === 'online' || paymentInfo.method === 'wallet') {
     if (!ride.driverId) return;
     const driverWallet = await getOrCreateWallet('driver', ride.driverId);
     const [driverWalletAccount, commissionAccount] = await Promise.all([

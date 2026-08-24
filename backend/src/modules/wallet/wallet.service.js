@@ -67,6 +67,21 @@ export async function getMyWallet(user) {
   return getOrCreateWallet(ownerType, user.id);
 }
 
+export async function creditDemoTopup(user, amountMinor) {
+  const ownerType = resolveOwnerTypeFromRole(user.role);
+  if (!Number.isInteger(amountMinor) || amountMinor <= 0) {
+    throw { statusCode: 400, message: 'amountMinor must be a positive integer' };
+  }
+  const wallet = await getOrCreateWallet(ownerType, user.id);
+  const country = await resolveOwnerCountry(ownerType, user.id);
+  return _creditWalletTopup(wallet, country.id, {
+    gateway: 'demo_wallet',
+    gatewayPaymentId: 'demo_topup_' + Date.now(),
+    gatewayOrderId: null,
+    amountMinor,
+  });
+}
+
 // idempotencyKey comes from the client's Idempotency-Key header (required — see
 // wallet.routes.js) so a retried/double-submitted initiate request returns the original
 // gateway order instead of creating a second one. Mirrors ride-payment.service.js

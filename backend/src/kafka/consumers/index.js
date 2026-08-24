@@ -198,6 +198,7 @@ async function startRideConsumer() {
             dropLat: payload.dropLat,
             dropLng: payload.dropLng,
             myDistanceKm: c.distanceKm,
+            paymentMethod: payload.paymentMethod || 'cash',
             expiresAt: payload.expiresAt,
           });
 
@@ -216,7 +217,14 @@ async function startRideConsumer() {
           driver: payload.driver,
           startOtp: payload.startOtp,
         });
-        // Bug 4 fix: notify OTHER candidates the ride is taken
+        // Remove accepting driver socket(s) from candidates room so they don't receive ride:taken
+        if (payload.driverId) {
+          const driverSockets = await _io.of('/driver').in(`driver:${payload.driverId}`).fetchSockets();
+          for (const s of driverSockets) {
+            s.leave(`ride:candidates:${payload.rideId}`);
+          }
+        }
+        // Notify OTHER candidates the ride is taken
         _io.of('/driver').to(`ride:candidates:${payload.rideId}`).emit('ride:taken', {
           rideId: payload.rideId,
         });
