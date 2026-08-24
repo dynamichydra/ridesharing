@@ -24,6 +24,14 @@ class AddWalletFunds extends WalletEvent {
   List<Object?> get props => [amount, paymentMethodId];
 }
 
+class PayRideWithWallet extends WalletEvent {
+  final String rideId;
+  const PayRideWithWallet(this.rideId);
+
+  @override
+  List<Object?> get props => [rideId];
+}
+
 // ==========================================
 // Wallet States
 // ==========================================
@@ -50,6 +58,14 @@ class WalletLoaded extends WalletState {
 
 class AddFundsSuccess extends WalletState {}
 
+class RidePaymentSuccess extends WalletState {
+  final String rideId;
+  const RidePaymentSuccess(this.rideId);
+
+  @override
+  List<Object?> get props => [rideId];
+}
+
 class WalletError extends WalletState {
   final String message;
 
@@ -68,6 +84,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   WalletBloc(this._walletRepository) : super(WalletInitial()) {
     on<LoadWalletDetails>(_onLoadWalletDetails);
     on<AddWalletFunds>(_onAddWalletFunds);
+    on<PayRideWithWallet>(_onPayRideWithWallet);
   }
 
   Future<void> _onLoadWalletDetails(LoadWalletDetails event, Emitter<WalletState> emit) async {
@@ -88,6 +105,17 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     try {
       await _walletRepository.addFunds(event.amount, event.paymentMethodId);
       emit(AddFundsSuccess());
+      add(LoadWalletDetails());
+    } catch (e) {
+      emit(WalletError(e.toString()));
+    }
+  }
+
+  Future<void> _onPayRideWithWallet(PayRideWithWallet event, Emitter<WalletState> emit) async {
+    emit(WalletLoading());
+    try {
+      await _walletRepository.payRideWithWallet(event.rideId);
+      emit(RidePaymentSuccess(event.rideId));
       add(LoadWalletDetails());
     } catch (e) {
       emit(WalletError(e.toString()));

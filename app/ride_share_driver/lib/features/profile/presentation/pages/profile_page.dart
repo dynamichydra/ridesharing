@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../injection_container.dart' as di;
 import '../bloc/profile_bloc.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../../presentation/screens/dashboard/driver_main_layout.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -89,11 +90,9 @@ class _ProfilePageState extends State<ProfilePage> {
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
-          leading: Builder(
-            builder: (context) => IconButton(
-              icon: const Icon(Icons.menu_rounded, color: Color(0xFF021B47), size: 26),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
+          leading: IconButton(
+            icon: const Icon(Icons.menu_rounded, color: Color(0xFF021B47), size: 26),
+            onPressed: () => DriverMainLayout.openDrawer(),
           ),
           title: const Text(
             'Profile',

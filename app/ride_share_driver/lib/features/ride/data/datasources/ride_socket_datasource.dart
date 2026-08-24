@@ -52,6 +52,11 @@ class RideSocketDataSource {
           .build(),
     );
 
+    print("event-eent");
+    print(socket);
+    print(ApiConfig.socketBaseUrl);
+    print("event-eent");
+
     socket.onConnect((_) => AppLogger.i('[RideSocket] connected'));
     socket.onConnectError((data) => _socketErrorController.add('Connection failed: $data'));
     socket.onDisconnect((reason) => AppLogger.i('[RideSocket] disconnected: $reason'));

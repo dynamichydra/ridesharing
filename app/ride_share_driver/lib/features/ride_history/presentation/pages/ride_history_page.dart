@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../injection_container.dart' as di;
 import '../bloc/ride_history_bloc.dart';
+import '../../../../presentation/screens/dashboard/driver_main_layout.dart';
 
 class RideHistoryPage extends StatefulWidget {
   const RideHistoryPage({super.key});
@@ -283,11 +283,9 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu_rounded, color: Color(0xFF021B47), size: 26),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
+        leading: IconButton(
+          icon: const Icon(Icons.menu_rounded, color: Color(0xFF021B47), size: 26),
+          onPressed: () => DriverMainLayout.openDrawer(),
         ),
         title: const Text(
           'Rides History',

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../../core/constants/constants.dart';
 import '../../../../core/services/storage_service.dart';
+import '../../../../core/widgets/custom_toast.dart';
 import '../../../../injection_container.dart';
 import '../bloc/auth_bloc.dart';
 
@@ -278,12 +279,7 @@ class _LoginPageState extends State<LoginPage> {
           } else if (state is AuthAuthenticated) {
             context.go('/home');
           } else if (state is AuthError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: AppColors.errorRed,
-              ),
-            );
+            CustomToast.show(context, state.message);
           }
         },
         builder: (context, state) {

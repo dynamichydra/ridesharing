@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
+import '../../../../core/widgets/custom_toast.dart';
 import '../bloc/auth_bloc.dart';
 
 class SignupPage extends StatefulWidget {
@@ -111,12 +112,7 @@ class _SignupPageState extends State<SignupPage> {
           if (state is AuthAuthenticated) {
             context.go('/home');
           } else if (state is AuthError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: AppColors.errorRed,
-              ),
-            );
+            CustomToast.show(context, state.message);
           }
         },
         builder: (context, state) {

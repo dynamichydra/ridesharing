@@ -12,7 +12,7 @@ class ApiConfig {
 
   static String get baseUrl {
     if (_overrideBaseUrl.isNotEmpty) return _overrideBaseUrl;
-    // return Platform.isAndroid ? 'https://rideshareapi.dokume.in/api/v1' : 'https://rideshareapi.dokume.in/api/v1';
+    // return Platform.isAndroid ? 'https://ryva.duckdns.org/api/v1' : 'https://ryva.duckdns.org/api/v1';
     return Platform.isAndroid ? 'http://10.0.2.2:3000/api/v1' : 'http://localhost:3000/api/v1';
   }
 
@@ -20,6 +20,10 @@ class ApiConfig {
   /// `backend/src/sockets/index.js`), NOT under the `/api/v1` REST prefix —
   /// this strips that prefix off of [baseUrl] rather than duplicating the
   /// host/port logic.
+  // static String get socketBaseUrl {
+  //   final uri = Uri.parse("https://ryva.duckdns.org");
+  //   return uri.origin;
+  // }
   static String get socketBaseUrl {
     final uri = Uri.parse(baseUrl);
     return uri.origin;

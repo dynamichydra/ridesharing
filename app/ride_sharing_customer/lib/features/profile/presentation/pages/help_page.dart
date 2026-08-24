@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/constants/constants.dart';
+import '../../../../core/widgets/custom_toast.dart';
 
 class HelpPage extends StatelessWidget {
   const HelpPage({super.key});
@@ -84,9 +84,7 @@ class HelpPage extends StatelessWidget {
               height: 52,
               child: OutlinedButton.icon(
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Chat with Support session opened.')),
-                  );
+                  CustomToast.show(context, 'Chat with Support session opened.');
                 },
                 icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF01A34D)),
                 label: const Text(

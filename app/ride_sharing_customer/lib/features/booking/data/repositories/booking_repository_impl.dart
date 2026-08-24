@@ -73,6 +73,7 @@ class BookingRepositoryImpl implements BookingRepository {
     required double dropLat,
     required double dropLng,
     required String dropAddress,
+    String paymentMethod = 'cash',
   }) async {
     return await _dataSource.requestRide(
       vehicleTypeId: vehicleTypeId,
@@ -82,6 +83,7 @@ class BookingRepositoryImpl implements BookingRepository {
       dropLat: dropLat,
       dropLng: dropLng,
       dropAddress: dropAddress,
+      paymentMethod: paymentMethod,
     );
   }
 }

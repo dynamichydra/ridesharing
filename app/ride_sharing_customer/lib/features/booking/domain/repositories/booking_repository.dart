@@ -11,7 +11,6 @@ abstract class BookingRepository {
     required double dropLng,
   });
   Future<Map<String, dynamic>> requestRide({
-
     required String vehicleTypeId,
     required double pickupLat,
     required double pickupLng,
@@ -19,6 +18,7 @@ abstract class BookingRepository {
     required double dropLat,
     required double dropLng,
     required String dropAddress,
+    String paymentMethod = 'cash',
   });
 }
 

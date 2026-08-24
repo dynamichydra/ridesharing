@@ -52,7 +52,13 @@ class SelectVehicle extends BookingEvent {
   List<Object?> get props => [vehicle];
 }
 
-class ConfirmRideBooking extends BookingEvent {}
+class ConfirmRideBooking extends BookingEvent {
+  final String paymentMethod;
+  const ConfirmRideBooking({this.paymentMethod = 'cash'});
+
+  @override
+  List<Object?> get props => [paymentMethod];
+}
 
 class ClearBooking extends BookingEvent {}
 
@@ -135,6 +141,7 @@ class BookingConfirmed extends BookingState {
   final String destinationName;
   final Vehicle selectedVehicle;
   final double fare;
+  final String paymentMethod;
 
   const BookingConfirmed({
     required this.rideId,
@@ -144,10 +151,11 @@ class BookingConfirmed extends BookingState {
     required this.destinationName,
     required this.selectedVehicle,
     required this.fare,
+    this.paymentMethod = 'cash',
   });
 
   @override
-  List<Object?> get props => [rideId, pickup, pickupName, destination, destinationName, selectedVehicle, fare];
+  List<Object?> get props => [rideId, pickup, pickupName, destination, destinationName, selectedVehicle, fare, paymentMethod];
 }
 
 
@@ -269,6 +277,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
           dropLat: currentState.destination.latitude,
           dropLng: currentState.destination.longitude,
           dropAddress: currentState.destinationAddress,
+          paymentMethod: event.paymentMethod,
         );
         print('[BookingBloc] requestRide successful: $result');
         
@@ -282,6 +291,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
           destinationName: currentState.destinationName,
           selectedVehicle: currentState.selectedVehicle,
           fare: selectedFare,
+          paymentMethod: event.paymentMethod,
         ));
 
       } catch (e) {

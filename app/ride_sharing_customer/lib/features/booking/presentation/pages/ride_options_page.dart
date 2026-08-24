@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../../../../core/widgets/error_view.dart';
+import '../../../../core/widgets/custom_toast.dart';
 import '../bloc/booking_bloc.dart';
 import '../../../ride_tracking/presentation/bloc/ride_tracking_bloc.dart';
 import '../../../wallet/presentation/bloc/wallet_bloc.dart';
@@ -38,6 +39,10 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
     } else {
       return 'assets/icons/car.png';
     }
+  }
+
+  void _showInsufficientWalletSnackbar(BuildContext context, double walletBalance, double requiredAmount) {
+    CustomToast.show(context, 'Not enough balance in your wallet');
   }
 
   @override
@@ -92,6 +97,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                     destinationName: state.destinationName,
                     vehicleName: state.selectedVehicle.name,
                     fare: state.fare,
+                    paymentMethod: state.paymentMethod,
                   ),
                 );
             context.go('/ride-tracking');
@@ -99,12 +105,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
             setState(() {
               _isBooking = false;
             });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: theme.colorScheme.error,
-              ),
-            );
+            CustomToast.show(context, state.message);
           }
         },
         builder: (context, state) {
@@ -318,6 +319,10 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                     Expanded(
                       child: InkWell(
                         onTap: () {
+                          if (walletBalance < selectedPrice) {
+                            _showInsufficientWalletSnackbar(context, walletBalance, selectedPrice);
+                            return;
+                          }
                           setState(() {
                             _paymentMethod = 'Wallet';
                           });
@@ -387,6 +392,10 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                   height: 52,
                   child: ElevatedButton(
                     onPressed: () {
+                      if (_paymentMethod == 'Wallet' && walletBalance < selectedPrice) {
+                        _showInsufficientWalletSnackbar(context, walletBalance, selectedPrice);
+                        return;
+                      }
                       setState(() {
                         _isConfirmStep = true;
                       });
@@ -659,8 +668,13 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                 ),
                 TextButton(
                   onPressed: () {
+                    final targetMethod = _paymentMethod == 'Cash' ? 'Wallet' : 'Cash';
+                    if (targetMethod == 'Wallet' && walletBalance < price) {
+                      _showInsufficientWalletSnackbar(context, walletBalance, price);
+                      return;
+                    }
                     setState(() {
-                      _paymentMethod = _paymentMethod == 'Cash' ? 'Wallet' : 'Cash';
+                      _paymentMethod = targetMethod;
                     });
                   },
                   child: const Text('Change', style: TextStyle(color: Color(0xFF0065B3), fontWeight: FontWeight.bold, fontSize: 13)),
@@ -678,10 +692,16 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
               onPressed: _isBooking
                   ? null
                   : () {
+                      final chosenMethod = _paymentMethod.toLowerCase();
+                      if (chosenMethod == 'wallet' && walletBalance < price) {
+                        _showInsufficientWalletSnackbar(context, walletBalance, price);
+                        return;
+                      }
+
                       setState(() {
                         _isBooking = true;
                       });
-                      context.read<BookingBloc>().add(ConfirmRideBooking());
+                      context.read<BookingBloc>().add(ConfirmRideBooking(paymentMethod: chosenMethod));
                     },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF009048),

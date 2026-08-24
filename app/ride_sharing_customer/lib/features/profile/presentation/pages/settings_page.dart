@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
 import '../../../../core/theme/theme_bloc.dart';
 import '../../../../core/services/storage_service.dart';
+import '../../../../core/widgets/custom_toast.dart';
 import '../../../../injection_container.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../wallet/presentation/bloc/wallet_bloc.dart';
@@ -184,9 +185,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 context.read<ProfileBloc>().add(LoadProfile());
                 context.read<WalletBloc>().add(LoadWalletDetails());
                 context.go('/login');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('App cache cleared. Mock data re-initialized.')),
-                );
+                CustomToast.show(context, 'App cache cleared. Mock data re-initialized.');
               }
             },
             child: const Text('Clear', style: TextStyle(color: AppColors.errorRed)),
@@ -216,9 +215,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 context.read<ProfileBloc>().add(LoadProfile());
                 context.read<WalletBloc>().add(LoadWalletDetails());
                 context.go('/login');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Account deleted successfully.')),
-                );
+                CustomToast.show(context, 'Account deleted successfully.');
               }
             },
             child: const Text('Delete', style: TextStyle(color: AppColors.errorRed)),

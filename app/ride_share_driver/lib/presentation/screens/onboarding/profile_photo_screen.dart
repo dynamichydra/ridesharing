@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../common/widgets/custom_toast.dart';
 import '../../../style/appcolors.dart';
 
 class ProfilePhotoScreen extends StatefulWidget {
@@ -56,9 +57,7 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
     } catch (e) {
       debugPrint('[ProfilePhotoScreen] Error picking image: $e');
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to select photo: $e')));
+        CustomToast.show(context, 'Failed to select photo: $e');
       }
     }
   }
@@ -84,9 +83,7 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
     } catch (e) {
       debugPrint('[ProfilePhotoScreen] Upload failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to upload photo: $e')));
+        CustomToast.show(context, 'Failed to upload photo: $e');
       }
     } finally {
       if (mounted) {

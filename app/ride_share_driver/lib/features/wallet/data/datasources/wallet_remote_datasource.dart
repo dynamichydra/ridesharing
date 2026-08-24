@@ -63,4 +63,71 @@ class WalletRemoteDataSource {
       throw mapDioException(e);
     }
   }
+
+  /// GET /api/v1/wallets/me/transactions
+  Future<List<Map<String, dynamic>>> getTransactions({int page = 1, int limit = 50}) async {
+    try {
+      final response = await apiClient.dio.get(
+        '/wallets/me/transactions',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        final rows = data['MESSAGE'] ?? data['data'] ?? data['rows'] ?? [];
+        if (rows is List) {
+          return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        }
+      } else if (data is List) {
+        return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+      return [];
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  /// POST /api/v1/wallets/me/topup/demo or /initiate
+  Future<Map<String, dynamic>> topup(int amountMinor, {bool isDemo = true}) async {
+    try {
+      if (isDemo) {
+        final response = await apiClient.dio.post(
+          '/wallets/me/topup/demo',
+          data: {'amountMinor': amountMinor},
+        );
+        final data = response.data as Map<String, dynamic>;
+        if (data['SUCCESS'] != true) {
+          throw ServerException(data['MESSAGE']?.toString() ?? 'Top-up failed');
+        }
+        return (data['MESSAGE'] is Map<String, dynamic>) ? data['MESSAGE'] as Map<String, dynamic> : data;
+      } else {
+        final idempotencyKey = 'drv_topup_${DateTime.now().millisecondsSinceEpoch}';
+        final response = await apiClient.dio.post(
+          '/wallets/me/topup/initiate',
+          data: {'amountMinor': amountMinor},
+          options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+        );
+        final data = response.data as Map<String, dynamic>;
+        if (data['SUCCESS'] != true) {
+          throw ServerException(data['MESSAGE']?.toString() ?? 'Top-up failed');
+        }
+        return (data['MESSAGE'] is Map<String, dynamic>) ? data['MESSAGE'] as Map<String, dynamic> : data;
+      }
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  /// POST /api/v1/payouts/me/instant
+  Future<Map<String, dynamic>> requestInstantPayout() async {
+    try {
+      final response = await apiClient.dio.post('/payouts/me/instant');
+      final data = response.data as Map<String, dynamic>;
+      if (data['SUCCESS'] != true) {
+        throw ServerException(data['MESSAGE']?.toString() ?? 'Payout failed');
+      }
+      return (data['MESSAGE'] is Map<String, dynamic>) ? data['MESSAGE'] as Map<String, dynamic> : data;
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
 }

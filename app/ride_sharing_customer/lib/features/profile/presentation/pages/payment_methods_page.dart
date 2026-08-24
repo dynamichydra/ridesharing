@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/widgets/custom_toast.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../bloc/profile_bloc.dart';
 
@@ -84,9 +85,7 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
                   height: 52,
                   child: OutlinedButton.icon(
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Add payment method flow triggered')),
-                      );
+                      CustomToast.show(context, 'Add payment method flow triggered');
                     },
                     icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF009048)),
                     label: const Text(

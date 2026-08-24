@@ -13,6 +13,7 @@ import '../../features/wallet/presentation/pages/wallet_page.dart';
 import '../../features/wallet/presentation/pages/transactions_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
 import '../../features/profile/presentation/pages/vehicle_info_page.dart';
+import '../../features/ride/presentation/screens/active_ride_screen.dart';
 
 class AppRouter {
   final AuthBloc authBloc;
@@ -121,6 +122,11 @@ class AppRouter {
       ),
 
       // Full-screen pages
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/active-ride',
+        builder: (context, state) => const ActiveRidePage(),
+      ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/ride-details',

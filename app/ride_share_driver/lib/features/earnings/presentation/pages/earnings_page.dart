@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import '../../../../presentation/screens/dashboard/driver_main_layout.dart';
 
 class EarningsPage extends StatefulWidget {
   const EarningsPage({super.key});
@@ -214,11 +214,9 @@ class _EarningsPageState extends State<EarningsPage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu_rounded, color: Color(0xFF021B47), size: 26),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
+        leading: IconButton(
+          icon: const Icon(Icons.menu_rounded, color: Color(0xFF021B47), size: 26),
+          onPressed: () => DriverMainLayout.openDrawer(),
         ),
         title: const Text(
           'Earnings',

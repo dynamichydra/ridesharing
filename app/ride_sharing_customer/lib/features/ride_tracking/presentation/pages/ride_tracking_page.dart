@@ -1098,15 +1098,22 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                     const Divider(),
                     const SizedBox(height: 10),
 
-                    const Row(
+                    Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Paid via', style: TextStyle(fontSize: 14, color: Color(0xFF8A94A6))),
+                        const Text('Paid via', style: TextStyle(fontSize: 14, color: Color(0xFF8A94A6))),
                         Row(
                           children: [
-                            Icon(Icons.payments_rounded, color: Color(0xFF009048), size: 18),
-                            SizedBox(width: 6),
-                            Text('Cash', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF021B47))),
+                            Icon(
+                              state.paymentMethod == 'wallet' ? Icons.account_balance_wallet_rounded : Icons.payments_rounded,
+                              color: const Color(0xFF009048),
+                              size: 18,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              state.paymentMethod == 'wallet' ? 'Ryva Wallet (Debited)' : 'Cash',
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                            ),
                           ],
                         ),
                       ],
@@ -1395,6 +1402,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                 child: ElevatedButton(
                   onPressed: () {
                     context.read<BookingBloc>().add(ClearBooking());
+                    context.read<WalletBloc>().add(LoadWalletDetails());
                     context.go('/home');
                   },
                   style: ElevatedButton.styleFrom(

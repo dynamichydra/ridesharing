@@ -38,7 +38,7 @@ class _WalletPageState extends State<WalletPage> {
           type.contains('add') ||
           type.contains('bonus') ||
           type.contains('deposit');
-      final desc = t['description']?.toString() ?? (isAdd ? 'Added Money' : 'Ride Payment');
+      final desc = isAdd ? 'Top Up' : 'Ride Payment';
       final dateStr = t['date']?.toString() ?? '';
       DateTime? dt = DateTime.tryParse(dateStr);
       final formattedDate = dt != null

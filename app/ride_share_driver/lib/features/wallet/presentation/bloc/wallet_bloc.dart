@@ -66,12 +66,98 @@ class WalletInfo {
       );
 
   double get balanceAmount => balanceMinor / 100.0;
+  bool get isNegative => balanceMinor < 0;
+}
+
+class WalletTransactionItem {
+  final String id;
+  final String type; // credit | debit
+  final double amount;
+  final int balanceAfterMinor;
+  final String reason;
+  final String description;
+  final DateTime createdAt;
+
+  const WalletTransactionItem({
+    required this.id,
+    required this.type,
+    required this.amount,
+    required this.balanceAfterMinor,
+    required this.reason,
+    required this.description,
+    required this.createdAt,
+  });
+
+  bool get isCredit => type == 'credit';
+
+  factory WalletTransactionItem.fromJson(Map<String, dynamic> json) {
+    final amtMinor = (json['amountMinor'] as num?)?.toInt() ?? 0;
+    final type = (json['type'] as String?)?.toLowerCase() ?? 'credit';
+    final reason = json['reason'] as String? ?? '';
+    final rawDesc = json['description'] as String?;
+
+    String displayDesc = rawDesc ?? '';
+    final lowerReason = reason.toLowerCase();
+    final lowerDesc = (rawDesc ?? '').toLowerCase();
+
+    if (lowerReason.contains('payout') ||
+        lowerReason.contains('withdrawal') ||
+        lowerDesc.contains('payout') ||
+        lowerDesc.contains('withdrawal') ||
+        lowerDesc.contains('cash out') ||
+        lowerDesc.contains('cashout')) {
+      displayDesc = 'Cash Out';
+    } else if (lowerReason.contains('fare') ||
+        lowerReason.contains('earnings') ||
+        lowerReason.contains('ride_fare') ||
+        lowerReason.contains('ride') ||
+        lowerDesc.contains('fare') ||
+        lowerDesc.contains('earnings') ||
+        lowerDesc.contains('ride')) {
+      displayDesc = 'Ride Fare Received';
+    } else if (lowerReason.contains('commission') || lowerDesc.contains('commission')) {
+      displayDesc = 'Cash Commission Fee';
+    } else if (lowerReason.contains('incentive') ||
+        lowerReason.contains('bonus') ||
+        lowerDesc.contains('incentive') ||
+        lowerDesc.contains('bonus')) {
+      displayDesc = 'Bonus Incentive';
+    } else if (lowerReason.contains('refund') || lowerDesc.contains('refund')) {
+      displayDesc = 'Ride Refund Deduction';
+    } else if (displayDesc.isEmpty) {
+      displayDesc = type == 'credit' ? 'Ride Fare Received' : 'Cash Out';
+    }
+
+    final dateStr = json['createdAt'] as String?;
+    DateTime dt = DateTime.now();
+    if (dateStr != null) {
+      dt = DateTime.tryParse(dateStr) ?? DateTime.now();
+    }
+
+    return WalletTransactionItem(
+      id: json['id']?.toString() ?? '',
+      type: type,
+      amount: amtMinor / 100.0,
+      balanceAfterMinor: (json['balanceAfterMinor'] as num?)?.toInt() ?? 0,
+      reason: reason,
+      description: displayDesc,
+      createdAt: dt,
+    );
+  }
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
 abstract class WalletEvent {}
 
 class LoadWalletData extends WalletEvent {}
+
+class TopUpWallet extends WalletEvent {
+  final double amount;
+  final bool isDemo;
+  TopUpWallet({required this.amount, this.isDemo = true});
+}
+
+class RequestInstantPayout extends WalletEvent {}
 
 class SubmitBankDetails extends WalletEvent {
   final String? upiId;
@@ -92,18 +178,31 @@ class WalletLoaded extends WalletState {
   final BankDetails? bankDetails;
   final PayoutAccount? payoutAccount;
   final WalletInfo? walletInfo;
-  WalletLoaded({this.bankDetails, this.payoutAccount, this.walletInfo});
+  final List<WalletTransactionItem> transactions;
+
+  WalletLoaded({
+    this.bankDetails,
+    this.payoutAccount,
+    this.walletInfo,
+    this.transactions = const [],
+  });
 }
 
 class WalletSubmitting extends WalletState {
   final BankDetails? bankDetails;
   final PayoutAccount? payoutAccount;
-  WalletSubmitting({this.bankDetails, this.payoutAccount});
+  final WalletInfo? walletInfo;
+  WalletSubmitting({this.bankDetails, this.payoutAccount, this.walletInfo});
 }
 
 class WalletSubmitSuccess extends WalletState {
   final BankDetails bankDetails;
   WalletSubmitSuccess(this.bankDetails);
+}
+
+class WalletActionSuccess extends WalletState {
+  final String message;
+  WalletActionSuccess(this.message);
 }
 
 class WalletError extends WalletState {
@@ -117,6 +216,8 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
 
   WalletBloc({required this.dataSource}) : super(WalletInitial()) {
     on<LoadWalletData>(_onLoad);
+    on<TopUpWallet>(_onTopUp);
+    on<RequestInstantPayout>(_onRequestPayout);
     on<SubmitBankDetails>(_onSubmit);
   }
 
@@ -127,17 +228,65 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
         dataSource.getBankDetails(),
         dataSource.getPayoutAccount(),
         dataSource.getWallet(),
+        dataSource.getTransactions(),
       ]);
 
-      final bankJson = results[0];
-      final payoutJson = results[1];
-      final walletJson = results[2];
+      final bankJson = results[0] as Map<String, dynamic>?;
+      final payoutJson = results[1] as Map<String, dynamic>?;
+      final walletJson = results[2] as Map<String, dynamic>?;
+      final txListJson = results[3] as List<Map<String, dynamic>>? ?? [];
+
+      final txItems = txListJson.map((e) => WalletTransactionItem.fromJson(e)).toList();
 
       emit(WalletLoaded(
         bankDetails: bankJson != null ? BankDetails.fromJson(bankJson) : null,
         payoutAccount: payoutJson != null ? PayoutAccount.fromJson(payoutJson) : null,
         walletInfo: walletJson != null ? WalletInfo.fromJson(walletJson) : null,
+        transactions: txItems,
       ));
+    } catch (e) {
+      emit(WalletError(e.toString()));
+    }
+  }
+
+  Future<void> _onTopUp(TopUpWallet event, Emitter<WalletState> emit) async {
+    final current = state;
+    BankDetails? currentBank;
+    PayoutAccount? currentPayout;
+    WalletInfo? currentWallet;
+    if (current is WalletLoaded) {
+      currentBank = current.bankDetails;
+      currentPayout = current.payoutAccount;
+      currentWallet = current.walletInfo;
+    }
+
+    emit(WalletSubmitting(bankDetails: currentBank, payoutAccount: currentPayout, walletInfo: currentWallet));
+    try {
+      final amountMinor = (event.amount * 100).round();
+      await dataSource.topup(amountMinor, isDemo: event.isDemo);
+      emit(WalletActionSuccess('₹${event.amount.toStringAsFixed(0)} added to wallet!'));
+      add(LoadWalletData());
+    } catch (e) {
+      emit(WalletError(e.toString()));
+    }
+  }
+
+  Future<void> _onRequestPayout(RequestInstantPayout event, Emitter<WalletState> emit) async {
+    final current = state;
+    BankDetails? currentBank;
+    PayoutAccount? currentPayout;
+    WalletInfo? currentWallet;
+    if (current is WalletLoaded) {
+      currentBank = current.bankDetails;
+      currentPayout = current.payoutAccount;
+      currentWallet = current.walletInfo;
+    }
+
+    emit(WalletSubmitting(bankDetails: currentBank, payoutAccount: currentPayout, walletInfo: currentWallet));
+    try {
+      await dataSource.requestInstantPayout();
+      emit(WalletActionSuccess('Instant payout processed successfully!'));
+      add(LoadWalletData());
     } catch (e) {
       emit(WalletError(e.toString()));
     }
@@ -147,12 +296,14 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     final current = state;
     BankDetails? currentBank;
     PayoutAccount? currentPayout;
+    WalletInfo? currentWallet;
     if (current is WalletLoaded) {
       currentBank = current.bankDetails;
       currentPayout = current.payoutAccount;
+      currentWallet = current.walletInfo;
     }
 
-    emit(WalletSubmitting(bankDetails: currentBank, payoutAccount: currentPayout));
+    emit(WalletSubmitting(bankDetails: currentBank, payoutAccount: currentPayout, walletInfo: currentWallet));
     try {
       final payload = <String, dynamic>{
         if (event.upiId != null && event.upiId!.isNotEmpty) 'upiId': event.upiId,
@@ -164,6 +315,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
       };
       final json = await dataSource.submitBankDetails(payload);
       emit(WalletSubmitSuccess(BankDetails.fromJson(json)));
+      add(LoadWalletData());
     } catch (e) {
       emit(WalletError(e.toString()));
     }

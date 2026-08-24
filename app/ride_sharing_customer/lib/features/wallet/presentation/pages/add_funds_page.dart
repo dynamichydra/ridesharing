@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
 import '../bloc/wallet_bloc.dart';
+import '../../../../core/widgets/custom_toast.dart';
 
 class AddFundsPage extends StatefulWidget {
   const AddFundsPage({super.key});
@@ -13,36 +14,47 @@ class AddFundsPage extends StatefulWidget {
 }
 
 class _AddFundsPageState extends State<AddFundsPage> {
-  final _amountController = TextEditingController(text: '500');
-  double _selectedAmount = 500.0;
-  String _selectedMethodType = 'upi';
+  final TextEditingController _amountController = TextEditingController(text: '200');
+  double _selectedAmount = 200.0;
+  String _selectedMethodType = 'demo';
 
-  final List<double> _presets = [100.0, 200.0, 500.0, 1000.0];
+  final List<double> _presets = [100.0, 200.0, 500.0, 1000.0, 2000.0];
 
   final List<Map<String, dynamic>> _paymentMethods = [
     {
+      'id': 'demo',
+      'title': '⚡ Demo Money (Sandbox)',
+      'subtitle': 'Add simulated money instantly for testing',
+      'asset': 'assets/icons/money-in.png',
+      'isFeatured': true,
+    },
+    {
       'id': 'upi',
-      'title': 'UPI',
-      'subtitle': 'Pay using any UPI app',
-      'iconText': 'UPI',
+      'title': 'Instant UPI (GPay / PhonePe / Paytm)',
+      'subtitle': 'Pay using any UPI app (GPay, PhonePe, Paytm)',
+      'asset': 'assets/icons/money-in.png',
+      'isFeatured': false,
     },
     {
       'id': 'card',
-      'title': 'Debit/Credit Card',
+      'title': 'Credit / Debit Card',
       'subtitle': 'Visa, Mastercard, Rupay',
-      'iconData': Icons.credit_card_rounded,
+      'asset': 'assets/icons/cab-payment.png',
+      'isFeatured': false,
     },
     {
       'id': 'netbanking',
       'title': 'Net Banking',
-      'subtitle': 'All major banks',
-      'iconData': Icons.account_balance_rounded,
+      'subtitle': 'All major Indian banks supported',
+      'asset': 'assets/icons/money-in.png',
+      'isFeatured': false,
     },
     {
-      'id': 'wallets',
-      'title': 'Wallets',
+      'id': 'wallet',
+      'title': 'Other Wallets',
       'subtitle': 'Paytm, PhonePe, Amazon Pay',
-      'iconData': Icons.account_balance_wallet_outlined,
+      'asset': 'assets/icons/money-in.png',
+      'isFeatured': false,
     },
   ];
 
@@ -57,17 +69,13 @@ class _AddFundsPageState extends State<AddFundsPage> {
     final RegExp amountRegex = RegExp(r'^\d+$');
 
     if (text.isEmpty || !amountRegex.hasMatch(text)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid whole number amount')),
-      );
+      CustomToast.show(context, 'Please enter a valid whole number amount');
       return;
     }
 
     final double? amount = double.tryParse(text);
-    if (amount == null || amount < 100) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Minimum amount to add is ₹100')),
-      );
+    if (amount == null || amount < 10) {
+      CustomToast.show(context, 'Minimum amount to add is ₹10');
       return;
     }
 
@@ -103,20 +111,10 @@ class _AddFundsPageState extends State<AddFundsPage> {
       body: BlocConsumer<WalletBloc, WalletState>(
         listener: (context, state) {
           if (state is AddFundsSuccess) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Funds added successfully!'),
-                backgroundColor: Color(0xFF009048),
-              ),
-            );
+            CustomToast.show(context, 'Funds added successfully!');
             context.pop();
           } else if (state is WalletError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: AppColors.errorRed,
-              ),
-            );
+            CustomToast.show(context, state.message);
           }
         },
         builder: (context, walletState) {
@@ -277,7 +275,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
                                       )
                                     else
                                       Icon(
-                                        pm['iconData'] as IconData,
+                                        (pm['iconData'] as IconData?) ?? Icons.account_balance_wallet_outlined,
                                         color: const Color(0xFF0A2540),
                                         size: 24,
                                       ),

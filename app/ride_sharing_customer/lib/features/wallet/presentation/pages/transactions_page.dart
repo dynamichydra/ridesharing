@@ -53,7 +53,7 @@ class _TransactionsPageState extends State<TransactionsPage>
           type.contains('topup') ||
           type.contains('add') ||
           type.contains('bonus');
-      final desc = t['description']?.toString() ?? (isAdd ? 'Added Money' : 'Ride Payment');
+      final desc = isAdd ? 'Top Up' : 'Ride Payment';
       final dateStr = t['date']?.toString() ?? '';
       DateTime? dt = DateTime.tryParse(dateStr);
       final monthGroup = dt != null

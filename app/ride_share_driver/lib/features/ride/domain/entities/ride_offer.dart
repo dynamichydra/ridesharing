@@ -17,6 +17,7 @@ class RideOffer {
   final double dropLng;
   final double myDistanceKm;
   final DateTime? expiresAt;
+  final String? paymentMethod;
 
   const RideOffer({
     required this.rideId,
@@ -34,6 +35,7 @@ class RideOffer {
     required this.dropLng,
     required this.myDistanceKm,
     this.expiresAt,
+    this.paymentMethod,
   });
 
   factory RideOffer.fromJson(Map<String, dynamic> json) {
@@ -65,6 +67,7 @@ class RideOffer {
       dropLng: parseDouble(json['dropLng']),
       myDistanceKm: parseDouble(json['myDistanceKm']),
       expiresAt: json['expiresAt'] != null ? DateTime.tryParse(json['expiresAt'].toString()) : null,
+      paymentMethod: json['paymentMethod']?.toString() ?? json['payment_method']?.toString(),
     );
   }
 }

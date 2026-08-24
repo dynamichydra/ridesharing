@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../../../../style/appcolors.dart';
 import '../../../../common/widgets/custom_toast.dart';
 import '../../../../injection_container.dart' as di;
 import '../../../../features/dashboard/presentation/bloc/driver_status_bloc.dart';
 import '../../../../features/ride/presentation/bloc/ride_bloc.dart';
 import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
-import '../../../../features/ride/presentation/screens/active_ride_screen.dart';
 import '../../../../features/ride/domain/entities/active_ride.dart';
 import '../../../../features/ride/domain/entities/ride_offer.dart';
 import '../../../../features/profile/presentation/bloc/profile_bloc.dart';
@@ -16,9 +13,11 @@ import '../../../../features/wallet/presentation/bloc/wallet_bloc.dart';
 import '../../../../features/ride_history/presentation/bloc/ride_history_bloc.dart';
 import '../../../../features/ride/presentation/widgets/ride_request_card.dart';
 import '../../../../common/entities/driver_dashboard_summary.dart';
+import '../../../../common/entities/driver_profile.dart';
 import '../../../../core/storage/secure_storage.dart';
 import 'widgets/pulsing_radar_view.dart';
 import 'widgets/offline_mode_view.dart';
+import 'driver_main_layout.dart';
 
 class DriverDashboard extends StatefulWidget {
   final VoidCallback onLogout;
@@ -35,11 +34,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
   late final ProfileBloc _profileBloc = di.sl<ProfileBloc>();
   late final WalletBloc _walletBloc = di.sl<WalletBloc>();
   late final RideHistoryBloc _rideHistoryBloc = di.sl<RideHistoryBloc>();
-
-  // Cached driver state so the map doesn't blank out during RideActionInProgress.
-  LatLng? _lastKnownDriverPos;
-  double _lastKnownBearing = 0.0;
-  List<LatLng> _lastKnownTraveledPath = const [];
 
   @override
   void initState() {
@@ -67,110 +61,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
   @override
   void dispose() {
     _driverStatusBloc.close();
-    _rideBloc.close();
-    _authBloc.close();
     _profileBloc.close();
     _walletBloc.close();
     _rideHistoryBloc.close();
     super.dispose();
-  }
-
-  Future<void> _confirmCancelRide(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Cancel this ride?'),
-        content: const Text(
-          'The ride will be offered to other nearby drivers instead.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('No'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text('Yes, cancel'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      _rideBloc.add(DriverCancelRequested());
-    }
-  }
-
-  Future<void> _promptStartOtpAndDispatch(BuildContext context) async {
-    final otpController = TextEditingController();
-    final otp = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Enter Rider OTP',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Ask the rider for their 4-digit start OTP to begin the trip.',
-              style: TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: otpController,
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              autofocus: true,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 4,
-              ),
-              textAlign: TextAlign.center,
-              decoration: InputDecoration(
-                labelText: '4-Digit OTP',
-                hintText: '1234',
-                counterText: '',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(null),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final val = otpController.text.trim();
-              if (val.length == 4) {
-                Navigator.of(ctx).pop(val);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF009048),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Start Trip'),
-          ),
-        ],
-      ),
-    );
-
-    if (otp != null && otp.length == 4) {
-      _rideBloc.add(StartRideRequested(otp: otp));
-    }
   }
 
   void _toggleOnlineStatus(bool currentIsOnline) {
@@ -217,13 +111,36 @@ class _DriverDashboardState extends State<DriverDashboard> {
         ),
         BlocListener<RideBloc, RideState>(
           bloc: _rideBloc,
+          listenWhen: (previous, current) {
+            // Only trigger auto-navigation on a fresh acceptance transition
+            if (previous is RideAccepting && current is RideActive) {
+              return true;
+            }
+            return current is RideOfferGone ||
+                current is RideOperationFailed ||
+                current is RideCancelledByRider ||
+                current is RideCompleted;
+          },
           listener: (context, state) {
-            if (state is RideOfferGone) {
+            if (state is RideActive) {
+              context.push('/active-ride');
+            } else if (state is RideOfferGone) {
               CustomToast.show(context, state.message);
             } else if (state is RideOperationFailed) {
               CustomToast.show(context, state.message);
             } else if (state is RideCancelledByRider) {
               CustomToast.show(context, state.message);
+            } else if (state is RideCompleted) {
+              _profileBloc.add(LoadProfile());
+              _walletBloc.add(LoadWalletData());
+              final fareMinor = state.ride.finalFareMinor ?? state.ride.estimatedFareMinor ?? 0;
+              final fare = (fareMinor / 100.0).toStringAsFixed(2);
+              final isWallet = state.ride.paymentMethod?.toLowerCase() == 'wallet';
+              if (isWallet) {
+                CustomToast.show(context, 'Ride Completed! ₹$fare credited to your Ryva Wallet');
+              } else {
+                CustomToast.show(context, 'Ride Completed! Collect ₹$fare cash from rider');
+              }
             }
           },
         ),
@@ -256,12 +173,26 @@ class _DriverDashboardState extends State<DriverDashboard> {
           return BlocBuilder<ProfileBloc, ProfileState>(
             bloc: _profileBloc,
             builder: (context, profileState) {
-              final summary = profileState is ProfileLoaded
-                  ? profileState.summary
-                  : null;
-              final profile = profileState is ProfileLoaded
-                  ? profileState.profile
-                  : null;
+              // Extract summary and profile from all states that carry them,
+              // so the dashboard doesn't flash zeros during refresh/update.
+              final DriverDashboardSummary? summary;
+              final DriverProfile? profile;
+              if (profileState is ProfileLoaded) {
+                summary = profileState.summary;
+                profile = profileState.profile;
+              } else if (profileState is ProfileUpdateSuccess) {
+                summary = profileState.summary;
+                profile = profileState.profile;
+              } else if (profileState is ProfileUpdating) {
+                summary = profileState.summary;
+                profile = profileState.profile;
+              } else if (profileState is ProfileLoading) {
+                summary = profileState.previousSummary;
+                profile = profileState.previousProfile;
+              } else {
+                summary = null;
+                profile = null;
+              }
 
               final driverName =
                   summary?.name ??
@@ -288,27 +219,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     bloc: _rideBloc,
                     builder: (context, rideState) {
                       ActiveRide? activeRide;
-                      LatLng? driverPos;
-                      double driverBearing = 0.0;
-                      List<LatLng> traveledPath = const [];
-                      bool isBusy = false;
 
                       if (rideState is RideActive) {
                         activeRide = rideState.ride;
-                        driverPos = rideState.driverPosition;
-                        driverBearing = rideState.driverBearing;
-                        traveledPath = rideState.traveledPath;
-                        // Cache the latest known driver state.
-                        _lastKnownDriverPos = driverPos;
-                        _lastKnownBearing = driverBearing;
-                        _lastKnownTraveledPath = traveledPath;
                       } else if (rideState is RideActionInProgress) {
                         activeRide = rideState.ride;
-                        isBusy = true;
-                        // Keep map showing last known driver position while REST call is in flight.
-                        driverPos = _lastKnownDriverPos;
-                        driverBearing = _lastKnownBearing;
-                        traveledPath = _lastKnownTraveledPath;
                       }
 
                       List<RideOffer> pendingOffers = [];
@@ -318,26 +233,17 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
                       return Scaffold(
                         backgroundColor: Colors.white,
-                        drawer: _buildDrawer(
-                          context,
-                          driverName: driverName,
-                          driverRating: driverRating,
-                          profilePhoto: profilePhoto,
-                        ),
                         appBar: AppBar(
                           backgroundColor: Colors.white,
                           elevation: 0,
                           scrolledUnderElevation: 0,
-                          leading: Builder(
-                            builder: (context) => IconButton(
-                              icon: const Icon(
-                                Icons.menu_rounded,
-                                color: Color(0xFF021B47),
-                                size: 26,
-                              ),
-                              onPressed: () =>
-                                  Scaffold.of(context).openDrawer(),
+                          leading: IconButton(
+                            icon: const Icon(
+                              Icons.menu_rounded,
+                              color: Color(0xFF021B47),
+                              size: 26,
                             ),
+                            onPressed: () => DriverMainLayout.openDrawer(),
                           ),
                           centerTitle: true,
                           title: Image.asset(
@@ -412,6 +318,65 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
                                     const SizedBox(height: 16),
 
+                                    // Active Trip Banner if ongoing trip and driver navigated back to dashboard
+                                    if (activeRide != null)
+                                      GestureDetector(
+                                        onTap: () => context.push('/active-ride'),
+                                        child: Container(
+                                          margin: const EdgeInsets.only(bottom: 16),
+                                          padding: const EdgeInsets.all(16),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF009048),
+                                            borderRadius: BorderRadius.circular(16),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: const Color(0xFF009048).withValues(alpha: 0.3),
+                                                blurRadius: 10,
+                                                offset: const Offset(0, 4),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.all(8),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white.withValues(alpha: 0.2),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(Icons.navigation_rounded, color: Colors.white, size: 22),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      activeRide.status == 'started'
+                                                          ? 'Trip in Progress'
+                                                          : (activeRide.status == 'arriving' ? 'Waiting at Pickup' : 'Heading to Pickup'),
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 15,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      activeRide.dropAddress ?? 'Tap to view live navigation',
+                                                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 16),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+
                                     // 2. Metrics Card: [Earnings] [Rides] [Working Hours]
                                     _buildMetricsSummaryCard(context, summary),
 
@@ -440,25 +405,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
                                 ),
                               ),
                             ),
-
-                            // Active Ride Full Overlay if ongoing trip
-                            if (activeRide != null)
-                              Positioned.fill(
-                                child: ActiveRideScreen(
-                                  ride: activeRide,
-                                  driverPosition: driverPos,
-                                  driverBearing: driverBearing,
-                                  traveledPath: traveledPath,
-                                  isBusy: isBusy,
-                                  onMarkArriving: () =>
-                                      _rideBloc.add(MarkArrivingRequested()),
-                                  onStart: () =>
-                                      _promptStartOtpAndDispatch(context),
-                                  onComplete: () =>
-                                      _rideBloc.add(CompleteRideRequested()),
-                                  onCancel: () => _confirmCancelRide(context),
-                                ),
-                              ),
                           ],
                         ),
                       );
@@ -490,7 +436,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       children: [
         // Driver Avatar & Name + Rating
         GestureDetector(
-          onTap: () => Scaffold.of(context).openDrawer(),
+          onTap: () => DriverMainLayout.openDrawer(),
           child: Row(
             children: [
               Stack(
@@ -842,7 +788,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Hours',
+                          'Duration',
                           style: TextStyle(
                             fontSize: 11,
                             color: Color(0xFF64748B),
@@ -964,178 +910,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
           ),
 
           SizedBox(height: 48),
-        ],
-      ),
-    );
-  }
-
-  // ===========================================================================
-  // Drawer
-  // ===========================================================================
-  Widget _buildDrawer(
-    BuildContext context, {
-    required String driverName,
-    required String driverRating,
-    String? profilePhoto,
-  }) {
-    return Drawer(
-      backgroundColor: Colors.white,
-      child: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.only(
-              top: 60,
-              left: 24,
-              right: 24,
-              bottom: 24,
-            ),
-            decoration: const BoxDecoration(color: Color(0xFF009048)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  alignment: Alignment.center,
-                  child: (profilePhoto != null && profilePhoto.isNotEmpty)
-                      ? Image.network(
-                          profilePhoto,
-                          width: 60,
-                          height: 60,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(
-                            Icons.person,
-                            color: Color(0xFF009048),
-                            size: 34,
-                          ),
-                        )
-                      : const Icon(
-                          Icons.person,
-                          color: Color(0xFF009048),
-                          size: 34,
-                        ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  driverName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.star_rounded,
-                      color: Colors.amber,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      driverRating,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.home_rounded, color: Color(0xFF0F172A)),
-            title: const Text(
-              'Home',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              context.go('/dashboard');
-            },
-          ),
-          ListTile(
-            leading: const Icon(
-              Icons.assignment_outlined,
-              color: Color(0xFF0F172A),
-            ),
-            title: const Text(
-              'Rides History',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              context.go('/ride-history');
-            },
-          ),
-          ListTile(
-            leading: const Icon(
-              Icons.monetization_on_outlined,
-              color: Color(0xFF0F172A),
-            ),
-            title: const Text(
-              'Earnings',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              context.go('/earnings');
-            },
-          ),
-          ListTile(
-            leading: const Icon(
-              Icons.account_balance_wallet_outlined,
-              color: Color(0xFF0F172A),
-            ),
-            title: const Text(
-              'Wallet',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              context.go('/wallet');
-            },
-          ),
-          ListTile(
-            leading: const Icon(
-              Icons.person_outline_rounded,
-              color: Color(0xFF0F172A),
-            ),
-            title: const Text(
-              'Profile',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              context.go('/profile');
-            },
-          ),
-          const Spacer(),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.logout_rounded, color: Color(0xFFE53935)),
-            title: const Text(
-              'Logout',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Color(0xFFE53935),
-              ),
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              widget.onLogout();
-            },
-          ),
-          const SizedBox(height: 20),
         ],
       ),
     );

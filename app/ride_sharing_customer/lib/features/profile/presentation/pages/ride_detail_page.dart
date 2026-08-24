@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
+import '../../../../core/widgets/custom_toast.dart';
 
 class RideDetailPage extends StatelessWidget {
   final Map<String, dynamic> ride;
@@ -261,12 +262,7 @@ class RideDetailPage extends StatelessWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m)),
                     ),
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Invoice ${ride['id']}.pdf downloaded to Downloads directory.'),
-                          backgroundColor: AppColors.successGreen,
-                        ),
-                      );
+                      CustomToast.show(context, 'Invoice ${ride['id']}.pdf downloaded.');
                     },
                     icon: const Icon(Icons.download_rounded, color: AppColors.primaryBlue),
                     label: const Text('Download Invoice'),
@@ -282,12 +278,7 @@ class RideDetailPage extends StatelessWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m)),
                     ),
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Invoice link copied to clipboard. Ready to share!'),
-                          backgroundColor: AppColors.secondaryBlue,
-                        ),
-                      );
+                      CustomToast.show(context, 'Invoice link copied to clipboard.');
                     },
                     icon: const Icon(Icons.share_rounded),
                     label: const Text('Share Invoice'),

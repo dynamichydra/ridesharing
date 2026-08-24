@@ -5,6 +5,7 @@ import '../../../../core/services/storage_service.dart';
 abstract class WalletDataSource {
   Future<Map<String, dynamic>> getWalletDetails();
   Future<void> addFunds(double amount, String paymentMethodId);
+  Future<Map<String, dynamic>> payRideWithWallet(String rideId);
 }
 
 class WalletDataSourceImpl implements WalletDataSource {
@@ -35,16 +36,13 @@ class WalletDataSourceImpl implements WalletDataSource {
           rawTxData = rawTxData['MESSAGE'] ?? rawTxData['data'] ?? rawTxData['rows'] ?? [];
         }
         if (rawTxData is List) {
-          txsList = (rawTxData as List).map((t) {
+          txsList = rawTxData.map((t) {
             final m = Map<String, dynamic>.from(t as Map);
             final int amtMinor = (m['amountMinor'] as num?)?.toInt() ?? 0;
             final String type = m['type']?.toString().toLowerCase() ?? 'credit';
             final bool isAdd = type == 'credit';
             final String reason = m['reason']?.toString() ?? '';
-            final String desc = m['description']?.toString() ??
-                (reason == 'topup'
-                    ? 'Added Money'
-                    : (reason.contains('ride') ? 'Ride Payment' : 'Wallet Transaction'));
+            final String desc = isAdd ? 'Top Up' : 'Ride Payment';
 
             return {
               'id': m['id']?.toString() ?? '',
@@ -91,15 +89,50 @@ class WalletDataSourceImpl implements WalletDataSource {
     final amountMinor = (amount * 100).round();
     final idempotencyKey = 'topup_${DateTime.now().millisecondsSinceEpoch}';
     
-    await _dioClient.dio.post(
-      '/api/v1/wallets/me/topup/initiate',
-      data: {'amountMinor': amountMinor},
+    if (paymentMethodId == 'demo') {
+      await _dioClient.dio.post(
+        '/api/v1/wallets/me/topup/demo',
+        data: {'amountMinor': amountMinor},
+      );
+    } else {
+      try {
+        await _dioClient.dio.post(
+          '/api/v1/wallets/me/topup/initiate',
+          data: {'amountMinor': amountMinor},
+          options: Options(
+            headers: {'Idempotency-Key': idempotencyKey},
+          ),
+        );
+      } catch (e) {
+        // If gateway keys are not configured or error occurs, fallback to demo topup
+        await _dioClient.dio.post(
+          '/api/v1/wallets/me/topup/demo',
+          data: {'amountMinor': amountMinor},
+        );
+      }
+    }
+    
+    // Clear cached wallet so next fetch gets the fresh balance from server
+    await _storageService.clearCache();
+  }
+
+  @override
+  Future<Map<String, dynamic>> payRideWithWallet(String rideId) async {
+    final idempotencyKey = 'ride_pay_${rideId}_${DateTime.now().millisecondsSinceEpoch}';
+    final response = await _dioClient.dio.post(
+      '/api/v1/ride-payments/$rideId/pay-wallet',
       options: Options(
         headers: {'Idempotency-Key': idempotencyKey},
       ),
     );
-    
-    // Clear cached wallet so next fetch gets the fresh balance from server
+
+    // Clear cached wallet balance
     await _storageService.clearCache();
+
+    final data = response.data;
+    if (data is Map && data['MESSAGE'] is Map) {
+      return Map<String, dynamic>.from(data['MESSAGE'] as Map);
+    }
+    return {};
   }
 }

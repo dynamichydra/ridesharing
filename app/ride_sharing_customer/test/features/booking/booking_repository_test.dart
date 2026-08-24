@@ -55,6 +55,7 @@ class MockBookingDataSource implements BookingDataSource {
     required double dropLat,
     required double dropLng,
     required String dropAddress,
+    String paymentMethod = 'cash',
   }) async {
     return {'id': 'ride_mock_id', 'status': 'searching'};
   }

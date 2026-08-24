@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
+import '../../../../core/widgets/custom_toast.dart';
 import '../bloc/auth_bloc.dart';
 
 class OtpPage extends StatefulWidget {
@@ -54,12 +55,7 @@ class _OtpPageState extends State<OtpPage> {
     _startTimer();
     if (widget.phoneNumber.isNotEmpty) {
       context.read<AuthBloc>().add(LoginSubmitted(widget.phoneNumber));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('OTP resent successfully'),
-          backgroundColor: Color(0xFF009048),
-        ),
-      );
+      CustomToast.show(context, 'OTP resent successfully');
     }
   }
 
@@ -100,12 +96,7 @@ class _OtpPageState extends State<OtpPage> {
             setState(() {
               _isValid = false;
             });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: AppColors.errorRed,
-              ),
-            );
+            CustomToast.show(context, state.message);
           }
         },
         builder: (context, state) {

@@ -24,4 +24,13 @@ class WalletRepositoryImpl implements WalletRepository {
       throw ServerFailure(e.toString());
     }
   }
+
+  @override
+  Future<Map<String, dynamic>> payRideWithWallet(String rideId) async {
+    try {
+      return await _walletDataSource.payRideWithWallet(rideId);
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
 }

@@ -11,7 +11,6 @@ abstract class BookingDataSource {
     required double dropLng,
   });
   Future<Map<String, dynamic>> requestRide({
-
     required String vehicleTypeId,
     required double pickupLat,
     required double pickupLng,
@@ -19,6 +18,7 @@ abstract class BookingDataSource {
     required double dropLat,
     required double dropLng,
     required String dropAddress,
+    String paymentMethod = 'cash',
   });
 }
 
@@ -119,6 +119,7 @@ class BookingDataSourceImpl implements BookingDataSource {
     required double dropLat,
     required double dropLng,
     required String dropAddress,
+    String paymentMethod = 'cash',
   }) async {
     try {
       print('[BookingDataSource] POST /api/v1/rides requesting...');
@@ -130,6 +131,7 @@ class BookingDataSourceImpl implements BookingDataSource {
         'dropLat': dropLat,
         'dropLng': dropLng,
         'dropAddress': dropAddress,
+        'paymentMethod': paymentMethod,
       });
       print('[BookingDataSource] POST /api/v1/rides RESPONSE: ${response.statusCode} - ${response.data}');
       if (response.data['SUCCESS'] == true) {

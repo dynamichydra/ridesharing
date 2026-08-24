@@ -24,6 +24,7 @@ class ActiveRide {
   final double? distanceKm;
   final int? durationMin;
   final String? polyline;
+  final String? paymentMethod;
 
   const ActiveRide({
     required this.id,
@@ -41,6 +42,7 @@ class ActiveRide {
     this.distanceKm,
     this.durationMin,
     this.polyline,
+    this.paymentMethod,
   });
 
   factory ActiveRide.fromJson(Map<String, dynamic> json) {
@@ -73,6 +75,7 @@ class ActiveRide {
       distanceKm: parseDouble(json['distanceKm'] ?? json['distance_km']),
       durationMin: parseInt(json['durationMin'] ?? json['duration_min']),
       polyline: json['polyline']?.toString(),
+      paymentMethod: json['paymentMethod']?.toString() ?? json['payment_method']?.toString(),
     );
   }
 
@@ -91,6 +94,7 @@ class ActiveRide {
       currencyCode: offer.currencyCode,
       distanceKm: offer.distanceKm,
       polyline: offer.polyline,
+      paymentMethod: offer.paymentMethod,
     );
   }
 }

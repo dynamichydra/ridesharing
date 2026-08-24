@@ -57,11 +57,11 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
 
   // ---- Location state ----
   LatLng _pickupLatLng = const LatLng(22.5726, 88.3639); // Kolkata fallback
-  LatLng _destLatLng = const LatLng(22.5552, 88.3519);
+  LatLng? _destLatLng;
   String _pickupName = 'Fetching current location...';
   String _pickupAddress = 'Loading address details...';
-  String _destName = 'Destination';
-  String _destAddress = 'Choose destination';
+  String _destName = '';
+  String _destAddress = '';
   bool _isLoadingLocation = true;
 
   // ---- Autocomplete state ----
@@ -188,11 +188,18 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
         _pickupName = placeName;
         _pickupAddress = placeAddress;
         _pickupController.text = placeName;
-        _currentStep = SelectionStep.pickupSelected;
-        _currentRoute = null;
         _searchResults = [];
         _showAutocomplete = false;
+        if (_destLatLng != null && _destName.isNotEmpty) {
+          _currentStep = SelectionStep.destSelected;
+        } else {
+          _currentStep = SelectionStep.pickupSelected;
+          _currentRoute = null;
+        }
       });
+      if (_destLatLng != null && _destName.isNotEmpty) {
+        await _fetchRoute();
+      }
     } else {
       setState(() {
         _destLatLng = position;
@@ -212,7 +219,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
   // ---------------------------------------------------------------------------
 
   Future<void> _fetchRoute() async {
-    if (_currentStep != SelectionStep.destSelected) return;
+    if (_destLatLng == null) return;
 
     setState(() {
       _isLoadingRoute = true;
@@ -221,7 +228,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
 
     final route = await _routesService.computeRoute(
       _pickupLatLng,
-      _destLatLng,
+      _destLatLng!,
       travelMode: AppTravelMode.drive,
     );
 
@@ -247,7 +254,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
   // ---------------------------------------------------------------------------
 
   Future<void> _swapLocations() async {
-    if (_pickupName.isEmpty) return;
+    if (_pickupName.isEmpty || _destLatLng == null || _destName.isEmpty) return;
 
     final tmpLatLng = _pickupLatLng;
     final tmpName = _pickupName;
@@ -261,7 +268,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
     }
 
     setState(() {
-      _pickupLatLng = _destLatLng;
+      _pickupLatLng = _destLatLng!;
       _pickupName = _destName;
       _pickupAddress = _destAddress;
       _pickupController.text = _destName;
@@ -377,12 +384,18 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
         _pickupName = name;
         _pickupAddress = address;
         _pickupController.text = name;
-        _currentStep = SelectionStep.pickupSelected;
         _searchResults = [];
         _showAutocomplete = false;
-        _currentRoute = null;
+        if (_destLatLng != null && _destName.isNotEmpty) {
+          _currentStep = SelectionStep.destSelected;
+        } else {
+          _currentStep = SelectionStep.pickupSelected;
+          _currentRoute = null;
+        }
       });
-      if (_mapController != null) {
+      if (_destLatLng != null && _destName.isNotEmpty) {
+        await _fetchRoute();
+      } else if (_mapController != null) {
         await Future.delayed(const Duration(milliseconds: 200));
         if (mounted && _mapController != null) {
           _mapController!.animateCamera(
@@ -411,12 +424,13 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
   // ---------------------------------------------------------------------------
 
   void _proceedToRideOptions() {
+    if (_destLatLng == null) return;
     context.read<BookingBloc>().add(
           SetRideLocations(
             pickup: _pickupLatLng,
             pickupName: _pickupName,
             pickupAddress: _pickupAddress,
-            destination: _destLatLng,
+            destination: _destLatLng!,
             destinationName: _destName,
             destinationAddress: _destAddress,
           ),
@@ -533,8 +547,17 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
             height: 54,
             child: ElevatedButton(
               onPressed: () {
-                setState(() => _currentStep = SelectionStep.destSelected);
-                _fetchRoute();
+                if (_destLatLng != null && _destName.isNotEmpty) {
+                  setState(() => _currentStep = SelectionStep.destSelected);
+                  _fetchRoute();
+                } else {
+                  setState(() {
+                    _activeInputTarget = LocationTarget.destination;
+                    _showAutocomplete = true;
+                    _currentStep = SelectionStep.initialSearch;
+                  });
+                  _destinationFocusNode.requestFocus();
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF009048),
@@ -715,9 +738,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
                     onMapCreated: _onMapControllerCreated,
                     onTap: _onMapTapped,
                     pickup: _pickupLatLng,
-                    destination: _currentStep == SelectionStep.destSelected
-                        ? _destLatLng
-                        : null,
+                    destination: _destLatLng,
                     routePoints: routePoints,
                   ),
           ),

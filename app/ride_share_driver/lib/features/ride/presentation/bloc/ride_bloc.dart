@@ -204,6 +204,12 @@ class RideBloc extends Bloc<RideEvent, RideState> {
       emit(RideOfferPending(offers: List.unmodifiable(_pendingOffers)));
     });
     on<_OfferTakenByOther>((event, emit) {
+      if (_currentRide?.id == event.rideId ||
+          _acceptedOffer?.rideId == event.rideId ||
+          (state is RideAccepting && _acceptedOffer?.rideId == event.rideId) ||
+          state is RideActive) {
+        return;
+      }
       _pendingOffers.removeWhere((o) => o.rideId == event.rideId);
       if (_pendingOffers.isEmpty) {
         emit(RideOfferGone(message: 'Another driver accepted this ride.'));
@@ -228,6 +234,11 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     ConnectRideSocket event,
     Emitter<RideState> emit,
   ) async {
+
+    print("event-event-event");
+    print(event);
+    print("event-event-event");
+
     rideRepository.connect();
 
     _offerSub ??= rideRepository.onRideOffer.listen(

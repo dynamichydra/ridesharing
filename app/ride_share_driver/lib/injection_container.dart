@@ -82,7 +82,7 @@ Future<void> init() async {
   sl.registerFactory(() => OnboardingBloc(onboardingRepository: sl()));
   sl.registerFactory(() => DriverStatusBloc(driverStatusRepository: sl(), locationService: sl(), secureStorage: sl()));
   sl.registerFactory(() => SubscriptionBloc(subscriptionRepository: sl()));
-  sl.registerFactory(() => RideBloc(rideRepository: sl(), locationService: sl()));
+  sl.registerLazySingleton<RideBloc>(() => RideBloc(rideRepository: sl(), locationService: sl()));
   sl.registerFactory(() => ProfileBloc(dataSource: sl()));
   sl.registerFactory(() => WalletBloc(dataSource: sl()));
   sl.registerFactory(() => RideHistoryBloc(dataSource: sl()));
