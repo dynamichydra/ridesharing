@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or, like, sql } from 'drizzle-orm';
 import bcrypt                                      from 'bcryptjs';
 import { db }                                      from '../../config/db.js';
 import { users, drivers, admins, driverDevices }   from '../../../drizzle/schema/index.js';
@@ -11,8 +11,46 @@ import { env }                                    from '../../config/env.js';
 const PHONE_REGEX = /^\+[1-9]\d{6,14}$/;   // E.164
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+export function normalizePhone(phone) {
+  if (!phone) return '';
+  const cleaned = phone.replace(/[\s\-()]/g, '');
+  return cleaned;
+}
+
+export async function findDriverByPhone(phone) {
+  if (!phone) return null;
+  const raw = normalizePhone(phone);
+  const digitsOnly = raw.replace(/\D/g, '');
+  const last10 = digitsOnly.slice(-10);
+
+  // Exact match first
+  let [driver] = await db.select().from(drivers).where(eq(drivers.phone, raw)).limit(1);
+  if (driver) return driver;
+
+  // Suffix match on last 10 digits
+  if (last10.length >= 7) {
+    const candidates = await db.select().from(drivers)
+      .where(or(
+        like(drivers.phone, `%${last10}`),
+        eq(drivers.phone, digitsOnly),
+        eq(drivers.phone, `+91${last10}`)
+      )).limit(5);
+
+    for (const c of candidates) {
+      const cDigits = (c.phone || '').replace(/\D/g, '');
+      if (cDigits.endsWith(last10) || digitsOnly.endsWith(cDigits.slice(-10))) {
+        return c;
+      }
+    }
+  }
+  return null;
+}
+
 function assertValidPhone(phone) {
-  if (!PHONE_REGEX.test(phone)) throw { statusCode: 400, code: 'PHONE_INVALID', message: 'Enter a valid phone number in international format, e.g. +919876543210' };
+  const norm = normalizePhone(phone);
+  if (!PHONE_REGEX.test(norm) && !/^\d{10,15}$/.test(norm)) {
+    throw { statusCode: 400, code: 'PHONE_INVALID', message: 'Enter a valid phone number in international format, e.g. +919876543210' };
+  }
 }
 function assertValidEmail(email) {
   if (!EMAIL_REGEX.test(email)) throw { statusCode: 400, code: 'EMAIL_INVALID', message: 'Enter a valid email address' };
@@ -61,7 +99,7 @@ export async function driverMobileStart(phone, deviceId) {
   if (!deviceId) throw { statusCode: 400, message: 'deviceId is required' };
   await assertCanSendOtp(phone);
 
-  const [existing] = await db.select({ id: drivers.id }).from(drivers).where(eq(drivers.phone, phone)).limit(1);
+  const existing = await findDriverByPhone(phone);
 
   const otp = generateOtp();
   await storeOtp(phone, otp);
@@ -111,12 +149,12 @@ export async function driverMobileVerify(phone, otp, deviceId, platform, fcmToke
   const valid = await verifyOtp(phone, otp);
   if (!valid) throw { statusCode: 400, code: 'OTP_INVALID', message: 'Invalid or expired OTP' };
 
-  let [driver] = await db.select().from(drivers).where(eq(drivers.phone, phone)).limit(1);
+  let driver = await findDriverByPhone(phone);
   const isNew = !driver;
 
   if (!driver) {
     [driver] = await db.insert(drivers).values({
-      phone, registrationStatus: 'mobile_verified', registrationStep: 1,
+      phone: normalizePhone(phone), registrationStatus: 'mobile_verified', registrationStep: 1,
     }).returning();
   } else if (driver.registrationStatus === 'new') {
     [driver] = await db.update(drivers).set({
@@ -180,14 +218,18 @@ export async function verifyDriverOtp(phone, otp, app) {
   const valid = await verifyOtp(phone, otp);
   if (!valid) throw { statusCode: 400, message: 'Invalid or expired OTP' };
 
-  let [driver] = await db.select().from(drivers).where(eq(drivers.phone, phone)).limit(1);
+  let driver = await findDriverByPhone(phone);
   const isNew = !driver;
 
   if (!driver) {
-    [driver] = await db.insert(drivers).values({ phone, registrationStatus: 'mobile_verified', registrationStep: 1 }).returning();
+    [driver] = await db.insert(drivers).values({
+      phone: normalizePhone(phone),
+      registrationStatus: 'mobile_verified',
+      registrationStep: 1,
+    }).returning();
   }
 
-  const accessToken  = app.jwt.sign({ id: driver.id, role: 'driver', phone });
+  const accessToken  = app.jwt.sign({ id: driver.id, role: 'driver', phone: driver.phone });
   const refreshToken = app.jwt.sign(
     { id: driver.id, role: 'driver' },
     { secret: env.JWT_REFRESH_SECRET, expiresIn: env.JWT_REFRESH_EXPIRES_IN },

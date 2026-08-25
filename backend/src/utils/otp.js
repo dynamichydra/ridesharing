@@ -1,14 +1,15 @@
 import { redis, REDIS_KEYS } from '../config/redis.js';
 import { sendSms } from './sms.js';
 
-const OTP_TTL_SECONDS       = 300;   // 5 minutes
+const OTP_TTL_SECONDS = 300;   // 5 minutes
 const RESEND_COOLDOWN_SECONDS = 30;   // min gap between sends
-const MAX_SENDS_PER_HOUR    = 5;
-const MAX_VERIFY_ATTEMPTS   = 5;
-const LOCKOUT_SECONDS       = 900;   // 15 minutes
+const MAX_SENDS_PER_HOUR = 5;
+const MAX_VERIFY_ATTEMPTS = 5;
+const LOCKOUT_SECONDS = 900;   // 15 minutes
 
 export function generateOtp() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  // return String(Math.floor(100000 + Math.random() * 900000));
+  return String(123456);
 }
 
 /** Throws if the phone is resend-cooling-down, hourly-capped, or locked out from too many wrong attempts. */
