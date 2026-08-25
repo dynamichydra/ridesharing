@@ -23,9 +23,14 @@ export async function findDriverByPhone(phone) {
   const digitsOnly = raw.replace(/\D/g, '');
   const last10 = digitsOnly.slice(-10);
 
+  console.log(`[DriverAuth:findDriverByPhone] input="${phone}", raw="${raw}", digitsOnly="${digitsOnly}", last10="${last10}"`);
+
   // Exact match first
   let [driver] = await db.select().from(drivers).where(eq(drivers.phone, raw)).limit(1);
-  if (driver) return driver;
+  if (driver) {
+    console.log(`[DriverAuth:findDriverByPhone] exact match found! driverId="${driver.id}", name="${driver.name}", phone="${driver.phone}"`);
+    return driver;
+  }
 
   // Suffix match on last 10 digits
   if (last10.length >= 7) {
@@ -36,13 +41,18 @@ export async function findDriverByPhone(phone) {
         eq(drivers.phone, `+91${last10}`)
       )).limit(5);
 
+    console.log(`[DriverAuth:findDriverByPhone] candidates matching last10="${last10}":`, candidates.map(c => ({ id: c.id, name: c.name, phone: c.phone })));
+
     for (const c of candidates) {
       const cDigits = (c.phone || '').replace(/\D/g, '');
       if (cDigits.endsWith(last10) || digitsOnly.endsWith(cDigits.slice(-10))) {
+        console.log(`[DriverAuth:findDriverByPhone] suffix match selected! driverId="${c.id}", name="${c.name}", phone="${c.phone}"`);
         return c;
       }
     }
   }
+
+  console.log(`[DriverAuth:findDriverByPhone] NO driver found matching phone="${phone}".`);
   return null;
 }
 
@@ -99,7 +109,9 @@ export async function driverMobileStart(phone, deviceId) {
   if (!deviceId) throw { statusCode: 400, message: 'deviceId is required' };
   await assertCanSendOtp(phone);
 
+  console.log(`[DriverAuth:driverMobileStart] phone="${phone}", deviceId="${deviceId}"`);
   const existing = await findDriverByPhone(phone);
+  console.log(`[DriverAuth:driverMobileStart] existing driver found:`, existing ? `id=${existing.id}, name=${existing.name}, status=${existing.registrationStatus}` : 'NONE');
 
   const otp = generateOtp();
   await storeOtp(phone, otp);
@@ -149,17 +161,23 @@ export async function driverMobileVerify(phone, otp, deviceId, platform, fcmToke
   const valid = await verifyOtp(phone, otp);
   if (!valid) throw { statusCode: 400, code: 'OTP_INVALID', message: 'Invalid or expired OTP' };
 
+  console.log(`[DriverAuth:driverMobileVerify] phone="${phone}", otp="${otp}", deviceId="${deviceId}"`);
   let driver = await findDriverByPhone(phone);
   const isNew = !driver;
 
   if (!driver) {
+    console.log(`[DriverAuth:driverMobileVerify] No existing driver. Creating new driver for phone="${phone}"...`);
     [driver] = await db.insert(drivers).values({
       phone: normalizePhone(phone), registrationStatus: 'mobile_verified', registrationStep: 1,
     }).returning();
+    console.log(`[DriverAuth:driverMobileVerify] Created new driver id="${driver.id}".`);
   } else if (driver.registrationStatus === 'new') {
+    console.log(`[DriverAuth:driverMobileVerify] Existing driver with status "new". Updating to mobile_verified...`);
     [driver] = await db.update(drivers).set({
       registrationStatus: 'mobile_verified', registrationStep: Math.max(driver.registrationStep, 1),
     }).where(eq(drivers.id, driver.id)).returning();
+  } else {
+    console.log(`[DriverAuth:driverMobileVerify] Found existing driver id="${driver.id}", name="${driver.name}", status="${driver.registrationStatus}", step=${driver.registrationStep}`);
   }
 
   if (driver.isBlocked) throw { statusCode: 403, code: 'ACCOUNT_SUSPENDED', message: 'This account is suspended' };
@@ -218,15 +236,20 @@ export async function verifyDriverOtp(phone, otp, app) {
   const valid = await verifyOtp(phone, otp);
   if (!valid) throw { statusCode: 400, message: 'Invalid or expired OTP' };
 
+  console.log(`[DriverAuth:verifyDriverOtp] verifying OTP for phone="${phone}"...`);
   let driver = await findDriverByPhone(phone);
   const isNew = !driver;
 
   if (!driver) {
+    console.log(`[DriverAuth:verifyDriverOtp] No existing driver found for phone="${phone}". Creating NEW blank driver row...`);
     [driver] = await db.insert(drivers).values({
       phone: normalizePhone(phone),
       registrationStatus: 'mobile_verified',
       registrationStep: 1,
     }).returning();
+    console.log(`[DriverAuth:verifyDriverOtp] Inserted new driver id="${driver.id}", phone="${driver.phone}".`);
+  } else {
+    console.log(`[DriverAuth:verifyDriverOtp] Found existing driver id="${driver.id}", name="${driver.name}", phone="${driver.phone}". No new row created.`);
   }
 
   const accessToken  = app.jwt.sign({ id: driver.id, role: 'driver', phone: driver.phone });
