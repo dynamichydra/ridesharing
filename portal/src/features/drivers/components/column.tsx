@@ -6,10 +6,11 @@ import type { Driver } from "../types";
 
 interface Props {
   onViewDetail: (driver: Driver) => void;
+  onEdit?: (driver: Driver) => void;
   onToggleBlock: (driver: Driver) => void;
 }
 
-export function getDriverColumns({ onViewDetail, onToggleBlock }: Props): ColumnDef<Driver>[] {
+export function getDriverColumns({ onViewDetail, onEdit, onToggleBlock }: Props): ColumnDef<Driver>[] {
   return [
     getSelectionColumn<Driver>(),
     {
@@ -105,6 +106,16 @@ export function getDriverColumns({ onViewDetail, onToggleBlock }: Props): Column
             <Eye className="h-3.5 w-3.5 mr-1" />
             Review
           </Button>
+          {onEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onEdit(row.original)}
+              className="text-xs border-border text-foreground hover:bg-muted font-medium cursor-pointer"
+            >
+              Edit
+            </Button>
+          )}
           <Button
             variant={row.original.isBlocked ? "outline" : "destructive"}
             size="sm"

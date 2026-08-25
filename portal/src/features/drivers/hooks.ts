@@ -1,13 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { driversApi, documentsApi, driverSubscriptionsApi, vehicleModelsLookupApi } from "./api";
+import { driversApi, documentsApi, driverSubscriptionsApi, vehicleModelsLookupApi, vehiclesApi } from "./api";
 import type {
   DriverListParams,
   CreateDriverPayload,
-  ApproveDriverPayload,
+  UpdateDriverPayload,
+  ResetDriverPendingPayload,
   RejectDriverPayload,
   RequestDocumentsPayload,
   VerifyDocumentPayload,
+  AdminVehiclePayload,
 } from "./types";
 
 const DRIVERS_KEY = "drivers";
@@ -55,6 +57,38 @@ export function useCreateDriver() {
   });
 }
 
+export function useUpdateDriver() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateDriverPayload }) =>
+      driversApi.update(id, payload),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY, variables.id] });
+      toast.success("Driver updated successfully");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to update driver");
+    },
+  });
+}
+
+export function useSetDriverPending() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string } & ResetDriverPendingPayload) =>
+      driversApi.setPending(id, { note }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY, variables.id] });
+      toast.success("Driver status moved back to Pending Review");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to reset driver status to pending");
+    },
+  });
+}
+
 export function useVehicleModelOptions() {
   return useQuery({
     queryKey: ["vehicle-models", "lookup"],
@@ -74,10 +108,11 @@ export function useDriver(id: string | undefined) {
 export function useApproveDriver() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, note }: { id: string } & ApproveDriverPayload) =>
+    mutationFn: ({ id, note }: { id: string; note?: string }) =>
       driversApi.approve(id, { note }),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY, variables.id] });
       toast.success("Driver approved successfully!");
     },
     onError: (err: any) => {
@@ -91,8 +126,9 @@ export function useRejectDriver() {
   return useMutation({
     mutationFn: ({ id, note }: { id: string } & RejectDriverPayload) =>
       driversApi.reject(id, { note }),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY, variables.id] });
       toast.success("Driver application rejected");
     },
     onError: (err: any) => {
@@ -106,12 +142,73 @@ export function useRequestDriverDocuments() {
   return useMutation({
     mutationFn: ({ id, documentTypeCodes, note }: { id: string } & RequestDocumentsPayload) =>
       driversApi.requestDocuments(id, { documentTypeCodes, note }),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY, variables.id] });
       toast.success("Document request sent to driver");
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to request documents");
+    },
+  });
+}
+
+export function useAdminAddVehicle(driverId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: AdminVehiclePayload) =>
+      vehiclesApi.add(driverId as string, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY, driverId] });
+      toast.success("Vehicle added successfully");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to add vehicle");
+    },
+  });
+}
+
+export function useAdminUpdateVehicle(driverId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ vehicleId, payload }: { vehicleId: string; payload: Partial<AdminVehiclePayload> }) =>
+      vehiclesApi.update(driverId as string, vehicleId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY, driverId] });
+      toast.success("Vehicle updated successfully");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to update vehicle");
+    },
+  });
+}
+
+export function useAdminDeleteVehicle(driverId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (vehicleId: string) =>
+      vehiclesApi.delete(driverId as string, vehicleId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY, driverId] });
+      toast.success("Vehicle removed successfully");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to delete vehicle");
+    },
+  });
+}
+
+export function useAdminActivateVehicle(driverId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (vehicleId: string) =>
+      vehiclesApi.activate(driverId as string, vehicleId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY, driverId] });
+      toast.success("Active vehicle set successfully");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to activate vehicle");
     },
   });
 }

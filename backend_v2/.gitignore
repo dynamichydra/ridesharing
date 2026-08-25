@@ -1,0 +1,6 @@
+node_modules/
+.env
+drizzle/migrations/*.sql
+*.log
+dist/
+uploads/

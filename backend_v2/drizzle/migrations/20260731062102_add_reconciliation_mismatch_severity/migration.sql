@@ -1,0 +1,1 @@
+ALTER TABLE "reconciliation_mismatches" ADD COLUMN "severity" varchar(10) DEFAULT 'low' NOT NULL;

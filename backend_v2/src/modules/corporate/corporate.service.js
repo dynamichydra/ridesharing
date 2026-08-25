@@ -1,0 +1,160 @@
+import { eq, and, desc, count, sql } from 'drizzle-orm';
+import { db } from '../../config/db.js';
+import {
+  corporateAccounts, corporateUsers, corporateInvoices,
+  corporateInvoiceItems, corporatePayments, users, rides,
+} from '../../../drizzle/schema/index.js';
+import { postTransaction, getOrCreateSystemAccount } from '../ledger/ledger.service.js';
+import { createFinancialTransaction } from '../ledger/financial-transaction.service.js';
+import { paginate } from '../../utils/response.js';
+
+export async function createCorporateAccount(data) {
+  const [account] = await db.insert(corporateAccounts).values(data).returning();
+  return account;
+}
+
+export async function addCorporateUser(corporateAccountId, { userId, role = 'employee', spendingLimitMinor = null }) {
+  const [corpUser] = await db.insert(corporateUsers).values({
+    corporateAccountId,
+    userId,
+    role,
+    spendingLimitMinor,
+  }).returning();
+  return corpUser;
+}
+
+export async function checkCorporateCreditAvailable(corporateAccountId, estimatedFareMinor) {
+  const [account] = await db.select().from(corporateAccounts)
+    .where(eq(corporateAccounts.id, corporateAccountId)).limit(1);
+  if (!account || account.status !== 'active') {
+    return { isAllowed: false, reason: 'Corporate account is inactive or not found' };
+  }
+
+  const available = account.creditLimitMinor - account.currentExposureMinor;
+  if (available < estimatedFareMinor) {
+    return { isAllowed: false, reason: 'Credit limit exceeded', availableMinor: available };
+  }
+
+  return { isAllowed: true, availableMinor: available, account };
+}
+
+export async function reserveCorporateRideCredit(corporateAccountId, rideId, estimatedFareMinor) {
+  return db.transaction(async (tx) => {
+    const [account] = await tx.select().from(corporateAccounts)
+      .where(eq(corporateAccounts.id, corporateAccountId)).for('update').limit(1);
+
+    if (!account || account.status !== 'active') {
+      throw { statusCode: 400, message: 'Corporate account not active' };
+    }
+
+    const available = account.creditLimitMinor - account.currentExposureMinor;
+    if (available < estimatedFareMinor) {
+      throw { statusCode: 422, message: 'Corporate credit limit exceeded' };
+    }
+
+    const [updated] = await tx.update(corporateAccounts).set({
+      currentExposureMinor: account.currentExposureMinor + estimatedFareMinor,
+      updatedAt: new Date(),
+    }).where(eq(corporateAccounts.id, corporateAccountId)).returning();
+
+    return updated;
+  });
+}
+
+/**
+ * Generate monthly/periodic corporate invoice for all uninvoiced corporate rides.
+ */
+export async function generateCorporateInvoice(corporateAccountId, periodStart, periodEnd) {
+  const [account] = await db.select().from(corporateAccounts).where(eq(corporateAccounts.id, corporateAccountId)).limit(1);
+  if (!account) throw { statusCode: 404, message: 'Corporate account not found' };
+
+  const invoiceNumber = `INV-CORP-${Date.now()}`;
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + 30); // Net 30 default
+
+  const [invoice] = await db.insert(corporateInvoices).values({
+    corporateAccountId,
+    invoiceNumber,
+    periodStart: new Date(periodStart),
+    periodEnd: new Date(periodEnd),
+    subtotalMinor: account.currentExposureMinor,
+    totalMinor: account.currentExposureMinor,
+    currencyCode: account.currencyCode,
+    status: 'issued',
+    dueAt: dueDate,
+  }).returning();
+
+  return invoice;
+}
+
+/**
+ * Record corporate invoice settlement payment:
+ * DR PSP_CLEARING / BANK_CLEARING
+ *   CR CORPORATE_RECEIVABLE
+ */
+export async function payCorporateInvoice(invoiceId, { amountMinor, paymentMethod, gatewayPaymentId }) {
+  const [invoice] = await db.select().from(corporateInvoices).where(eq(corporateInvoices.id, invoiceId)).limit(1);
+  if (!invoice) throw { statusCode: 404, message: 'Invoice not found' };
+
+  const curr = invoice.currencyCode;
+  const clearingAccount = await getOrCreateSystemAccount('processor_clearing:bank_transfer', curr, {
+    accountCategory: 'CLEARING',
+    subType: 'BANK_CLEARING',
+  });
+  const receivableAccount = await getOrCreateSystemAccount('receivable:corporate', curr, {
+    accountCategory: 'ASSET',
+    subType: 'CORPORATE_RECEIVABLE',
+  });
+
+  const entries = [
+    {
+      accountId: clearingAccount.id,
+      direction: 'debit',
+      amountMinor,
+      currencyCode: curr,
+    },
+    {
+      accountId: receivableAccount.id,
+      direction: 'credit',
+      amountMinor,
+      currencyCode: curr,
+    },
+  ];
+
+  const ledgerResult = await postTransaction({
+    businessType: 'corporate_invoice_settlement',
+    idempotencyKey: `corp_inv_pay_${invoiceId}_${amountMinor}`,
+    entries,
+    referenceType: 'corporate_invoice',
+    referenceId: invoiceId,
+    metadata: { invoiceId, paymentMethod, gatewayPaymentId },
+  });
+
+  await createFinancialTransaction({
+    transactionType: 'CORPORATE_INVOICE',
+    referenceType: 'corporate_invoice',
+    referenceId: invoiceId,
+    currencyCode: curr,
+    amountMinor,
+    status: 'settled',
+  });
+
+  const [payment] = await db.insert(corporatePayments).values({
+    corporateAccountId: invoice.corporateAccountId,
+    invoiceId,
+    amountMinor,
+    currencyCode: curr,
+    paymentMethod,
+    gatewayPaymentId,
+    status: 'completed',
+  }).returning();
+
+  await db.update(corporateInvoices).set({
+    paidAmountMinor: invoice.paidAmountMinor + amountMinor,
+    status: (invoice.paidAmountMinor + amountMinor >= invoice.totalMinor) ? 'paid' : 'partially_paid',
+    paidAt: new Date(),
+    updatedAt: new Date(),
+  }).where(eq(corporateInvoices.id, invoiceId));
+
+  return { payment, ledgerResult };
+}

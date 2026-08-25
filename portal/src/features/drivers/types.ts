@@ -81,6 +81,59 @@ export interface CreateDriverPayload {
   vehicleYear?: string;
 }
 
+export interface UpdateDriverPayload {
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  profilePhoto?: string | null;
+  status?: "pending_approval" | "approved" | "rejected" | "suspended" | string;
+  dateOfBirth?: string | null;
+  gender?: string | null;
+  referralCode?: string | null;
+  preferredLanguageCode?: string | null;
+  countryId?: string | null;
+  stateId?: string | null;
+  cityId?: string | null;
+  registrationStatus?: string | null;
+  registrationStep?: number | null;
+  licenseNumber?: string | null;
+  licenseDoc?: string | null;
+  aadharNumber?: string | null;
+  aadharDoc?: string | null;
+  vehicleTypeId?: string | null;
+  vehicleNumber?: string | null;
+  vehicleModel?: string | null;
+  vehiclePhoto?: string | null;
+  vehicleYear?: string | null;
+  approvalStatus?: "pending" | "approved" | "rejected";
+  approvalNote?: string | null;
+  isOnline?: boolean;
+  isBlocked?: boolean;
+  rating?: string;
+  totalRatings?: number;
+  totalRides?: number;
+  subscriptionStatus?: "active" | "inactive" | "expired" | string;
+}
+
+export interface ResetDriverPendingPayload {
+  note?: string;
+}
+
+export interface AdminVehiclePayload {
+  vehicleModelId?: string;
+  vehicleTypeId?: string;
+  brand?: string;
+  model?: string;
+  year: string;
+  color?: string;
+  registrationNumber: string;
+  vin?: string;
+  seats?: number;
+  fuelType?: string;
+  transmission?: string;
+  isActive?: boolean;
+}
+
 export interface ApproveDriverPayload {
   note?: string;
 }

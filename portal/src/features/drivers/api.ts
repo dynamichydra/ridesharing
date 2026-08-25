@@ -4,6 +4,8 @@ import type {
   DriverDetail,
   DriverListParams,
   CreateDriverPayload,
+  UpdateDriverPayload,
+  ResetDriverPendingPayload,
   ApproveDriverPayload,
   RejectDriverPayload,
   RequestDocumentsPayload,
@@ -13,9 +15,12 @@ import type {
   DriverSubscriptionHistoryRow,
   DriverPaymentRow,
   VehicleModelOption,
+  DriverVehicle,
+  AdminVehiclePayload,
 } from "./types";
 
 const BASE_URL = "/drivers";
+const VEHICLES_BASE_URL = "/vehicles";
 const DOCUMENTS_BASE_URL = "/documents";
 const SUBSCRIPTIONS_BASE_URL = "/subscriptions";
 
@@ -46,13 +51,21 @@ export const driversApi = {
   // { driver, vehicles, documents, answers, isComplete, missing } — NOT a flat Driver.
   getById: (id: string) => apiClient.get<DriverDetail>(`${BASE_URL}/${id}`),
 
+  // PATCH /drivers/:id  (Admin) — full edit on driver
+  update: (id: string, payload: UpdateDriverPayload) =>
+    apiClient.patch<Driver>(`${BASE_URL}/${id}`, payload),
+
+  // POST /drivers/:id/pending  (Admin) — reset / set status to pending
+  setPending: (id: string, payload?: ResetDriverPendingPayload) =>
+    apiClient.post<Driver>(`${BASE_URL}/${id}/pending`, payload || {}),
+
   // POST /drivers/:id/approve  (Admin)
-  approve: (id: string, payload: ApproveDriverPayload) =>
-    apiClient.post(`${BASE_URL}/${id}/approve`, payload),
+  approve: (id: string, payload?: ApproveDriverPayload) =>
+    apiClient.post<Driver>(`${BASE_URL}/${id}/approve`, payload || {}),
 
   // POST /drivers/:id/reject  (Admin)
   reject: (id: string, payload: RejectDriverPayload) =>
-    apiClient.post(`${BASE_URL}/${id}/reject`, payload),
+    apiClient.post<Driver>(`${BASE_URL}/${id}/reject`, payload),
 
   // POST /drivers/:id/block  (Admin)
   block: (id: string) => apiClient.post(`${BASE_URL}/${id}/block`, {}),
@@ -63,6 +76,28 @@ export const driversApi = {
   // POST /drivers/:id/request-documents  (Admin)
   requestDocuments: (id: string, payload: RequestDocumentsPayload) =>
     apiClient.post(`${BASE_URL}/${id}/request-documents`, payload),
+};
+
+export const vehiclesApi = {
+  // GET /vehicles/admin/drivers/:driverId
+  listForDriver: (driverId: string) =>
+    apiClient.get<DriverVehicle[]>(`${VEHICLES_BASE_URL}/admin/drivers/${driverId}`),
+
+  // POST /vehicles/admin/drivers/:driverId
+  add: (driverId: string, payload: AdminVehiclePayload) =>
+    apiClient.post<DriverVehicle>(`${VEHICLES_BASE_URL}/admin/drivers/${driverId}`, payload),
+
+  // PATCH /vehicles/admin/drivers/:driverId/:vehicleId
+  update: (driverId: string, vehicleId: string, payload: Partial<AdminVehiclePayload>) =>
+    apiClient.patch<DriverVehicle>(`${VEHICLES_BASE_URL}/admin/drivers/${driverId}/${vehicleId}`, payload),
+
+  // DELETE /vehicles/admin/drivers/:driverId/:vehicleId
+  delete: (driverId: string, vehicleId: string) =>
+    apiClient.delete(`${VEHICLES_BASE_URL}/admin/drivers/${driverId}/${vehicleId}`),
+
+  // POST /vehicles/admin/drivers/:driverId/:vehicleId/activate
+  activate: (driverId: string, vehicleId: string) =>
+    apiClient.post<DriverVehicle>(`${VEHICLES_BASE_URL}/admin/drivers/${driverId}/${vehicleId}/activate`, {}),
 };
 
 export const documentsApi = {

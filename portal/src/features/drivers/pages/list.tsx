@@ -10,6 +10,7 @@ import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getDriverColumns } from "../components/column";
 import { CreateDriverDialog } from "../components/create-dialog";
+import { EditDriverDialog } from "../components/dialog";
 import { useDrivers, useToggleBlockDriver, useExportDrivers, useApproveDriver } from "../hooks";
 import type { Driver } from "../types";
 import { AutoFilters, type FilterSchema } from "@/components/filters/AutoFilters";
@@ -40,6 +41,7 @@ export default function DriverList() {
   const driverFilterSchema: FilterSchema = { ...driverBaseFilterSchema, ...geoFilterSchema };
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
 
   const page = Number(controller.applied.page) || 1;
 
@@ -61,6 +63,10 @@ export default function DriverList() {
 
   const handleViewDetail = (driver: Driver) => {
     navigate(`/drivers/${driver.id}`);
+  };
+
+  const handleEdit = (driver: Driver) => {
+    setEditingDriver(driver);
   };
 
   const handleExport = () => {
@@ -107,6 +113,7 @@ export default function DriverList() {
     () =>
       getDriverColumns({
         onViewDetail: handleViewDetail,
+        onEdit: handleEdit,
         onToggleBlock: handleToggleBlock,
       }),
     []
@@ -187,6 +194,15 @@ export default function DriverList() {
       </div>
 
       <CreateDriverDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
+      {editingDriver && (
+        <EditDriverDialog
+          open={!!editingDriver}
+          onOpenChange={(open) => {
+            if (!open) setEditingDriver(null);
+          }}
+          driver={editingDriver}
+        />
+      )}
     </div>
   );
 }

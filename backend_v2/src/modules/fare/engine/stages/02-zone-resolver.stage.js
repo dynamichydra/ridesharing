@@ -1,0 +1,47 @@
+import { detectZone } from '../../../zone/zone.service.js';
+import { resolveHexZones } from '../../../zone/hex-zone.service.js';
+import { getDefaultCountry, getCountryById } from '../../../geo/geo.service.js';
+
+/**
+ * Stage 2: Geographic & Zone Resolution (Polygon + H3 Hex Hierarchies).
+ */
+export async function executeZoneResolverStage(context) {
+  const { pickupLat, pickupLng, dropLat, dropLng } = context.request;
+
+  // 1. Resolve pickup zone & dropoff zone
+  const [pickupZone, dropZone] = await Promise.all([
+    detectZone(parseFloat(pickupLat), parseFloat(pickupLng)),
+    detectZone(parseFloat(dropLat), parseFloat(dropLng)),
+  ]);
+
+  if (pickupZone?.type === 'restricted' || dropZone?.type === 'restricted') {
+    throw {
+      statusCode: 400,
+      code: 'RESTRICTED_ZONE',
+      message: 'Pickup or drop-off is located in a restricted geofenced area',
+    };
+  }
+
+  // 2. Resolve country & currency
+  let country = null;
+  if (pickupZone?.countryId) {
+    country = await getCountryById(pickupZone.countryId);
+  } else if (context.countryId) {
+    country = await getCountryById(context.countryId);
+  } else {
+    country = await getDefaultCountry();
+  }
+
+  // 3. Resolve H3 Hex Zones (ordered by priority DESC)
+  const hexZones = await resolveHexZones(parseFloat(pickupLat), parseFloat(pickupLng));
+  const hexZoneIds = new Set(hexZones.map((z) => z.id));
+
+  context.pickupZone = pickupZone;
+  context.dropZone = dropZone;
+  context.country = country;
+  context.currencyCode = country.currencyCode;
+  context.hexZones = hexZones;
+  context.hexZoneIds = hexZoneIds;
+
+  return context;
+}
