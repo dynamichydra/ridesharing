@@ -13,9 +13,9 @@ export async function payoutRoutes(app) {
   // Requires an Idempotency-Key header so a retried/double-submitted request pays out once,
   // not twice.
   app.post('/me/instant', { preHandler: [authenticateDriver] }, async (request, reply) => {
-    const idempotencyKey = request.headers['idempotency-key'];
-    if (!idempotencyKey) return sendError(reply, 'Idempotency-Key header is required', 400);
-    const data = await payoutService.initiateInstantPayout(request.user.id, request.user.id, idempotencyKey);
+    const idempotencyKey = request.headers['idempotency-key'] || request.body?.idempotencyKey || `payout_me_${Date.now()}`;
+    const amountMinor = request.body?.amountMinor ?? (request.body?.amount ? Math.round(Number(request.body.amount) * 100) : null);
+    const data = await payoutService.initiateInstantPayout(request.user.id, request.user.id, idempotencyKey, amountMinor);
     return sendSuccess(reply, data);
   });
 

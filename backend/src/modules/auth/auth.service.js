@@ -1,12 +1,14 @@
 import { eq, and, or, like, sql } from 'drizzle-orm';
-import bcrypt                                      from 'bcryptjs';
-import { db }                                      from '../../config/db.js';
-import { users, drivers, admins, driverDevices }   from '../../../drizzle/schema/index.js';
-import { redis, REDIS_KEYS }                      from '../../config/redis.js';
-import { generateOtp, storeOtp, verifyOtp,
-         sendOtpSms, assertCanSendOtp, markOtpSent } from '../../utils/otp.js';
+import bcrypt from 'bcryptjs';
+import { db } from '../../config/db.js';
+import { users, drivers, admins, driverDevices } from '../../../drizzle/schema/index.js';
+import { redis, REDIS_KEYS } from '../../config/redis.js';
+import {
+  generateOtp, storeOtp, verifyOtp,
+  sendOtpSms, assertCanSendOtp, markOtpSent
+} from '../../utils/otp.js';
 import { sendEmailVerification, verifyEmailCode } from '../../utils/emailOtp.js';
-import { env }                                    from '../../config/env.js';
+import { env } from '../../config/env.js';
 
 const PHONE_REGEX = /^\+[1-9]\d{6,14}$/;   // E.164
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -92,7 +94,7 @@ export async function verifyRiderOtp(phone, otp, app) {
     await db.update(users).set({ isVerified: true }).where(eq(users.id, user.id));
   }
 
-  const accessToken  = app.jwt.sign({ id: user.id, role: 'rider', phone });
+  const accessToken = app.jwt.sign({ id: user.id, role: 'rider', phone });
   const refreshToken = app.jwt.sign(
     { id: user.id, role: 'rider' },
     { secret: env.JWT_REFRESH_SECRET, expiresIn: env.JWT_REFRESH_EXPIRES_IN },
@@ -147,7 +149,7 @@ async function upsertDevice(driverId, deviceId, platform, fcmToken, ip) {
 }
 
 async function issueDriverTokens(driver, deviceId, app) {
-  const accessToken  = app.jwt.sign({ id: driver.id, role: 'driver', phone: driver.phone });
+  const accessToken = app.jwt.sign({ id: driver.id, role: 'driver', phone: driver.phone });
   const refreshToken = app.jwt.sign(
     { id: driver.id, role: 'driver', deviceId },
     { secret: env.JWT_REFRESH_SECRET, expiresIn: env.JWT_REFRESH_EXPIRES_IN },
@@ -252,7 +254,7 @@ export async function verifyDriverOtp(phone, otp, app) {
     console.log(`[DriverAuth:verifyDriverOtp] Found existing driver id="${driver.id}", name="${driver.name}", phone="${driver.phone}". No new row created.`);
   }
 
-  const accessToken  = app.jwt.sign({ id: driver.id, role: 'driver', phone: driver.phone });
+  const accessToken = app.jwt.sign({ id: driver.id, role: 'driver', phone: driver.phone });
   const refreshToken = app.jwt.sign(
     { id: driver.id, role: 'driver' },
     { secret: env.JWT_REFRESH_SECRET, expiresIn: env.JWT_REFRESH_EXPIRES_IN },

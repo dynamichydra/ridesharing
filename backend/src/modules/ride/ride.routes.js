@@ -143,11 +143,54 @@ export async function rideRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  // GET /api/v1/rides/driver/history — driver's completed/cancelled ride history with filtering
+  app.get('/driver/history', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const filters = {
+      status: request.query.status,
+      fromDate: request.query.fromDate,
+      toDate: request.query.toDate,
+      minEarnings: request.query.minEarnings,
+      maxEarnings: request.query.maxEarnings,
+    };
+    const { rows, pagination } = await rideService.getDriverRideHistory(
+      request.user.id, filters, page, limit, offset,
+    );
+    return sendList(reply, rows, pagination);
+  });
+
   // GET /api/v1/rides/driver/offers — driver's own offer inbox (paginated)
   app.get('/driver/offers', { preHandler: [authenticateDriver] }, async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);
     const { rows, pagination } = await rideService.getMyOffers(
       request.user.id, page, limit, offset, request.query.status,
+    );
+    return sendList(reply, rows, pagination);
+  });
+
+  // GET /api/v1/rides/history (or /rider/history) — rider's completed/cancelled ride history with filtering
+  app.get('/history', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const filters = {
+      status: request.query.status,
+      fromDate: request.query.fromDate,
+      toDate: request.query.toDate,
+    };
+    const { rows, pagination } = await rideService.getRiderRideHistory(
+      request.user.id, filters, page, limit, offset,
+    );
+    return sendList(reply, rows, pagination);
+  });
+
+  app.get('/rider/history', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const filters = {
+      status: request.query.status,
+      fromDate: request.query.fromDate,
+      toDate: request.query.toDate,
+    };
+    const { rows, pagination } = await rideService.getRiderRideHistory(
+      request.user.id, filters, page, limit, offset,
     );
     return sendList(reply, rows, pagination);
   });

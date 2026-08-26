@@ -11,6 +11,16 @@ export async function driverRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  app.get('/earnings', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const { period, weekOffset, monthOffset } = request.query;
+    const data = await driverService.getDriverEarnings(request.user.id, {
+      period: period || 'daily',
+      weekOffset: parseInt(weekOffset || '0', 10),
+      monthOffset: parseInt(monthOffset || '0', 10),
+    });
+    return sendSuccess(reply, data);
+  });
+
   app.get('/profile', { preHandler: [authenticateDriver] }, async (request, reply) => {
     const data = await driverService.getProfile(request.user.id);
     return sendSuccess(reply, data);

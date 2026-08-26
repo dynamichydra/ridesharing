@@ -36,6 +36,12 @@ export function emitToRideRoom(rideId, eventName, payload) {
   }
 }
 
+export function emitToDriver(driverId, eventName, payload) {
+  if (_io) {
+    _io.of('/driver').to(`driver:${driverId}`).emit(eventName, payload);
+  }
+}
+
 // ── Notification ──────────────────────────────────────────────────────────────
 // Two payload shapes land here:
 //  - Legacy: { title, body, ... } — the ~18 call sites not yet migrated to
@@ -259,6 +265,14 @@ async function startRideConsumer() {
             rideId: payload.rideId,
           });
         }
+        // Also broadcast to the candidates room so any driver currently viewing this pending request dismisses it immediately
+        _io.of('/driver').to(`ride:candidates:${payload.rideId}`).emit('ride:cancelled_by_rider', {
+          rideId: payload.rideId,
+          reason: payload.reason || 'Rider cancelled search',
+        });
+        _io.of('/driver').to(`ride:candidates:${payload.rideId}`).emit('ride:taken', {
+          rideId: payload.rideId,
+        });
       }
 
       // ── DRIVER_LOCATION ────────────────────────────────────────────────

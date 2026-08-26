@@ -138,6 +138,10 @@ async function queryDriversInRadius(pickupLat, pickupLng, vehicleTypeId, radiusK
         SELECT 1 FROM driver_rider_blocks b
         WHERE b.driver_id = d.id AND b.rider_id = ${riderId}::uuid
       )
+      AND NOT EXISTS (
+        SELECT 1 FROM rides ar
+        WHERE ar.driver_id = d.id AND ar.status IN ('accepted', 'arriving', 'in_progress')
+      )
       AND (6371 * acos(
         LEAST(1.0,
           cos(radians(${pickupLat})) * cos(radians(d.current_lat::float))

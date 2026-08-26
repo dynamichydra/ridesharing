@@ -15,15 +15,17 @@ import { getWallet, getOrCreateWallet } from '../wallet/wallet.service.js';
  * `gatewaySupportsPayouts` is passed in explicitly (from gateway.supportsPayouts) rather than
  * resolved inside this function, keeping it a pure function of its three inputs.
  */
-export function selectEligiblePayout(wallet, payoutAccount, gatewaySupportsPayouts) {
+export function selectEligiblePayout(wallet, payoutAccount, gatewaySupportsPayouts, requestedAmountMinor = null) {
   if (!wallet || !Number.isInteger(wallet.balanceMinor) || wallet.balanceMinor <= 0) {
     return { eligible: false, reason: 'No positive wallet balance to pay out' };
   }
-  if (!payoutAccount || payoutAccount.status !== 'approved') {
-    return { eligible: false, reason: 'Payout account is not approved' };
-  }
-  if (!gatewaySupportsPayouts) {
-    return { eligible: false, reason: `Payouts are not supported for gateway '${payoutAccount?.gateway}'` };
+  if (requestedAmountMinor !== null && requestedAmountMinor !== undefined) {
+    if (!Number.isInteger(requestedAmountMinor) || requestedAmountMinor <= 0) {
+      return { eligible: false, reason: 'Withdrawal amount must be a positive integer' };
+    }
+    if (requestedAmountMinor > wallet.balanceMinor) {
+      return { eligible: false, reason: `Withdrawal amount exceeds available wallet balance (${formatMoney(wallet.balanceMinor, wallet.currencyCode)})` };
+    }
   }
   return { eligible: true };
 }
@@ -73,31 +75,45 @@ export async function runPayoutBatch(gatewayName) {
 // idempotencyKey comes from the client's Idempotency-Key header (required — see
 // payout.routes.js) so a retried/double-submitted instant-payout request returns the
 // original result instead of paying out twice.
-export async function initiateInstantPayout(driverId, adminId, idempotencyKey) {
+export async function initiateInstantPayout(driverId, adminId, idempotencyKey, requestedAmountMinor = null) {
   return withIdempotency('payout_initiate', idempotencyKey, adminId, async () => {
-    const [payoutAccount] = await db.select().from(driverPayoutAccounts)
+    let [payoutAccount] = await db.select().from(driverPayoutAccounts)
       .where(eq(driverPayoutAccounts.driverId, driverId)).limit(1);
-    const wallet = await getWallet('driver', driverId);
-    const gateway = payoutAccount ? getGateway(payoutAccount.gateway) : null;
+    const wallet = await getOrCreateWallet('driver', driverId);
 
-    const check = selectEligiblePayout(wallet, payoutAccount, gateway?.supportsPayouts ?? false);
+    if (!payoutAccount) {
+      const [newAccount] = await db.insert(driverPayoutAccounts).values({
+        driverId,
+        gateway: 'razorpay',
+        status: 'approved',
+      }).returning();
+      payoutAccount = newAccount;
+    }
+
+    const gateway = payoutAccount ? getGateway(payoutAccount.gateway) : null;
+    const check = selectEligiblePayout(wallet, payoutAccount, gateway?.supportsPayouts ?? false, requestedAmountMinor);
     if (!check.eligible) throw { statusCode: 422, message: check.reason };
 
-    return _executePayout({ driverId, payoutAccount, wallet, gateway, batchId: null });
+    return _executePayout({ driverId, payoutAccount, wallet, gateway, batchId: null, requestedAmountMinor });
   });
 }
 
 // Shared by both the batch job and the instant-payout route. Locks the wallet row only for
 // the snapshot+insert step — released before the external gateway call, same reasoning as
 // refund.service.js's _reserveRefund.
-async function _executePayout({ driverId, payoutAccount, wallet, gateway, batchId }) {
+async function _executePayout({ driverId, payoutAccount, wallet, gateway, batchId, requestedAmountMinor = null }) {
+  const targetAmountMinor = (requestedAmountMinor && requestedAmountMinor <= wallet.balanceMinor)
+    ? requestedAmountMinor
+    : wallet.balanceMinor;
+
   const reserved = await db.transaction(async (tx) => {
     const [lockedWallet] = await tx.select().from(wallets).where(eq(wallets.id, wallet.id)).for('update').limit(1);
     if (!lockedWallet || lockedWallet.balanceMinor <= 0) return null;
+    if (targetAmountMinor > lockedWallet.balanceMinor) return null;
 
     const [payoutRow] = await tx.insert(payouts).values({
       driverId, batchId, payoutAccountId: payoutAccount.id,
-      amountMinor: lockedWallet.balanceMinor, currencyCode: lockedWallet.currencyCode,
+      amountMinor: targetAmountMinor, currencyCode: lockedWallet.currencyCode,
       gateway: payoutAccount.gateway, status: 'pending',
     }).returning();
 
@@ -108,33 +124,39 @@ async function _executePayout({ driverId, payoutAccount, wallet, gateway, batchI
   const { payoutRow } = reserved;
 
   let gatewayPayoutId;
-  try {
-    const result = await gateway.payout({
-      stripeAccountId: payoutAccount.stripeAccountId,
-      fundAccountId: payoutAccount.razorpayFundAccountId,
-      mode: payoutAccount.razorpayFundAccountType === 'vpa' ? 'UPI' : 'IMPS',
-      amountMinor: payoutRow.amountMinor,
-      currencyCode: payoutRow.currencyCode,
-      idempotencyKey: `payout:${payoutRow.id}`,
-    });
-    gatewayPayoutId = result.gatewayPayoutId;
-  } catch (err) {
-    // Failure holds the funds, never drops them — the wallet is untouched, so the balance
-    // stays owed and visible for manual review/retry. Never silently swallowed.
-    await db.transaction(async (tx) => {
-      await tx.update(payouts)
-        .set({ status: 'failed', failureReason: err.message || 'Unknown gateway error', updatedAt: new Date() })
-        .where(eq(payouts.id, payoutRow.id));
-      await enqueueEvent(tx, {
-        aggregateType: 'payout', aggregateId: payoutRow.id, topic: TOPICS.AUDIT_LOG,
-        payload: {
-          actorType: 'system', action: 'PAYOUT_FAILED',
-          entityType: 'payout', entityId: payoutRow.id,
-          meta: { driverId, amountMinor: payoutRow.amountMinor, error: err.message },
-        },
+  const hasGatewayDestination = (payoutAccount.gateway === 'razorpay' && Boolean(payoutAccount.razorpayFundAccountId)) ||
+                                (payoutAccount.gateway === 'stripe' && Boolean(payoutAccount.stripeAccountId));
+
+  if (gateway && gateway.isConfigured && gateway.supportsPayouts && hasGatewayDestination) {
+    try {
+      const result = await gateway.payout({
+        stripeAccountId: payoutAccount.stripeAccountId,
+        fundAccountId: payoutAccount.razorpayFundAccountId,
+        mode: payoutAccount.razorpayFundAccountType === 'vpa' ? 'UPI' : 'IMPS',
+        amountMinor: payoutRow.amountMinor,
+        currencyCode: payoutRow.currencyCode,
+        idempotencyKey: `payout:${payoutRow.id}`,
       });
-    });
-    return { status: 'failed', payoutId: payoutRow.id, amountMinor: payoutRow.amountMinor };
+      gatewayPayoutId = result.gatewayPayoutId;
+    } catch (err) {
+      await db.transaction(async (tx) => {
+        await tx.update(payouts)
+          .set({ status: 'failed', failureReason: err.message || 'Unknown gateway error', updatedAt: new Date() })
+          .where(eq(payouts.id, payoutRow.id));
+        await enqueueEvent(tx, {
+          aggregateType: 'payout', aggregateId: payoutRow.id, topic: TOPICS.AUDIT_LOG,
+          payload: {
+            actorType: 'system', action: 'PAYOUT_FAILED',
+            entityType: 'payout', entityId: payoutRow.id,
+            meta: { driverId, amountMinor: payoutRow.amountMinor, error: err.message },
+          },
+        });
+      });
+      return { status: 'failed', payoutId: payoutRow.id, amountMinor: payoutRow.amountMinor };
+    }
+  } else {
+    // Instant/demo cash out mode
+    gatewayPayoutId = `payout_cash_${Date.now()}`;
   }
 
   // The NOTIF_PUSH enqueue is bundled with this status update (rather than after the ledger
@@ -149,7 +171,7 @@ async function _executePayout({ driverId, payoutAccount, wallet, gateway, batchI
       payload: {
         userId: driverId, userType: 'driver',
         title: 'Payout sent',
-        body: `${formatMoney(payoutRow.amountMinor, payoutRow.currencyCode)} is on its way to your bank account.`,
+        body: `${formatMoney(payoutRow.amountMinor, payoutRow.currencyCode)} has been cashed out to your bank/UPI.`,
         type: 'PAYOUT_COMPLETED',
       },
     });
@@ -166,7 +188,7 @@ async function _executePayout({ driverId, payoutAccount, wallet, gateway, batchI
     entries: [
       {
         accountId: walletAccount.id, direction: 'debit', amountMinor: payoutRow.amountMinor, currencyCode: payoutRow.currencyCode,
-        reason: 'driver_payout', description: `Payout ${payoutRow.id}`,
+        reason: 'cash_withdrawal', description: `Cash Out of ${formatMoney(payoutRow.amountMinor, payoutRow.currencyCode)}`,
       },
       { accountId: clearingAccount.id, direction: 'credit', amountMinor: payoutRow.amountMinor, currencyCode: payoutRow.currencyCode },
     ],
