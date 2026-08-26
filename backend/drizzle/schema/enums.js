@@ -12,6 +12,16 @@ export const driverStatusEnum = pgEnum('driver_status', [
   'pending_onboarding', 'pending_approval', 'active', 'suspended', 'rejected', 'deleted',
 ]);
 
+export const driverRegistrationStatusEnum = pgEnum('driver_registration_status', [
+  'new', 'mobile_verified', 'email_verified', 'registration_in_progress',
+  'documents_pending', 'pending_review', 'under_verification',
+  'approved', 'rejected', 'suspended', 'active', 'inactive',
+]);
+
+export const driverApprovalStatusEnum = pgEnum('driver_approval_status', [
+  'pending', 'approved', 'rejected',
+]);
+
 export const fareSplitStatusEnum = pgEnum('fare_split_status', [
   'pending', 'accepted', 'declined', 'cancelled', 'expired',
 ]);

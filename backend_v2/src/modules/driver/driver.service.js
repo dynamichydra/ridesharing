@@ -1,6 +1,6 @@
-import { eq, desc, count, and, or, ilike, ne, sql } from 'drizzle-orm';
+import { eq, desc, count, and, or, ilike, ne, sql, gte } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { drivers, subscriptions, cities, driverPayoutAccounts, vehicleModels, rides } from '../../../drizzle/schema/index.js';
+import { drivers, subscriptions, cities, driverPayoutAccounts, vehicleModels, rides, countries } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
@@ -9,6 +9,30 @@ import { createUploadUrl, verifyObjectExists } from '../../utils/storage.js';
 import * as vehicleService from '../vehicle/vehicle.service.js';
 import * as documentsService from '../documents/documents.service.js';
 import * as onboardingService from '../onboarding/onboarding.service.js';
+
+function getStartOfTodayInTimezone(timeZone = 'UTC') {
+  const now = new Date();
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const parts = formatter.formatToParts(now);
+    const y = parts.find((p) => p.type === 'year').value;
+    const m = parts.find((p) => p.type === 'month').value;
+    const d = parts.find((p) => p.type === 'day').value;
+
+    const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const tzDate = new Date(now.toLocaleString('en-US', { timeZone }));
+    const offsetMs = tzDate.getTime() - utcDate.getTime();
+
+    return new Date(new Date(`${y}-${m}-${d}T00:00:00Z`).getTime() - offsetMs);
+  } catch {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+  }
+}
 
 export async function getDashboardSummary(driverId) {
   const [driver] = await db.select({
@@ -20,13 +44,23 @@ export async function getDashboardSummary(driverId) {
     isOnline: drivers.isOnline,
     vehicleModel: drivers.vehicleModel,
     vehicleNumber: drivers.vehicleNumber,
+    countryId: drivers.countryId,
   }).from(drivers).where(eq(drivers.id, driverId)).limit(1);
 
   if (!driver) throw { statusCode: 404, message: 'Driver not found' };
 
-  // Calculate start of today (midnight)
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+  // Resolve driver's country timezone
+  let timezone = 'UTC';
+  if (driver.countryId) {
+    const [country] = await db.select({ timezone: countries.timezone }).from(countries).where(eq(countries.id, driver.countryId)).limit(1);
+    if (country?.timezone) timezone = country.timezone;
+  } else {
+    const [defaultCountry] = await db.select({ timezone: countries.timezone }).from(countries).where(eq(countries.isDefault, true)).limit(1);
+    if (defaultCountry?.timezone) timezone = defaultCountry.timezone;
+  }
+
+  // Calculate start of today (midnight in driver's country timezone)
+  const startOfToday = getStartOfTodayInTimezone(timezone);
 
   // Completed rides today
   const todayCompletedRides = await db.select({
@@ -41,7 +75,7 @@ export async function getDashboardSummary(driverId) {
     and(
       eq(rides.driverId, driverId),
       eq(rides.status, 'completed'),
-      sql`${rides.completedAt} >= ${startOfToday}`,
+      gte(rides.completedAt, startOfToday),
     ),
   );
 

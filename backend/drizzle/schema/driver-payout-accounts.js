@@ -1,6 +1,7 @@
 import { pgTable, uuid, varchar, boolean, text, timestamp } from 'drizzle-orm/pg-core';
 import { drivers } from './drivers.js';
 import { admins } from './admins.js';
+import { payoutAccountStatusEnum } from './enums.js';
 
 // One payout-destination row per driver. `status` follows the exact same convention as
 // driver-documents.js (pending|approved|rejected, rejectionReason, verifiedBy, verifiedAt) —
@@ -18,7 +19,7 @@ export const driverPayoutAccounts = pgTable('driver_payout_accounts', {
   razorpayContactId:      varchar('razorpay_contact_id'),     // RazorpayX Contact — created from driver_bank_accounts
   razorpayFundAccountId:  varchar('razorpay_fund_account_id'), // RazorpayX Fund Account — what payout() actually pays into
   razorpayFundAccountType: varchar('razorpay_fund_account_type', { length: 20 }), // 'bank_account' | 'vpa' — picks the payout mode (IMPS vs UPI), see payout.service.js
-  status:                 varchar('status', { length: 20 }).default('pending'), // pending | approved | rejected
+  status:                 payoutAccountStatusEnum('status').default('pending'), // pending | approved | rejected
   rejectionReason:        text('rejection_reason'),
   verifiedBy:             uuid('verified_by').references(() => admins.id),
   verifiedAt:             timestamp('verified_at'),
