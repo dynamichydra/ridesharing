@@ -234,11 +234,6 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     ConnectRideSocket event,
     Emitter<RideState> emit,
   ) async {
-
-    print("event-event-event");
-    print(event);
-    print("event-event-event");
-
     rideRepository.connect();
 
     _offerSub ??= rideRepository.onRideOffer.listen(
@@ -261,6 +256,13 @@ class RideBloc extends Bloc<RideEvent, RideState> {
       (pos) => add(_DriverLocationChanged(pos)),
       onError: (e) => AppLogger.w('[RideBloc] location stream error: $e'),
     );
+
+    // Send immediate initial location ping to update Redis & H3 index without waiting for GPS movement
+    locationService.getCurrentPosition().then((pos) {
+      add(_DriverLocationChanged(pos));
+    }).catchError((e) {
+      AppLogger.w('[RideBloc] failed to get initial position on connect: $e');
+    });
 
     // Restore an in-progress ride if the app was killed/restarted mid-trip.
     try {

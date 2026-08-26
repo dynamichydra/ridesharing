@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import '../../../../core/network/dio_client.dart';
 import '../models/vehicle_model.dart';
 
@@ -98,14 +99,23 @@ class BookingDataSourceImpl implements BookingDataSource {
         'dropLng': dropLng,
       });
       print('[BookingDataSource] POST /api/v1/fare/available RESPONSE: ${response.statusCode} - ${response.data}');
-      if (response.data['SUCCESS'] == true) {
+      if (response.data != null && response.data['SUCCESS'] == true) {
         final List<dynamic> list = response.data['MESSAGE'] ?? [];
+        if (list.isEmpty) {
+          throw Exception('No rides are currently available in this area.');
+        }
         return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
-      return [];
+      final errorMsg = response.data?['MESSAGE']?.toString() ?? 'No rides available in your area';
+      throw Exception(errorMsg);
+    } on DioException catch (e) {
+      print('[BookingDataSource] POST /api/v1/fare/available ERROR: $e');
+      final errorMsg = e.response?.data?['MESSAGE']?.toString() ?? 'No rides available in your area';
+      throw Exception(errorMsg);
     } catch (e) {
       print('[BookingDataSource] POST /api/v1/fare/available ERROR: $e');
-      throw Exception('Failed to estimate fares: $e');
+      if (e is Exception) rethrow;
+      throw Exception('No rides are currently available in this area.');
     }
   }
 

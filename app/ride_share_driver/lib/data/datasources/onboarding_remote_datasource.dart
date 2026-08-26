@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
 import '../../core/network/api_client.dart';
+import '../../core/error/app_exception.dart';
 
 class OnboardingRemoteDataSource {
   final ApiClient apiClient;
@@ -8,176 +9,269 @@ class OnboardingRemoteDataSource {
   OnboardingRemoteDataSource({required this.apiClient});
 
   Future<Map<String, dynamic>> getProfile() async {
-    final response = await apiClient.dio.get('/drivers/profile');
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.get('/drivers/profile');
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to load profile');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to load profile');
   }
 
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
-    final response = await apiClient.dio.patch('/drivers/profile', data: data);
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.patch('/drivers/profile', data: data);
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to update profile');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to update profile');
   }
 
   Future<Map<String, dynamic>> getOnboardingConfig() async {
-    final response = await apiClient.dio.get('/onboarding/config');
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.get('/onboarding/config');
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to load onboarding configuration');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to load onboarding configuration');
   }
 
   Future<List<dynamic>> getStates(String countryId) async {
-    final response = await apiClient.dio.get('/geo/countries/$countryId/states');
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.get('/geo/countries/$countryId/states');
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to load states');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to load states');
   }
 
   Future<List<dynamic>> getCities(String stateId) async {
-    final response = await apiClient.dio.get('/geo/states/$stateId/cities');
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.get('/geo/states/$stateId/cities');
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to load cities');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to load cities');
   }
 
   Future<bool> setDrivingLocation(String countryId, String stateId, String cityId) async {
-    final response = await apiClient.dio.put('/drivers/driving-location', data: {
-      'countryId': countryId,
-      'stateId': stateId,
-      'cityId': cityId,
-    });
-    return response.data['SUCCESS'] == true;
+    try {
+      final response = await apiClient.dio.put('/drivers/driving-location', data: {
+        'countryId': countryId,
+        'stateId': stateId,
+        'cityId': cityId,
+      });
+      return response.data['SUCCESS'] == true;
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
   }
 
   Future<Map<String, dynamic>> acceptLegalDocument(String documentId) async {
-    final response = await apiClient.dio.post('/onboarding/legal/accept', data: {
-      'legalDocumentId': documentId,
-    });
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.post('/onboarding/legal/accept', data: {
+        'legalDocumentId': documentId,
+      });
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to accept terms');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to accept terms');
   }
 
   Future<List<dynamic>> getMyDocuments() async {
-    final response = await apiClient.dio.get('/documents/mine');
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.get('/documents/mine');
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to load documents');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to load documents');
   }
 
   Future<Map<String, dynamic>> requestUploadUrl(String documentTypeId, String side, String contentType) async {
-    final response = await apiClient.dio.post('/documents/$documentTypeId/upload-url', data: {
-      'side': side,
-      'contentType': contentType,
-    });
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.post('/documents/$documentTypeId/upload-url', data: {
+        'side': side,
+        'contentType': contentType,
+      });
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to get upload URL');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to get upload URL');
   }
 
   Future<bool> uploadDocumentFile(String uploadUrl, List<int> bytes, String contentType) async {
-    final dio = Dio();
-    final response = await dio.put(
-      uploadUrl,
-      data: Stream.fromIterable([bytes]),
-      options: Options(
-        headers: {
-          HttpHeaders.contentTypeHeader: contentType,
-          HttpHeaders.contentLengthHeader: bytes.length,
-        },
-      ),
-    );
-    return response.statusCode == 200;
+    try {
+      final dio = Dio();
+      final response = await dio.put(
+        uploadUrl,
+        data: Stream.fromIterable([bytes]),
+        options: Options(
+          headers: {
+            HttpHeaders.contentTypeHeader: contentType,
+            HttpHeaders.contentLengthHeader: bytes.length,
+          },
+        ),
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
   }
 
   Future<Map<String, dynamic>> confirmDocument(String documentTypeId, String side, String key, {String? documentNumber, String? expiryDate}) async {
-    final response = await apiClient.dio.post('/documents/$documentTypeId', data: {
-      'side': side,
-      'key': key,
-      if (documentNumber != null) 'documentNumber': documentNumber,
-      if (expiryDate != null) 'expiryDate': expiryDate,
-    });
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.post('/documents/$documentTypeId', data: {
+        'side': side,
+        'key': key,
+        if (documentNumber != null) 'documentNumber': documentNumber,
+        if (expiryDate != null) 'expiryDate': expiryDate,
+      });
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to confirm document upload');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to confirm document upload');
   }
 
   Future<Map<String, dynamic>> requestProfilePhotoUploadUrl(String contentType) async {
-    final response = await apiClient.dio.post('/drivers/profile-photo/upload-url', data: {
-      'contentType': contentType,
-    });
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.post('/drivers/profile-photo/upload-url', data: {
+        'contentType': contentType,
+      });
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to get profile photo upload URL');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to get profile photo upload URL');
   }
 
   Future<Map<String, dynamic>> confirmProfilePhoto(String key) async {
-    final response = await apiClient.dio.post('/drivers/profile-photo', data: {
-      'key': key,
-    });
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.post('/drivers/profile-photo', data: {
+        'key': key,
+      });
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to confirm profile photo');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to confirm profile photo');
   }
 
   Future<List<dynamic>> getMyVehicles() async {
-    final response = await apiClient.dio.get('/vehicles/mine');
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.get('/vehicles/mine');
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to load vehicles');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to load vehicles');
+  }
+
+  Future<List<dynamic>> getVehicleModels({String? vehicleTypeId}) async {
+    try {
+      final response = await apiClient.dio.get(
+        '/vehicle-models',
+        queryParameters: {
+          if (vehicleTypeId != null) 'vehicleTypeId': vehicleTypeId,
+        },
+      );
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'] as List<dynamic>? ?? [];
+      }
+      return [];
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
   }
 
   Future<Map<String, dynamic>> addVehicle(Map<String, dynamic> data) async {
-    final response = await apiClient.dio.post('/vehicles', data: data);
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.post('/vehicles', data: data);
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to add vehicle');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to add vehicle');
   }
 
   Future<List<dynamic>> getMyAnswers() async {
-    final response = await apiClient.dio.get('/onboarding/answers/mine');
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.get('/onboarding/answers/mine');
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to get answers');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to get answers');
   }
 
   Future<bool> submitAnswers(List<Map<String, dynamic>> answers) async {
-    final response = await apiClient.dio.post('/onboarding/answers', data: {
-      'answers': answers,
-    });
-    return response.data['SUCCESS'] == true;
+    try {
+      final response = await apiClient.dio.post('/onboarding/answers', data: {
+        'answers': answers,
+      });
+      return response.data['SUCCESS'] == true;
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
   }
 
   Future<Map<String, dynamic>> getRegistrationSummary() async {
-    final response = await apiClient.dio.get('/drivers/registration-summary');
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.get('/drivers/registration-summary');
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to load registration summary');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to load registration summary');
   }
 
   Future<Map<String, dynamic>> getOnboardingState() async {
-    final response = await apiClient.dio.get('/onboarding/state');
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+    try {
+      final response = await apiClient.dio.get('/onboarding/state');
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to load onboarding state');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to load onboarding state');
   }
 
   Future<String> fetchLegalContent(String url) async {
@@ -215,11 +309,41 @@ class OnboardingRemoteDataSource {
     }
   }
 
-  Future<Map<String, dynamic>> submitApplication() async {
-    final response = await apiClient.dio.post('/drivers/submit-application');
-    if (response.data['SUCCESS'] == true) {
-      return response.data['MESSAGE'];
+  Future<Map<String, dynamic>> submitBankDetails(Map<String, dynamic> data) async {
+    try {
+      final response = await apiClient.dio.put('/driver/bank-details', data: data);
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'] is Map<String, dynamic>
+            ? response.data['MESSAGE']
+            : {'success': true};
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to submit bank details');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
-    throw Exception('Failed to submit application');
+  }
+
+  Future<Map<String, dynamic>?> getMyBankDetails() async {
+    try {
+      final response = await apiClient.dio.get('/driver/bank-details');
+      if (response.data['SUCCESS'] == true && response.data['MESSAGE'] != null) {
+        return response.data['MESSAGE'] as Map<String, dynamic>;
+      }
+      return null;
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> submitApplication() async {
+    try {
+      final response = await apiClient.dio.post('/drivers/submit-application');
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to submit application');
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
   }
 }

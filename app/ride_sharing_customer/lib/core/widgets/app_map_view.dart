@@ -194,11 +194,10 @@ class _AppMapViewState extends State<AppMapView> with SingleTickerProviderStateM
           onMapCreated: widget.onMapCreated,
           onCameraMove: _handleCameraMove,
           onTap: widget.onTap,
+          mapId: AppConstants.cloudMapId,
+          style: null,
           myLocationEnabled: widget.myLocationEnabled,
           myLocationButtonEnabled: widget.myLocationButtonEnabled,
-          // Platform-specific Google Cloud Map ID with custom style fallback
-          mapId: AppConstants.cloudMapId,
-          style: widget.mapStyle ?? AppMapStyles.uberSilver,
 
           initialCameraPosition: CameraPosition(
             target: widget.driverPosition ??

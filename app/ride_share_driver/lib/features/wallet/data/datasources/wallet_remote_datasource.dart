@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/error/app_exception.dart';
 
@@ -120,7 +121,15 @@ class WalletRemoteDataSource {
   /// POST /api/v1/payouts/me/instant
   Future<Map<String, dynamic>> requestInstantPayout() async {
     try {
-      final response = await apiClient.dio.post('/payouts/me/instant');
+      final idempotencyKey = const Uuid().v4();
+      final response = await apiClient.dio.post(
+        '/payouts/me/instant',
+        options: Options(
+          headers: {
+            'Idempotency-Key': idempotencyKey,
+          },
+        ),
+      );
       final data = response.data as Map<String, dynamic>;
       if (data['SUCCESS'] != true) {
         throw ServerException(data['MESSAGE']?.toString() ?? 'Payout failed');

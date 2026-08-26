@@ -6,6 +6,7 @@ import '../../../../core/utils/location_helper.dart';
 import '../../../../core/models/route_model.dart';
 import '../../domain/repositories/ride_tracking_repository.dart';
 import '../../../../core/services/storage_service.dart';
+import '../../../../core/network/dio_client.dart';
 import '../../../../injection_container.dart';
 
 // ==========================================
@@ -327,6 +328,26 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
 
       final String rideId = map['rideId']?.toString() ?? '';
       if (rideId.isEmpty) return;
+
+      // ── Live status verification with server ──
+      try {
+        final dioClient = sl<DioClient>();
+        final res = await dioClient.dio.get('/api/v1/rides/$rideId');
+        if (res.data != null && res.data['SUCCESS'] == true) {
+          final serverRide = res.data['MESSAGE'] as Map<String, dynamic>?;
+          final serverStatus = serverRide?['status']?.toString().toLowerCase();
+
+          if (serverStatus == 'completed' || serverStatus == 'cancelled') {
+            print('[RideTrackingBloc] Ride $rideId already finished on server with status: $serverStatus');
+            await storage.cacheData('active_ride_tracking', null);
+            _rideTrackingRepository.disconnectFromRide();
+            emit(RideTrackingInitial());
+            return;
+          }
+        }
+      } catch (e) {
+        print('[RideTrackingBloc] Verification check error (proceeding with cached flow): $e');
+      }
 
       final pickup = LatLng(
         (map['pickupLat'] as num).toDouble(),

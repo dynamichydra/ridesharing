@@ -118,25 +118,50 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
           top: MediaQuery.of(context).padding.top + 8,
           left: 16,
           right: 16,
-          child: const Column(
-            children: [
-              Text(
-                'Connecting you to the driver',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF021B47),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
                 ),
-              ),
-              SizedBox(height: 2),
-              Text(
-                'Please wait a moment',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF8A94A6),
+              ],
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: Color(0xFF021B47)),
+                  onPressed: () => context.go('/home'),
                 ),
-              ),
-            ],
+                const Expanded(
+                  child: Column(
+                    children: [
+                      Text(
+                        'Connecting you to the driver',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF021B47),
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Please wait a moment',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF8A94A6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 36),
+              ],
+            ),
           ),
         ),
 
@@ -259,7 +284,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
           left: 16,
           right: 16,
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
@@ -271,24 +296,35 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                 ),
               ],
             ),
-            child: const Column(
+            child: Row(
               children: [
-                Text(
-                  'Driver Accepted',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF009048),
-                    fontSize: 16,
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: Color(0xFF021B47)),
+                  onPressed: () => context.go('/home'),
+                ),
+                const Expanded(
+                  child: Column(
+                    children: [
+                      Text(
+                        'Driver Accepted',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF009048),
+                          fontSize: 16,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Your driver is on the way',
+                        style: TextStyle(
+                          color: Color(0xFF535E79),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                SizedBox(height: 2),
-                Text(
-                  'Your driver is on the way',
-                  style: TextStyle(
-                    color: Color(0xFF535E79),
-                    fontSize: 12,
-                  ),
-                ),
+                const SizedBox(width: 36),
               ],
             ),
           ),
@@ -454,7 +490,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
           left: 16,
           right: 16,
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
@@ -466,24 +502,35 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                 ),
               ],
             ),
-            child: const Column(
+            child: Row(
               children: [
-                Text(
-                  'Driver on the way',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF009048),
-                    fontSize: 16,
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: Color(0xFF021B47)),
+                  onPressed: () => context.go('/home'),
+                ),
+                const Expanded(
+                  child: Column(
+                    children: [
+                      Text(
+                        'Driver on the way',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF009048),
+                          fontSize: 16,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Your driver is coming to pickup',
+                        style: TextStyle(
+                          color: Color(0xFF535E79),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                SizedBox(height: 2),
-                Text(
-                  'Your driver is coming to pickup',
-                  style: TextStyle(
-                    color: Color(0xFF535E79),
-                    fontSize: 12,
-                  ),
-                ),
+                const SizedBox(width: 36),
               ],
             ),
           ),
@@ -650,9 +697,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
               children: [
                 IconButton(
                   icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: Color(0xFF021B47)),
-                  onPressed: () {
-                    context.read<RideTrackingBloc>().add(const UpdateTrackingStep('driverAccepted'));
-                  },
+                  onPressed: () => context.go('/home'),
                 ),
                 const Expanded(
                   child: Column(
@@ -880,7 +925,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
               children: [
                 IconButton(
                   icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: Color(0xFF021B47)),
-                  onPressed: () {},
+                  onPressed: () => context.go('/home'),
                 ),
                 const Text(
                   'In Ride',

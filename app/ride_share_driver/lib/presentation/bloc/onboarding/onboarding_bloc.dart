@@ -85,6 +85,19 @@ class UploadProfilePhotoEvent extends OnboardingEvent {
   UploadProfilePhotoEvent({required this.bytes, required this.contentType});
 }
 
+class SaveBankDetailsEvent extends OnboardingEvent {
+  final String holder;
+  final String bankName;
+  final String accountNumber;
+  final String ifscCode;
+  SaveBankDetailsEvent({
+    required this.holder,
+    required this.bankName,
+    required this.accountNumber,
+    required this.ifscCode,
+  });
+}
+
 class LoadRegistrationSummary extends OnboardingEvent {}
 
 class SubmitOnboardingApplication extends OnboardingEvent {}
@@ -268,6 +281,21 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
         );
         await onboardingRepository.confirmProfilePhoto(uploadResp.key);
 
+        emit(OnboardingSuccess());
+      } catch (e) {
+        emit(OnboardingError(message: e.toString()));
+      }
+    });
+
+    on<SaveBankDetailsEvent>((event, emit) async {
+      emit(OnboardingLoading());
+      try {
+        await onboardingRepository.submitBankDetails(
+          holder: event.holder,
+          bankName: event.bankName,
+          accountNumber: event.accountNumber,
+          ifscCode: event.ifscCode,
+        );
         emit(OnboardingSuccess());
       } catch (e) {
         emit(OnboardingError(message: e.toString()));

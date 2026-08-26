@@ -102,47 +102,42 @@ class ChecklistScreen extends StatelessWidget {
 
     // Add required document list dynamically from documentRequirements
     for (final req in documentRequirements) {
-      if (req.code == 'DRIVERS_LICENSE') {
-        todoItems.add(
-          _ChecklistItem(
-            code: 'document:DRIVERS_LICENSE',
-            title: 'Driver\'s licence',
-            description: 'Identity validation and DL proof',
-            icon: Icons.badge_rounded,
-            isCompleted: isDocumentComplete('DRIVERS_LICENSE'),
-          ),
-        );
-      } else if (req.code == 'NATIONAL_ID') {
-        todoItems.add(
-          _ChecklistItem(
-            code: 'document:NATIONAL_ID',
-            title: 'Aadhar Card (National ID)',
-            description: 'Aadhar card validation proof',
-            icon: Icons.style_rounded,
-            isCompleted: isDocumentComplete('NATIONAL_ID'),
-          ),
-        );
-      } else if (req.code == 'VEHICLE_REGISTRATION' && !needsVehicleRental) {
-        todoItems.add(
-          _ChecklistItem(
-            code: 'document:VEHICLE_REGISTRATION',
-            title: 'Vehicle Registration',
-            description: 'Upload RC Book front side',
-            icon: Icons.assignment_rounded,
-            isCompleted: isDocumentComplete('VEHICLE_REGISTRATION'),
-          ),
-        );
-      } else if (req.code == 'INSURANCE_CERTIFICATE' && !needsVehicleRental) {
-        todoItems.add(
-          _ChecklistItem(
-            code: 'document:INSURANCE_CERTIFICATE',
-            title: 'Insurance Certificate',
-            description: 'Upload valid insurance policy paper',
-            icon: Icons.security_rounded,
-            isCompleted: isDocumentComplete('INSURANCE_CERTIFICATE'),
-          ),
-        );
+      if (needsVehicleRental && (req.code == 'VEHICLE_REGISTRATION' || req.code == 'INSURANCE_CERTIFICATE')) {
+        continue;
       }
+
+      IconData docIcon = Icons.assignment_rounded;
+      String docTitle = req.code.replaceAll('_', ' ').toLowerCase();
+      docTitle = docTitle.split(' ').map((word) => word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1)}' : '').join(' ');
+      String docDesc = 'Upload required document image / PDF';
+
+      if (req.code == 'DRIVERS_LICENSE' || req.code == 'DRIVING_LICENSE') {
+        docTitle = "Driver's Licence";
+        docDesc = 'Identity validation and DL proof';
+        docIcon = Icons.badge_rounded;
+      } else if (req.code == 'NATIONAL_ID') {
+        docTitle = 'Aadhar Card (National ID)';
+        docDesc = 'Aadhar card validation proof';
+        docIcon = Icons.style_rounded;
+      } else if (req.code == 'VEHICLE_REGISTRATION') {
+        docTitle = 'Vehicle Registration';
+        docDesc = 'Upload RC Book document';
+        docIcon = Icons.assignment_rounded;
+      } else if (req.code == 'INSURANCE_CERTIFICATE') {
+        docTitle = 'Insurance Certificate';
+        docDesc = 'Upload valid insurance policy paper';
+        docIcon = Icons.security_rounded;
+      }
+
+      todoItems.add(
+        _ChecklistItem(
+          code: 'document:${req.code}',
+          title: docTitle,
+          description: docDesc,
+          icon: docIcon,
+          isCompleted: isDocumentComplete(req.code),
+        ),
+      );
     }
 
     // Add remaining items

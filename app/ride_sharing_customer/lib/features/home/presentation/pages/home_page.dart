@@ -3,7 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../../../../core/widgets/error_view.dart';
+import '../../../../core/widgets/custom_toast.dart';
 import '../bloc/home_bloc.dart';
+import '../../../ride_tracking/presentation/bloc/ride_tracking_bloc.dart';
 import '../../../location/presentation/widgets/google_map_picker.dart';
 
 class HomePage extends StatefulWidget {
@@ -78,7 +80,20 @@ class _HomePageState extends State<HomePage> {
                         ),
                         Expanded(
                           child: InkWell(
-                            onTap: () => context.push('/select-location'),
+                            onTap: () {
+                              final trackingState = context.read<RideTrackingBloc>().state;
+                              final hasActiveRide = (trackingState is RideTrackingActive &&
+                                      trackingState.trackingState != 'rideCompleted') ||
+                                  trackingState is RideTrackingSearching;
+                              if (hasActiveRide) {
+                                CustomToast.show(
+                                  context,
+                                  'You already have an active ride in progress.',
+                                );
+                              } else {
+                                context.push('/select-location');
+                              }
+                            },
                             borderRadius: BorderRadius.circular(12),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
@@ -144,120 +159,254 @@ class _HomePageState extends State<HomePage> {
                   bottom: 0,
                   left: 0,
                   right: 0,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(28),
-                        topRight: Radius.circular(28),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF021B47).withOpacity(0.12),
-                          blurRadius: 20,
-                          offset: const Offset(0, -6),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 12),
-                        // Sheet Drag Handle
-                        Center(
-                          child: Container(
-                            width: 36,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade300,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
+                  child: BlocBuilder<RideTrackingBloc, RideTrackingState>(
+                    builder: (context, trackingState) {
+                      final hasActiveRide = (trackingState is RideTrackingActive &&
+                              trackingState.trackingState != 'rideCompleted') ||
+                          trackingState is RideTrackingSearching;
 
-                        // Animated / Highlighted Search Bar Card
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: InkWell(
-                            onTap: () => context.push('/select-location'),
-                            borderRadius: BorderRadius.circular(18),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF7F9FC),
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(color: const Color(0xFFE2E7E9)),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.02),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
+                      void handleBookingTap() {
+                        if (hasActiveRide) {
+                          CustomToast.show(
+                            context,
+                            'You already have an active ride in progress. Tap the banner to view.',
+                          );
+                        } else {
+                          context.push('/select-location');
+                        }
+                      }
+
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(28),
+                            topRight: Radius.circular(28),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF021B47).withOpacity(0.12),
+                              blurRadius: 20,
+                              offset: const Offset(0, -6),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 12),
+                            // Sheet Drag Handle
+                            Center(
+                              child: Container(
+                                width: 36,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade300,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
                               ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
+                            ),
+                            const SizedBox(height: 12),
+
+                            // ── Elevated Active Ride Banner ───────────────────
+                            if (hasActiveRide) ...[
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                child: InkWell(
+                                  onTap: () => context.push('/ride-tracking'),
+                                  borderRadius: BorderRadius.circular(18),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF01A34D).withOpacity(0.12),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: const Icon(Icons.search_rounded, color: Color(0xFF01A34D), size: 20),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  const Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Where to next?',
-                                          style: TextStyle(
-                                            color: Color(0xFF021B47),
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        SizedBox(height: 2),
-                                        Text(
-                                          'Search destination or tap saved spot',
-                                          style: TextStyle(
-                                            color: Color(0xFF8A94A6),
-                                            fontSize: 12,
-                                          ),
+                                      gradient: const LinearGradient(
+                                        colors: [Color(0xFF009048), Color(0xFF006C36)],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                      borderRadius: BorderRadius.circular(18),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF009048).withOpacity(0.35),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
                                         ),
                                       ],
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF0165B7).withOpacity(0.08),
-                                      borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: Row(
-                                      children: const [
-                                        Icon(Icons.schedule_rounded, color: Color(0xFF0165B7), size: 14),
-                                        SizedBox(width: 4),
-                                        Text(
-                                          'Now',
-                                          style: TextStyle(
-                                            color: Color(0xFF0165B7),
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withOpacity(0.2),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.directions_car_filled_rounded,
+                                            color: Colors.white,
+                                            size: 22,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  Container(
+                                                    width: 8,
+                                                    height: 8,
+                                                    decoration: const BoxDecoration(
+                                                      color: Color(0xFFFFD700),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    trackingState is RideTrackingSearching
+                                                        ? 'Searching Driver...'
+                                                        : (trackingState as RideTrackingActive).trackingState == 'rideInProgress'
+                                                            ? 'Trip in Progress'
+                                                            : 'Driver is on the way',
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 14,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 3),
+                                              Text(
+                                                trackingState is RideTrackingActive
+                                                    ? 'To: ${(trackingState as RideTrackingActive).destinationName}'
+                                                    : 'Finding nearest driver for you',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  color: Colors.white.withOpacity(0.9),
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                'View',
+                                                style: TextStyle(
+                                                  color: Color(0xFF009048),
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                              SizedBox(width: 4),
+                                              Icon(
+                                                Icons.arrow_forward_ios_rounded,
+                                                color: Color(0xFF009048),
+                                                size: 12,
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
-                                ],
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+
+                            // Animated / Highlighted Search Bar Card
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                              child: InkWell(
+                                onTap: handleBookingTap,
+                                borderRadius: BorderRadius.circular(18),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF7F9FC),
+                                    borderRadius: BorderRadius.circular(18),
+                                    border: Border.all(color: const Color(0xFFE2E7E9)),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.02),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF01A34D).withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: const Icon(Icons.search_rounded, color: Color(0xFF01A34D), size: 20),
+                                      ),
+                                      const SizedBox(width: 14),
+                                      const Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Where to next?',
+                                              style: TextStyle(
+                                                color: Color(0xFF021B47),
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            SizedBox(height: 2),
+                                            Text(
+                                              'Search destination or tap saved spot',
+                                              style: TextStyle(
+                                                color: Color(0xFF8A94A6),
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF0165B7).withOpacity(0.08),
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                        child: Row(
+                                          children: const [
+                                            Icon(Icons.schedule_rounded, color: Color(0xFF0165B7), size: 14),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Now',
+                                              style: TextStyle(
+                                                color: Color(0xFF0165B7),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
+                            const SizedBox(height: 18),
 
                         // Service Modes Banner Grid / Quick Shortcuts
                         Padding(
@@ -271,7 +420,7 @@ class _HomePageState extends State<HomePage> {
                                   badge: 'Popular',
                                   icon: Icons.directions_car_rounded,
                                   iconBgColor: const Color(0xFF01A34D),
-                                  onTap: () => context.push('/select-location'),
+                                  onTap: handleBookingTap,
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -283,7 +432,7 @@ class _HomePageState extends State<HomePage> {
                                   badgeColor: const Color(0xFFE53935),
                                   icon: Icons.people_alt_rounded,
                                   iconBgColor: const Color(0xFF0165B7),
-                                  onTap: () => context.push('/select-location'),
+                                  onTap: handleBookingTap,
                                 ),
                               ),
                             ],
@@ -303,7 +452,7 @@ class _HomePageState extends State<HomePage> {
                                   label: 'Home',
                                   address: 'Add address',
                                   color: const Color(0xFF0165B7),
-                                  onTap: () => context.push('/select-location'),
+                                  onTap: handleBookingTap,
                                 ),
                                 const SizedBox(width: 10),
                                 _buildSavedChip(
@@ -311,7 +460,7 @@ class _HomePageState extends State<HomePage> {
                                   label: 'Work',
                                   address: 'Add address',
                                   color: const Color(0xFF01A34D),
-                                  onTap: () => context.push('/select-location'),
+                                  onTap: handleBookingTap,
                                 ),
                                 const SizedBox(width: 10),
                                 _buildSavedChip(
@@ -331,7 +480,7 @@ class _HomePageState extends State<HomePage> {
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: InkWell(
-                            onTap: () => context.push('/select-location'),
+                            onTap: handleBookingTap,
                             borderRadius: BorderRadius.circular(16),
                             child: Container(
                               padding: const EdgeInsets.all(14),
@@ -410,16 +559,18 @@ class _HomePageState extends State<HomePage> {
                         const SizedBox(height: 24),
                       ],
                     ),
-                  ),
-                ),
-              ],
-            );
-          }
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      }
 
-          return const LoadingView();
-        },
-      ),
-    );
+      return const LoadingView();
+    },
+  ),
+);
   }
 
   Widget _buildServiceCategoryTile({

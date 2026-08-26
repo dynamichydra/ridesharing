@@ -12,8 +12,8 @@ class ApiConfig {
 
   static String get baseUrl {
     if (_overrideBaseUrl.isNotEmpty) return _overrideBaseUrl;
-    // return Platform.isAndroid ? 'https://ryva.duckdns.org/api/v1' : 'https://ryva.duckdns.org/api/v1';
-    return Platform.isAndroid ? 'http://10.0.2.2:3000/api/v1' : 'http://localhost:3000/api/v1';
+    return Platform.isAndroid ? 'https://ryva.duckdns.org/api/v1' : 'https://ryva.duckdns.org/api/v1';
+    // return Platform.isAndroid ? 'http://10.0.2.2:3000/api/v1' : 'http://localhost:3000/api/v1';
   }
 
   /// Socket.IO is mounted directly on the raw HTTP server (see
@@ -29,6 +29,6 @@ class ApiConfig {
     return uri.origin;
   }
 
-  static const Duration connectTimeout = Duration(seconds: 10);
-  static const Duration receiveTimeout = Duration(seconds: 10);
+  static const Duration connectTimeout = Duration(minutes: 10);
+  static const Duration receiveTimeout = Duration(minutes: 10);
 }

@@ -766,9 +766,13 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           },
           onSubmit: () {
             // Frontend validation for both sides of the required documents
-            bool allDocsComplete = true;
+            String? missingDocName;
             for (final docReq in _config!.documentRequirements) {
               if (docReq.isRequired) {
+                if (_needsVehicleRental && (docReq.code == 'VEHICLE_REGISTRATION' || docReq.code == 'INSURANCE_CERTIFICATE')) {
+                  continue;
+                }
+
                 DriverDocument? doc;
                 for (final d in _summary!.documents) {
                   if (d.documentTypeId == docReq.id) {
@@ -777,31 +781,31 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                   }
                 }
                 if (doc == null) {
-                  allDocsComplete = false;
+                  missingDocName = docReq.code.replaceAll('_', ' ');
                   break;
                 }
                 if (docReq.requiresFront &&
                     (doc.frontUrl == null || doc.frontUrl!.isEmpty)) {
-                  allDocsComplete = false;
+                  missingDocName = "${docReq.code.replaceAll('_', ' ')} (Front)";
                   break;
                 }
                 if (docReq.requiresBack &&
                     (doc.backUrl == null || doc.backUrl!.isEmpty)) {
-                  allDocsComplete = false;
+                  missingDocName = "${docReq.code.replaceAll('_', ' ')} (Back)";
                   break;
                 }
                 if (docReq.requiresPdf &&
                     (doc.pdfUrl == null || doc.pdfUrl!.isEmpty)) {
-                  allDocsComplete = false;
+                  missingDocName = "${docReq.code.replaceAll('_', ' ')} (PDF)";
                   break;
                 }
               }
             }
 
-            if (!allDocsComplete) {
+            if (missingDocName != null) {
               CustomToast.show(
                 context,
-                'Please upload all required document sides (front & back).',
+                'Please upload $missingDocName.',
               );
               return;
             }
@@ -880,10 +884,15 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                   _bankAccount = accountNumber;
                   _bankIfsc = ifscCode;
                   _simulatedCompletedItems.add('bank_details');
-                  _currentStep = 9;
-                  _enteredFromChecklist = false;
                 });
-                context.read<OnboardingBloc>().add(LoadRegistrationSummary());
+                context.read<OnboardingBloc>().add(
+                  SaveBankDetailsEvent(
+                    holder: holder,
+                    bankName: bankName,
+                    accountNumber: accountNumber,
+                    ifscCode: ifscCode,
+                  ),
+                );
               },
         );
       case 14:

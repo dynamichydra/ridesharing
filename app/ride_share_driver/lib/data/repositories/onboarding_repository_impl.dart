@@ -191,7 +191,27 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
     required String registrationNumber,
     String? color,
   }) async {
+    String? resolvedModelId;
+    try {
+      final list = await remoteDataSource.getVehicleModels(vehicleTypeId: vehicleTypeId);
+      if (list.isNotEmpty) {
+        final query = model.toLowerCase();
+        final matched = list.firstWhere(
+          (m) {
+            final name = (m['name'] as String?)?.toLowerCase() ?? '';
+            final slug = (m['slug'] as String?)?.toLowerCase() ?? '';
+            return name == query || slug.contains(query) || query.contains(name);
+          },
+          orElse: () => list.first,
+        );
+        resolvedModelId = matched['id']?.toString();
+      }
+    } catch (_) {
+      // Fallback if /vehicle-models endpoint is unreachable
+    }
+
     final data = await remoteDataSource.addVehicle({
+      if (resolvedModelId != null) 'vehicleModelId': resolvedModelId,
       'vehicleTypeId': vehicleTypeId,
       'model': model,
       'year': year,
@@ -251,6 +271,27 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
   Future<OnboardingProgress> getOnboardingState() async {
     final data = await remoteDataSource.getOnboardingState();
     return OnboardingProgress.fromJson(data);
+  }
+
+  @override
+  Future<bool> submitBankDetails({
+    required String holder,
+    required String bankName,
+    required String accountNumber,
+    required String ifscCode,
+  }) async {
+    final res = await remoteDataSource.submitBankDetails({
+      'accountHolderName': holder,
+      'bankName': bankName,
+      'accountNumber': accountNumber,
+      'routingCode': ifscCode,
+    });
+    return res.isNotEmpty;
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getMyBankDetails() {
+    return remoteDataSource.getMyBankDetails();
   }
 
   @override

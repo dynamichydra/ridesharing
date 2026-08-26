@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../../injection_container.dart';
 import '../../../../core/services/storage_service.dart';
+import '../../../../core/network/dio_client.dart';
 import '../../../ride_tracking/presentation/bloc/ride_tracking_bloc.dart';
 import '../bloc/auth_bloc.dart';
 
@@ -90,15 +91,32 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
     if (!_isPermissionGranted || _pendingState == null) return;
 
     if (_pendingState is AuthAuthenticated) {
-      Future.delayed(const Duration(milliseconds: 1000), () {
+      Future.delayed(const Duration(milliseconds: 1000), () async {
         if (!mounted) return;
         final storage = sl<StorageService>();
         final activeRide = storage.getCachedData('active_ride_tracking');
-        if (activeRide != null) {
-          context.read<RideTrackingBloc>().add(RestoreActiveRide());
-          context.go('/ride-tracking');
+        if (activeRide != null && activeRide is Map) {
+          final rideId = activeRide['rideId']?.toString();
+          if (rideId != null && rideId.isNotEmpty) {
+            try {
+              final dioClient = sl<DioClient>();
+              final res = await dioClient.dio.get('/api/v1/rides/$rideId');
+              if (res.data != null && res.data['SUCCESS'] == true) {
+                final status = res.data['MESSAGE']?['status']?.toString().toLowerCase();
+                if (status == 'completed' || status == 'cancelled') {
+                  await storage.cacheData('active_ride_tracking', null);
+                  if (mounted) context.go('/home');
+                  return;
+                }
+              }
+            } catch (_) {}
+          }
+          if (mounted) {
+            context.read<RideTrackingBloc>().add(RestoreActiveRide());
+            context.go('/ride-tracking');
+          }
         } else {
-          context.go('/home');
+          if (mounted) context.go('/home');
         }
       });
     } else if (_pendingState is AuthUnauthenticated) {

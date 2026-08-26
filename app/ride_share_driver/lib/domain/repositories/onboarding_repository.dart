@@ -99,6 +99,13 @@ abstract class OnboardingRepository {
   });
   Future<List<DriverAnswer>> getMyAnswers();
   Future<bool> submitAnswers(List<Map<String, dynamic>> answers);
+  Future<bool> submitBankDetails({
+    required String holder,
+    required String bankName,
+    required String accountNumber,
+    required String ifscCode,
+  });
+  Future<Map<String, dynamic>?> getMyBankDetails();
   Future<RegistrationSummary> getRegistrationSummary();
   Future<DriverProfile> submitApplication();
   Future<OnboardingProgress> getOnboardingState();

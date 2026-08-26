@@ -326,33 +326,44 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
           });
         }
       } else {
-        final coord = await _geocodingService.forwardGeocode(query);
-        if (coord != null && mounted) {
-          String displayAddress = query;
-          try {
-            final reversedPlace =
-                await _geocodingService.reverseGeocode(coord);
-            final resolved =
-                _extractPlaceName(reversedPlace, fallback: query);
-            if (resolved.isNotEmpty) displayAddress = resolved;
-          } catch (_) {}
+        // Try REST API fallback for multiple autocomplete results
+        final httpResults = await _placesService.fetchPredictionsHttp(
+            query, AppConstants.googleMapsApiKey);
+        if (httpResults.isNotEmpty && mounted) {
+          setState(() {
+            _searchResults = httpResults;
+            _isSearching = false;
+          });
+        } else {
+          // Final fallback: geocoding (single result)
+          final coord = await _geocodingService.forwardGeocode(query);
+          if (coord != null && mounted) {
+            String displayAddress = query;
+            try {
+              final reversedPlace =
+                  await _geocodingService.reverseGeocode(coord);
+              final resolved =
+                  _extractPlaceName(reversedPlace, fallback: query);
+              if (resolved.isNotEmpty) displayAddress = resolved;
+            } catch (_) {}
 
-          if (mounted) {
-            setState(() {
-              _searchResults = [
-                {
-                  'name': query,
-                  'address': displayAddress,
-                  'latitude': coord.latitude,
-                  'longitude': coord.longitude,
-                  'type': 'geocode',
-                }
-              ];
-              _isSearching = false;
-            });
+            if (mounted) {
+              setState(() {
+                _searchResults = [
+                  {
+                    'name': query,
+                    'address': displayAddress,
+                    'latitude': coord.latitude,
+                    'longitude': coord.longitude,
+                    'type': 'geocode',
+                  }
+                ];
+                _isSearching = false;
+              });
+            }
+          } else if (mounted) {
+            setState(() => _isSearching = false);
           }
-        } else if (mounted) {
-          setState(() => _isSearching = false);
         }
       }
     } catch (_) {
@@ -378,12 +389,23 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
     _pickupFocusNode.unfocus();
     _destinationFocusNode.unfocus();
 
+    // Reverse geocode for full location name (consistent with map tap)
+    String resolvedName = name;
+    String resolvedAddress = address;
+    try {
+      final reversePlace = await _geocodingService.reverseGeocode(coords);
+      final extracted = _extractPlaceName(reversePlace, fallback: name);
+      if (extracted.isNotEmpty) resolvedName = extracted;
+      final revAddress = reversePlace?.formattedAddress ?? '';
+      if (revAddress.isNotEmpty) resolvedAddress = revAddress;
+    } catch (_) {}
+
     if (_activeInputTarget == LocationTarget.pickup) {
       setState(() {
         _pickupLatLng = coords;
-        _pickupName = name;
-        _pickupAddress = address;
-        _pickupController.text = name;
+        _pickupName = resolvedName;
+        _pickupAddress = resolvedAddress;
+        _pickupController.text = resolvedName;
         _searchResults = [];
         _showAutocomplete = false;
         if (_destLatLng != null && _destName.isNotEmpty) {
@@ -408,9 +430,9 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
     } else {
       setState(() {
         _destLatLng = coords;
-        _destName = name;
-        _destAddress = address;
-        _destinationController.text = name;
+        _destName = resolvedName;
+        _destAddress = resolvedAddress;
+        _destinationController.text = resolvedName;
         _currentStep = SelectionStep.destSelected;
         _searchResults = [];
         _showAutocomplete = false;

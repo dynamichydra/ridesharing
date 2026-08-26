@@ -46,39 +46,53 @@ class RideSocketDataSource {
     final socket = io.io(
       '${ApiConfig.socketBaseUrl}/driver',
       io.OptionBuilder()
-          .setTransports(['websocket','polling'])
+          .setTransports(['websocket', 'polling'])
           .disableAutoConnect()
           .setAuth({'token': token})
+          .setQuery({'token': token})
           .build(),
     );
 
-    print("event-eent");
-    print(socket);
-    print(ApiConfig.socketBaseUrl);
-    print("event-eent");
-
-    socket.onConnect((_) => AppLogger.i('[RideSocket] connected'));
-    socket.onConnectError((data) => _socketErrorController.add('Connection failed: $data'));
+    socket.onConnect((_) {
+      AppLogger.i('[RideSocket] connected to /driver namespace');
+    });
+    socket.onConnectError((data) {
+      AppLogger.w('[RideSocket] connection error: $data');
+      _socketErrorController.add('Connection failed: $data');
+    });
     socket.onDisconnect((reason) => AppLogger.i('[RideSocket] disconnected: $reason'));
-    socket.onError((data) => _socketErrorController.add('Socket error: $data'));
+    socket.onError((data) {
+      AppLogger.w('[RideSocket] error: $data');
+      _socketErrorController.add('Socket error: $data');
+    });
 
     socket.on('error', (data) {
       final message = (data is Map) ? data['message']?.toString() : data?.toString();
+      AppLogger.w('[RideSocket] received server error event: $message');
       _socketErrorController.add(message ?? 'Unknown socket error.');
     });
 
     socket.on('ride:new_request', (data) {
+      AppLogger.i('[RideSocket] received ride:new_request: $data');
       if (data is Map) {
-        _rideOfferController.add(RideOffer.fromJson(Map<String, dynamic>.from(data)));
+        try {
+          final offer = RideOffer.fromJson(Map<String, dynamic>.from(data));
+          AppLogger.i('[RideSocket] parsed RideOffer successfully: rideId=${offer.rideId}, fare=${offer.estimatedFare}');
+          _rideOfferController.add(offer);
+        } catch (e, st) {
+          AppLogger.e('[RideSocket] failed to parse RideOffer: $e\n$st');
+        }
       }
     });
 
     socket.on('ride:taken', (data) {
+      AppLogger.i('[RideSocket] received ride:taken: $data');
       final rideId = (data is Map) ? data['rideId']?.toString() : null;
       if (rideId != null) _rideTakenController.add(rideId);
     });
 
     socket.on('ride:cancelled_by_rider', (data) {
+      AppLogger.i('[RideSocket] received ride:cancelled_by_rider: $data');
       final rideId = (data is Map) ? data['rideId']?.toString() : null;
       if (rideId != null) _cancelledByRiderController.add(rideId);
     });

@@ -51,6 +51,15 @@ class RideOffer {
       return int.tryParse(val.toString()) ?? 1;
     }
 
+    DateTime? parseExpiresAt(dynamic val) {
+      if (val == null) return null;
+      if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
+      if (val is num) return DateTime.fromMillisecondsSinceEpoch(val.toInt());
+      final asInt = int.tryParse(val.toString());
+      if (asInt != null) return DateTime.fromMillisecondsSinceEpoch(asInt);
+      return DateTime.tryParse(val.toString());
+    }
+
     return RideOffer(
       rideId: json['rideId']?.toString() ?? '',
       ring: parseInt(json['ring']),
@@ -66,7 +75,7 @@ class RideOffer {
       dropLat: parseDouble(json['dropLat']),
       dropLng: parseDouble(json['dropLng']),
       myDistanceKm: parseDouble(json['myDistanceKm']),
-      expiresAt: json['expiresAt'] != null ? DateTime.tryParse(json['expiresAt'].toString()) : null,
+      expiresAt: parseExpiresAt(json['expiresAt']),
       paymentMethod: json['paymentMethod']?.toString() ?? json['payment_method']?.toString(),
     );
   }

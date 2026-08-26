@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'package:dio/dio.dart';
 import 'package:flutter_google_places_sdk/flutter_google_places_sdk.dart'
     hide LatLng;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -91,5 +92,48 @@ class PlacesService {
     final Place? place = await fetchPlaceDetails(placeId);
     if (place == null || place.latLng == null) return null;
     return LatLng(place.latLng!.lat, place.latLng!.lng);
+  }
+
+  /// Fetches autocomplete predictions via the Google Places REST API.
+  /// Reliable fallback when the native SDK returns empty results.
+  Future<List<Map<String, dynamic>>> fetchPredictionsHttp(
+    String query,
+    String apiKey,
+  ) async {
+    if (query.trim().isEmpty || apiKey.isEmpty) return [];
+
+    try {
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 8),
+        receiveTimeout: const Duration(seconds: 8),
+      ));
+      final response = await dio.get<Map<String, dynamic>>(
+        'https://maps.googleapis.com/maps/api/place/autocomplete/json',
+        queryParameters: {
+          'input': query,
+          'key': apiKey,
+        },
+      );
+
+      final data = response.data;
+      if (data == null || data['status'] != 'OK') return [];
+
+      final predictions = data['predictions'] as List<dynamic>? ?? [];
+      return predictions.map<Map<String, dynamic>>((pred) {
+        final p = pred as Map<String, dynamic>;
+        final structuredFormatting =
+            p['structured_formatting'] as Map<String, dynamic>?;
+        return {
+          'name': structuredFormatting?['main_text'] ??
+              p['description'] ??
+              query,
+          'address': p['description'] ?? '',
+          'placeId': p['place_id'] ?? '',
+          'type': 'place',
+        };
+      }).toList();
+    } catch (_) {
+      return [];
+    }
   }
 }
