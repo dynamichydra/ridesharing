@@ -8,7 +8,9 @@ import { detectZone } from '../zone/zone.service.js';
 
 import {
   startMatchingProcess,
-  validateDriverCanAccept
+  validateDriverCanAccept,
+  signalRideAccepted,
+  signalRideCancelled,
 } from '../matching/matching.service.js';
 import {
   computeApproachRoute,
@@ -33,7 +35,7 @@ import { bufferGpsPing } from '../trip-gps/gps-ping.service.js';
 import { expirePendingFareSplits } from '../ride-payment/ride-payment.service.js';
 
 import { finalizeTripDistance } from '../trip-gps/finalize-trip.job.js';
-import { emitToRider, emitToRideRoom, emitToDriver } from '../../kafka/consumers/index.js';
+import { emitToRider, emitToRideRoom, emitToDriver, emitRideAccepted } from '../../kafka/consumers/index.js';
 
 /** Driver-facing ride payloads must never carry the rider's start OTP. */
 function stripOtp(ride) {
@@ -443,17 +445,28 @@ export async function acceptRide(rideId, driverId) {
     currentLng: drivers.currentLng,
   }).from(drivers).where(eq(drivers.id, driverId)).limit(1);
 
+  // Signal the matching loop to terminate immediately
+  await signalRideAccepted(rideId).catch((err) =>
+    console.error('[Ride] signalRideAccepted failed:', err.message),
+  );
+
   // Bug 11 fix: compute approach route (driver → pickup) immediately after accept
   // Fire-and-forget — don't block the response
   computeApproachRoute(updated, driver).catch((err) =>
     console.error('[Ride] computeApproachRoute failed:', err.message),
   );
 
-  await publishEvent(TOPICS.RIDE_ACCEPTED, {
+  const acceptPayload = {
     id: rideId, rideId, driverId, driver,
     riderId: ride.riderId,
     startOtp,
-  });
+  };
+
+  await publishEvent(TOPICS.RIDE_ACCEPTED, acceptPayload);
+  emitRideAccepted(acceptPayload).catch((err) =>
+    console.warn('[Ride] direct emitRideAccepted failed:', err.message),
+  );
+
   await publishEvent(TOPICS.NOTIF_PUSH, {
     userType: 'rider', userId: ride.riderId,
     type: 'RIDE_ACCEPTED',
@@ -481,6 +494,10 @@ export async function markArriving(rideId, driverId) {
     title: 'Driver has arrived!',
     body: 'Your driver is at the pickup point.',
   });
+
+  emitToRider(updated.riderId, 'ride:arriving', { rideId });
+  emitToRideRoom(rideId, 'ride:arriving', { rideId });
+
   return stripOtp(updated);
 }
 
@@ -511,6 +528,9 @@ export async function startRide(rideId, driverId, otp) {
   );
 
   await publishEvent(TOPICS.RIDE_STARTED, { id: rideId, rideId, driverId, riderId: ride.riderId });
+  emitToRider(ride.riderId, 'ride:started', { rideId });
+  emitToRideRoom(rideId, 'ride:started', { rideId });
+
   await publishEvent(TOPICS.NOTIF_PUSH, {
     userType: 'rider', userId: ride.riderId,
     type: 'RIDE_STARTED',
@@ -575,10 +595,15 @@ export async function completeRide(rideId, driverId) {
     console.error('[Ride] finalizeTripDistance failed:', err.message),
   );
 
-  await publishEvent(TOPICS.RIDE_COMPLETED, {
+  const completedData = {
     id: rideId, rideId, driverId, riderId: ride.riderId,
     finalFare: fromMinor(finalFareMinor, ride.currencyCode), currency: ride.currencyCode,
-  });
+  };
+
+  await publishEvent(TOPICS.RIDE_COMPLETED, completedData);
+  emitToRider(ride.riderId, 'ride:completed', completedData);
+  emitToRideRoom(rideId, 'ride:completed', completedData);
+
   await publishEvent(TOPICS.NOTIF_PUSH, {
     userType: 'rider', userId: ride.riderId,
     type: 'RIDE_COMPLETED',

@@ -206,9 +206,14 @@ export function initSocketIO(fastifyServer, app) {
   const riderNS = io.of('/rider');
 
   riderNS.use((socket, next) => {
-    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    const rawHeader = socket.handshake.headers?.authorization || socket.handshake.headers?.['Authorization'];
+    const headerToken = rawHeader ? rawHeader.replace(/^Bearer\s+/i, '') : null;
+    const token = socket.handshake.auth?.token || socket.handshake.query?.token || headerToken;
     const user = verifyJwt(app, token);
-    if (!user || user.role !== 'rider') return next(new Error('Unauthorized'));
+    if (!user || user.role !== 'rider') {
+      console.warn(`[Socket/rider] Unauthorized connection attempt. tokenPresent=${Boolean(token)}, user=${user ? JSON.stringify(user) : 'null'}`);
+      return next(new Error('Unauthorized'));
+    }
     socket.data.riderId = user.id;
     next();
   });

@@ -201,6 +201,35 @@ export async function emitRideMatchedToDrivers(payload) {
   }
 }
 
+export async function emitRideAccepted(payload) {
+  if (!_io) {
+    console.warn(`[RideBridge] emitRideAccepted: Socket.IO not ready yet`);
+    return;
+  }
+  const data = {
+    rideId: payload.rideId,
+    driver: payload.driver,
+    startOtp: payload.startOtp,
+  };
+  console.log(`[RideBridge] emitting ride:driver_assigned for ride ${payload.rideId} to rider:${payload.riderId} and ride:${payload.rideId}`);
+  _io.of('/rider').to(`rider:${payload.riderId}`).emit('ride:driver_assigned', data);
+  _io.of('/rider').to(`ride:${payload.rideId}`).emit('ride:driver_assigned', data);
+
+  // Remove accepting driver socket(s) from candidates room so they don't receive ride:taken
+  if (payload.driverId) {
+    try {
+      const driverSockets = await _io.of('/driver').in(`driver:${payload.driverId}`).fetchSockets();
+      for (const s of driverSockets) {
+        s.leave(`ride:candidates:${payload.rideId}`);
+      }
+    } catch (_) {}
+  }
+  // Notify OTHER candidates the ride is taken
+  _io.of('/driver').to(`ride:candidates:${payload.rideId}`).emit('ride:taken', {
+    rideId: payload.rideId,
+  });
+}
+
 async function startRideConsumer() {
   const consumer = kafka.consumer({ groupId: 'ride-socket-bridge' });
   await consumer.connect();
@@ -228,48 +257,33 @@ async function startRideConsumer() {
 
       // ── RIDE_ACCEPTED ──────────────────────────────────────────────────
       if (topic === TOPICS.RIDE_ACCEPTED) {
-        // Notify rider
-        _io.of('/rider').to(`rider:${payload.riderId}`).emit('ride:driver_assigned', {
-          rideId: payload.rideId,
-          driver: payload.driver,
-          startOtp: payload.startOtp,
-        });
-        // Remove accepting driver socket(s) from candidates room so they don't receive ride:taken
-        if (payload.driverId) {
-          const driverSockets = await _io.of('/driver').in(`driver:${payload.driverId}`).fetchSockets();
-          for (const s of driverSockets) {
-            s.leave(`ride:candidates:${payload.rideId}`);
-          }
-        }
-        // Notify OTHER candidates the ride is taken
-        _io.of('/driver').to(`ride:candidates:${payload.rideId}`).emit('ride:taken', {
-          rideId: payload.rideId,
-        });
+        await emitRideAccepted(payload);
       }
 
       // ── RIDE_STARTED ───────────────────────────────────────────────────
       if (topic === TOPICS.RIDE_STARTED) {
-        _io.of('/rider').to(`rider:${payload.riderId}`).emit('ride:started', {
-          rideId: payload.rideId,
-        });
+        const data = { rideId: payload.rideId };
+        _io.of('/rider').to(`rider:${payload.riderId}`).emit('ride:started', data);
+        _io.of('/rider').to(`ride:${payload.rideId}`).emit('ride:started', data);
       }
 
       // ── RIDE_COMPLETED ─────────────────────────────────────────────────
       if (topic === TOPICS.RIDE_COMPLETED) {
-        _io.of('/rider').to(`rider:${payload.riderId}`).emit('ride:completed', {
+        const data = {
           rideId: payload.rideId,
           finalFare: payload.finalFare,
           currency: payload.currency,
-        });
+        };
+        _io.of('/rider').to(`rider:${payload.riderId}`).emit('ride:completed', data);
+        _io.of('/rider').to(`ride:${payload.rideId}`).emit('ride:completed', data);
       }
 
       // ── RIDE_CANCELLED ─────────────────────────────────────────────────
       if (topic === TOPICS.RIDE_CANCELLED) {
         if (payload.riderId) {
-          _io.of('/rider').to(`rider:${payload.riderId}`).emit('ride:cancelled', {
-            rideId: payload.rideId,
-            reason: payload.reason,
-          });
+          const data = { rideId: payload.rideId, reason: payload.reason };
+          _io.of('/rider').to(`rider:${payload.riderId}`).emit('ride:cancelled', data);
+          _io.of('/rider').to(`ride:${payload.rideId}`).emit('ride:cancelled', data);
         }
         if (payload.driverId) {
           _io.of('/driver').to(`driver:${payload.driverId}`).emit('ride:cancelled_by_rider', {
