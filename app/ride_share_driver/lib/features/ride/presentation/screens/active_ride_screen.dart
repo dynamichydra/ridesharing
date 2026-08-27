@@ -165,18 +165,18 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
       listener: (context, state) {
         if (state is RideCompleted) {
           final fareMinor = state.ride.finalFareMinor ?? state.ride.estimatedFareMinor ?? 0;
-          final fare = (fareMinor / 100.0).toStringAsFixed(2);
+          final fareNum = fareMinor / 100.0;
+          final fare = fareNum.toStringAsFixed(2);
           final isWallet = state.ride.paymentMethod?.toLowerCase() == 'wallet';
-          if (isWallet) {
-            CustomToast.show(context, 'Ride Completed! ₹$fare credited to your Ryva Wallet');
-          } else {
-            CustomToast.show(context, 'Ride Completed! Collect ₹$fare cash from rider');
-          }
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.go('/dashboard');
-          }
+
+          showModalBottomSheet(
+            context: context,
+            isDismissible: false,
+            enableDrag: false,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (sheetCtx) => _buildCompletionSheet(sheetCtx, state.ride, fare, isWallet),
+          );
         } else if (state is RideCancelledByRider) {
           CustomToast.show(context, state.message);
           if (context.canPop()) {
@@ -504,6 +504,174 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildCompletionSheet(BuildContext sheetCtx, ActiveRide ride, String fare, bool isWallet) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 20,
+            offset: Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48,
+            height: 5,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Animated Cash / Success Icon
+          Container(
+            width: 76,
+            height: 76,
+            decoration: BoxDecoration(
+              color: const Color(0xFFDCFCE7),
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFF009048).withValues(alpha: 0.3), width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF009048).withValues(alpha: 0.25),
+                  blurRadius: 16,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: const Center(
+              child: Icon(
+                Icons.check_circle_rounded,
+                color: Color(0xFF009048),
+                size: 44,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          const Text(
+            'Ride Completed!',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF021B47),
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            isWallet
+                ? 'Trip payment was automatically credited to your Ryva Wallet.'
+                : 'Please collect cash from the rider before finishing.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Color(0xFF64748B),
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Big Cash Collection Card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isWallet
+                    ? [const Color(0xFFF0FDF4), const Color(0xFFDCFCE7)]
+                    : [const Color(0xFFFEF3C7), const Color(0xFFFDE68A)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isWallet
+                    ? const Color(0xFF009048).withValues(alpha: 0.3)
+                    : const Color(0xFFD97706).withValues(alpha: 0.4),
+                width: 1.5,
+              ),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      isWallet ? Icons.account_balance_wallet_rounded : Icons.payments_rounded,
+                      color: isWallet ? const Color(0xFF009048) : const Color(0xFFB45309),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      isWallet ? 'WALLET PAYMENT' : 'COLLECT CASH',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                        color: isWallet ? const Color(0xFF009048) : const Color(0xFFB45309),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '₹$fare',
+                  style: TextStyle(
+                    fontSize: 38,
+                    fontWeight: FontWeight.w900,
+                    color: isWallet ? const Color(0xFF009048) : const Color(0xFF92400E),
+                    letterSpacing: -1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Confirm Button
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.of(sheetCtx).pop();
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/dashboard');
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF009048),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: Text(
+                isWallet ? 'Continue to Dashboard' : 'Cash Collected — Done',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

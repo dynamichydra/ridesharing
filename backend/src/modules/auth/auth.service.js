@@ -9,6 +9,7 @@ import {
 } from '../../utils/otp.js';
 import { sendEmailVerification, verifyEmailCode } from '../../utils/emailOtp.js';
 import { env } from '../../config/env.js';
+import { getProfile } from '../driver/driver.service.js';
 
 const PHONE_REGEX = /^\+[1-9]\d{6,14}$/;   // E.164
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -186,9 +187,10 @@ export async function driverMobileVerify(phone, otp, deviceId, platform, fcmToke
 
   await upsertDevice(driver.id, deviceId, platform, fcmToken, ip);
   const tokens = await issueDriverTokens(driver, deviceId, app);
+  const driverProfile = await getProfile(driver.id).catch(() => driver);
 
   return {
-    ...tokens, isNew, driver,
+    ...tokens, isNew, driver: driverProfile,
     registrationStatus: driver.registrationStatus,
     registrationStep: driver.registrationStep,
   };
@@ -224,9 +226,10 @@ export async function driverEmailVerify(email, code, deviceId, platform, fcmToke
 
   await upsertDevice(driver.id, deviceId, platform, fcmToken, ip);
   const tokens = await issueDriverTokens(driver, deviceId, app);
+  const driverProfile = await getProfile(driver.id).catch(() => driver);
 
   return {
-    ...tokens, isNew, driver,
+    ...tokens, isNew, driver: driverProfile,
     registrationStatus: driver.registrationStatus,
     registrationStep: driver.registrationStep,
   };
@@ -260,8 +263,9 @@ export async function verifyDriverOtp(phone, otp, app) {
     { secret: env.JWT_REFRESH_SECRET, expiresIn: env.JWT_REFRESH_EXPIRES_IN },
   );
   await redis.setex(REDIS_KEYS.refreshToken(driver.id), 30 * 86400, refreshToken);
+  const driverProfile = await getProfile(driver.id).catch(() => driver);
 
-  return { accessToken, refreshToken, isNew, driver };
+  return { accessToken, refreshToken, isNew, driver: driverProfile };
 }
 
 // ── Device management ───────────────────────────────────────────────────────────

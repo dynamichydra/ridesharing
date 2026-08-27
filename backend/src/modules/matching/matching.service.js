@@ -140,7 +140,7 @@ async function queryDriversInRadius(pickupLat, pickupLng, vehicleTypeId, radiusK
       )
       AND NOT EXISTS (
         SELECT 1 FROM rides ar
-        WHERE ar.driver_id = d.id AND ar.status IN ('accepted', 'arriving', 'in_progress')
+        WHERE ar.driver_id = d.id AND ar.status IN ('accepted', 'arriving', 'started')
       )
       AND (6371 * acos(
         LEAST(1.0,

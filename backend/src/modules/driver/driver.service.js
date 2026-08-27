@@ -1,6 +1,6 @@
 import { eq, desc, count, and, or, ilike, ne, sql, gte } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { drivers, subscriptions, cities, driverPayoutAccounts, vehicleModels, rides, countries, wallets, walletTransactions } from '../../../drizzle/schema/index.js';
+import { drivers, subscriptions, subscriptionPlans, driverDocuments, cities, driverPayoutAccounts, vehicleModels, rides, countries, wallets, walletTransactions } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
@@ -410,23 +410,78 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
 export async function getProfile(driverId) {
   const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId)).limit(1);
   if (!driver) throw { statusCode: 404, message: 'Driver not found' };
+
+  let cityName = null;
+  let countryName = null;
+  if (driver.cityId) {
+    const [city] = await db.select({ name: cities.name }).from(cities).where(eq(cities.id, driver.cityId)).limit(1);
+    cityName = city?.name || null;
+  }
+  if (driver.countryId) {
+    const [country] = await db.select({ name: countries.name }).from(countries).where(eq(countries.id, driver.countryId)).limit(1);
+    countryName = country?.name || null;
+  }
+
+  // Active Subscription
+  const [sub] = await db.select({
+    id: subscriptions.id,
+    planId: subscriptions.planId,
+    status: subscriptions.status,
+    startDate: subscriptions.startDate,
+    endDate: subscriptions.endDate,
+    planName: subscriptionPlans.name,
+    planType: subscriptionPlans.type,
+    maxRidesPerDay: subscriptionPlans.maxRidesPerDay,
+    priorityMatching: subscriptionPlans.priorityMatching,
+  }).from(subscriptions)
+    .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+    .where(
+      and(
+        eq(subscriptions.driverId, driverId),
+        eq(subscriptions.status, 'active'),
+        or(sql`${subscriptions.endDate} IS NULL`, gte(subscriptions.endDate, new Date()))
+      )
+    )
+    .orderBy(desc(subscriptions.createdAt))
+    .limit(1);
+
+  // Documents summary
+  const docs = await db.select({
+    id: driverDocuments.id,
+    status: driverDocuments.status,
+  }).from(driverDocuments).where(eq(driverDocuments.driverId, driverId));
+
+  const totalDocuments = docs.length;
+  const approvedDocuments = docs.filter((d) => d.status === 'approved').length;
+  const pendingDocuments = docs.filter((d) => d.status === 'pending').length;
+
   const { aadharNumber, ...safe } = driver;
-  return safe;
+  return {
+    ...safe,
+    cityName,
+    countryName,
+    activeSubscription: sub || null,
+    documentStats: {
+      total: totalDocuments,
+      approved: approvedDocuments,
+      pending: pendingDocuments,
+    },
+  };
 }
 
 export async function updateProfile(driverId, data) {
   const allowed = [
-    'name', 'email', 'vehicleNumber', 'vehicleModel', 'vehicleYear', 'fcmToken',
+    'name', 'email', 'vehicleNumber', 'vehicleModel', 'vehicleYear', 'vehicleColor', 'fcmToken',
     'dateOfBirth', 'gender', 'referralCode', 'preferredLanguageCode', 'profilePhoto',
   ];
   const updates = Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
   updates.updatedAt = new Date();
-  const [updated] = await db.update(drivers).set(updates).where(eq(drivers.id, driverId)).returning();
+  await db.update(drivers).set(updates).where(eq(drivers.id, driverId));
 
   const touchedPersonalInfo = ['name', 'dateOfBirth', 'gender', 'referralCode'].some((f) => f in data);
   if (touchedPersonalInfo) await advanceRegistration(driverId, REGISTRATION_STEP.PERSONAL_INFO);
 
-  return updated;
+  return getProfile(driverId);
 }
 
 export async function updateDrivingLocation(driverId, { countryId, stateId, cityId }) {

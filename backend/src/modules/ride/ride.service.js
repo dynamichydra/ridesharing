@@ -385,7 +385,7 @@ export async function acceptRide(rideId, driverId) {
     .where(
       and(
         eq(rides.driverId, driverId),
-        inArray(rides.status, ['accepted', 'arriving', 'in_progress'])
+        inArray(rides.status, ['accepted', 'arriving', 'started'])
       )
     ).limit(1);
   if (existingActiveRide) throw { statusCode: 409, message: 'You already have an active ride in progress' };
