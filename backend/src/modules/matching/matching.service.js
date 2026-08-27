@@ -47,6 +47,7 @@ import { acquireLock, releaseLocks } from './driver-lock.service.js';
 import { scoreDrivers } from './scoring.service.js';
 import { getActiveWeights } from './matching-weights.service.js';
 import { metrics } from '../../utils/metrics.js';
+import { emitRideMatchedToDrivers } from '../../kafka/consumers/index.js';
 
 const RADII_KM = [1, 2, 3, 15];
 
@@ -207,25 +208,31 @@ function waitForAcceptanceSignal(rideId, timeoutMs) {
     const channel = REDIS_KEYS.CHAN.rideAccepted(rideId);
     let settled = false;
 
+    const cleanup = () => {
+      redisSub.removeListener('message', onMessage);
+      redisSub.unsubscribe(channel).catch(() => { });
+    };
+
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      redisSub.unsubscribe(channel).catch(() => { });
+      cleanup();
       resolve(false);
     }, timeoutMs);
+
+    function onMessage(ch, msg) {
+      if (ch !== channel || settled) return;
+      settled = true;
+      clearTimeout(timer);
+      cleanup();
+      // msg = "accepted" | "cancelled"
+      resolve(msg === 'accepted');
+    }
 
     redisSub.subscribe(channel, (err) => {
       if (err) { console.error('[Matching] redisSub error:', err.message); }
     });
-
-    redisSub.on('message', (ch, msg) => {
-      if (ch !== channel || settled) return;
-      settled = true;
-      clearTimeout(timer);
-      redisSub.unsubscribe(channel).catch(() => { });
-      // msg = "accepted" | "cancelled"
-      resolve(true);
-    });
+    redisSub.on('message', onMessage);
   });
 }
 
@@ -355,33 +362,36 @@ async function _runMatchingRings(ride) {
       JSON.stringify(candidates.map((c) => c.id)),
     );
 
-    // Broadcast to all candidates via Kafka → Socket.IO
+    const matchPayload = {
+      id: rideId,
+      rideId,
+      ring: ringIdx + 1,
+      radiusKm,
+      candidates: offerPayload,
+      pickupLat, pickupLng,
+      dropLat: ride.dropLat,
+      dropLng: ride.dropLng,
+      pickupAddress: ride.pickupAddress,
+      dropAddress: ride.dropAddress,
+      vehicleTypeId,
+      estimatedFare: fromMinor(ride.estimatedFareMinor, ride.currencyCode),
+      currency: ride.currencyCode,
+      distanceKm: ride.distanceKm,
+      polyline: ride.polyline,
+      paymentMethod: ride.paymentMethod || 'cash',
+      expiresAt: Date.now() + ACCEPT_TIMEOUT_MS,
+    };
+
+    // Broadcast to all candidates via Kafka + direct WebSocket bridge
     console.log(`[Matching] Ride ${rideId} — publishing RIDE_MATCHED to Kafka for driver(s): ${candidates.map((c) => c.id).join(', ')}`);
     try {
-      await publishEvent(TOPICS.RIDE_MATCHED, {
-        id: rideId,
-        rideId,
-        ring: ringIdx + 1,
-        radiusKm,
-        candidates: offerPayload,
-        pickupLat, pickupLng,
-        dropLat: ride.dropLat,
-        dropLng: ride.dropLng,
-        pickupAddress: ride.pickupAddress,
-        dropAddress: ride.dropAddress,
-        vehicleTypeId,
-        estimatedFare: fromMinor(ride.estimatedFareMinor, ride.currencyCode),
-        currency: ride.currencyCode,
-        distanceKm: ride.distanceKm,
-        polyline: ride.polyline,
-        paymentMethod: ride.paymentMethod || 'cash',
-        expiresAt: Date.now() + ACCEPT_TIMEOUT_MS,
-      }, rideId);
+      await publishEvent(TOPICS.RIDE_MATCHED, matchPayload, rideId);
       console.log(`[Matching] Ride ${rideId} — RIDE_MATCHED published OK`);
     } catch (err) {
       console.error(`[Matching] Ride ${rideId} — publishEvent(RIDE_MATCHED) FAILED:`, err.message);
-      throw err;
     }
+    // Also directly emit to Socket.IO without waiting for Kafka consumer loop
+    emitRideMatchedToDrivers(matchPayload).catch((e) => console.warn('[Matching] direct emit error:', e.message));
 
     // Bug 9 fix: instant signal via pub/sub — no more DB polling
     const accepted = await waitForAcceptanceSignal(rideId, ACCEPT_TIMEOUT_MS);

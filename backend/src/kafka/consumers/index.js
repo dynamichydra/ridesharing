@@ -162,6 +162,45 @@ async function startAuditConsumer() {
 
 // ── Ride ← → Socket.IO bridge ────────────────────────────────────────────────
 
+export async function emitRideMatchedToDrivers(payload) {
+  if (!_io) {
+    console.warn(`[RideBridge] emitRideMatchedToDrivers: Socket.IO not ready yet`);
+    return;
+  }
+  const candidateList = payload.candidates || [];
+  console.log(`[RideBridge] emitRideMatchedToDrivers for ride ${payload.rideId}, candidates: ${candidateList.map((c) => c.driverId || c.id).join(', ') || '(none)'}`);
+
+  for (const c of candidateList) {
+    const driverId = c.driverId || c.id;
+    const room = `driver:${driverId}`;
+    const roomSize = _io.of('/driver').adapter.rooms.get(room)?.size || 0;
+    console.log(`[RideBridge] emitting ride:new_request to room "${room}" (${roomSize} connected socket(s))`);
+    _io.of('/driver').to(room).emit('ride:new_request', {
+      rideId: payload.rideId,
+      ring: payload.ring,
+      radiusKm: payload.radiusKm,
+      pickupAddress: payload.pickupAddress,
+      dropAddress: payload.dropAddress,
+      estimatedFare: payload.estimatedFare,
+      currency: payload.currency,
+      distanceKm: payload.distanceKm,
+      polyline: payload.polyline,
+      pickupLat: payload.pickupLat,
+      pickupLng: payload.pickupLng,
+      dropLat: payload.dropLat,
+      dropLng: payload.dropLng,
+      myDistanceKm: c.distanceKm,
+      paymentMethod: payload.paymentMethod || 'cash',
+      expiresAt: payload.expiresAt,
+    });
+
+    try {
+      const sockets = await _io.of('/driver').in(room).fetchSockets();
+      for (const s of sockets) s.join(`ride:candidates:${payload.rideId}`);
+    } catch (_) {}
+  }
+}
+
 async function startRideConsumer() {
   const consumer = kafka.consumer({ groupId: 'ride-socket-bridge' });
   await consumer.connect();
@@ -184,35 +223,7 @@ async function startRideConsumer() {
 
       // ── RIDE_MATCHED — notify each candidate driver ─────────────────────
       if (topic === TOPICS.RIDE_MATCHED) {
-        console.log(`[RideBridge] RIDE_MATCHED received for ride ${payload.rideId}, candidates: ${(payload.candidates || []).map((c) => c.driverId).join(', ') || '(none)'}`);
-        for (const c of (payload.candidates || [])) {
-          const room = `driver:${c.driverId}`;
-          const roomSize = _io.of('/driver').adapter.rooms.get(room)?.size || 0;
-          console.log(`[RideBridge] emitting ride:new_request to room "${room}" (${roomSize} connected socket(s))`);
-          _io.of('/driver').to(`driver:${c.driverId}`).emit('ride:new_request', {
-            rideId: payload.rideId,
-            ring: payload.ring,
-            radiusKm: payload.radiusKm,
-            pickupAddress: payload.pickupAddress,
-            dropAddress: payload.dropAddress,
-            estimatedFare: payload.estimatedFare,
-            currency: payload.currency,
-            distanceKm: payload.distanceKm,
-            polyline: payload.polyline,
-            pickupLat: payload.pickupLat,
-            pickupLng: payload.pickupLng,
-            dropLat: payload.dropLat,
-            dropLng: payload.dropLng,
-            myDistanceKm: c.distanceKm,
-            paymentMethod: payload.paymentMethod || 'cash',
-            expiresAt: payload.expiresAt,
-          });
-
-          // Bug 4 fix: join driver socket to the candidates room
-          // so ride:taken reaches them when another driver accepts
-          const sockets = await _io.of('/driver').in(`driver:${c.driverId}`).fetchSockets();
-          for (const s of sockets) s.join(`ride:candidates:${payload.rideId}`);
-        }
+        await emitRideMatchedToDrivers(payload);
       }
 
       // ── RIDE_ACCEPTED ──────────────────────────────────────────────────

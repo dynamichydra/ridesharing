@@ -98,9 +98,14 @@ export function initSocketIO(fastifyServer, app) {
   const driverNS = io.of('/driver');
 
   driverNS.use((socket, next) => {
-    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    const rawHeader = socket.handshake.headers?.authorization || socket.handshake.headers?.['Authorization'];
+    const headerToken = rawHeader ? rawHeader.replace(/^Bearer\s+/i, '') : null;
+    const token = socket.handshake.auth?.token || socket.handshake.query?.token || headerToken;
     const user = verifyJwt(app, token);
-    if (!user || user.role !== 'driver') return next(new Error('Unauthorized'));
+    if (!user || user.role !== 'driver') {
+      console.warn(`[Socket/driver] Unauthorized connection attempt. tokenPresent=${Boolean(token)}, user=${user ? JSON.stringify(user) : 'null'}`);
+      return next(new Error('Unauthorized'));
+    }
     socket.data.driverId = user.id;
     next();
   });
@@ -108,7 +113,7 @@ export function initSocketIO(fastifyServer, app) {
   driverNS.on('connection', (socket) => {
     const { driverId } = socket.data;
     socket.join(`driver:${driverId}`);
-    console.log(`[Socket/driver] connected: ${driverId}`);
+    console.log(`[Socket/driver] connected: ${driverId} (socketId: ${socket.id})`);
 
     // ── go_online ──────────────────────────────────────────────────────────
     socket.on('go_online', async ({ lat, lng }) => {

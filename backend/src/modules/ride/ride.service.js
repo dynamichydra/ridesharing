@@ -1,7 +1,7 @@
 import { eq, desc, count, and, or, sql, gte, lte, inArray } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { rides, drivers, users, rideFareSplits, vehicleTypes } from '../../../drizzle/schema/index.js';
-import { redis, REDIS_KEYS } from '../../config/redis.js';
+import { redis, redisPub, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { calculateFare } from '../fare/fare.service.js';
 import { detectZone } from '../zone/zone.service.js';
@@ -176,6 +176,10 @@ export async function cancelRideByRider(rideId, riderId, reason) {
   const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
   if (!ride) throw { statusCode: 404, message: 'Ride not found' };
   if (ride.riderId !== riderId) throw { statusCode: 403, message: 'Not your ride' };
+
+  if (ride.status === 'cancelled' || ride.status === 'expired') {
+    return ride;
+  }
 
   const cancellable = ['searching', 'accepted', 'arriving'];
   if (!cancellable.includes(ride.status)) {
@@ -1036,6 +1040,10 @@ export async function listAllRides(filters, page, limit, offset) {
 export async function cancelRideByAdmin(rideId, adminId, reason) {
   const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
   if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+
+  if (ride.status === 'cancelled' || ride.status === 'expired') {
+    return ride;
+  }
 
   const cancellable = ['searching', 'accepted', 'arriving', 'started'];
   if (!cancellable.includes(ride.status)) {
