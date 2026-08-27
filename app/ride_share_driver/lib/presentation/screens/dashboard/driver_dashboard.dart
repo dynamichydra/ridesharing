@@ -273,8 +273,12 @@ class _DriverDashboardState extends State<DriverDashboard>
                       }
 
                       List<RideOffer> pendingOffers = [];
+                      bool isAccepting = false;
                       if (rideState is RideOfferPending) {
                         pendingOffers = rideState.offers;
+                      } else if (rideState is RideAccepting && rideState.offer != null) {
+                        pendingOffers = [rideState.offer!];
+                        isAccepting = true;
                       }
 
                       return Scaffold(
@@ -391,6 +395,7 @@ class _DriverDashboardState extends State<DriverDashboard>
                                       // ONLINE - OFFERS AVAILABLE
                                       _buildOffersAvailableSection(
                                         pendingOffers,
+                                        isAccepting,
                                       )
                                     else
                                       // SEARCHING FOR OFFERS
@@ -983,7 +988,7 @@ class _DriverDashboardState extends State<DriverDashboard>
   // ===========================================================================
   // State 1: ONLINE - OFFERS AVAILABLE
   // ===========================================================================
-  Widget _buildOffersAvailableSection(List<RideOffer> offers) {
+  Widget _buildOffersAvailableSection(List<RideOffer> offers, bool isAccepting) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1024,6 +1029,7 @@ class _DriverDashboardState extends State<DriverDashboard>
           (offer) => RideRequestCard(
             key: ValueKey(offer.rideId),
             offer: offer,
+            isAccepting: isAccepting,
             onAccept: (id) => _rideBloc.add(AcceptOfferRequested(rideId: id)),
             onDecline: (id) => _rideBloc.add(DeclineOfferRequested(rideId: id)),
             onExpired: (id) => _rideBloc.add(OfferExpiredLocally(rideId: id)),

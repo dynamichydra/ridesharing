@@ -105,7 +105,10 @@ class RideOfferGone extends RideState {
   RideOfferGone({required this.message});
 }
 
-class RideAccepting extends RideState {}
+class RideAccepting extends RideState {
+  final RideOffer? offer;
+  RideAccepting({this.offer});
+}
 
 /// `ride.status` (accepted | arriving | started) drives which sub-screen /
 /// primary action the UI shows — carries driver position, bearing, and
@@ -396,13 +399,13 @@ class RideBloc extends Bloc<RideEvent, RideState> {
       emit(RideOperationFailed(message: 'You already have an active ride in progress'));
       return;
     }
-    emit(RideAccepting());
     for (final o in _pendingOffers) {
       if (o.rideId == event.rideId) {
         _acceptedOffer = o;
         break;
       }
     }
+    emit(RideAccepting(offer: _acceptedOffer));
     rideRepository.acceptOffer(event.rideId);
   }
 

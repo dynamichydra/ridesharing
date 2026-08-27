@@ -7,6 +7,7 @@ class RideRequestCard extends StatefulWidget {
   final Function(String rideId) onAccept;
   final Function(String rideId) onDecline;
   final Function(String rideId) onExpired;
+  final bool isAccepting;
 
   const RideRequestCard({
     super.key,
@@ -14,6 +15,7 @@ class RideRequestCard extends StatefulWidget {
     required this.onAccept,
     required this.onDecline,
     required this.onExpired,
+    this.isAccepting = false,
   });
 
   @override
@@ -436,8 +438,9 @@ class _RideRequestCardState extends State<RideRequestCard>
                       child: SizedBox(
                         height: 42,
                         child: OutlinedButton(
-                          onPressed: () =>
-                              _triggerDismissAndExpire(isDecline: true),
+                          onPressed: widget.isAccepting
+                              ? null
+                              : () => _triggerDismissAndExpire(isDecline: true),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: const Color(0xFFE53935),
                             side: const BorderSide(
@@ -464,23 +467,36 @@ class _RideRequestCardState extends State<RideRequestCard>
                       child: SizedBox(
                         height: 42,
                         child: ElevatedButton(
-                          onPressed: () => widget.onAccept(offer.rideId),
+                          onPressed: widget.isAccepting
+                              ? null
+                              : () => widget.onAccept(offer.rideId),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF009048),
+                            disabledBackgroundColor: const Color(0xFF009048).withValues(alpha: 0.7),
                             foregroundColor: Colors.white,
+                            disabledForegroundColor: Colors.white,
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
                             padding: EdgeInsets.zero,
                           ),
-                          child: const Text(
-                            'Accept',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: widget.isAccepting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Text(
+                                  'Accept',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                         ),
                       ),
                     ),
