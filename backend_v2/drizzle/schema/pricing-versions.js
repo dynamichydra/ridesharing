@@ -1,6 +1,7 @@
 import { pgTable, uuid, integer, decimal, boolean, timestamp } from 'drizzle-orm/pg-core';
 import { pricingProfiles } from './pricing-profiles.js';
 import { vehicleTypes } from './vehicle-types.js';
+import { cityTypes } from './city-types.js';
 import { cities } from './cities.js';
 import { zones } from './zones.js';
 
@@ -8,6 +9,7 @@ export const pricingVersions = pgTable('pricing_versions', {
   id:                      uuid('id').primaryKey().defaultRandom(),
   pricingProfileId:        uuid('pricing_profile_id').references(() => pricingProfiles.id),
   vehicleTypeId:           uuid('vehicle_type_id').references(() => vehicleTypes.id),
+  cityTypeId:              uuid('city_type_id').references(() => cityTypes.id),
   cityId:                  uuid('city_id').references(() => cities.id),
   zoneId:                  uuid('zone_id').references(() => zones.id),
   version:                 integer('version').default(1).notNull(),

@@ -1,6 +1,6 @@
 import { detectZone } from '../../../zone/zone.service.js';
 import { resolveHexZones } from '../../../zone/hex-zone.service.js';
-import { getDefaultCountry, getCountryById } from '../../../geo/geo.service.js';
+import { getDefaultCountry, getCountryById, getCityById } from '../../../geo/geo.service.js';
 
 /**
  * Stage 2: Geographic & Zone Resolution (Polygon + H3 Hex Hierarchies).
@@ -36,8 +36,30 @@ export async function executeZoneResolverStage(context) {
   const hexZones = await resolveHexZones(parseFloat(pickupLat), parseFloat(pickupLng));
   const hexZoneIds = new Set(hexZones.map((z) => z.id));
 
+  // 4. Resolve City & City Type / Tier if mapped
+  const resolvedCityId = context.cityId || pickupZone?.cityId || null;
+  let cityTypeId = context.cityTypeId || null;
+  let cityDensity = 'medium';
+
+  if (resolvedCityId) {
+    try {
+      const cityData = await getCityById(resolvedCityId);
+      if (cityData?.city?.cityTypeId) {
+        cityTypeId = cityData.city.cityTypeId;
+      }
+      if (cityData?.cityType?.densityLevel) {
+        cityDensity = cityData.cityType.densityLevel;
+      }
+    } catch {
+      // Non-blocking fallback
+    }
+  }
+
   context.pickupZone = pickupZone;
   context.dropZone = dropZone;
+  context.cityId = resolvedCityId;
+  context.cityTypeId = cityTypeId;
+  context.cityDensity = cityDensity;
   context.country = country;
   context.currencyCode = country.currencyCode;
   context.hexZones = hexZones;

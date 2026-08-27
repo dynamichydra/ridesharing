@@ -20,8 +20,20 @@ export async function adminRoutes(app) {
   });
 
   app.get('/stats/subscriptions', async (request, reply) => {
-    const data = await adminService.getSubscriptionStats();
-    return sendSuccess(reply, data);
+    const { page, limit, offset } = parsePagination(request.query);
+    const filters = {
+      countryId: request.query.countryId,
+      planType: request.query.planType || request.query.type,
+      currencyCode: request.query.currencyCode,
+      isActive: request.query.isActive !== undefined ? request.query.isActive === 'true' : undefined,
+      search: request.query.search || request.query.planName,
+    };
+    const sort = {
+      sortBy: request.query.sortBy,
+      sortOrder: request.query.sortOrder || request.query.order,
+    };
+    const { rows, pagination } = await adminService.getSubscriptionStats({ page, limit, offset, filters, sort });
+    return sendList(reply, rows, pagination);
   });
 
   app.get('/audit-logs', async (request, reply) => {

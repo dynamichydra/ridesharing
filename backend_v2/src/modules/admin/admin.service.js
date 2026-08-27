@@ -32,36 +32,129 @@ export async function getDashboardStats() {
 
 export async function getRideStats(days = 30) {
   const from = new Date(Date.now() - days * 86400000);
-  const rows = await db.execute(sql`
+  const result = await db.execute(sql`
     SELECT
       DATE(requested_at) AS date,
-      COUNT(*) FILTER (WHERE status = 'completed') AS completed,
-      COUNT(*) FILTER (WHERE status = 'cancelled') AS cancelled,
-      COUNT(*) FILTER (WHERE status = 'expired')   AS expired,
-      COUNT(*)                                      AS total
+      COUNT(*) FILTER (WHERE status = 'completed')::int AS completed,
+      COUNT(*) FILTER (WHERE status = 'cancelled')::int AS cancelled,
+      COUNT(*) FILTER (WHERE status = 'expired')::int   AS expired,
+      COUNT(*)::int                                    AS total
     FROM rides
     WHERE requested_at >= ${from}
     GROUP BY DATE(requested_at)
     ORDER BY date ASC
   `);
-  return rows;
+  return result.rows ?? result;
 }
 
-export async function getSubscriptionStats() {
-  const rows = await db.execute(sql`
+export async function getSubscriptionStats(pageOrOptions = {}, maybeLimit, maybeOffset, maybeFilters = {}, maybeSort = {}) {
+  let page = 1;
+  let limit = 20;
+  let offset = 0;
+  let filters = {};
+  let sort = {};
+
+  if (pageOrOptions && typeof pageOrOptions === 'object' && !Array.isArray(pageOrOptions)) {
+    page = pageOrOptions.page ? Number(pageOrOptions.page) : 1;
+    limit = pageOrOptions.limit ? Number(pageOrOptions.limit) : 20;
+    offset = pageOrOptions.offset !== undefined ? Number(pageOrOptions.offset) : (page - 1) * limit;
+    filters = pageOrOptions.filters || {};
+    sort = pageOrOptions.sort || {
+      sortBy: pageOrOptions.sortBy,
+      sortOrder: pageOrOptions.sortOrder || pageOrOptions.order,
+    };
+  } else {
+    page = pageOrOptions ? Number(pageOrOptions) : 1;
+    limit = maybeLimit ? Number(maybeLimit) : 20;
+    offset = maybeOffset !== undefined ? Number(maybeOffset) : (page - 1) * limit;
+    filters = maybeFilters || {};
+    sort = maybeSort || {};
+  }
+
+  const conditions = [];
+
+  if (filters.countryId) {
+    conditions.push(sql`sp.country_id = ${filters.countryId}`);
+  }
+  if (filters.planType || filters.type) {
+    conditions.push(sql`sp.type = ${filters.planType || filters.type}`);
+  }
+  if (filters.currencyCode) {
+    conditions.push(sql`sp.currency_code = ${filters.currencyCode}`);
+  }
+  if (filters.isActive !== undefined && filters.isActive !== null && filters.isActive !== '') {
+    const activeBool = typeof filters.isActive === 'boolean' ? filters.isActive : String(filters.isActive) === 'true';
+    conditions.push(sql`sp.is_active = ${activeBool}`);
+  }
+  if (filters.search || filters.planName) {
+    const searchTerm = `%${filters.search || filters.planName}%`;
+    conditions.push(sql`sp.name ILIKE ${searchTerm}`);
+  }
+
+  const whereClause = conditions.length > 0
+    ? sql`WHERE ${sql.join(conditions, sql` AND `)}`
+    : sql``;
+
+  // 1. Total matching plans count for pagination
+  const countResult = await db.execute(sql`
+    SELECT COUNT(*)::int AS total
+    FROM subscription_plans sp
+    ${whereClause}
+  `);
+  const countRows = countResult.rows ?? countResult;
+  const total = Number(countRows[0]?.total || 0);
+
+  // 2. Sorting
+  const sortMap = {
+    total_subscriptions: sql`total_subscriptions`,
+    active_count: sql`active_count`,
+    cancelled_count: sql`cancelled_count`,
+    expired_count: sql`expired_count`,
+    plan_name: sql`sp.name`,
+    name: sql`sp.name`,
+    plan_type: sql`sp.type`,
+    type: sql`sp.type`,
+    price_minor: sql`sp.price_minor`,
+    price: sql`sp.price_minor`,
+    currency_code: sql`sp.currency_code`,
+    is_active: sql`sp.is_active`,
+    created_at: sql`sp.created_at`,
+  };
+
+  const sortByField = String(sort?.sortBy || '').toLowerCase();
+  const sortColumn = sortMap[sortByField] || sql`total_subscriptions`;
+  const isAsc = String(sort?.sortOrder || sort?.order || '').toLowerCase() === 'asc';
+  const orderDirection = isAsc ? sql`ASC` : sql`DESC`;
+
+  // 3. Data query
+  const dataResult = await db.execute(sql`
     SELECT
-      sp.name  AS plan_name,
-      sp.type  AS plan_type,
+      sp.id                                                  AS plan_id,
+      sp.name                                                AS plan_name,
+      sp.type                                                AS plan_type,
       sp.price_minor,
       sp.currency_code,
-      COUNT(s.id)                                    AS total_subscriptions,
-      COUNT(s.id) FILTER (WHERE s.status = 'active') AS active_count
+      sp.country_id,
+      sp.is_active,
+      COUNT(s.id)::int                                       AS total_subscriptions,
+      COUNT(s.id) FILTER (WHERE s.status = 'active')::int    AS active_count,
+      COUNT(s.id) FILTER (WHERE s.status = 'cancelled')::int AS cancelled_count,
+      COUNT(s.id) FILTER (WHERE s.status = 'expired')::int   AS expired_count
     FROM subscription_plans sp
     LEFT JOIN subscriptions s ON s.plan_id = sp.id
-    GROUP BY sp.id, sp.name, sp.type, sp.price_minor, sp.currency_code
-    ORDER BY total_subscriptions DESC
+    ${whereClause}
+    GROUP BY sp.id, sp.name, sp.type, sp.price_minor, sp.currency_code, sp.country_id, sp.is_active
+    ORDER BY ${sortColumn} ${orderDirection}
+    LIMIT ${limit}
+    OFFSET ${offset}
   `);
-  return rows;
+
+  const rows = dataResult.rows ?? dataResult;
+
+  return {
+    rows,
+    pagination: paginate(page, limit, total),
+  };
 }
 
 export async function listAuditLogs(page, limit, offset, filters = {}) {

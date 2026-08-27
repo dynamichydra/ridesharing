@@ -3,6 +3,7 @@ export * from './countries.js';
 export * from './currencies.js';
 export * from './legal-entities.js';
 export * from './states.js';
+export * from './city-types.js';
 export * from './cities.js';
 export * from './languages.js';
 export * from './translations.js';
