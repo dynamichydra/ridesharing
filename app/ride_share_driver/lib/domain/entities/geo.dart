@@ -15,11 +15,11 @@ class Country {
 
   factory Country.fromJson(Map<String, dynamic> json) {
     return Country(
-      id: json['id'],
-      name: json['name'],
-      isoCode: json['isoCode'],
-      dialCode: json['dialCode'],
-      currencyCode: json['currencyCode'],
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      isoCode: json['isoCode']?.toString() ?? '',
+      dialCode: json['dialCode']?.toString() ?? '',
+      currencyCode: json['currencyCode']?.toString() ?? '',
     );
   }
 }
@@ -39,10 +39,10 @@ class StateProvince {
 
   factory StateProvince.fromJson(Map<String, dynamic> json) {
     return StateProvince(
-      id: json['id'],
-      countryId: json['countryId'],
-      name: json['name'],
-      code: json['code'] ?? '',
+      id: json['id']?.toString() ?? '',
+      countryId: json['countryId']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      code: json['code']?.toString() ?? '',
     );
   }
 }
@@ -50,22 +50,23 @@ class StateProvince {
 class City {
   final String id;
   final String stateId;
-  final String countryId;
+  final String? countryId;
   final String name;
 
   City({
     required this.id,
     required this.stateId,
-    required this.countryId,
+    this.countryId,
     required this.name,
   });
 
   factory City.fromJson(Map<String, dynamic> json) {
     return City(
-      id: json['id'],
-      stateId: json['stateId'],
-      countryId: json['countryId'],
-      name: json['name'],
+      id: json['id']?.toString() ?? '',
+      stateId: json['stateId']?.toString() ?? '',
+      countryId: json['countryId']?.toString(),
+      name: json['name']?.toString() ?? '',
     );
   }
 }
+

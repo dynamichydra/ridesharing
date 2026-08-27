@@ -30,6 +30,8 @@ import 'features/wallet/data/datasources/wallet_remote_datasource.dart';
 import 'features/wallet/presentation/bloc/wallet_bloc.dart';
 import 'features/ride_history/data/datasources/ride_history_datasource.dart';
 import 'features/ride_history/presentation/bloc/ride_history_bloc.dart';
+import 'features/earnings/data/datasources/earnings_remote_datasource.dart';
+import 'core/network/network_cubit.dart';
 
 final sl = GetIt.instance;
 
@@ -64,6 +66,8 @@ Future<void> init() async {
       () => WalletRemoteDataSource(apiClient: sl()));
   sl.registerLazySingleton<RideHistoryDataSource>(
       () => RideHistoryDataSource(apiClient: sl()));
+  sl.registerLazySingleton<EarningsRemoteDataSource>(
+      () => EarningsRemoteDataSource(apiClient: sl()));
 
   // ── Repositories ──────────────────────────────────────────────────────────
   sl.registerLazySingleton<AuthRepository>(
@@ -78,12 +82,13 @@ Future<void> init() async {
       () => RideRepositoryImpl(remoteDataSource: sl(), socketDataSource: sl()));
 
   // ── BLoCs ─────────────────────────────────────────────────────────────────
-  sl.registerFactory(() => AuthBloc(authRepository: sl()));
-  sl.registerFactory(() => OnboardingBloc(onboardingRepository: sl()));
-  sl.registerFactory(() => DriverStatusBloc(driverStatusRepository: sl(), locationService: sl(), secureStorage: sl()));
+  sl.registerLazySingleton<AuthBloc>(() => AuthBloc(authRepository: sl()));
+  sl.registerLazySingleton<OnboardingBloc>(() => OnboardingBloc(onboardingRepository: sl()));
+  sl.registerLazySingleton<DriverStatusBloc>(() => DriverStatusBloc(driverStatusRepository: sl(), locationService: sl(), secureStorage: sl()));
   sl.registerFactory(() => SubscriptionBloc(subscriptionRepository: sl()));
   sl.registerLazySingleton<RideBloc>(() => RideBloc(rideRepository: sl(), locationService: sl()));
-  sl.registerFactory(() => ProfileBloc(dataSource: sl()));
-  sl.registerFactory(() => WalletBloc(dataSource: sl()));
-  sl.registerFactory(() => RideHistoryBloc(dataSource: sl()));
+  sl.registerLazySingleton<ProfileBloc>(() => ProfileBloc(dataSource: sl()));
+  sl.registerLazySingleton<WalletBloc>(() => WalletBloc(dataSource: sl()));
+  sl.registerLazySingleton<RideHistoryBloc>(() => RideHistoryBloc(dataSource: sl()));
+  sl.registerLazySingleton<NetworkCubit>(() => NetworkCubit());
 }

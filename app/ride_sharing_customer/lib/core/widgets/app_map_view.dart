@@ -3,7 +3,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../../features/location/utils/map_styles.dart';
 import '../constants/constants.dart';
 import 'mock_map_view.dart';
 
@@ -56,10 +55,16 @@ class AppMapView extends StatefulWidget {
   State<AppMapView> createState() => _AppMapViewState();
 }
 
-class _AppMapViewState extends State<AppMapView> with SingleTickerProviderStateMixin {
+class _AppMapViewState extends State<AppMapView> with TickerProviderStateMixin {
   BitmapDescriptor _carIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
   late final AnimationController _pulseController;
+  late final AnimationController _markerAnimController;
   double _currentZoom = 15.0;
+
+  LatLng? _prevMarkerPos;
+  LatLng? _targetMarkerPos;
+  double _prevMarkerBearing = 0.0;
+  double _targetMarkerBearing = 0.0;
 
   @override
   void initState() {
@@ -73,6 +78,16 @@ class _AppMapViewState extends State<AppMapView> with SingleTickerProviderStateM
     if (widget.showPickupPulse) {
       _pulseController.repeat();
     }
+
+    _prevMarkerPos = widget.driverPosition;
+    _targetMarkerPos = widget.driverPosition;
+    _prevMarkerBearing = widget.driverBearing;
+    _targetMarkerBearing = widget.driverBearing;
+
+    _markerAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
   }
 
   @override
@@ -88,11 +103,44 @@ class _AppMapViewState extends State<AppMapView> with SingleTickerProviderStateM
         _pulseController.stop();
       }
     }
+
+    if (widget.driverPosition != null &&
+        (widget.driverPosition != _targetMarkerPos ||
+            widget.driverBearing != _targetMarkerBearing)) {
+      // Calculate current interpolated position before starting new animation
+      if (_targetMarkerPos != null && _prevMarkerPos != null) {
+        final t = _markerAnimController.value;
+        _prevMarkerPos = LatLng(
+          _prevMarkerPos!.latitude +
+              (_targetMarkerPos!.latitude - _prevMarkerPos!.latitude) * t,
+          _prevMarkerPos!.longitude +
+              (_targetMarkerPos!.longitude - _prevMarkerPos!.longitude) * t,
+        );
+        _prevMarkerBearing =
+            _interpolateBearing(_prevMarkerBearing, _targetMarkerBearing, t);
+      } else {
+        _prevMarkerPos = widget.driverPosition;
+        _prevMarkerBearing = widget.driverBearing;
+      }
+
+      _targetMarkerPos = widget.driverPosition;
+      _targetMarkerBearing = widget.driverBearing;
+
+      _markerAnimController.forward(from: 0.0);
+    }
+  }
+
+  double _interpolateBearing(double start, double end, double t) {
+    double diff = (end - start) % 360;
+    if (diff > 180) diff -= 360;
+    if (diff < -180) diff += 360;
+    return (start + diff * t) % 360;
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
+    _markerAnimController.dispose();
     super.dispose();
   }
 
@@ -188,8 +236,23 @@ class _AppMapViewState extends State<AppMapView> with SingleTickerProviderStateM
     }
 
     return AnimatedBuilder(
-      animation: _pulseController,
+      animation: Listenable.merge([_pulseController, _markerAnimController]),
       builder: (context, child) {
+        LatLng? currentDriverPos = _targetMarkerPos;
+        double currentDriverBearing = _targetMarkerBearing;
+
+        if (_prevMarkerPos != null && _targetMarkerPos != null) {
+          final t = _markerAnimController.value;
+          currentDriverPos = LatLng(
+            _prevMarkerPos!.latitude +
+                (_targetMarkerPos!.latitude - _prevMarkerPos!.latitude) * t,
+            _prevMarkerPos!.longitude +
+                (_targetMarkerPos!.longitude - _prevMarkerPos!.longitude) * t,
+          );
+          currentDriverBearing =
+              _interpolateBearing(_prevMarkerBearing, _targetMarkerBearing, t);
+        }
+
         return GoogleMap(
           onMapCreated: widget.onMapCreated,
           onCameraMove: _handleCameraMove,
@@ -260,14 +323,14 @@ class _AppMapViewState extends State<AppMapView> with SingleTickerProviderStateM
                 infoWindow: const InfoWindow(title: 'Destination'),
                 zIndexInt: 3,
               ),
-            if (widget.driverPosition != null)
+            if (currentDriverPos != null)
               Marker(
                 markerId: const MarkerId('driver'),
-                position: widget.driverPosition!,
+                position: currentDriverPos,
                 icon: _carIcon,
                 anchor: const Offset(0.5, 0.5),
                 flat: true,
-                rotation: widget.driverBearing,
+                rotation: currentDriverBearing,
                 zIndexInt: 4,
               ),
           },

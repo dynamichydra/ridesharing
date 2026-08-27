@@ -6,6 +6,7 @@ abstract class RideTrackingRepository {
   void disconnectFromRide();
   Stream<Map<String, dynamic>> get onDriverAssigned;
   Stream<Map<String, dynamic>> get onDriverLocation;
+  Stream<Map<String, dynamic>> get onDriverArriving;
   Stream<Map<String, dynamic>> get onRideStarted;
   Stream<Map<String, dynamic>> get onRideCompleted;
   Stream<Map<String, dynamic>> get onRideCancelled;

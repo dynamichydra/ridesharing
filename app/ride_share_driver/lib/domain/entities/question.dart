@@ -11,9 +11,9 @@ class QuestionOption {
 
   factory QuestionOption.fromJson(Map<String, dynamic> json) {
     return QuestionOption(
-      id: json['id'],
-      code: json['code'],
-      label: json['label'],
+      id: json['id']?.toString() ?? '',
+      code: json['code']?.toString() ?? '',
+      label: json['label']?.toString() ?? '',
     );
   }
 }
@@ -47,18 +47,18 @@ class OnboardingQuestion {
 
   factory OnboardingQuestion.fromJson(Map<String, dynamic> json) {
     return OnboardingQuestion(
-      id: json['id'],
-      code: json['code'],
-      type: json['type'],
-      required: json['required'] ?? false,
-      sortOrder: json['sortOrder'] ?? 0,
-      minValue: json['minValue'],
-      maxValue: json['maxValue'],
-      label: json['label'],
-      description: json['description'],
-      dependsOn: json['dependsOn'],
+      id: json['id']?.toString() ?? '',
+      code: json['code']?.toString() ?? '',
+      type: json['type']?.toString() ?? 'text',
+      required: json['required'] as bool? ?? false,
+      sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+      minValue: (json['minValue'] as num?)?.toInt(),
+      maxValue: (json['maxValue'] as num?)?.toInt(),
+      label: json['label']?.toString() ?? '',
+      description: json['description']?.toString(),
+      dependsOn: json['dependsOn'] as Map<String, dynamic>?,
       options: (json['options'] as List?)
-              ?.map((o) => QuestionOption.fromJson(o))
+              ?.map((o) => QuestionOption.fromJson(o as Map<String, dynamic>))
               .toList() ??
           [],
     );
@@ -76,8 +76,9 @@ class DriverAnswer {
 
   factory DriverAnswer.fromJson(Map<String, dynamic> json) {
     return DriverAnswer(
-      questionId: json['questionId'],
-      value: json['answerValue'],
+      questionId: (json['questionId'] ?? json['id'])?.toString() ?? '',
+      value: json['answerValue'] ?? json['value'],
     );
   }
 }
+

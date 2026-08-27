@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import '../../../style/appcolors.dart';
 import '../../../core/localization/app_localizations.dart';
 
+import 'widgets/three_dots_loader.dart';
+
 class LanguageToggle extends StatelessWidget {
+
   const LanguageToggle({super.key});
 
   @override
@@ -85,11 +88,13 @@ class LanguageToggle extends StatelessWidget {
 class WelcomeScreen extends StatelessWidget {
   final VoidCallback onRegister;
   final VoidCallback onLogin;
+  final bool isLoading;
 
   const WelcomeScreen({
     super.key,
     required this.onRegister,
     required this.onLogin,
+    this.isLoading = false,
   });
 
   @override
@@ -173,10 +178,12 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 32),
                   ElevatedButton(
-                    onPressed: () {
-                      debugPrint('[WelcomeScreen] Get Started button clicked');
-                      onRegister();
-                    },
+                    onPressed: isLoading
+                        ? null
+                        : () {
+                            debugPrint('[WelcomeScreen] Get Started button clicked');
+                            onRegister();
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
@@ -186,13 +193,15 @@ class WelcomeScreen extends StatelessWidget {
                       ),
                       elevation: 0,
                     ),
-                    child: Text(
-                      l10n.getStarted,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    child: isLoading
+                        ? const ThreeDotsLoader()
+                        : Text(
+                            l10n.getStarted,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                   const SizedBox(height: 20),
                   TextButton(

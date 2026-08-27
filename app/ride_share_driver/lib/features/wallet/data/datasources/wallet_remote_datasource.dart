@@ -119,11 +119,14 @@ class WalletRemoteDataSource {
   }
 
   /// POST /api/v1/payouts/me/instant
-  Future<Map<String, dynamic>> requestInstantPayout() async {
+  Future<Map<String, dynamic>> requestInstantPayout({int? amountMinor}) async {
     try {
       final idempotencyKey = const Uuid().v4();
       final response = await apiClient.dio.post(
         '/payouts/me/instant',
+        data: {
+          if (amountMinor != null) 'amountMinor': amountMinor,
+        },
         options: Options(
           headers: {
             'Idempotency-Key': idempotencyKey,

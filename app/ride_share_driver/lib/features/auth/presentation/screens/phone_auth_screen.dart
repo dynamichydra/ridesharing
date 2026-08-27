@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../style/appcolors.dart';
+import '../../../../presentation/screens/onboarding/widgets/three_dots_loader.dart';
 import '../../../../core/localization/app_localizations.dart';
 import '../../../../services/location_service.dart';
 
@@ -35,7 +36,10 @@ class PhoneAuthScreen extends StatefulWidget {
     required this.isLogin,
     this.onLoginModeChanged,
     this.initialPhone,
+    this.isLoading = false,
   });
+
+  final bool isLoading;
 
   @override
   State<PhoneAuthScreen> createState() => _PhoneAuthScreenState();
@@ -405,7 +409,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   ),
                   const SizedBox(height: 28),
                   ElevatedButton(
-                    onPressed: _submit,
+                    onPressed: widget.isLoading ? null : _submit,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
@@ -415,13 +419,15 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                       ),
                       elevation: 0,
                     ),
-                    child: Text(
-                      l10n.getStarted,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    child: widget.isLoading
+                        ? const ThreeDotsLoader()
+                        : Text(
+                            l10n.getStarted,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ],
               ),

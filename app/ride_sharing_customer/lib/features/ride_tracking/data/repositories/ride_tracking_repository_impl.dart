@@ -34,6 +34,9 @@ class RideTrackingRepositoryImpl implements RideTrackingRepository {
   Stream<Map<String, dynamic>> get onDriverLocation => socketDataSource.onDriverLocation;
 
   @override
+  Stream<Map<String, dynamic>> get onDriverArriving => socketDataSource.onDriverArriving;
+
+  @override
   Stream<Map<String, dynamic>> get onRideStarted => socketDataSource.onRideStarted;
 
   @override

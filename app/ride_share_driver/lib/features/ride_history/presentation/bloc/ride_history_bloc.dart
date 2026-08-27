@@ -7,7 +7,18 @@ abstract class RideHistoryEvent {}
 
 class LoadRideHistory extends RideHistoryEvent {
   final String? status;
-  LoadRideHistory({this.status});
+  final String? fromDate;
+  final String? toDate;
+  final double? minEarnings;
+  final double? maxEarnings;
+
+  LoadRideHistory({
+    this.status,
+    this.fromDate,
+    this.toDate,
+    this.minEarnings,
+    this.maxEarnings,
+  });
 }
 
 class LoadMoreRideHistory extends RideHistoryEvent {}
@@ -24,6 +35,10 @@ class RideHistoryLoaded extends RideHistoryState {
   final bool isLoadingMore;
   final int page;
   final String? status;
+  final String? fromDate;
+  final String? toDate;
+  final double? minEarnings;
+  final double? maxEarnings;
 
   RideHistoryLoaded({
     required this.rides,
@@ -31,6 +46,10 @@ class RideHistoryLoaded extends RideHistoryState {
     this.isLoadingMore = false,
     required this.page,
     this.status,
+    this.fromDate,
+    this.toDate,
+    this.minEarnings,
+    this.maxEarnings,
   });
 
   RideHistoryLoaded copyWith({
@@ -39,6 +58,10 @@ class RideHistoryLoaded extends RideHistoryState {
     bool? isLoadingMore,
     int? page,
     String? status,
+    String? fromDate,
+    String? toDate,
+    double? minEarnings,
+    double? maxEarnings,
   }) {
     return RideHistoryLoaded(
       rides: rides ?? this.rides,
@@ -46,6 +69,10 @@ class RideHistoryLoaded extends RideHistoryState {
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       page: page ?? this.page,
       status: status ?? this.status,
+      fromDate: fromDate ?? this.fromDate,
+      toDate: toDate ?? this.toDate,
+      minEarnings: minEarnings ?? this.minEarnings,
+      maxEarnings: maxEarnings ?? this.maxEarnings,
     );
   }
 }
@@ -67,16 +94,28 @@ class RideHistoryBloc extends Bloc<RideHistoryEvent, RideHistoryState> {
   Future<void> _onLoad(LoadRideHistory event, Emitter<RideHistoryState> emit) async {
     emit(RideHistoryLoading());
     try {
-      final result = await dataSource.getRideHistory(page: 1, limit: 20, status: event.status);
+      final result = await dataSource.getRideHistory(
+        page: 1,
+        limit: 20,
+        status: event.status,
+        fromDate: event.fromDate,
+        toDate: event.toDate,
+        minEarnings: event.minEarnings,
+        maxEarnings: event.maxEarnings,
+      );
       final rows = (result['MESSAGE'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final pagination = result['PAGINATION'] as Map<String, dynamic>?;
       final totalPages = (pagination?['totalPages'] as num?)?.toInt() ?? 1;
 
       emit(RideHistoryLoaded(
         rides: rows,
-        hasMore: totalPages > 1 && rows.length == 20,
+        hasMore: totalPages > 1 && rows.isNotEmpty,
         page: 1,
         status: event.status,
+        fromDate: event.fromDate,
+        toDate: event.toDate,
+        minEarnings: event.minEarnings,
+        maxEarnings: event.maxEarnings,
       ));
     } catch (e) {
       emit(RideHistoryError(e.toString()));
@@ -90,7 +129,15 @@ class RideHistoryBloc extends Bloc<RideHistoryEvent, RideHistoryState> {
     emit(current.copyWith(isLoadingMore: true));
     try {
       final nextPage = current.page + 1;
-      final result = await dataSource.getRideHistory(page: nextPage, limit: 20, status: current.status);
+      final result = await dataSource.getRideHistory(
+        page: nextPage,
+        limit: 20,
+        status: current.status,
+        fromDate: current.fromDate,
+        toDate: current.toDate,
+        minEarnings: current.minEarnings,
+        maxEarnings: current.maxEarnings,
+      );
       final rows = (result['MESSAGE'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final pagination = result['PAGINATION'] as Map<String, dynamic>?;
       final totalPages = (pagination?['totalPages'] as num?)?.toInt() ?? 1;

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../../style/appcolors.dart';
 import '../../../domain/entities/geo.dart';
+import 'widgets/three_dots_loader.dart';
 
 class DrivingLocationScreen extends StatefulWidget {
   final List<Country> countries;
   final String? initialCountryId;
   final String? initialStateId;
   final String? initialCityId;
+  final bool isLoading;
   final Future<List<StateProvince>> Function(String) getStates;
   final Future<List<City>> Function(String) getCities;
   final Function({
@@ -22,6 +24,7 @@ class DrivingLocationScreen extends StatefulWidget {
     this.initialCountryId,
     this.initialStateId,
     this.initialCityId,
+    this.isLoading = false,
     required this.getStates,
     required this.getCities,
     required this.onSave,
@@ -334,7 +337,7 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
                     : null,
               ),
               child: ElevatedButton(
-                onPressed: isFormValid
+                onPressed: (isFormValid && !widget.isLoading)
                     ? () {
                         debugPrint(
                           '[DrivingLocationScreen] Save location clicked. Country: $_selectedCountryId, State: $_selectedStateId, City: $_selectedCityId',
@@ -349,25 +352,27 @@ class _DrivingLocationScreenState extends State<DrivingLocationScreen> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Save location',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                child: widget.isLoading
+                    ? const ThreeDotsLoader()
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Save location',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ],
                       ),
-                    ),
-                    SizedBox(width: 8),
-                    Icon(
-                      Icons.arrow_forward_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ],
-                ),
               ),
             ),
           ),

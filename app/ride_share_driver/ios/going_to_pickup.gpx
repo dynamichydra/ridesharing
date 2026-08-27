@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Ryva Ride">
+  <metadata><name>Going to Pickup</name></metadata>
+  <wpt lat="22.626470000000001" lon="88.434020000000004">
+    <name>Start</name>
+    <time>2026-08-26T17:30:00.000Z</time>
+  </wpt>
+  <wpt lat="22.625940000000003" lon="88.435750000000013">
+    <name>Point 1</name>
+    <time>2026-08-26T17:30:02.000Z</time>
+  </wpt>
+  <wpt lat="22.624950000000002" lon="88.438680000000005">
+    <name>Point 2</name>
+    <time>2026-08-26T17:30:04.000Z</time>
+  </wpt>
+  <wpt lat="22.624750000000002" lon="88.439140000000009">
+    <name>Point 3</name>
+    <time>2026-08-26T17:30:06.000Z</time>
+  </wpt>
+  <wpt lat="22.624310000000001" lon="88.440030000000007">
+    <name>Point 4</name>
+    <time>2026-08-26T17:30:08.000Z</time>
+  </wpt>
+  <wpt lat="22.623700000000003" lon="88.441040000000001">
+    <name>End</name>
+    <time>2026-08-26T17:30:10.000Z</time>
+  </wpt>
+</gpx>

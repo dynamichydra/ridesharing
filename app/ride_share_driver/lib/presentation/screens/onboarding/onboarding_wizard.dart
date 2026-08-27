@@ -74,6 +74,12 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
     super.initState();
     final authState = context.read<AuthBloc>().state;
     if (authState is Authenticated) {
+      if (authState.driver.isApproved) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          widget.onComplete();
+        });
+        return;
+      }
       context.read<OnboardingBloc>().add(LoadOnboardingConfig());
       _currentStep = 2;
     }
@@ -120,11 +126,10 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
       child: BlocListener<AuthBloc, AuthState>(
         listener: (context, authState) {
           if (authState is Authenticated) {
-            // Blocking statuses (pending_review/under_verification/rejected/
-            // suspended) are now handled by RegistrationStatusScreen in the
-            // builder below instead of a one-shot dialog that used to force
-            // a logout on dismiss — a `rejected` driver needs to be able to
-            // edit and resubmit, not just see a message and get logged out.
+            if (authState.driver.isApproved) {
+              widget.onComplete();
+              return;
+            }
             debugPrint(
               '[OnboardingWizard] AuthState transitioned to Authenticated. Fetching configuration.',
             );
@@ -179,6 +184,11 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                   isComplete: missing.isEmpty,
                   missing: missing,
                 );
+
+                if (_summary!.driver.isApproved) {
+                  widget.onComplete();
+                  return;
+                }
 
                 if (_currentStep == 2) {
                   final regStep = state.summary.driver.registrationStep;
@@ -405,6 +415,16 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           builder: (context, state) {
             final authState = context.watch<AuthBloc>().state;
             if (authState is Authenticated && !_isEditingRejectedApplication) {
+              if (authState.driver.isApproved) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  widget.onComplete();
+                });
+                return const Scaffold(
+                  backgroundColor: Colors.white,
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+
               final status = authState.driver.registrationStatus;
               const blockingStatuses = {
                 'pending_review',
@@ -416,6 +436,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                 return RegistrationStatusScreen(
                   status: status,
                   note: authState.driver.approvalNote,
+                  isLoading: state is OnboardingLoading || authState is AuthLoading,
                   onEditAndResubmit: status == 'rejected'
                       ? () {
                           setState(() {
@@ -511,9 +532,15 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
   }
 
   Widget _buildStepContent(BuildContext context) {
+    final authState = context.watch<AuthBloc>().state;
+    final onboardingState = context.watch<OnboardingBloc>().state;
+    final isAuthLoading = authState is AuthLoading;
+    final isOnboardingLoading = onboardingState is OnboardingLoading;
+
     switch (_currentStep) {
       case 0:
         return WelcomeScreen(
+          isLoading: isAuthLoading,
           onRegister: () {
             setState(() {
               _isLogin = false;
@@ -531,6 +558,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         return PhoneAuthScreen(
           isLogin: _isLogin,
           initialPhone: _phoneNumber,
+          isLoading: isAuthLoading,
           onLoginModeChanged: (isLogin) {
             setState(() {
               _isLogin = isLogin;
@@ -546,6 +574,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
       case 2:
         return OtpVerificationScreen(
           phoneNumber: _phoneNumber,
+          isLoading: isAuthLoading,
           onOtpVerified: (otp) {
             context.read<AuthBloc>().add(
               VerifyOtpCode(phone: _phoneNumber, otp: otp, isLogin: _isLogin),
@@ -564,6 +593,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           initialDob: _summary?.driver.dateOfBirth,
           initialGender: _summary?.driver.gender,
           initialReferralCode: _summary?.driver.referralCode,
+          isLoading: isOnboardingLoading,
           onSave:
               ({
                 required String name,
@@ -587,6 +617,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         return TermsLegalScreen(
           termsUrl: _config?.termsUrl,
           privacyUrl: _config?.privacyPolicyUrl,
+          isLoading: isOnboardingLoading,
           fetchContent: (url) =>
               sl<OnboardingRepository>().fetchLegalContent(url),
           isAlreadyAccepted:
@@ -614,6 +645,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           initialCountryId: _summary?.driver.countryId,
           initialStateId: _summary?.driver.stateId,
           initialCityId: _summary?.driver.cityId,
+          isLoading: isOnboardingLoading,
           getStates: (countryId) =>
               sl<OnboardingRepository>().getStates(countryId),
           getCities: (stateId) => sl<OnboardingRepository>().getCities(stateId),
@@ -634,6 +666,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         return QuestionnaireScreen(
           questions: _config!.questionnaire,
           existingAnswers: _summary!.answers,
+          isLoading: isOnboardingLoading,
           onSubmit: (answers) {
             context.read<OnboardingBloc>().add(
               SubmitQuestionAnswers(answers: answers),
@@ -642,6 +675,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         );
       case 7:
         return VehicleSelectionScreen(
+          isLoading: isOnboardingLoading,
           onHasVehicle: () {
             setState(() {
               _needsVehicleRental = false;
@@ -710,6 +744,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           initialYear: existingVehicle?.year,
           initialRegistrationNumber: existingVehicle?.registrationNumber,
           initialColor: existingVehicle?.color,
+          isLoading: isOnboardingLoading,
           onSave:
               ({
                 color,
@@ -739,6 +774,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           documentRequirements: _config!.documentRequirements,
           isBankDetailsCompleted: _bankAccount != null && _bankAccount!.isNotEmpty,
           isEmergencyContactCompleted: _emergencyPhone != null && _emergencyPhone!.isNotEmpty,
+          isLoading: isOnboardingLoading,
           onItemTap: (code) {
             setState(() {
               _enteredFromChecklist = true;
@@ -830,6 +866,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         return DocumentUploadScreen(
           docType: docType,
           existingDoc: existing,
+          isLoading: isOnboardingLoading,
           onUpload:
               ({
                 required bytes,
@@ -853,6 +890,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
       case 12:
         return ProfilePhotoScreen(
           currentPhotoUrl: _summary?.driver.profilePhoto,
+          isLoading: isOnboardingLoading,
           onUpload: ({required bytes, required contentType}) {
             context.read<OnboardingBloc>().add(
               UploadProfilePhotoEvent(bytes: bytes, contentType: contentType),
@@ -865,6 +903,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           initialBankName: _bankName,
           initialAccount: _bankAccount,
           initialIfsc: _bankIfsc,
+          isLoading: isOnboardingLoading,
           onSkip: () {
             setState(() {
               _currentStep = 9;
@@ -900,6 +939,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           initialName: _emergencyName,
           initialPhone: _emergencyPhone,
           initialRelationship: _emergencyRelationship,
+          isLoading: isOnboardingLoading,
           onSkip: () {
             setState(() {
               _currentStep = 9;
@@ -920,6 +960,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         );
       default:
         return WelcomeScreen(
+          isLoading: isAuthLoading,
           onRegister: () {
             setState(() {
               _isLogin = false;
@@ -935,4 +976,5 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
         );
     }
   }
+
 }

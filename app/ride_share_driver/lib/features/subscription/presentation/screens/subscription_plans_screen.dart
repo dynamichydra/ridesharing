@@ -39,7 +39,6 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
 
   @override
   void dispose() {
-    _bloc.close();
     super.dispose();
   }
 
@@ -90,10 +89,17 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Choose a Plan', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Subscription Plans', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
         backgroundColor: Colors.white,
-        foregroundColor: AppColors.textPrimary,
+        foregroundColor: const Color(0xFF0F172A),
         elevation: 0,
+        centerTitle: true,
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout_rounded),

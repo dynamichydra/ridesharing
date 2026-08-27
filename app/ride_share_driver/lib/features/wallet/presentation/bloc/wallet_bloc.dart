@@ -157,7 +157,10 @@ class TopUpWallet extends WalletEvent {
   TopUpWallet({required this.amount, this.isDemo = true});
 }
 
-class RequestInstantPayout extends WalletEvent {}
+class RequestInstantPayout extends WalletEvent {
+  final double? amount;
+  RequestInstantPayout({this.amount});
+}
 
 class SubmitBankDetails extends WalletEvent {
   final String? upiId;
@@ -284,8 +287,12 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
 
     emit(WalletSubmitting(bankDetails: currentBank, payoutAccount: currentPayout, walletInfo: currentWallet));
     try {
-      await dataSource.requestInstantPayout();
-      emit(WalletActionSuccess('Instant payout processed successfully!'));
+      final amountMinor = event.amount != null ? (event.amount! * 100).round() : null;
+      await dataSource.requestInstantPayout(amountMinor: amountMinor);
+      final msg = event.amount != null
+          ? '₹${event.amount!.toStringAsFixed(0)} cashed out successfully!'
+          : 'Instant cash out processed successfully!';
+      emit(WalletActionSuccess(msg));
       add(LoadWalletData());
     } catch (e) {
       emit(WalletError(e.toString()));

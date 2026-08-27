@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.1" creator="ChatGPT" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 https://www.topografix.com/GPX/1/1/gpx.xsd">
+  <metadata>
+    <name>2 Minute Straight Line Test</name>
+  </metadata>
+  <trk>
+    <name>2 Minute Straight Line Route</name>
+    <trkseg>
+      <trkpt lat="22.627351377625363" lon="88.433475156341359"><time>2026-08-26T12:00:00Z</time></trkpt><trkpt lat="22.626909722742852" lon="88.434464043562443"><time>2026-08-26T12:00:15Z</time></trkpt><trkpt lat="22.626468067860344" lon="88.435452930783526"><time>2026-08-26T12:00:30Z</time></trkpt><trkpt lat="22.626026412977833" lon="88.436441818004596"><time>2026-08-26T12:00:45Z</time></trkpt><trkpt lat="22.625584758095322" lon="88.437430705225680"><time>2026-08-26T12:01:00Z</time></trkpt><trkpt lat="22.625143103212810" lon="88.438419592446763"><time>2026-08-26T12:01:15Z</time></trkpt><trkpt lat="22.624701448330299" lon="88.439408479667833"><time>2026-08-26T12:01:30Z</time></trkpt><trkpt lat="22.624259793447791" lon="88.440397366888917"><time>2026-08-26T12:01:45Z</time></trkpt><trkpt lat="22.623818138565280" lon="88.441386254110000"><time>2026-08-26T12:02:00Z</time></trkpt></trkseg>
+  </trk>
+</gpx>

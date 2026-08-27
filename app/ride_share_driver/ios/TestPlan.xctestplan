@@ -1,0 +1,21 @@
+{
+  "configurations" : [
+    {
+      "id" : "D4D786FF-FD66-4BA3-8020-FC35DAADDAC0",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "locationScenario" : {
+      "identifier" : "..\/straight_line_2min.gpx"
+    },
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+
+  ],
+  "version" : 1
+}

@@ -27,7 +27,8 @@ class DriverDashboard extends StatefulWidget {
   State<DriverDashboard> createState() => _DriverDashboardState();
 }
 
-class _DriverDashboardState extends State<DriverDashboard> {
+class _DriverDashboardState extends State<DriverDashboard>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final DriverStatusBloc _driverStatusBloc = di.sl<DriverStatusBloc>();
   late final RideBloc _rideBloc = di.sl<RideBloc>();
   late final AuthBloc _authBloc = di.sl<AuthBloc>();
@@ -35,35 +36,90 @@ class _DriverDashboardState extends State<DriverDashboard> {
   late final WalletBloc _walletBloc = di.sl<WalletBloc>();
   late final RideHistoryBloc _rideHistoryBloc = di.sl<RideHistoryBloc>();
 
+  late final AnimationController _moneyAnimController;
+  late final Animation<Offset> _moneySlideAnim;
+  late final Animation<double> _moneyFadeAnim;
+  late final Animation<double> _moneyScaleAnim;
+  double? _lastAddedAmount;
+  bool _showMoneyBadge = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    _moneyAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+
+    _moneySlideAnim = Tween<Offset>(
+      begin: const Offset(0, 0.5),
+      end: const Offset(0, -0.6),
+    ).animate(CurvedAnimation(
+      parent: _moneyAnimController,
+      curve: Curves.easeOutCubic,
+    ));
+
+    _moneyFadeAnim = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween<double>(begin: 0.0, end: 1.0), weight: 20),
+      TweenSequenceItem(tween: Tween<double>(begin: 1.0, end: 1.0), weight: 50),
+      TweenSequenceItem(tween: Tween<double>(begin: 1.0, end: 0.0), weight: 30),
+    ]).animate(_moneyAnimController);
+
+    _moneyScaleAnim = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween<double>(begin: 0.5, end: 1.15), weight: 25),
+      TweenSequenceItem(tween: Tween<double>(begin: 1.15, end: 1.0), weight: 20),
+      TweenSequenceItem(tween: Tween<double>(begin: 1.0, end: 1.0), weight: 55),
+    ]).animate(_moneyAnimController);
+
     _profileBloc.add(LoadProfile());
     _walletBloc.add(LoadWalletData());
     _rideHistoryBloc.add(LoadRideHistory());
-    _restoreDriverOnlineStatus();
+
+    // Always start in offline state on app open or fresh login
+    _initOfflineStatus();
   }
 
-  Future<void> _restoreDriverOnlineStatus() async {
-    final storage = di.sl<SecureStorage>();
-    final isOnlineStored = await storage.getOnlineStatus();
-    final authState = _authBloc.state;
-    final isOnlineAuth = (authState is Authenticated)
-        ? authState.driver.isOnline
-        : false;
-    final isOnline = isOnlineStored ?? isOnlineAuth;
-    if (isOnline) {
-      _driverStatusBloc.add(GoOnlineRequested());
-      _rideBloc.add(ConnectRideSocket());
+  void _initOfflineStatus() {
+    _driverStatusBloc.add(RestoreOnlineStatus(isOnline: false));
+    di.sl<SecureStorage>().saveOnlineStatus(false);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached || state == AppLifecycleState.hidden) {
+      // Driver closed the app or navigated away: automatically go offline
+      _driverStatusBloc.add(GoOfflineRequested());
+      _rideBloc.add(DisconnectRideSocket());
+      di.sl<SecureStorage>().saveOnlineStatus(false);
     }
+  }
+
+  void _showMoneyAddedAnimation(double amount) {
+    if (amount <= 0) return;
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() {
+        _lastAddedAmount = amount;
+        _showMoneyBadge = true;
+      });
+      _moneyAnimController.forward(from: 0.0).then((_) {
+        Future.delayed(const Duration(milliseconds: 2500), () {
+          if (mounted) {
+            setState(() {
+              _showMoneyBadge = false;
+            });
+          }
+        });
+      });
+    });
   }
 
   @override
   void dispose() {
-    _driverStatusBloc.close();
-    _profileBloc.close();
-    _walletBloc.close();
-    _rideHistoryBloc.close();
+    WidgetsBinding.instance.removeObserver(this);
+    _moneyAnimController.dispose();
     super.dispose();
   }
 
@@ -101,10 +157,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
             if (state is DriverStatusError) {
               CustomToast.show(context, state.message);
             } else if (state is DriverStatusOnline) {
-              CustomToast.show(context, 'You are now online');
               _rideBloc.add(ConnectRideSocket());
             } else if (state is DriverStatusOffline) {
-              CustomToast.show(context, 'You are now offline');
               _rideBloc.add(DisconnectRideSocket());
             }
           },
@@ -125,7 +179,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
             if (state is RideActive) {
               context.push('/active-ride');
             } else if (state is RideOfferGone) {
-              CustomToast.show(context, state.message);
+              // Card simply slides away without showing an intrusive popup toast
             } else if (state is RideOperationFailed) {
               CustomToast.show(context, state.message);
             } else if (state is RideCancelledByRider) {
@@ -134,7 +188,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
               _profileBloc.add(LoadProfile());
               _walletBloc.add(LoadWalletData());
               final fareMinor = state.ride.finalFareMinor ?? state.ride.estimatedFareMinor ?? 0;
-              final fare = (fareMinor / 100.0).toStringAsFixed(2);
+              final fareNum = fareMinor / 100.0;
+              final fare = fareNum.toStringAsFixed(2);
+              _showMoneyAddedAnimation(fareNum);
               final isWallet = state.ride.paymentMethod?.toLowerCase() == 'wallet';
               if (isWallet) {
                 CustomToast.show(context, 'Ride Completed! ₹$fare credited to your Ryva Wallet');
@@ -146,25 +202,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         ),
         BlocListener<ProfileBloc, ProfileState>(
           bloc: _profileBloc,
-          listener: (context, state) async {
-            if (state is ProfileLoaded) {
-              final storage = di.sl<SecureStorage>();
-              final isOnlineStored = await storage.getOnlineStatus();
-              if (isOnlineStored == true) {
-                final isOnlineApi =
-                    state.summary?.isOnline ?? state.profile.isOnline;
-                if (!isOnlineApi) {
-                  _driverStatusBloc.add(GoOnlineRequested());
-                } else {
-                  _driverStatusBloc.add(RestoreOnlineStatus(isOnline: true));
-                }
-                _rideBloc.add(ConnectRideSocket());
-              } else if (isOnlineStored == false) {
-                _driverStatusBloc.add(RestoreOnlineStatus(isOnline: false));
-                _rideBloc.add(DisconnectRideSocket());
-              }
-            }
-          },
+          listener: (context, state) {},
         ),
       ],
       child: BlocBuilder<AuthBloc, AuthState>(
@@ -198,8 +236,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   summary?.name ??
                   profile?.name ??
                   ((authState is Authenticated)
-                      ? (authState.driver.name ?? 'Ramesh Kumar')
-                      : 'Ramesh Kumar');
+                      ? (authState.driver.name ?? 'Driver')
+                      : 'Driver');
               final driverRating =
                   summary?.rating ??
                   (profile != null
@@ -214,6 +252,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 bloc: _driverStatusBloc,
                 builder: (context, statusState) {
                   final isOnline = statusState is DriverStatusOnline;
+                  final isGoingOnline =
+                      statusState is DriverStatusTransitioning &&
+                      statusState.goingOnline;
+                  final isGoingOffline =
+                      statusState is DriverStatusTransitioning &&
+                      !statusState.goingOnline;
+                  final isTransitioning =
+                      statusState is DriverStatusTransitioning;
 
                   return BlocBuilder<RideBloc, RideState>(
                     bloc: _rideBloc,
@@ -302,21 +348,53 @@ class _DriverDashboardState extends State<DriverDashboard> {
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 16,
-                                  vertical: 8,
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // 1. Top Header Row: [Avatar + Greeting/Name/Rating] [Pill Toggle Switch]
+                                    const SizedBox(height: 12),
+
+                                    // 1. Top Header Profile / Status Card
                                     _buildHeaderSection(
                                       context: context,
                                       driverName: driverName,
                                       driverRating: driverRating,
                                       profilePhoto: profilePhoto,
                                       isOnline: isOnline,
+                                      isTransitioning: isTransitioning,
+                                      isGoingOnline: isGoingOnline,
+                                      isGoingOffline: isGoingOffline,
                                     ),
 
                                     const SizedBox(height: 16),
+
+                                    // 2. Metrics Card: [Earnings] [Rides] [Working Hours]
+                                    _buildMetricsSummaryCard(context, summary),
+
+                                    const SizedBox(height: 20),
+
+                                    // 3. Dynamic State Section
+                                    if (!isOnline)
+                                      // OFFLINE MODE
+                                      Center(
+                                        child: OfflineModeView(
+                                          isGoingOnline: isGoingOnline,
+                                          onGoOnline: isTransitioning
+                                              ? () {}
+                                              : () => _toggleOnlineStatus(false),
+                                        ),
+                                      )
+                                    else if (activeRide != null)
+                                      // ONGOING ACTIVE TRIP — do not display new ride requests
+                                      const SizedBox.shrink()
+                                    else if (pendingOffers.isNotEmpty)
+                                      // ONLINE - OFFERS AVAILABLE
+                                      _buildOffersAvailableSection(
+                                        pendingOffers,
+                                      )
+                                    else
+                                      // SEARCHING FOR OFFERS
+                                      _buildSearchingForOffersSection(),
 
                                     // Active Trip Banner if ongoing trip and driver navigated back to dashboard
                                     if (activeRide != null)
@@ -377,29 +455,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
                                         ),
                                       ),
 
-                                    // 2. Metrics Card: [Earnings] [Rides] [Working Hours]
-                                    _buildMetricsSummaryCard(context, summary),
-
-                                    const SizedBox(height: 20),
-
-                                    // 3. Dynamic State Section
-                                    if (!isOnline)
-                                      // OFFLINE MODE
-                                      Center(
-                                        child: OfflineModeView(
-                                          onGoOnline: () =>
-                                              _toggleOnlineStatus(false),
-                                        ),
-                                      )
-                                    else if (pendingOffers.isNotEmpty)
-                                      // ONLINE - OFFERS AVAILABLE
-                                      _buildOffersAvailableSection(
-                                        pendingOffers,
-                                      )
-                                    else
-                                      // SEARCHING FOR OFFERS
-                                      _buildSearchingForOffersSection(),
-
                                     const SizedBox(height: 24),
                                   ],
                                 ),
@@ -428,6 +483,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
     required String driverRating,
     String? profilePhoto,
     required bool isOnline,
+    bool isTransitioning = false,
+    bool isGoingOnline = false,
+    bool isGoingOffline = false,
   }) {
     final initials = _getInitials(driverName);
 
@@ -483,7 +541,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       width: 14,
                       height: 14,
                       decoration: BoxDecoration(
-                        color: isOnline
+                        color: (isOnline || isGoingOnline)
                             ? const Color(0xFF009048)
                             : const Color(0xFF94A3B8),
                         shape: BoxShape.circle,
@@ -554,19 +612,21 @@ class _DriverDashboardState extends State<DriverDashboard> {
           ),
         ),
 
-        // Online / Offline Pill Switch with smooth sliding animation
+        // Online / Offline Pill Switch with smooth sliding and loading animation
         GestureDetector(
-          onTap: () => _toggleOnlineStatus(isOnline),
+          onTap: isTransitioning ? null : () => _toggleOnlineStatus(isOnline),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 280),
             curve: Curves.easeInOut,
-            width: 92,
+            width: 96,
             height: 36,
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
               color: isOnline
                   ? const Color(0xFF009048)
-                  : const Color(0xFF64748B),
+                  : (isGoingOnline
+                      ? const Color(0xFF009048).withValues(alpha: 0.8)
+                      : const Color(0xFF64748B)),
               borderRadius: BorderRadius.circular(24),
             ),
             child: Stack(
@@ -574,19 +634,23 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 AnimatedAlign(
                   duration: const Duration(milliseconds: 280),
                   curve: Curves.easeInOut,
-                  alignment: isOnline
+                  alignment: (isOnline || isGoingOnline)
                       ? Alignment.centerLeft
                       : Alignment.centerRight,
                   child: Padding(
                     padding: EdgeInsets.only(
-                      left: isOnline ? 10 : 0,
-                      right: isOnline ? 0 : 10,
+                      left: (isOnline || isGoingOnline) ? 8 : 0,
+                      right: (isOnline || isGoingOnline) ? 0 : 8,
                     ),
                     child: Text(
-                      isOnline ? 'Online' : 'Offline',
+                      isGoingOnline
+                          ? 'Going...'
+                          : (isGoingOffline
+                              ? 'Going...'
+                              : (isOnline ? 'Online' : 'Offline')),
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -595,7 +659,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 AnimatedAlign(
                   duration: const Duration(milliseconds: 280),
                   curve: Curves.easeInOut,
-                  alignment: isOnline
+                  alignment: (isOnline || isGoingOnline)
                       ? Alignment.centerRight
                       : Alignment.centerLeft,
                   child: Container(
@@ -612,6 +676,20 @@ class _DriverDashboardState extends State<DriverDashboard> {
                         ),
                       ],
                     ),
+                    child: isTransitioning
+                        ? const Center(
+                            child: SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.0,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFF009048),
+                                ),
+                              ),
+                            ),
+                          )
+                        : null,
                   ),
                 ),
               ],
@@ -659,47 +737,131 @@ class _DriverDashboardState extends State<DriverDashboard> {
           Expanded(
             child: InkWell(
               onTap: () => context.push('/earnings'),
-              child: Row(
+              child: Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0FDF4),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.account_balance_wallet_outlined,
-                      color: Color(0xFF009048),
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Earnings",
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF64748B),
-                            fontWeight: FontWeight.w500,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      // Animated pulse ring around icon container
+                      AnimatedBuilder(
+                        animation: _moneyAnimController,
+                        builder: (context, child) {
+                          final isAnimating = _moneyAnimController.isAnimating;
+                          return Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isAnimating ? const Color(0xFFDCFCE7) : const Color(0xFFF0FDF4),
+                              borderRadius: BorderRadius.circular(10),
+                              border: isAnimating
+                                  ? Border.all(color: const Color(0xFF009048).withValues(alpha: 0.6), width: 1.5)
+                                  : null,
+                              boxShadow: isAnimating
+                                  ? [
+                                      BoxShadow(
+                                        color: const Color(0xFF009048).withValues(alpha: 0.3),
+                                        blurRadius: 10,
+                                        spreadRadius: 2,
+                                      )
+                                    ]
+                                  : null,
+                            ),
+                            child: child,
+                          );
+                        },
+                        child: const Icon(
+                          Icons.account_balance_wallet_outlined,
+                          color: Color(0xFF009048),
+                          size: 20,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '₹$earningsStr',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF0F172A),
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Earnings",
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            AnimatedBuilder(
+                              animation: _moneyAnimController,
+                              builder: (context, child) {
+                                final scale = _moneyAnimController.isAnimating
+                                    ? 1.0 + (0.12 * (1.0 - (_moneyAnimController.value - 0.5).abs() * 2).clamp(0.0, 1.0))
+                                    : 1.0;
+                                return Transform.scale(
+                                  scale: scale,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    '₹$earningsStr',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w900,
+                                      color: _moneyAnimController.isAnimating
+                                          ? const Color(0xFF009048)
+                                          : const Color(0xFF0F172A),
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+
+                  // Floating animated "+₹XX" Badge
+                  if (_showMoneyBadge && _lastAddedAmount != null)
+                    Positioned(
+                      top: -24,
+                      left: 10,
+                      child: SlideTransition(
+                        position: _moneySlideAnim,
+                        child: FadeTransition(
+                          opacity: _moneyFadeAnim,
+                          child: ScaleTransition(
+                            scale: _moneyScaleAnim,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF009048),
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF009048).withValues(alpha: 0.4),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 11),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    '+₹${_lastAddedAmount!.toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

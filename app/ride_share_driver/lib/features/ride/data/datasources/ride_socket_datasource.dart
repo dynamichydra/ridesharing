@@ -30,17 +30,20 @@ class RideSocketDataSource {
   Stream<RideAcceptResult> get onAcceptResult => _acceptResultController.stream;
 
   Future<void> connect() async {
-    if (_socket != null) {
-      if (!_socket!.connected) {
-        _socket!.connect();
-      }
-      return;
-    }
-
     final token = await secureStorage.getToken();
     if (token == null) {
       _socketErrorController.add('Not authenticated.');
       return;
+    }
+
+    if (_socket != null) {
+      if (_socket!.connected) {
+        return;
+      }
+      try {
+        _socket!.dispose();
+      } catch (_) {}
+      _socket = null;
     }
 
     final socket = io.io(
@@ -48,8 +51,12 @@ class RideSocketDataSource {
       io.OptionBuilder()
           .setTransports(['websocket', 'polling'])
           .disableAutoConnect()
+          .enableReconnection()
+          .setReconnectionDelay(1000)
+          .setReconnectionAttempts(50)
           .setAuth({'token': token})
           .setQuery({'token': token})
+          .setExtraHeaders({'Authorization': 'Bearer $token'})
           .build(),
     );
 
@@ -93,6 +100,12 @@ class RideSocketDataSource {
 
     socket.on('ride:cancelled_by_rider', (data) {
       AppLogger.i('[RideSocket] received ride:cancelled_by_rider: $data');
+      final rideId = (data is Map) ? data['rideId']?.toString() : null;
+      if (rideId != null) _cancelledByRiderController.add(rideId);
+    });
+
+    socket.on('ride:cancelled', (data) {
+      AppLogger.i('[RideSocket] received ride:cancelled: $data');
       final rideId = (data is Map) ? data['rideId']?.toString() : null;
       if (rideId != null) _cancelledByRiderController.add(rideId);
     });

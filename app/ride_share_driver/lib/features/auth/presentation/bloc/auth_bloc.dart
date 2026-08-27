@@ -22,7 +22,11 @@ class VerifyOtpCode extends AuthEvent {
   final String phone;
   final String otp;
   final bool isLogin;
-  VerifyOtpCode({required this.phone, required this.otp, required this.isLogin});
+  VerifyOtpCode({
+    required this.phone,
+    required this.otp,
+    required this.isLogin,
+  });
 }
 
 class LogoutRequested extends AuthEvent {}
@@ -59,7 +63,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<LogoutRequested>(_onLogoutRequested);
   }
 
-  Future<void> _onCheckAuthStatus(CheckAuthStatus event, Emitter<AuthState> emit) async {
+  Future<void> _onCheckAuthStatus(
+    CheckAuthStatus event,
+    Emitter<AuthState> emit,
+  ) async {
     emit(AuthLoading());
 
     final hasSession = await authRepository.hasStoredSession();
@@ -72,7 +79,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final driver = await authRepository.getCurrentDriver();
       emit(Authenticated(driver: driver));
     } on AppException catch (e) {
-      AppLogger.i('[AuthBloc] Stored session is no longer valid (${e.runtimeType}); clearing it.');
+      AppLogger.i(
+        '[AuthBloc] Stored session is no longer valid (${e.runtimeType}); clearing it.',
+      );
       await authRepository.logout();
       emit(Unauthenticated());
     } catch (e) {
@@ -82,12 +91,22 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  Future<void> _onStartPhoneAuthentication(StartPhoneAuthentication event, Emitter<AuthState> emit) async {
+  Future<void> _onStartPhoneAuthentication(
+    StartPhoneAuthentication event,
+    Emitter<AuthState> emit,
+  ) async {
     emit(AuthLoading());
     try {
-      final result = await authRepository.startPhoneAuth(event.phone, event.isLogin);
+      final result = await authRepository.startPhoneAuth(
+        event.phone,
+        event.isLogin,
+      );
       if (!result.success) {
-        emit(AuthError(message: result.error ?? 'Failed to request OTP. Try again.'));
+        emit(
+          AuthError(
+            message: result.error ?? 'Failed to request OTP. Try again.',
+          ),
+        );
         return;
       }
       if (!event.isLogin && !result.isNewAccount) {
@@ -100,22 +119,34 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  Future<void> _onVerifyOtpCode(VerifyOtpCode event, Emitter<AuthState> emit) async {
+  Future<void> _onVerifyOtpCode(
+    VerifyOtpCode event,
+    Emitter<AuthState> emit,
+  ) async {
     emit(AuthLoading());
     try {
-      final driver = await authRepository.verifyPhoneOtp(event.phone, event.otp, event.isLogin);
+      final driver = await authRepository.verifyPhoneOtp(
+        event.phone,
+        event.otp,
+        event.isLogin,
+      );
       emit(Authenticated(driver: driver));
     } catch (e) {
       emit(AuthError(message: e.toString()));
     }
   }
 
-  Future<void> _onLogoutRequested(LogoutRequested event, Emitter<AuthState> emit) async {
+  Future<void> _onLogoutRequested(
+    LogoutRequested event,
+    Emitter<AuthState> emit,
+  ) async {
     emit(AuthLoading());
     try {
       await authRepository.logout();
     } catch (e) {
-      AppLogger.w('[AuthBloc] Logout request failed, session was still cleared locally: $e');
+      AppLogger.w(
+        '[AuthBloc] Logout request failed, session was still cleared locally: $e',
+      );
     }
     emit(Unauthenticated());
   }

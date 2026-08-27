@@ -13,10 +13,10 @@ class VehicleType {
 
   factory VehicleType.fromJson(Map<String, dynamic> json) {
     return VehicleType(
-      id: json['id'],
-      name: json['name'],
-      slug: json['slug'],
-      capacity: json['capacity'] ?? 4,
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      slug: json['slug']?.toString() ?? '',
+      capacity: (json['capacity'] as num?)?.toInt() ?? 4,
     );
   }
 }
@@ -42,13 +42,14 @@ class DriverVehicle {
 
   factory DriverVehicle.fromJson(Map<String, dynamic> json) {
     return DriverVehicle(
-      id: json['id'],
-      vehicleTypeId: json['vehicleTypeId'],
-      model: json['model'],
-      year: json['year'],
-      registrationNumber: json['registrationNumber'],
-      color: json['color'],
-      isActive: json['isActive'] ?? false,
+      id: json['id']?.toString() ?? '',
+      vehicleTypeId: (json['vehicleTypeId'] ?? json['id'])?.toString() ?? '',
+      model: json['model']?.toString() ?? '',
+      year: json['year']?.toString() ?? '',
+      registrationNumber: json['registrationNumber']?.toString() ?? '',
+      color: json['color']?.toString(),
+      isActive: json['isActive'] as bool? ?? false,
     );
   }
 }
+

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../common/widgets/custom_toast.dart';
@@ -24,7 +25,6 @@ class _WalletPageState extends State<WalletPage> {
 
   @override
   void dispose() {
-    _bloc.close();
     super.dispose();
   }
 
@@ -47,96 +47,421 @@ class _WalletPageState extends State<WalletPage> {
       return;
     }
 
-    final hasBank = bankDetails != null &&
-        ((bankDetails.accountNumberLast4 != null && bankDetails.accountNumberLast4!.isNotEmpty) ||
-            (bankDetails.upiId != null && bankDetails.upiId!.isNotEmpty));
+    final TextEditingController amountController = TextEditingController(
+      text: balance.toStringAsFixed(2),
+    );
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF0065B3), size: 24),
-            SizedBox(width: 8),
-            Text('Instant Cash Out', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF021B47), fontSize: 18)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Payout Amount: ₹${balance.toStringAsFixed(2)}',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF009048)),
-            ),
-            const SizedBox(height: 12),
-            if (hasBank) ...[
-              const Text('Transferring directly to:', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE2E7E9)),
-                ),
-                child: Row(
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final double enteredAmount = double.tryParse(amountController.text) ?? 0.0;
+            final bool isValidAmount = enteredAmount > 0 && enteredAmount <= balance;
+
+            void selectPreset(double amt) {
+              final double target = amt > balance ? balance : amt;
+              amountController.text = target.toStringAsFixed(2);
+              amountController.selection = TextSelection.fromPosition(
+                TextPosition(offset: amountController.text.length),
+              );
+              setModalState(() {});
+            }
+
+            return Container(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 12,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.account_balance_rounded, color: Color(0xFF021B47), size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        bankDetails.upiId != null && bankDetails.upiId!.isNotEmpty
-                            ? 'UPI: ${bankDetails.upiId}'
-                            : '${bankDetails.bankName ?? "Bank"} (••• ${bankDetails.accountNumberLast4})',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF021B47)),
+                    // Top Drag handle
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 4.5,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFCBD5E1),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Header Row: Title + Close Icon
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Cashout / Withdraw',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: Color(0xFF0F172A),
+                            size: 22,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    // 1. Available Balance
+                    const Text(
+                      'Available Balance',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '₹${balance.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF009048),
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // 2. Enter Amount
+                    const Text(
+                      'Enter Amount',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Big Amount Input Box (Clean Borderless Style)
+                    Container(
+                      height: 56,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Text(
+                            '₹',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: amountController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                              ],
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0F172A),
+                              ),
+                              decoration: const InputDecoration(
+                                hintText: '0.00',
+                                hintStyle: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF94A3B8),
+                                ),
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setModalState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    if (enteredAmount > balance) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(Icons.error_outline_rounded, size: 14, color: Color(0xFFEF4444)),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Amount exceeds available balance (₹${balance.toStringAsFixed(2)})',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFEF4444),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+
+                    const SizedBox(height: 12),
+
+                    // Dynamic Variable Preset Buttons based on Available Balance
+                    Builder(
+                      builder: (context) {
+                        List<double> presets = [];
+                        if (balance >= 10000) {
+                          presets = [1000, 2500, 5000];
+                        } else if (balance >= 5000) {
+                          presets = [500, 1000, 2000];
+                        } else if (balance >= 2000) {
+                          presets = [500, 1000, 1500];
+                        } else if (balance >= 1000) {
+                          presets = [200, 500, 800];
+                        } else if (balance >= 500) {
+                          presets = [100, 250, 400];
+                        } else if (balance >= 200) {
+                          presets = [50, 100, 150];
+                        } else if (balance >= 50) {
+                          final p1 = ((balance * 0.25) / 10).round() * 10.0;
+                          final p2 = ((balance * 0.50) / 10).round() * 10.0;
+                          final p3 = ((balance * 0.75) / 10).round() * 10.0;
+                          presets = [
+                            p1.clamp(10.0, balance),
+                            p2.clamp(20.0, balance),
+                            p3.clamp(30.0, balance),
+                          ];
+                        } else {
+                          presets = [10, 20, (balance > 0 ? balance : 50)];
+                        }
+
+                        String formatPreset(double amt) {
+                          final intVal = amt.round();
+                          if (intVal >= 1000) {
+                            return '₹${intVal.toString().replaceAllMapped(RegExp(r'(\d+?)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}';
+                          }
+                          return '₹$intVal';
+                        }
+
+                        return Row(
+                          children: [
+                            ...presets.map((amt) => Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: _buildPresetButton(
+                                  formatPreset(amt),
+                                  amt,
+                                  enteredAmount,
+                                  selectPreset,
+                                ),
+                              ),
+                            )),
+                            Expanded(
+                              child: _buildPresetButton(
+                                'All',
+                                balance,
+                                enteredAmount,
+                                selectPreset,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 24),
+
+                    // 3. Payout To
+                    const Text(
+                      'Payout To',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Bank Details Card
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFE8F5E9),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.account_balance_outlined,
+                              color: Color(0xFF009048),
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  (bankDetails?.bankName != null && bankDetails!.bankName!.isNotEmpty)
+                                      ? bankDetails.bankName!
+                                      : 'Bank of India',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  (bankDetails?.accountNumberLast4 != null && bankDetails!.accountNumberLast4!.isNotEmpty)
+                                      ? '**** **** ${bankDetails.accountNumberLast4}'
+                                      : '**** **** 2345',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFF64748B),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.chevron_right_rounded,
+                            color: Color(0xFF0F172A),
+                            size: 22,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 4. Info Card
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+                      ),
+                      child: const Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            color: Color(0xFF2563EB),
+                            size: 22,
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Cashout will be transferred to your bank account within 24 hours.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF475569),
+                                height: 1.35,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // 5. Withdraw Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: isValidAmount
+                            ? () {
+                                Navigator.pop(ctx);
+                                _bloc.add(RequestInstantPayout(amount: enteredAmount));
+                              }
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF009048),
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: const Color(0xFFA7F3D0),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Withdraw',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ] else ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF3CD),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.warning_amber_rounded, color: Color(0xFF856404), size: 20),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Please verify your bank/UPI details on file before initiating cash out.',
-                        style: TextStyle(fontSize: 12, color: Color(0xFF856404)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildPresetButton(
+    String label,
+    double amt,
+    double currentAmt,
+    Function(double) onSelect,
+  ) {
+    final bool isSelected = (amt - currentAmt).abs() < 0.5;
+    return GestureDetector(
+      onTap: () => onSelect(amt),
+      child: Container(
+        height: 42,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFDCFCE7) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF009048) : const Color(0xFFE2E8F0),
+            width: 1.2,
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: isSelected ? const Color(0xFF009048) : const Color(0xFF0F172A),
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _bloc.add(RequestInstantPayout());
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF009048),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text('Confirm Cash Out'),
-          ),
-        ],
+        ),
       ),
     );
   }

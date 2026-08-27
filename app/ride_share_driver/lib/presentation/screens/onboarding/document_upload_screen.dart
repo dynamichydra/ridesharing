@@ -5,10 +5,12 @@ import 'package:image_picker/image_picker.dart';
 import '../../../style/appcolors.dart';
 import '../../../domain/entities/document.dart';
 import '../../../common/widgets/custom_toast.dart';
+import 'widgets/three_dots_loader.dart';
 
 class DocumentUploadScreen extends StatefulWidget {
   final DocumentType docType;
   final DriverDocument? existingDoc;
+  final bool isLoading;
   final Function({
     required String side,
     required String docNumber,
@@ -22,6 +24,7 @@ class DocumentUploadScreen extends StatefulWidget {
     super.key,
     required this.docType,
     this.existingDoc,
+    this.isLoading = false,
     required this.onUpload,
   });
 
@@ -646,7 +649,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () => _confirmUpload(side),
+                      onPressed: widget.isLoading ? null : () => _confirmUpload(side),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
@@ -655,10 +658,12 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                         ),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: const Text(
-                        'Confirm Upload',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                      child: widget.isLoading
+                          ? const ThreeDotsLoader()
+                          : const Text(
+                              'Confirm Upload',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
                     ),
                   ),
                 ],

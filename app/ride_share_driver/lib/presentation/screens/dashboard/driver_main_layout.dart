@@ -3,11 +3,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../common/widgets/app_drawer.dart';
 import '../../../features/profile/presentation/bloc/profile_bloc.dart';
+import '../../../features/ride/presentation/bloc/ride_bloc.dart';
 import '../../../injection_container.dart' as di;
 
 class DriverMainLayout extends StatefulWidget {
-  final Widget child;
-  const DriverMainLayout({super.key, required this.child});
+  final StatefulNavigationShell navigationShell;
+  const DriverMainLayout({super.key, required this.navigationShell});
 
   static final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -21,109 +22,101 @@ class DriverMainLayout extends StatefulWidget {
 
 class _DriverMainLayoutState extends State<DriverMainLayout> {
   late final ProfileBloc _profileBloc;
+  late final RideBloc _rideBloc;
 
   @override
   void initState() {
     super.initState();
     _profileBloc = di.sl<ProfileBloc>()..add(LoadProfile());
+    _rideBloc = di.sl<RideBloc>();
   }
 
-  @override
-  void dispose() {
-    _profileBloc.close();
-    super.dispose();
-  }
-
-  int _calculateSelectedIndex(BuildContext context) {
-    final String location = GoRouterState.of(context).uri.path;
-    if (location.startsWith('/ride-history')) return 1;
-    if (location.startsWith('/earnings')) return 2;
-    if (location.startsWith('/wallet')) return 3;
-    if (location.startsWith('/profile')) return 4;
-    return 0; // Default to Dashboard (/dashboard)
-  }
-
-  void _onItemTapped(int index, BuildContext context) {
-    switch (index) {
-      case 0:
-        context.go('/dashboard');
-        break;
-      case 1:
-        context.go('/ride-history');
-        break;
-      case 2:
-        context.go('/earnings');
-        break;
-      case 3:
-        context.go('/wallet');
-        break;
-      case 4:
-        context.go('/profile');
-        break;
-    }
+  void _onItemTapped(int index) {
+    widget.navigationShell.goBranch(
+      index,
+      initialLocation: index == widget.navigationShell.currentIndex,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = _calculateSelectedIndex(context);
-
-    return BlocProvider.value(
-      value: _profileBloc,
-      child: Scaffold(
-        key: DriverMainLayout.scaffoldKey,
-        drawer: const AppDrawer(),
-        body: widget.child,
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: const Border(
-              top: BorderSide(color: Color(0xFFF1F5F9), width: 1),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 10,
-                offset: const Offset(0, -2),
-              ),
-            ],
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider.value(value: _profileBloc),
+        BlocProvider.value(value: _rideBloc),
+      ],
+      child: MultiBlocListener(
+        listeners: [
+          BlocListener<RideBloc, RideState>(
+            bloc: _rideBloc,
+            listener: (context, state) {
+              // When a customer makes a ride request and an offer arrives,
+              // if driver is on another tab (Rides, Earnings, Wallet, Profile),
+              // immediately switch to the Dashboard tab so the driver sees the incoming ride offer card!
+              if (state is RideOfferPending && state.offers.isNotEmpty) {
+                if (widget.navigationShell.currentIndex != 0) {
+                  widget.navigationShell.goBranch(0);
+                }
+              }
+            },
           ),
-          child: BottomNavigationBar(
-            currentIndex: selectedIndex,
-            onTap: (index) => _onItemTapped(index, context),
-            type: BottomNavigationBarType.fixed,
-            backgroundColor: Colors.white,
-            elevation: 0,
-            selectedItemColor: const Color(0xFF009048),
-            unselectedItemColor: const Color(0xFF8A94A6),
-            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.home_rounded, size: 22),
-                activeIcon: Icon(Icons.home_rounded, size: 22),
-                label: 'Home',
+        ],
+        child: Scaffold(
+          key: DriverMainLayout.scaffoldKey,
+          drawer: const AppDrawer(),
+          body: widget.navigationShell,
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: const Border(
+                top: BorderSide(color: Color(0xFFF1F5F9), width: 1),
               ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.assignment_outlined, size: 22),
-                activeIcon: Icon(Icons.assignment_rounded, size: 22),
-                label: 'Rides',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.monetization_on_outlined, size: 22),
-                activeIcon: Icon(Icons.monetization_on_rounded, size: 22),
-                label: 'Earnings',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.account_balance_wallet_outlined, size: 22),
-                activeIcon: Icon(Icons.account_balance_wallet_rounded, size: 22),
-                label: 'Wallet',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.person_outline_rounded, size: 22),
-                activeIcon: Icon(Icons.person_rounded, size: 22),
-                label: 'Profile',
-              ),
-            ],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: BottomNavigationBar(
+              currentIndex: widget.navigationShell.currentIndex,
+              onTap: _onItemTapped,
+              type: BottomNavigationBarType.fixed,
+              backgroundColor: Colors.white,
+              elevation: 0,
+              selectedItemColor: const Color(0xFF009048),
+              unselectedItemColor: const Color(0xFF8A94A6),
+              selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.home_rounded, size: 22),
+                  activeIcon: Icon(Icons.home_rounded, size: 22),
+                  label: 'Home',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.assignment_outlined, size: 22),
+                  activeIcon: Icon(Icons.assignment_rounded, size: 22),
+                  label: 'Rides',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.monetization_on_outlined, size: 22),
+                  activeIcon: Icon(Icons.monetization_on_rounded, size: 22),
+                  label: 'Earnings',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.account_balance_wallet_outlined, size: 22),
+                  activeIcon: Icon(Icons.account_balance_wallet_rounded, size: 22),
+                  label: 'Wallet',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.person_outline_rounded, size: 22),
+                  activeIcon: Icon(Icons.person_rounded, size: 22),
+                  label: 'Profile',
+                ),
+              ],
+            ),
           ),
         ),
       ),

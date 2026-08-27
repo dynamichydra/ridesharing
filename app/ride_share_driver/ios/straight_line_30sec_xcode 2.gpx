@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Xcode">
+  <!-- Xcode-compatible waypoint route: exact Point A to Point B over 30 seconds. -->
+  <wpt lat="22.627351377625363" lon="88.433475156341359">
+    <name>Point A</name>
+    <time>2026-08-26T12:00:00Z</time>
+  </wpt>
+  <wpt lat="22.627233602990028" lon="88.433738859600311">
+    <name>Route 1s</name>
+    <time>2026-08-26T12:00:01Z</time>
+  </wpt>
+  <wpt lat="22.627115828354690" lon="88.434002562859263">
+    <name>Route 2s</name>
+    <time>2026-08-26T12:00:02Z</time>
+  </wpt>
+  <wpt lat="22.626998053719355" lon="88.434266266118229">
+    <name>Route 3s</name>
+    <time>2026-08-26T12:00:03Z</time>
+  </wpt>
+  <wpt lat="22.626880279084020" lon="88.434529969377181">
+    <name>Route 4s</name>
+    <time>2026-08-26T12:00:04Z</time>
+  </wpt>
+  <wpt lat="22.626762504448681" lon="88.434793672636133">
+    <name>Route 5s</name>
+    <time>2026-08-26T12:00:05Z</time>
+  </wpt>
+  <wpt lat="22.626644729813346" lon="88.435057375895084">
+    <name>Route 6s</name>
+    <time>2026-08-26T12:00:06Z</time>
+  </wpt>
+  <wpt lat="22.626526955178011" lon="88.435321079154036">
+    <name>Route 7s</name>
+    <time>2026-08-26T12:00:07Z</time>
+  </wpt>
+  <wpt lat="22.626409180542673" lon="88.435584782413002">
+    <name>Route 8s</name>
+    <time>2026-08-26T12:00:08Z</time>
+  </wpt>
+  <wpt lat="22.626291405907338" lon="88.435848485671954">
+    <name>Route 9s</name>
+    <time>2026-08-26T12:00:09Z</time>
+  </wpt>
+  <wpt lat="22.626173631272003" lon="88.436112188930906">
+    <name>Route 10s</name>
+    <time>2026-08-26T12:00:10Z</time>
+  </wpt>
+  <wpt lat="22.626055856636665" lon="88.436375892189858">
+    <name>Route 11s</name>
+    <time>2026-08-26T12:00:11Z</time>
+  </wpt>
+  <wpt lat="22.625938082001330" lon="88.436639595448810">
+    <name>Route 12s</name>
+    <time>2026-08-26T12:00:12Z</time>
+  </wpt>
+  <wpt lat="22.625820307365995" lon="88.436903298707776">
+    <name>Route 13s</name>
+    <time>2026-08-26T12:00:13Z</time>
+  </wpt>
+  <wpt lat="22.625702532730656" lon="88.437167001966728">
+    <name>Route 14s</name>
+    <time>2026-08-26T12:00:14Z</time>
+  </wpt>
+  <wpt lat="22.625584758095322" lon="88.437430705225680">
+    <name>Route 15s</name>
+    <time>2026-08-26T12:00:15Z</time>
+  </wpt>
+  <wpt lat="22.625466983459987" lon="88.437694408484631">
+    <name>Route 16s</name>
+    <time>2026-08-26T12:00:16Z</time>
+  </wpt>
+  <wpt lat="22.625349208824648" lon="88.437958111743583">
+    <name>Route 17s</name>
+    <time>2026-08-26T12:00:17Z</time>
+  </wpt>
+  <wpt lat="22.625231434189313" lon="88.438221815002549">
+    <name>Route 18s</name>
+    <time>2026-08-26T12:00:18Z</time>
+  </wpt>
+  <wpt lat="22.625113659553978" lon="88.438485518261501">
+    <name>Route 19s</name>
+    <time>2026-08-26T12:00:19Z</time>
+  </wpt>
+  <wpt lat="22.624995884918640" lon="88.438749221520453">
+    <name>Route 20s</name>
+    <time>2026-08-26T12:00:20Z</time>
+  </wpt>
+  <wpt lat="22.624878110283305" lon="88.439012924779405">
+    <name>Route 21s</name>
+    <time>2026-08-26T12:00:21Z</time>
+  </wpt>
+  <wpt lat="22.624760335647970" lon="88.439276628038357">
+    <name>Route 22s</name>
+    <time>2026-08-26T12:00:22Z</time>
+  </wpt>
+  <wpt lat="22.624642561012632" lon="88.439540331297323">
+    <name>Route 23s</name>
+    <time>2026-08-26T12:00:23Z</time>
+  </wpt>
+  <wpt lat="22.624524786377297" lon="88.439804034556275">
+    <name>Route 24s</name>
+    <time>2026-08-26T12:00:24Z</time>
+  </wpt>
+  <wpt lat="22.624407011741962" lon="88.440067737815227">
+    <name>Route 25s</name>
+    <time>2026-08-26T12:00:25Z</time>
+  </wpt>
+  <wpt lat="22.624289237106623" lon="88.440331441074179">
+    <name>Route 26s</name>
+    <time>2026-08-26T12:00:26Z</time>
+  </wpt>
+  <wpt lat="22.624171462471288" lon="88.440595144333130">
+    <name>Route 27s</name>
+    <time>2026-08-26T12:00:27Z</time>
+  </wpt>
+  <wpt lat="22.624053687835953" lon="88.440858847592096">
+    <name>Route 28s</name>
+    <time>2026-08-26T12:00:28Z</time>
+  </wpt>
+  <wpt lat="22.623935913200615" lon="88.441122550851048">
+    <name>Route 29s</name>
+    <time>2026-08-26T12:00:29Z</time>
+  </wpt>
+  <wpt lat="22.623818138565280" lon="88.441386254110000">
+    <name>Point B</name>
+    <time>2026-08-26T12:00:30Z</time>
+  </wpt>
+</gpx>

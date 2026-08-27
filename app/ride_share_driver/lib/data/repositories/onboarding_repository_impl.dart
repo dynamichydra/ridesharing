@@ -40,22 +40,26 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
   Future<OnboardingConfig> getOnboardingConfig() async {
     final data = await remoteDataSource.getOnboardingConfig();
 
-    final List<Country> countries = (data['countries'] as List)
-        .map((c) => Country.fromJson(c))
-        .toList();
+    final List<Country> countries = (data['countries'] as List?)
+            ?.map((c) => Country.fromJson(c as Map<String, dynamic>))
+            .toList() ??
+        [];
 
     final List<OnboardingQuestion> questionnaire =
-        (data['questionnaire'] as List)
-            .map((q) => OnboardingQuestion.fromJson(q))
-            .toList();
+        (data['questionnaire'] as List?)
+                ?.map((q) => OnboardingQuestion.fromJson(q as Map<String, dynamic>))
+                .toList() ??
+            [];
 
-    final List<DocumentType> docReqs = (data['documentRequirements'] as List)
-        .map((d) => DocumentType.fromJson(d))
-        .toList();
+    final List<DocumentType> docReqs = (data['documentRequirements'] as List?)
+            ?.map((d) => DocumentType.fromJson(d as Map<String, dynamic>))
+            .toList() ??
+        [];
 
-    final List<VehicleType> vehicleTypes = (data['vehicleTypes'] as List)
-        .map((v) => VehicleType.fromJson(v))
-        .toList();
+    final List<VehicleType> vehicleTypes = (data['vehicleTypes'] as List?)
+            ?.map((v) => VehicleType.fromJson(v as Map<String, dynamic>))
+            .toList() ??
+        [];
 
     final legal = data['legalDocuments'] as Map?;
     final terms = legal?['terms'] as Map?;
@@ -66,12 +70,13 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
       questionnaire: questionnaire,
       documentRequirements: docReqs,
       vehicleTypes: vehicleTypes,
-      termsUrl: terms?['contentUrl'],
-      termsId: terms?['id'],
-      privacyPolicyUrl: privacy?['contentUrl'],
-      privacyPolicyId: privacy?['id'],
+      termsUrl: terms?['contentUrl']?.toString(),
+      termsId: terms?['id']?.toString(),
+      privacyPolicyUrl: privacy?['contentUrl']?.toString(),
+      privacyPolicyId: privacy?['id']?.toString(),
     );
   }
+
 
   @override
   Future<List<StateProvince>> getStates(String countryId) async {
@@ -236,30 +241,36 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
   Future<RegistrationSummary> getRegistrationSummary() async {
     final data = await remoteDataSource.getRegistrationSummary();
 
-    final driver = DriverProfile.fromJson(data['driver']);
+    final driver = DriverProfile.fromJson(
+      data['driver'] as Map<String, dynamic>? ?? {},
+    );
 
-    final List<DriverVehicle> vehicles = (data['vehicles'] as List)
-        .map((v) => DriverVehicle.fromJson(v))
-        .toList();
+    final List<DriverVehicle> vehicles = (data['vehicles'] as List?)
+            ?.map((v) => DriverVehicle.fromJson(v as Map<String, dynamic>))
+            .toList() ??
+        [];
 
-    final List<DriverDocument> documents = (data['documents'] as List)
-        .map((d) => DriverDocument.fromJson(d))
-        .toList();
+    final List<DriverDocument> documents = (data['documents'] as List?)
+            ?.map((d) => DriverDocument.fromJson(d as Map<String, dynamic>))
+            .toList() ??
+        [];
 
-    final List<DriverAnswer> answers = (data['answers'] as List)
-        .map((a) => DriverAnswer.fromJson(a))
-        .toList();
+    final List<DriverAnswer> answers = (data['answers'] as List?)
+            ?.map((a) => DriverAnswer.fromJson(a as Map<String, dynamic>))
+            .toList() ??
+        [];
 
     return RegistrationSummary(
       driver: driver,
       vehicles: vehicles,
       documents: documents,
       answers: answers,
-      isComplete: data['isComplete'] ?? false,
+      isComplete: data['isComplete'] as bool? ?? false,
       missing:
           (data['missing'] as List?)?.map((m) => m.toString()).toList() ?? [],
     );
   }
+
 
   @override
   Future<DriverProfile> submitApplication() async {

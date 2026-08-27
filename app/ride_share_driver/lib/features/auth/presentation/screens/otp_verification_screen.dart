@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:otp_autofill/otp_autofill.dart';
 import '../../../../style/appcolors.dart';
+import '../../../../presentation/screens/onboarding/widgets/three_dots_loader.dart';
 import '../../../../core/localization/app_localizations.dart';
 import '../../../../common/widgets/custom_toast.dart';
 import '../../../../services/app_logger.dart';
@@ -14,12 +15,14 @@ class OtpVerificationScreen extends StatefulWidget {
   final String phoneNumber;
   final Function(String) onOtpVerified;
   final VoidCallback onResendRequested;
+  final bool isLoading;
 
   const OtpVerificationScreen({
     super.key,
     required this.phoneNumber,
     required this.onOtpVerified,
     required this.onResendRequested,
+    this.isLoading = false,
   });
 
   @override
@@ -294,7 +297,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton(
-                      onPressed: _submit,
+                      onPressed: widget.isLoading ? null : _submit,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
@@ -304,7 +307,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                         ),
                         elevation: 0,
                       ),
-                      child: Text(l10n.verifyContinue),
+                      child: widget.isLoading
+                          ? const ThreeDotsLoader()
+                          : Text(l10n.verifyContinue),
                     ),
                   ],
                 ),

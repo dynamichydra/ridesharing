@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../style/appcolors.dart';
 import '../../../domain/repositories/onboarding_repository.dart';
 import '../../../domain/entities/document.dart';
+import 'widgets/three_dots_loader.dart';
 
 class ChecklistScreen extends StatelessWidget {
   final RegistrationSummary summary;
@@ -9,6 +10,7 @@ class ChecklistScreen extends StatelessWidget {
   final List<DocumentType> documentRequirements;
   final bool isBankDetailsCompleted;
   final bool isEmergencyContactCompleted;
+  final bool isLoading;
   final Function(String itemCode) onItemTap;
   final VoidCallback onSubmit;
 
@@ -19,6 +21,7 @@ class ChecklistScreen extends StatelessWidget {
     required this.documentRequirements,
     required this.isBankDetailsCompleted,
     required this.isEmergencyContactCompleted,
+    this.isLoading = false,
     required this.onItemTap,
     required this.onSubmit,
   });
@@ -326,7 +329,7 @@ class ChecklistScreen extends StatelessWidget {
             child: SizedBox(
               height: 56,
               child: ElevatedButton(
-                onPressed: isButtonEnabled ? onSubmit : null,
+                onPressed: (isButtonEnabled && !isLoading) ? onSubmit : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
@@ -338,20 +341,22 @@ class ChecklistScreen extends StatelessWidget {
                   ),
                   elevation: isButtonEnabled ? 2 : 0,
                 ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Submit Application',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                child: isLoading
+                    ? const ThreeDotsLoader()
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Submit Application',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Icon(Icons.send_rounded, size: 18),
+                        ],
                       ),
-                    ),
-                    SizedBox(width: 8),
-                    Icon(Icons.send_rounded, size: 18),
-                  ],
-                ),
               ),
             ),
           ),

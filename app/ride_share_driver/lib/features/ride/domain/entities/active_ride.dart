@@ -1,3 +1,5 @@
+library active_ride;
+
 /// Maps a flat `rides` table row, as returned by every driver-facing ride
 /// endpoint (`accept`/`arriving`/`start`/`complete`/`driver/active`).
 ///

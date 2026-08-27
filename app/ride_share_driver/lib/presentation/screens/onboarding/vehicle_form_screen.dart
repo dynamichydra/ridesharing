@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../style/appcolors.dart';
 import '../../../domain/entities/vehicle.dart';
+import 'widgets/three_dots_loader.dart';
 
 class VehicleFormScreen extends StatefulWidget {
   final List<VehicleType> vehicleTypes;
@@ -9,6 +10,7 @@ class VehicleFormScreen extends StatefulWidget {
   final String? initialYear;
   final String? initialRegistrationNumber;
   final String? initialColor;
+  final bool isLoading;
   final Function({
     required String vehicleTypeId,
     required String model,
@@ -26,6 +28,7 @@ class VehicleFormScreen extends StatefulWidget {
     this.initialYear,
     this.initialRegistrationNumber,
     this.initialColor,
+    this.isLoading = false,
     required this.onSave,
   });
 
@@ -291,12 +294,14 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
           SizedBox(
             height: 56,
             child: ElevatedButton(
-              onPressed: () {
-                debugPrint(
-                  '[VehicleFormScreen] Save & Continue button clicked',
-                );
-                _submit();
-              },
+              onPressed: widget.isLoading
+                  ? null
+                  : () {
+                      debugPrint(
+                        '[VehicleFormScreen] Save & Continue button clicked',
+                      );
+                      _submit();
+                    },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
@@ -305,17 +310,19 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                 ),
                 elevation: 2,
               ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Save & Continue',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(width: 8),
-                  Icon(Icons.arrow_forward_rounded, size: 20),
-                ],
-              ),
+              child: widget.isLoading
+                  ? const ThreeDotsLoader()
+                  : const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Save & Continue',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        SizedBox(width: 8),
+                        Icon(Icons.arrow_forward_rounded, size: 20),
+                      ],
+                    ),
             ),
           ),
         ],

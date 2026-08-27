@@ -64,6 +64,8 @@ class UpdateTrackingStep extends RideTrackingEvent {
   List<Object?> get props => [step];
 }
 
+class DriverArriving extends RideTrackingEvent {}
+
 class RideStarted extends RideTrackingEvent {}
 
 class RideCompleted extends RideTrackingEvent {
@@ -76,6 +78,13 @@ class RideCompleted extends RideTrackingEvent {
 class CancelRide extends RideTrackingEvent {}
 
 class RestoreActiveRide extends RideTrackingEvent {}
+
+class UpdateRoutePoints extends RideTrackingEvent {
+  final List<LatLng> routePoints;
+  const UpdateRoutePoints(this.routePoints);
+  @override
+  List<Object?> get props => [routePoints];
+}
 
 // ==========================================
 // Ride Tracking States
@@ -223,12 +232,16 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
   StreamSubscription? _rideCancelledSub;
 
   late StartRideTracking _initialRideData;
+  bool _isReRouting = false;
+  DateTime? _lastReRouteTime;
 
   RideTrackingBloc(this._rideTrackingRepository) : super(RideTrackingInitial()) {
     on<StartRideTracking>(_onStartRideTracking);
     on<DriverAssigned>(_onDriverAssigned);
     on<DriverLocationUpdated>(_onDriverLocationUpdated);
     on<UpdateTrackingStep>(_onUpdateTrackingStep);
+    on<UpdateRoutePoints>(_onUpdateRoutePoints);
+    on<DriverArriving>(_onDriverArriving);
     on<RideStarted>(_onRideStarted);
     on<RideCompleted>(_onRideCompleted);
     on<CancelRide>(_onCancelRide);
@@ -252,6 +265,10 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       if (lat != null && lng != null) {
         add(DriverLocationUpdated(LatLng(lat, lng)));
       }
+    });
+
+    _rideTrackingRepository.onDriverArriving.listen((data) {
+      add(DriverArriving());
     });
 
     _rideStartedSub = _rideTrackingRepository.onRideStarted.listen((data) {
@@ -424,12 +441,19 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
           destination: destination,
           destinationName: destinationName,
           driverPosition: driverPosition,
-          driverBearing: LocationHelper.calculateBearing(
-            driverPosition.latitude,
-            driverPosition.longitude,
-            (trackingState == 'driverArriving' ? pickup : destination).latitude,
-            (trackingState == 'driverArriving' ? pickup : destination).longitude,
-          ),
+          driverBearing: (points.length >= 2)
+              ? LocationHelper.calculateBearing(
+                  points[0].latitude,
+                  points[0].longitude,
+                  points[1].latitude,
+                  points[1].longitude,
+                )
+              : LocationHelper.calculateBearing(
+                  driverPosition.latitude,
+                  driverPosition.longitude,
+                  (trackingState == 'driverArriving' ? pickup : destination).latitude,
+                  (trackingState == 'driverArriving' ? pickup : destination).longitude,
+                ),
           routePoints: points,
           trackingState: trackingState,
           fare: fare,
@@ -486,12 +510,19 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       destination: _initialRideData.destination,
       destinationName: _initialRideData.destinationName,
       driverPosition: driverPosition,
-      driverBearing: LocationHelper.calculateBearing(
-        driverPosition.latitude,
-        driverPosition.longitude,
-        _initialRideData.pickup.latitude,
-        _initialRideData.pickup.longitude,
-      ),
+      driverBearing: (points.length >= 2)
+          ? LocationHelper.calculateBearing(
+              points[0].latitude,
+              points[0].longitude,
+              points[1].latitude,
+              points[1].longitude,
+            )
+          : LocationHelper.calculateBearing(
+              driverPosition.latitude,
+              driverPosition.longitude,
+              _initialRideData.pickup.latitude,
+              _initialRideData.pickup.longitude,
+            ),
       routePoints: points,
       trackingState: 'driverAccepted',
       fare: _initialRideData.fare,
@@ -540,15 +571,71 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
   void _onDriverLocationUpdated(DriverLocationUpdated event, Emitter<RideTrackingState> emit) {
     final currentState = state;
     if (currentState is RideTrackingActive) {
-      final bearing = LocationHelper.calculateBearing(
+      final distanceKm = LocationHelper.calculateDistance(
         currentState.driverPosition.latitude,
         currentState.driverPosition.longitude,
         event.location.latitude,
         event.location.longitude,
       );
+
+      // Only update bearing if movement is meaningful (>= 2 meters), otherwise keep last bearing
+      final double bearing;
+      if (distanceKm >= 0.002) {
+        bearing = LocationHelper.calculateBearing(
+          currentState.driverPosition.latitude,
+          currentState.driverPosition.longitude,
+          event.location.latitude,
+          event.location.longitude,
+        );
+      } else {
+        bearing = currentState.driverBearing;
+      }
+
+      // Dynamic polyline trimming: only show the leftover way from the car to the target
+      List<LatLng> updatedRoutePoints = currentState.routePoints;
+      final LatLng target = (currentState.trackingState == 'driverAccepted' ||
+              currentState.trackingState == 'driverArriving')
+          ? currentState.pickup
+          : currentState.destination;
+
+      if (currentState.routePoints.isNotEmpty) {
+        final closestIndex = LocationHelper.findClosestPointIndex(
+          event.location,
+          currentState.routePoints,
+        );
+        final minDistanceKm = LocationHelper.calculateDistance(
+          event.location.latitude,
+          event.location.longitude,
+          currentState.routePoints[closestIndex].latitude,
+          currentState.routePoints[closestIndex].longitude,
+        );
+
+        // If driver deviates from the path (> 80 meters), trigger auto re-routing
+        if (minDistanceKm > 0.080) {
+          final now = DateTime.now();
+          if (!_isReRouting &&
+              (_lastReRouteTime == null ||
+                  now.difference(_lastReRouteTime!).inSeconds >= 5)) {
+            _isReRouting = true;
+            _lastReRouteTime = now;
+            _reRoute(event.location, target, currentState.vehicleName);
+          }
+          // Direct segment while re-routing
+          updatedRoutePoints = [event.location, target];
+        } else {
+          // On route: Trim already passed waypoints so only remaining path is shown
+          updatedRoutePoints = LocationHelper.trimRoute(
+            event.location,
+            currentState.routePoints,
+            closestIndex: closestIndex,
+          );
+        }
+      }
+
       final updatedState = currentState.copyWith(
         driverPosition: event.location,
         driverBearing: bearing,
+        routePoints: updatedRoutePoints,
       );
 
       try {
@@ -570,6 +657,46 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     }
   }
 
+  Future<void> _reRoute(LatLng from, LatLng to, String vehicleName) async {
+    try {
+      final travelMode = _getTravelMode(vehicleName);
+      final newPoints = await _rideTrackingRepository.fetchRoutePoints(
+        from,
+        to,
+        travelMode: travelMode,
+      );
+      _isReRouting = false;
+      if (newPoints.isNotEmpty && state is RideTrackingActive) {
+        add(UpdateRoutePoints(newPoints));
+      }
+    } catch (_) {
+      _isReRouting = false;
+    }
+  }
+
+  void _onUpdateRoutePoints(UpdateRoutePoints event, Emitter<RideTrackingState> emit) {
+    final currentState = state;
+    if (currentState is RideTrackingActive) {
+      emit(currentState.copyWith(routePoints: event.routePoints));
+    }
+  }
+  Future<void> _onDriverArriving(DriverArriving event, Emitter<RideTrackingState> emit) async {
+    final currentState = state;
+    if (currentState is RideTrackingActive) {
+      final updatedState = currentState.copyWith(trackingState: 'driverArriving');
+      try {
+        final storage = sl<StorageService>();
+        final cached = storage.getCachedData('active_ride_tracking');
+        if (cached != null) {
+          final Map<String, dynamic> map = Map<String, dynamic>.from(cached as Map);
+          map['trackingState'] = 'driverArriving';
+          storage.cacheData('active_ride_tracking', map);
+        }
+      } catch (_) {}
+      emit(updatedState);
+    }
+  }
+
   Future<void> _onRideStarted(RideStarted event, Emitter<RideTrackingState> emit) async {
     final currentState = state;
     if (currentState is RideTrackingActive) {
@@ -582,12 +709,19 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       final updatedState = currentState.copyWith(
         trackingState: 'rideInProgress',
         routePoints: pointsToDestination,
-        driverBearing: LocationHelper.calculateBearing(
-          currentState.pickup.latitude,
-          currentState.pickup.longitude,
-          currentState.destination.latitude,
-          currentState.destination.longitude,
-        ),
+        driverBearing: (pointsToDestination.length >= 2)
+            ? LocationHelper.calculateBearing(
+                pointsToDestination[0].latitude,
+                pointsToDestination[0].longitude,
+                pointsToDestination[1].latitude,
+                pointsToDestination[1].longitude,
+              )
+            : LocationHelper.calculateBearing(
+                currentState.pickup.latitude,
+                currentState.pickup.longitude,
+                currentState.destination.latitude,
+                currentState.destination.longitude,
+              ),
       );
 
       try {

@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../services/location_service.dart';
 import '../../../../core/storage/secure_storage.dart';
+import '../../../../core/error/app_exception.dart';
 import '../../domain/repositories/driver_status_repository.dart';
 
 // ── Events ──────────────────────────────────────────────────────────────────
@@ -69,7 +70,8 @@ class DriverStatusBloc extends Bloc<DriverStatusEvent, DriverStatusState> {
       await secureStorage.saveOnlineStatus(true);
       emit(DriverStatusOnline());
     } catch (e) {
-      emit(DriverStatusError(message: e.toString(), wasOnline: false));
+      final String msg = e is AppException ? e.message : e.toString();
+      emit(DriverStatusError(message: msg, wasOnline: false));
     }
   }
 
@@ -80,7 +82,8 @@ class DriverStatusBloc extends Bloc<DriverStatusEvent, DriverStatusState> {
       await secureStorage.saveOnlineStatus(false);
       emit(DriverStatusOffline());
     } catch (e) {
-      emit(DriverStatusError(message: e.toString(), wasOnline: true));
+      final String msg = e is AppException ? e.message : e.toString();
+      emit(DriverStatusError(message: msg, wasOnline: true));
     }
   }
 }

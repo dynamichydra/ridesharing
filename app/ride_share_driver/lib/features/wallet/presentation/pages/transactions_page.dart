@@ -23,7 +23,6 @@ class _TransactionsPageState extends State<TransactionsPage> {
 
   @override
   void dispose() {
-    _bloc.close();
     super.dispose();
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import '../../../style/appcolors.dart';
+import 'widgets/three_dots_loader.dart';
 
 class _LegalContent {
   final String? terms;
@@ -14,6 +15,7 @@ class TermsLegalScreen extends StatefulWidget {
   final String? termsUrl;
   final String? privacyUrl;
   final bool isAlreadyAccepted;
+  final bool isLoading;
   final VoidCallback onAccepted;
   final Future<String> Function(String url) fetchContent;
 
@@ -22,6 +24,7 @@ class TermsLegalScreen extends StatefulWidget {
     required this.termsUrl,
     required this.privacyUrl,
     this.isAlreadyAccepted = false,
+    this.isLoading = false,
     required this.onAccepted,
     required this.fetchContent,
   });
@@ -157,13 +160,15 @@ class _TermsLegalScreenState extends State<TermsLegalScreen> {
         Padding(
           padding: const EdgeInsets.all(24),
           child: ElevatedButton(
-            onPressed: _scrolledToEnd ? widget.onAccepted : null,
+            onPressed: (_scrolledToEnd && !widget.isLoading) ? widget.onAccepted : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: _scrolledToEnd ? AppColors.primary : Colors.grey,
             ),
-            child: Text(
-              _scrolledToEnd ? 'I Agree & Continue' : 'Scroll down to read',
-            ),
+            child: widget.isLoading
+                ? const ThreeDotsLoader()
+                : Text(
+                    _scrolledToEnd ? 'I Agree & Continue' : 'Scroll down to read',
+                  ),
           ),
         ),
       ],

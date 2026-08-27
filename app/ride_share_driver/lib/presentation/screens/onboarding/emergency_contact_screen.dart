@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../../style/appcolors.dart';
+import 'widgets/three_dots_loader.dart';
 
 class EmergencyContactScreen extends StatefulWidget {
   final String? initialName;
   final String? initialPhone;
   final String? initialRelationship;
+  final bool isLoading;
   final VoidCallback? onSkip;
   final Function({
     required String name,
@@ -18,6 +20,7 @@ class EmergencyContactScreen extends StatefulWidget {
     this.initialName,
     this.initialPhone,
     this.initialRelationship,
+    this.isLoading = false,
     this.onSkip,
     required this.onSave,
   });
@@ -231,12 +234,14 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
                 child: SizedBox(
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: () {
-                      debugPrint(
-                        '[EmergencyContactScreen] Save Contact Details button clicked',
-                      );
-                      _submit();
-                    },
+                    onPressed: widget.isLoading
+                        ? null
+                        : () {
+                            debugPrint(
+                              '[EmergencyContactScreen] Save Contact Details button clicked',
+                            );
+                            _submit();
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
@@ -245,20 +250,22 @@ class _EmergencyContactScreenState extends State<EmergencyContactScreen> {
                       ),
                       elevation: 2,
                     ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Save Details',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                    child: widget.isLoading
+                        ? const ThreeDotsLoader()
+                        : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Save Details',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(width: 6),
+                              Icon(Icons.check_circle_outline_rounded, size: 20),
+                            ],
                           ),
-                        ),
-                        SizedBox(width: 6),
-                        Icon(Icons.check_circle_outline_rounded, size: 20),
-                      ],
-                    ),
                   ),
                 ),
               ),

@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+
 import 'style/style.dart';
 import 'injection_container.dart' as di;
 import 'core/router/app_router.dart';
-
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'features/auth/presentation/bloc/auth_bloc.dart';
-import 'presentation/bloc/onboarding/onboarding_bloc.dart';
-
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/localization/app_localizations.dart';
 import 'core/storage/secure_storage.dart';
+import 'core/network/network_cubit.dart';
+import 'core/widgets/no_internet_view.dart';
+import 'features/auth/presentation/bloc/auth_bloc.dart';
+import 'presentation/bloc/onboarding/onboarding_bloc.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +28,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   late final AuthBloc _authBloc;
   late final OnboardingBloc _onboardingBloc;
+  late final NetworkCubit _networkCubit;
   late final AppRouter _appRouter;
   Locale _locale = const Locale('en');
 
@@ -35,6 +37,7 @@ class _MyAppState extends State<MyApp> {
     super.initState();
     _authBloc = di.sl<AuthBloc>()..add(CheckAuthStatus());
     _onboardingBloc = di.sl<OnboardingBloc>();
+    _networkCubit = di.sl<NetworkCubit>();
     _appRouter = AppRouter(_authBloc);
     _loadSavedLocale();
   }
@@ -64,6 +67,7 @@ class _MyAppState extends State<MyApp> {
         providers: [
           BlocProvider<AuthBloc>.value(value: _authBloc),
           BlocProvider<OnboardingBloc>.value(value: _onboardingBloc),
+          BlocProvider<NetworkCubit>.value(value: _networkCubit),
         ],
         child: MaterialApp.router(
           title: 'Ride Sharing Driver',
@@ -81,6 +85,16 @@ class _MyAppState extends State<MyApp> {
             Locale('en'),
             Locale('hi'),
           ],
+          builder: (context, child) {
+            return BlocBuilder<NetworkCubit, NetworkState>(
+              builder: (context, networkState) {
+                if (networkState is NetworkDisconnected) {
+                  return const NoInternetView();
+                }
+                return child ?? const SizedBox.shrink();
+              },
+            );
+          },
         ),
       ),
     );

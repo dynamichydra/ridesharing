@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../style/appcolors.dart';
+import 'widgets/three_dots_loader.dart';
 
 class _StatusConfig {
   final IconData icon;
@@ -22,6 +23,7 @@ class _StatusConfig {
 class RegistrationStatusScreen extends StatelessWidget {
   final String status;
   final String? note;
+  final bool isLoading;
   final VoidCallback? onEditAndResubmit;
   final VoidCallback onLogout;
 
@@ -29,6 +31,7 @@ class RegistrationStatusScreen extends StatelessWidget {
     super.key,
     required this.status,
     this.note,
+    this.isLoading = false,
     this.onEditAndResubmit,
     required this.onLogout,
   });
@@ -115,7 +118,7 @@ class RegistrationStatusScreen extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: onEditAndResubmit,
+                    onPressed: isLoading ? null : onEditAndResubmit,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
@@ -125,7 +128,9 @@ class RegistrationStatusScreen extends StatelessWidget {
                       ),
                       elevation: 0,
                     ),
-                    child: const Text('Edit & Resubmit'),
+                    child: isLoading
+                        ? const ThreeDotsLoader()
+                        : const Text('Edit & Resubmit'),
                   ),
                 ),
                 const SizedBox(height: 12),

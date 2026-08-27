@@ -3,15 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../common/widgets/custom_toast.dart';
 import '../../../style/appcolors.dart';
+import 'widgets/three_dots_loader.dart';
 
 class ProfilePhotoScreen extends StatefulWidget {
   final String? currentPhotoUrl;
+  final bool isLoading;
   final Function({required List<int> bytes, required String contentType})
   onUpload;
 
   const ProfilePhotoScreen({
     super.key,
     this.currentPhotoUrl,
+    this.isLoading = false,
     required this.onUpload,
   });
 
@@ -180,10 +183,29 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
               label: const Text('Select from Gallery'),
             ),
           ] else ...[
-            ElevatedButton.icon(
-              onPressed: _uploading ? null : _submitUpload,
-              icon: const Icon(Icons.cloud_upload_rounded),
-              label: const Text('Confirm & Upload'),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: (_uploading || widget.isLoading) ? null : _submitUpload,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: (_uploading || widget.isLoading)
+                    ? const ThreeDotsLoader()
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.cloud_upload_rounded),
+                          SizedBox(width: 8),
+                          Text('Confirm & Upload'),
+                        ],
+                      ),
+              ),
             ),
             const SizedBox(height: 16),
             Row(

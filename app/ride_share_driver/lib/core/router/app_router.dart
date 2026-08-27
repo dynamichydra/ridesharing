@@ -13,6 +13,7 @@ import '../../features/wallet/presentation/pages/wallet_page.dart';
 import '../../features/wallet/presentation/pages/transactions_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
 import '../../features/profile/presentation/pages/vehicle_info_page.dart';
+import '../../features/profile/presentation/pages/driver_documents_page.dart';
 import '../../features/ride/presentation/screens/active_ride_screen.dart';
 
 class AppRouter {
@@ -32,16 +33,10 @@ class AppRouter {
       final isOnboarding = state.matchedLocation == '/onboarding';
 
       if (authState is Authenticated) {
-        final isFullyApproved = authState.driver.registrationStatus == 'approved' ||
-                                authState.driver.registrationStatus == 'active';
+        final isFullyApproved = authState.driver.isApproved;
 
         if (!isFullyApproved) {
           if (!isOnboarding) return '/onboarding';
-          return null;
-        }
-
-        if (!authState.driver.hasActiveSubscription) {
-          if (state.matchedLocation != '/subscription') return '/subscription';
           return null;
         }
 
@@ -88,35 +83,55 @@ class AppRouter {
         },
       ),
 
-      // ShellRoute wraps the 5 main index tab pages inside DriverMainLayout
-      ShellRoute(
-        builder: (context, state, child) {
-          return DriverMainLayout(child: child);
+      // StatefulShellRoute.indexedStack preserves all 5 main index tabs in memory without recreating/reloading them
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          return DriverMainLayout(navigationShell: navigationShell);
         },
-        routes: [
-          GoRoute(
-            path: '/dashboard',
-            builder: (context, state) => DriverDashboard(
-              onLogout: () {
-                authBloc.add(LogoutRequested());
-              },
-            ),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/dashboard',
+                builder: (context, state) => DriverDashboard(
+                  onLogout: () {
+                    authBloc.add(LogoutRequested());
+                  },
+                ),
+              ),
+            ],
           ),
-          GoRoute(
-            path: '/ride-history',
-            builder: (context, state) => const RideHistoryPage(),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/ride-history',
+                builder: (context, state) => const RideHistoryPage(),
+              ),
+            ],
           ),
-          GoRoute(
-            path: '/earnings',
-            builder: (context, state) => const EarningsPage(),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/earnings',
+                builder: (context, state) => const EarningsPage(),
+              ),
+            ],
           ),
-          GoRoute(
-            path: '/wallet',
-            builder: (context, state) => const WalletPage(),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/wallet',
+                builder: (context, state) => const WalletPage(),
+              ),
+            ],
           ),
-          GoRoute(
-            path: '/profile',
-            builder: (context, state) => const ProfilePage(),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/profile',
+                builder: (context, state) => const ProfilePage(),
+              ),
+            ],
           ),
         ],
       ),
@@ -144,6 +159,11 @@ class AppRouter {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/vehicle-info',
         builder: (context, state) => const VehicleInfoPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/documents',
+        builder: (context, state) => const DriverDocumentsPage(),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,

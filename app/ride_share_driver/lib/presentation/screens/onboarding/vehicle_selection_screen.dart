@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import '../../../style/appcolors.dart';
+import 'widgets/three_dots_loader.dart';
 
 class VehicleSelectionScreen extends StatefulWidget {
   final VoidCallback onHasVehicle;
   final VoidCallback onNeedVehicle;
+  final bool isLoading;
 
   const VehicleSelectionScreen({
     super.key,
     required this.onHasVehicle,
     required this.onNeedVehicle,
+    this.isLoading = false,
   });
 
   @override
@@ -102,7 +105,7 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
                     : null,
               ),
               child: ElevatedButton(
-                onPressed: hasSelection ? _handleContinue : null,
+                onPressed: (hasSelection && !widget.isLoading) ? _handleContinue : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.transparent,
                   shadowColor: Colors.transparent,
@@ -110,29 +113,31 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Continue',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: hasSelection
-                            ? Colors.white
-                            : AppColors.textSecondary,
+                child: widget.isLoading
+                    ? const ThreeDotsLoader()
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Continue',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: hasSelection
+                                  ? Colors.white
+                                  : AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            color: hasSelection
+                                ? Colors.white
+                                : AppColors.textSecondary,
+                            size: 20,
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      Icons.arrow_forward_rounded,
-                      color: hasSelection
-                          ? Colors.white
-                          : AppColors.textSecondary,
-                      size: 20,
-                    ),
-                  ],
-                ),
               ),
             ),
           ),

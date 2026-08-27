@@ -10,6 +10,7 @@ class RideTrackingSocketDataSource {
 
   final _driverAssignedController = StreamController<Map<String, dynamic>>.broadcast();
   final _driverLocationController = StreamController<Map<String, dynamic>>.broadcast();
+  final _driverArrivingController = StreamController<Map<String, dynamic>>.broadcast();
   final _rideStartedController = StreamController<Map<String, dynamic>>.broadcast();
   final _rideCompletedController = StreamController<Map<String, dynamic>>.broadcast();
   final _rideCancelledController = StreamController<Map<String, dynamic>>.broadcast();
@@ -19,15 +20,18 @@ class RideTrackingSocketDataSource {
 
   Stream<Map<String, dynamic>> get onDriverAssigned => _driverAssignedController.stream;
   Stream<Map<String, dynamic>> get onDriverLocation => _driverLocationController.stream;
+  Stream<Map<String, dynamic>> get onDriverArriving => _driverArrivingController.stream;
   Stream<Map<String, dynamic>> get onRideStarted => _rideStartedController.stream;
   Stream<Map<String, dynamic>> get onRideCompleted => _rideCompletedController.stream;
   Stream<Map<String, dynamic>> get onRideCancelled => _rideCancelledController.stream;
   Stream<String> get onSocketError => _socketErrorController.stream;
 
   Future<void> connectAndSubscribe(String rideId) async {
+    // Clean up any existing connection
     if (_socket != null) {
       _socket?.disconnect();
       _socket?.dispose();
+      _socket = null;
     }
 
     final token = await storageService.getToken();
@@ -39,9 +43,14 @@ class RideTrackingSocketDataSource {
     final socket = io.io(
       '${DioClient.socketBaseUrl}/rider',
       io.OptionBuilder()
-          .setTransports(['websocket','polling'])
+          .setTransports(['websocket', 'polling'])
           .disableAutoConnect()
+          .enableReconnection()
+          .setReconnectionAttempts(double.maxFinite.toInt())
+          .setReconnectionDelay(1000)
+          .setReconnectionDelayMax(5000)
           .setAuth({'token': token})
+          .setExtraHeaders({'Authorization': 'Bearer $token'})
           .build(),
     );
 
@@ -49,6 +58,11 @@ class RideTrackingSocketDataSource {
       AppLogger.i('[RideTrackingSocket] connected to /rider namespace');
       AppLogger.d('[RideTrackingSocket] emitting ride:subscribe with rideId: $rideId');
       // Subscribe to the specific ride updates
+      socket.emit('ride:subscribe', {'rideId': rideId});
+    });
+
+    socket.onReconnect((_) {
+      AppLogger.i('[RideTrackingSocket] reconnected, re-subscribing to ride: $rideId');
       socket.emit('ride:subscribe', {'rideId': rideId});
     });
 
@@ -72,6 +86,7 @@ class RideTrackingSocketDataSource {
       _socketErrorController.add(message ?? 'Unknown socket error.');
     });
 
+    // ── Driver found / accepted ─────────────────────────────────────────
     socket.on('ride:driver_assigned', (data) {
       AppLogger.d('[RideTrackingSocket] event: ride:driver_assigned -> $data');
       if (data is Map) {
@@ -79,6 +94,7 @@ class RideTrackingSocketDataSource {
       }
     });
 
+    // ── Driver location updates ─────────────────────────────────────────
     socket.on('driver:location', (data) {
       AppLogger.d('[RideTrackingSocket] event: driver:location -> $data');
       if (data is Map) {
@@ -86,6 +102,15 @@ class RideTrackingSocketDataSource {
       }
     });
 
+    // ── Driver arriving at pickup ───────────────────────────────────────
+    socket.on('ride:arriving', (data) {
+      AppLogger.d('[RideTrackingSocket] event: ride:arriving -> $data');
+      if (data is Map) {
+        _driverArrivingController.add(Map<String, dynamic>.from(data));
+      }
+    });
+
+    // ── Ride started (OTP verified, trip in progress) ───────────────────
     socket.on('ride:started', (data) {
       AppLogger.d('[RideTrackingSocket] event: ride:started -> $data');
       if (data is Map) {
@@ -93,6 +118,7 @@ class RideTrackingSocketDataSource {
       }
     });
 
+    // ── Ride completed ──────────────────────────────────────────────────
     socket.on('ride:completed', (data) {
       AppLogger.d('[RideTrackingSocket] event: ride:completed -> $data');
       if (data is Map) {
@@ -100,8 +126,17 @@ class RideTrackingSocketDataSource {
       }
     });
 
+    // ── Ride cancelled by rider ─────────────────────────────────────────
     socket.on('ride:cancelled', (data) {
       AppLogger.d('[RideTrackingSocket] event: ride:cancelled -> $data');
+      if (data is Map) {
+        _rideCancelledController.add(Map<String, dynamic>.from(data));
+      }
+    });
+
+    // ── Ride cancelled by driver (re-matching) ──────────────────────────
+    socket.on('ride:driver_cancelled', (data) {
+      AppLogger.d('[RideTrackingSocket] event: ride:driver_cancelled -> $data');
       if (data is Map) {
         _rideCancelledController.add(Map<String, dynamic>.from(data));
       }
@@ -121,6 +156,7 @@ class RideTrackingSocketDataSource {
     disconnect();
     _driverAssignedController.close();
     _driverLocationController.close();
+    _driverArrivingController.close();
     _rideStartedController.close();
     _rideCompletedController.close();
     _rideCancelledController.close();

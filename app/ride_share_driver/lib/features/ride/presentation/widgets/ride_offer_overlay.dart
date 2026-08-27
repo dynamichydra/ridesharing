@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../../../style/appcolors.dart';
 import '../../domain/entities/ride_offer.dart';
 
 /// Floating multi-request offer overlay tile.
@@ -19,10 +18,10 @@ class RideOfferOverlay extends StatefulWidget {
     required VoidCallback onAccept,
     required VoidCallback onDecline,
     required VoidCallback onExpired,
-  })  : offers = offers ?? (offer != null ? [offer] : []),
-        onAccept = ((id) => onAccept()),
-        onDecline = ((id) => onDecline()),
-        onExpired = ((id) => onExpired());
+  }) : offers = offers ?? (offer != null ? [offer] : []),
+       onAccept = ((id) => onAccept()),
+       onDecline = ((id) => onDecline()),
+       onExpired = ((id) => onExpired());
 
   const RideOfferOverlay.multi({
     super.key,
@@ -38,7 +37,6 @@ class RideOfferOverlay extends StatefulWidget {
 
 class _RideOfferOverlayState extends State<RideOfferOverlay> {
   final PageController _pageController = PageController(viewportFraction: 0.94);
-  int _currentPage = 0;
 
   @override
   void dispose() {
@@ -60,7 +58,10 @@ class _RideOfferOverlayState extends State<RideOfferOverlay> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.75),
                     borderRadius: BorderRadius.circular(20),
@@ -68,7 +69,11 @@ class _RideOfferOverlayState extends State<RideOfferOverlay> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.notifications_active_rounded, color: Colors.amber, size: 16),
+                      const Icon(
+                        Icons.notifications_active_rounded,
+                        color: Colors.amber,
+                        size: 16,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         '${widget.offers.length} Pending Ride Requests',
@@ -88,11 +93,6 @@ class _RideOfferOverlayState extends State<RideOfferOverlay> {
               child: PageView.builder(
                 controller: _pageController,
                 itemCount: widget.offers.length,
-                onPageChanged: (idx) {
-                  setState(() {
-                    _currentPage = idx;
-                  });
-                },
                 itemBuilder: (context, index) {
                   final offer = widget.offers[index];
                   return _SingleOfferTileCard(
@@ -197,7 +197,9 @@ class _SingleOfferTileCardState extends State<_SingleOfferTileCard> {
             LinearProgressIndicator(
               value: progress,
               backgroundColor: const Color(0xFFE2E8F0),
-              color: progress > 0.3 ? const Color(0xFF16A34A) : const Color(0xFFEF4444),
+              color: progress > 0.3
+                  ? const Color(0xFF16A34A)
+                  : const Color(0xFFEF4444),
               minHeight: 4,
             ),
 
@@ -214,7 +216,10 @@ class _SingleOfferTileCardState extends State<_SingleOfferTileCard> {
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFEFF6FF),
                                 borderRadius: BorderRadius.circular(12),
@@ -268,14 +273,16 @@ class _SingleOfferTileCardState extends State<_SingleOfferTileCard> {
                           children: [
                             _StatBadge(
                               icon: Icons.near_me_rounded,
-                              label: '${offer.myDistanceKm.toStringAsFixed(1)} km away',
+                              label:
+                                  '${offer.myDistanceKm.toStringAsFixed(1)} km away',
                               color: const Color(0xFF2563EB),
                               bgColor: const Color(0xFFEFF6FF),
                             ),
                             const SizedBox(width: 8),
                             _StatBadge(
                               icon: Icons.route_rounded,
-                              label: '${offer.distanceKm.toStringAsFixed(1)} km trip',
+                              label:
+                                  '${offer.distanceKm.toStringAsFixed(1)} km trip',
                               color: const Color(0xFF16A34A),
                               bgColor: const Color(0xFFF0FDF4),
                             ),
@@ -303,12 +310,18 @@ class _SingleOfferTileCardState extends State<_SingleOfferTileCard> {
                             address: offer.pickupAddress ?? 'Pickup location',
                           ),
                           const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 4, horizontal: 10),
+                            padding: EdgeInsets.symmetric(
+                              vertical: 4,
+                              horizontal: 10,
+                            ),
                             child: SizedBox(
                               height: 12,
                               child: Align(
                                 alignment: Alignment.centerLeft,
-                                child: VerticalDivider(color: Color(0xFFCBD5E1), width: 1),
+                                child: VerticalDivider(
+                                  color: Color(0xFFCBD5E1),
+                                  width: 1,
+                                ),
                               ),
                             ),
                           ),
@@ -336,7 +349,9 @@ class _SingleOfferTileCardState extends State<_SingleOfferTileCard> {
                               foregroundColor: const Color(0xFFEF4444),
                               side: const BorderSide(color: Color(0xFFFCA5A5)),
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
                             ),
                           ),
                         ),
@@ -345,13 +360,18 @@ class _SingleOfferTileCardState extends State<_SingleOfferTileCard> {
                           flex: 2,
                           child: ElevatedButton.icon(
                             onPressed: widget.onAccept,
-                            icon: const Icon(Icons.check_circle_rounded, size: 20),
+                            icon: const Icon(
+                              Icons.check_circle_rounded,
+                              size: 20,
+                            ),
                             label: const Text('Accept Ride'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF16A34A),
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
                               elevation: 0,
                             ),
                           ),
@@ -378,10 +398,14 @@ class _TimerRingBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: secondsLeft <= 8 ? const Color(0xFFFEF2F2) : const Color(0xFFFFFBEB),
+        color: secondsLeft <= 8
+            ? const Color(0xFFFEF2F2)
+            : const Color(0xFFFFFBEB),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: secondsLeft <= 8 ? const Color(0xFFFCA5A5) : const Color(0xFFFDE68A),
+          color: secondsLeft <= 8
+              ? const Color(0xFFFCA5A5)
+              : const Color(0xFFFDE68A),
         ),
       ),
       child: Row(
@@ -390,7 +414,9 @@ class _TimerRingBadge extends StatelessWidget {
           Icon(
             Icons.timer_outlined,
             size: 16,
-            color: secondsLeft <= 8 ? const Color(0xFFDC2626) : const Color(0xDFD97706),
+            color: secondsLeft <= 8
+                ? const Color(0xFFDC2626)
+                : const Color(0xDFD97706),
           ),
           const SizedBox(width: 4),
           Text(
@@ -398,7 +424,9 @@ class _TimerRingBadge extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 13,
-              color: secondsLeft <= 8 ? const Color(0xFFDC2626) : const Color(0xDFD97706),
+              color: secondsLeft <= 8
+                  ? const Color(0xFFDC2626)
+                  : const Color(0xDFD97706),
             ),
           ),
         ],
@@ -487,7 +515,11 @@ class _StatBadge extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             label,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
         ],
       ),

@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import '../../../style/appcolors.dart';
 import '../../../domain/entities/question.dart';
 import '../../../common/widgets/custom_toast.dart';
+import 'widgets/three_dots_loader.dart';
 
 class QuestionnaireScreen extends StatefulWidget {
   final List<OnboardingQuestion> questions;
   final List<DriverAnswer> existingAnswers;
+  final bool isLoading;
   final Function(List<Map<String, dynamic>>) onSubmit;
 
   const QuestionnaireScreen({
     super.key,
     required this.questions,
     required this.existingAnswers,
+    this.isLoading = false,
     required this.onSubmit,
   });
 
@@ -144,12 +147,14 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: () {
-                  debugPrint(
-                    '[QuestionnaireScreen] Submit Survey button clicked',
-                  );
-                  _submit();
-                },
+                onPressed: widget.isLoading
+                    ? null
+                    : () {
+                        debugPrint(
+                          '[QuestionnaireScreen] Submit Survey button clicked',
+                        );
+                        _submit();
+                      },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
@@ -158,20 +163,22 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
                   ),
                   elevation: 2,
                 ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Submit Survey',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                child: widget.isLoading
+                    ? const ThreeDotsLoader()
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Submit Survey',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Icon(Icons.arrow_forward_rounded, size: 20),
+                        ],
                       ),
-                    ),
-                    SizedBox(width: 8),
-                    Icon(Icons.arrow_forward_rounded, size: 20),
-                  ],
-                ),
               ),
             ),
           ),

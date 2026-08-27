@@ -199,6 +199,13 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     });
 
     on<_OfferArrived>((event, emit) {
+      if (state is RideActive ||
+          state is RideActionInProgress ||
+          state is RideAccepting ||
+          _currentRide != null) {
+        // Driver already has an active trip in progress — do not accept/show other offers
+        return;
+      }
       _pendingOffers.removeWhere((o) => o.rideId == event.offer.rideId);
       _pendingOffers.insert(0, event.offer);
       emit(RideOfferPending(offers: List.unmodifiable(_pendingOffers)));
@@ -210,19 +217,32 @@ class RideBloc extends Bloc<RideEvent, RideState> {
           state is RideActive) {
         return;
       }
+      final wasInPending = _pendingOffers.any((o) => o.rideId == event.rideId);
       _pendingOffers.removeWhere((o) => o.rideId == event.rideId);
-      if (_pendingOffers.isEmpty) {
-        emit(RideOfferGone(message: 'Another driver accepted this ride.'));
-        emit(RideIdle());
-      } else {
-        emit(RideOfferPending(offers: List.unmodifiable(_pendingOffers)));
+      if (wasInPending) {
+        if (_pendingOffers.isEmpty) {
+          emit(RideIdle());
+        } else {
+          emit(RideOfferPending(offers: List.unmodifiable(_pendingOffers)));
+        }
       }
     });
     on<_CancelledByRider>((event, emit) {
-      if (_currentRide?.id != event.rideId) return;
-      _currentRide = null;
-      _traveledPath.clear();
-      emit(RideCancelledByRider(message: 'The rider cancelled this trip.'));
+      final wasInPending = _pendingOffers.any((o) => o.rideId == event.rideId);
+      _pendingOffers.removeWhere((o) => o.rideId == event.rideId);
+
+      if (_currentRide?.id == event.rideId) {
+        _currentRide = null;
+        _traveledPath.clear();
+        emit(RideCancelledByRider(message: 'The rider cancelled this trip.'));
+        emit(RideIdle());
+      } else if (wasInPending) {
+        if (_pendingOffers.isEmpty) {
+          emit(RideIdle());
+        } else {
+          emit(RideOfferPending(offers: List.unmodifiable(_pendingOffers)));
+        }
+      }
     });
     on<_AcceptResultArrived>(_onAcceptResultArrived);
     on<_SocketErrorArrived>(
@@ -372,6 +392,10 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     AcceptOfferRequested event,
     Emitter<RideState> emit,
   ) {
+    if (state is RideActive || state is RideActionInProgress || _currentRide != null) {
+      emit(RideOperationFailed(message: 'You already have an active ride in progress'));
+      return;
+    }
     emit(RideAccepting());
     for (final o in _pendingOffers) {
       if (o.rideId == event.rideId) {

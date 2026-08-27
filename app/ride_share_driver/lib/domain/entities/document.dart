@@ -21,31 +21,31 @@ class DocumentType {
 
   factory DocumentType.fromJson(Map<String, dynamic> json) {
     return DocumentType(
-      id: json['id'],
-      code: json['code'],
-      requiresFront: json['requiresFront'] ?? true,
-      requiresBack: json['requiresBack'] ?? false,
-      requiresPdf: json['requiresPdf'] ?? false,
-      requiresExpiry: json['requiresExpiry'] ?? true,
-      requiresDocNumber: json['requiresDocNumber'] ?? true,
-      isRequired: json['isRequired'] ?? true,
+      id: json['id']?.toString() ?? '',
+      code: json['code']?.toString() ?? '',
+      requiresFront: json['requiresFront'] as bool? ?? true,
+      requiresBack: json['requiresBack'] as bool? ?? false,
+      requiresPdf: json['requiresPdf'] as bool? ?? false,
+      requiresExpiry: json['requiresExpiry'] as bool? ?? true,
+      requiresDocNumber: json['requiresDocNumber'] as bool? ?? true,
+      isRequired: json['isRequired'] as bool? ?? true,
     );
   }
 }
 
 class DriverDocument {
-  final String id;
+  final String? id;
   final String documentTypeId;
   final String? frontUrl;
   final String? backUrl;
   final String? pdfUrl;
   final String? documentNumber;
   final String? expiryDate;
-  final String status; // pending | approved | rejected | expired
+  final String status; // pending | approved | rejected | expired | missing
   final String? rejectionReason;
 
   DriverDocument({
-    required this.id,
+    this.id,
     required this.documentTypeId,
     this.frontUrl,
     this.backUrl,
@@ -58,15 +58,16 @@ class DriverDocument {
 
   factory DriverDocument.fromJson(Map<String, dynamic> json) {
     return DriverDocument(
-      id: json['id'],
-      documentTypeId: json['documentTypeId'],
-      frontUrl: json['frontUrl'],
-      backUrl: json['backUrl'],
-      pdfUrl: json['pdfUrl'],
-      documentNumber: json['documentNumber'],
-      expiryDate: json['expiryDate'],
-      status: json['status'] ?? 'pending',
-      rejectionReason: json['rejectionReason'],
+      id: json['id']?.toString(),
+      documentTypeId: (json['documentTypeId'] ?? json['id'])?.toString() ?? '',
+      frontUrl: json['frontUrl']?.toString(),
+      backUrl: json['backUrl']?.toString(),
+      pdfUrl: json['pdfUrl']?.toString(),
+      documentNumber: json['documentNumber']?.toString(),
+      expiryDate: json['expiryDate']?.toString(),
+      status: json['status']?.toString() ?? 'pending',
+      rejectionReason: json['rejectionReason']?.toString(),
     );
   }
 }
+

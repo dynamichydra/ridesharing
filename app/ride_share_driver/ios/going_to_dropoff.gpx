@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Ryva Ride">
+  <metadata><name>Going to Drop Off</name></metadata>
+  <wpt lat="22.623370000000001" lon="88.441020000000009">
+    <name>Start</name>
+    <time>2026-08-26T17:30:00.000Z</time>
+  </wpt>
+  <wpt lat="22.623400000000000" lon="88.440870000000004">
+    <name>Point 1</name>
+    <time>2026-08-26T17:30:00.666Z</time>
+  </wpt>
+  <wpt lat="22.622460000000000" lon="88.439880000000002">
+    <name>Point 2</name>
+    <time>2026-08-26T17:30:01.333Z</time>
+  </wpt>
+  <wpt lat="22.621800000000000" lon="88.439160000000001">
+    <name>Point 3</name>
+    <time>2026-08-26T17:30:02.000Z</time>
+  </wpt>
+  <wpt lat="22.620550000000001" lon="88.437840000000008">
+    <name>Point 4</name>
+    <time>2026-08-26T17:30:02.666Z</time>
+  </wpt>
+  <wpt lat="22.619530000000001" lon="88.436800000000005">
+    <name>Point 5</name>
+    <time>2026-08-26T17:30:03.333Z</time>
+  </wpt>
+  <wpt lat="22.618420000000000" lon="88.435610000000011">
+    <name>Point 6</name>
+    <time>2026-08-26T17:30:04.000Z</time>
+  </wpt>
+  <wpt lat="22.616860000000003" lon="88.433960000000013">
+    <name>Point 7</name>
+    <time>2026-08-26T17:30:04.666Z</time>
+  </wpt>
+  <wpt lat="22.616330000000001" lon="88.433430000000001">
+    <name>Point 8</name>
+    <time>2026-08-26T17:30:05.333Z</time>
+  </wpt>
+  <wpt lat="22.615410000000001" lon="88.432420000000008">
+    <name>Point 9</name>
+    <time>2026-08-26T17:30:06.000Z</time>
+  </wpt>
+  <wpt lat="22.615260000000003" lon="88.432240000000007">
+    <name>Point 10</name>
+    <time>2026-08-26T17:30:06.666Z</time>
+  </wpt>
+  <wpt lat="22.613960000000002" lon="88.430880000000002">
+    <name>Point 11</name>
+    <time>2026-08-26T17:30:07.333Z</time>
+  </wpt>
+  <wpt lat="22.613760000000003" lon="88.430590000000009">
+    <name>Point 12</name>
+    <time>2026-08-26T17:30:08.000Z</time>
+  </wpt>
+  <wpt lat="22.613640000000000" lon="88.430550000000011">
+    <name>Point 13</name>
+    <time>2026-08-26T17:30:08.666Z</time>
+  </wpt>
+  <wpt lat="22.613100000000003" lon="88.429970000000012">
+    <name>Point 14</name>
+    <time>2026-08-26T17:30:09.333Z</time>
+  </wpt>
+  <wpt lat="22.613080000000004" lon="88.429920000000010">
+    <name>End</name>
+    <time>2026-08-26T17:30:10.000Z</time>
+  </wpt>
+</gpx>

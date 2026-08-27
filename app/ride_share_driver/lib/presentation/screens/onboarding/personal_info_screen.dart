@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../style/appcolors.dart';
+import 'widgets/three_dots_loader.dart';
 
 class PersonalInfoScreen extends StatefulWidget {
   final String? initialName;
@@ -7,6 +8,7 @@ class PersonalInfoScreen extends StatefulWidget {
   final String? initialDob;
   final String? initialGender;
   final String? initialReferralCode;
+  final bool isLoading;
   final Function({
     required String name,
     required String email,
@@ -23,6 +25,7 @@ class PersonalInfoScreen extends StatefulWidget {
     this.initialDob,
     this.initialGender,
     this.initialReferralCode,
+    this.isLoading = false,
     required this.onSave,
   });
 
@@ -134,8 +137,6 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
     final dobText = _selectedDateOfBirth == null
         ? 'Select Date of Birth'
         : "${_selectedDateOfBirth!.day.toString().padLeft(2, '0')}/${_selectedDateOfBirth!.month.toString().padLeft(2, '0')}/${_selectedDateOfBirth!.year}";
-
-    final theme = Theme.of(context);
 
     // Modern input decoration builder
     InputDecoration buildModernInputDecoration({
@@ -329,10 +330,12 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
               ],
             ),
             child: ElevatedButton(
-              onPressed: () {
-                debugPrint('[PersonalInfoScreen] Save & Continue clicked');
-                _submit();
-              },
+              onPressed: widget.isLoading
+                  ? null
+                  : () {
+                      debugPrint('[PersonalInfoScreen] Save & Continue clicked');
+                      _submit();
+                    },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.transparent,
                 shadowColor: Colors.transparent,
@@ -340,25 +343,27 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
                   borderRadius: BorderRadius.circular(16),
                 ),
               ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Save & Continue',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+              child: widget.isLoading
+                  ? const ThreeDotsLoader()
+                  : const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Save & Continue',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Icon(
+                          Icons.arrow_forward_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ],
                     ),
-                  ),
-                  SizedBox(width: 8),
-                  Icon(
-                    Icons.arrow_forward_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ],
-              ),
             ),
           ),
         ],
