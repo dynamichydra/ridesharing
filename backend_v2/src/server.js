@@ -138,15 +138,15 @@ async function build() {
     });
   });
 
+  // Bug 2 fix: pass Fastify's underlying Node.js http.Server and attach Socket.IO routes
+  initSocketIO(app.server, app);
+
   return app;
 }
 
 async function start() {
   const app = await build();
   await app.ready();
-
-  // Bug 2 fix: pass Fastify's underlying Node.js http.Server — no extra createServer()
-  initSocketIO(app.server, app);
 
   // Connect all Redis clients safely
   try {

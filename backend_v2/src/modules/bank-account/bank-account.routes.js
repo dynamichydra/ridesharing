@@ -20,6 +20,12 @@ export async function bankAccountRoutes(app) {
     const data = await bankAccountService.getMyBankDetails(request.user.id);
     return sendSuccess(reply, data);
   });
+
+  // POST /api/v1/driver/bank-details/validate
+  app.post('/validate', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const data = await bankAccountService.validateDriverBankDetails(request.user.id, { id: request.user.id, type: 'driver' });
+    return sendSuccess(reply, data);
+  });
 }
 
 // Admin-on-behalf-of routes for both drivers and riders — mounted separately at
@@ -42,6 +48,12 @@ export async function adminBankAccountRoutes(app) {
   // GET /api/v1/admin/drivers/:driverId/bank-details
   app.get('/drivers/:driverId/bank-details', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const data = await bankAccountService.getMyBankDetails(request.params.driverId);
+    return sendSuccess(reply, data);
+  });
+
+  // POST /api/v1/admin/drivers/:driverId/bank-details/validate
+  app.post('/drivers/:driverId/bank-details/validate', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await bankAccountService.validateDriverBankDetails(request.params.driverId, { id: request.user.id, type: 'admin' });
     return sendSuccess(reply, data);
   });
 

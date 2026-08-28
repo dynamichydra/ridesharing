@@ -1615,6 +1615,262 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "List City Types / Tiers (Public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/geo/city-types",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "geo",
+                "city-types"
+              ]
+            },
+            "description": "Public list of active city types / tiers (Metro, Tier 1, Tier 2, etc.)."
+          },
+          "response": []
+        },
+        {
+          "name": "List City Types — Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/geo/admin/city-types?page=1&limit=20&search=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "geo",
+                "admin",
+                "city-types"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Admin paginated list of city types."
+          },
+          "response": []
+        },
+        {
+          "name": "Get City Type by ID — Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/geo/admin/city-types/{{city_type_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "geo",
+                "admin",
+                "city-types",
+                "{{city_type_id}}"
+              ]
+            },
+            "description": "Admin retrieves specific city type details."
+          },
+          "response": []
+        },
+        {
+          "name": "Create City Type — Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"TIER_1\",\n  \"name\": \"Tier 1 Metro\",\n  \"description\": \"Metropolitan cities tier\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/geo/admin/city-types",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "geo",
+                "admin",
+                "city-types"
+              ]
+            },
+            "description": "Admin creates a new city classification tier."
+          },
+          "response": []
+        },
+        {
+          "name": "Seed Default City Types — Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/geo/admin/city-types/seed-defaults",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "geo",
+                "admin",
+                "city-types",
+                "seed-defaults"
+              ]
+            },
+            "description": "Seeds standard default city tiers (Tier 1, Tier 2, Tier 3) if none exist."
+          },
+          "response": []
+        },
+        {
+          "name": "Update City Type — Admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tier 1 Mega Metro\",\n  \"description\": \"Updated description\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/geo/admin/city-types/{{city_type_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "geo",
+                "admin",
+                "city-types",
+                "{{city_type_id}}"
+              ]
+            },
+            "description": "Admin updates city type name/description."
+          },
+          "response": []
+        },
+        {
+          "name": "Enable City Type — Admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/geo/admin/city-types/{{city_type_id}}/enable",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "geo",
+                "admin",
+                "city-types",
+                "{{city_type_id}}",
+                "enable"
+              ]
+            },
+            "description": "Admin enables a city type."
+          },
+          "response": []
+        },
+        {
+          "name": "Disable City Type — Admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/geo/admin/city-types/{{city_type_id}}/disable",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "geo",
+                "admin",
+                "city-types",
+                "{{city_type_id}}",
+                "disable"
+              ]
+            },
+            "description": "Admin disables a city type."
+          },
+          "response": []
         }
       ]
     },
@@ -2494,6 +2750,176 @@
               ]
             },
             "description": "Admin inspects history of vehicle checks."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Driver Dashboard Summary (Driver)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/drivers/dashboard-summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "drivers",
+                "dashboard-summary"
+              ]
+            },
+            "description": "Returns driver home dashboard summary including today's stats, earnings, status, and active ride."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Destination Mode (Driver)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/drivers/destination-mode",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "drivers",
+                "destination-mode"
+              ]
+            },
+            "description": "Gets current active destination mode settings and route filters for the driver."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Live Demand Heatmap (Driver)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/drivers/heatmap?lat=28.6139&lng=77.2090&maxDistanceKm=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "drivers",
+                "heatmap"
+              ],
+              "query": [
+                {
+                  "key": "lat",
+                  "value": "28.6139"
+                },
+                {
+                  "key": "lng",
+                  "value": "77.2090"
+                },
+                {
+                  "key": "cityId",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "maxDistanceKm",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Returns real-time demand surge heatmap clusters and nearby ride demand zones."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Performance & Analytics (Driver)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/drivers/performance?period=weekly",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "drivers",
+                "performance"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "weekly",
+                  "description": "daily | weekly | monthly | all"
+                }
+              ]
+            },
+            "description": "Driver's self-service performance metrics (acceptance rate, cancellation rate, customer rating breakdown)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Driver Details — Admin",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Driver Name\",\n  \"phone\": \"+919876543210\",\n  \"email\": \"driver.updated@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/drivers/{{driver_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "drivers",
+                "{{driver_id}}"
+              ]
+            },
+            "description": "Admin updates driver details, contact information, or status."
           },
           "response": []
         }
@@ -6630,6 +7056,33 @@
             "description": "List complete ride history for a specific rider."
           },
           "response": []
+        },
+        {
+          "name": "Get Rider Details — Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/riders/{{rider_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "riders",
+                "{{rider_id}}"
+              ]
+            },
+            "description": "Admin retrieves detailed profile and statistics for a specific rider."
+          },
+          "response": []
         }
       ]
     },
@@ -7726,6 +8179,27 @@
               ]
             },
             "description": "Unauthenticated public web page or API to view live driver location and ETA."
+          },
+          "response": []
+        },
+        {
+          "name": "Tracking Public Share Link Alias (Unauthenticated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/tracking/public/{{public_share_token}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "tracking",
+                "public",
+                "{{public_share_token}}"
+              ]
+            },
+            "description": "Direct public live tracking alias endpoint via token."
           },
           "response": []
         }
@@ -9725,6 +10199,44 @@
               "mode": "raw",
               "raw": "{\n  \"rejectionReason\": \"Bank account number mismatch with KYC documentation.\"\n}"
             }
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Wallet Transactions (Driver / Rider)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/wallets/me/transactions?page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "wallets",
+                "me",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Retrieves transaction history for the authenticated user's own wallet."
           },
           "response": []
         }
@@ -12053,6 +12565,64 @@
               "mode": "raw",
               "raw": "{\n  \"isVerified\": true\n}"
             }
+          },
+          "response": []
+        },
+        {
+          "name": "Trigger Automated Bank / VPA Validation (Driver)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/driver/bank-details/validate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "driver",
+                "bank-details",
+                "validate"
+              ]
+            },
+            "description": "Triggers RazorpayX Penny Drop / UPI VPA validation and fuzzy name matching for the driver."
+          },
+          "response": []
+        },
+        {
+          "name": "Trigger Automated Bank / VPA Validation — Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/admin/drivers/{{driver_id}}/bank-details/validate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "{{api_version}}",
+                "admin",
+                "drivers",
+                "{{driver_id}}",
+                "bank-details",
+                "validate"
+              ]
+            },
+            "description": "Admin triggers automated Penny Drop / UPI VPA validation and fuzzy name matching for a driver."
           },
           "response": []
         }

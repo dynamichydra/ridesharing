@@ -72,6 +72,18 @@ export function initSocketIO(fastifyServer, app) {
     pingInterval: 10000,
   });
 
+  // Fastify route handler to route polling & websocket handshakes to Engine.IO
+  if (app) {
+    app.all('/socket.io/*', (request, reply) => {
+      reply.hijack();
+      io.engine.handleRequest(request.raw, reply.raw);
+    });
+    app.all('/socket.io', (request, reply) => {
+      reply.hijack();
+      io.engine.handleRequest(request.raw, reply.raw);
+    });
+  }
+
   ioInstance = io;
   setSocketIO(io);
 

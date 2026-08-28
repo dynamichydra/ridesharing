@@ -66,11 +66,26 @@ export async function handleStripeConnectWebhook(rawBody, signature) {
   const event = stripeGateway.parseConnectWebhookEvent(rawBody, signature);
   if (!event) return { received: true };
 
-  await db.update(driverPayoutAccounts).set({
+  const isAutoApproved = !!(event.detailsSubmitted && event.payoutsEnabled);
+  const [account] = await db.update(driverPayoutAccounts).set({
     stripeDetailsSubmitted: event.detailsSubmitted,
     stripePayoutsEnabled: event.payoutsEnabled,
+    ...(isAutoApproved ? { status: 'approved', verifiedAt: new Date() } : {}),
     updatedAt: new Date(),
-  }).where(eq(driverPayoutAccounts.stripeAccountId, event.stripeAccountId));
+  }).where(eq(driverPayoutAccounts.stripeAccountId, event.stripeAccountId)).returning();
+
+  if (isAutoApproved && account) {
+    await publishEvent(TOPICS.AUDIT_LOG, {
+      actorId: account.driverId, actorType: 'system',
+      action: 'STRIPE_ACCOUNT_AUTO_VERIFIED', entityType: 'driver_payout_account', entityId: account.id,
+    });
+    await publishEvent(TOPICS.NOTIF_PUSH, {
+      userId: account.driverId, userType: 'driver',
+      title: 'Payout account approved',
+      body: 'Your Stripe payout account has been verified and approved. You can now receive payouts.',
+      type: 'PAYOUT_ACCOUNT_APPROVED',
+    });
+  }
 
   return { received: true };
 }
