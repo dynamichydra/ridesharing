@@ -45,9 +45,22 @@ export function getZoneColumns({
     },
     {
       accessorKey: "multiplier",
-      header: "Multiplier",
+      header: "Pricing / Multiplier",
       cell: ({ row }) => (
-        <span className="font-mono font-medium text-foreground">{row.original.multiplier}x</span>
+        <div className="flex flex-col">
+          <span className="font-mono font-medium text-foreground">{row.original.multiplier}x</span>
+          {(row.original.airportFeeMinor || row.original.pickupFeeMinor || row.original.dropoffFeeMinor) ? (
+            <span className="text-[11px] text-muted-foreground font-mono">
+              {[
+                row.original.airportFeeMinor ? `Airport ₹${(row.original.airportFeeMinor / 100).toFixed(0)}` : null,
+                row.original.pickupFeeMinor ? `Pickup ₹${(row.original.pickupFeeMinor / 100).toFixed(0)}` : null,
+                row.original.dropoffFeeMinor ? `Dropoff ₹${(row.original.dropoffFeeMinor / 100).toFixed(0)}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          ) : null}
+        </div>
       ),
     },
     {

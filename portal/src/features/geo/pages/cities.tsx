@@ -8,7 +8,7 @@ import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getCityColumns } from "../components/city-column";
 import { CityFormDialog } from "../components/city-dialog";
-import { useCountries, useStates, useCities, useSetCityActive } from "../hooks";
+import { useCountries, useStates, useCities, useSetCityActive, useCityTypeOptions } from "../hooks";
 import type { City } from "../types";
 
 export default function CitiesTab() {
@@ -19,16 +19,26 @@ export default function CitiesTab() {
   const page = Number(controller.applied.page) || 1;
   const countryId = (controller.applied.countryId as string) || undefined;
   const stateId = (controller.applied.stateId as string) || undefined;
+  const cityTypeId = (controller.applied.cityTypeId as string) || undefined;
   const search = (controller.applied.search as string) || undefined;
 
   const { data: countriesData } = useCountries({ page: 1, limit: 100 });
   const countries = countriesData?.MESSAGE ?? [];
 
-  // Scope the state filter's own options to whichever country is currently applied.
   const { data: statesData } = useStates({ countryId, limit: 100 });
   const states = statesData?.MESSAGE ?? [];
 
-  const { data, isLoading, isFetching } = useCities({ countryId, stateId, search, page, limit: 20 });
+  const { data: cityTypesData } = useCityTypeOptions();
+  const cityTypes = cityTypesData?.MESSAGE ?? [];
+
+  const { data, isLoading, isFetching } = useCities({
+    countryId,
+    stateId,
+    cityTypeId,
+    search,
+    page,
+    limit: 20,
+  });
   const setActiveMutation = useSetCityActive();
 
   const countriesMap = useMemo(() => {
@@ -42,6 +52,12 @@ export default function CitiesTab() {
     states.forEach((s) => map.set(s.id, s.name));
     return map;
   }, [states]);
+
+  const cityTypesMap = useMemo(() => {
+    const map = new Map<string, string>();
+    cityTypes.forEach((t) => map.set(t.id, t.name));
+    return map;
+  }, [cityTypes]);
 
   const filterSchema: FilterSchema = useMemo(
     () => ({
@@ -68,8 +84,16 @@ export default function CitiesTab() {
         placeholder: countryId ? "All States" : "Select a country first",
         options: states.map((s) => ({ label: s.name, value: s.id })),
       },
+      cityTypeId: {
+        label: "City Tier / Type",
+        operator: "equals",
+        type: "select",
+        field: "cityTypeId",
+        placeholder: "All City Tiers",
+        options: cityTypes.map((t) => ({ label: `${t.name} (${t.code})`, value: t.id })),
+      },
     }),
-    [countries, states, countryId],
+    [countries, states, cityTypes, countryId],
   );
 
   const handleAdd = useCallback(() => {
@@ -91,8 +115,14 @@ export default function CitiesTab() {
 
   const columns = useMemo(
     () =>
-      getCityColumns({ countriesMap, statesMap, onEdit: handleEdit, onToggleActive: handleToggleActive }),
-    [countriesMap, statesMap, handleEdit, handleToggleActive],
+      getCityColumns({
+        countriesMap,
+        statesMap,
+        cityTypesMap,
+        onEdit: handleEdit,
+        onToggleActive: handleToggleActive,
+      }),
+    [countriesMap, statesMap, cityTypesMap, handleEdit, handleToggleActive],
   );
 
   const handlePageChange = (pageIndex: number) => {
@@ -134,9 +164,11 @@ export default function CitiesTab() {
         onOpenChange={setIsDialogOpen}
         city={editingCity}
         countries={countries}
+        cityTypes={cityTypes}
         defaultCountryId={countryId}
         defaultStateId={stateId}
       />
     </div>
   );
 }
+

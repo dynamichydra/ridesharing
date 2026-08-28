@@ -4,18 +4,19 @@ import { Button } from "@/components/ui/button";
 import type { Country } from "../types";
 
 interface Props {
+  currenciesMap?: Map<string, { symbol: string; name: string }>;
   onEdit: (country: Country) => void;
   onToggleActive: (country: Country) => void;
 }
 
-export function getCountryColumns({ onEdit, onToggleActive }: Props): ColumnDef<Country>[] {
+export function getCountryColumns({ currenciesMap, onEdit, onToggleActive }: Props): ColumnDef<Country>[] {
   return [
     {
       accessorKey: "name",
       header: "Country",
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <span className="font-medium text-foreground">{row.original.name}</span>
+          <span className="font-semibold text-foreground">{row.original.name}</span>
           {row.original.isDefault && (
             <span title="Default fallback country">
               <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
@@ -39,11 +40,19 @@ export function getCountryColumns({ onEdit, onToggleActive }: Props): ColumnDef<
     {
       accessorKey: "currencyCode",
       header: "Currency",
-      cell: ({ row }) => (
-        <span className="text-muted-foreground font-mono text-xs">
-          {row.original.currencyCode}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const curInfo = currenciesMap?.get(row.original.currencyCode);
+        return (
+          <div className="flex items-center gap-1.5 font-mono text-xs">
+            <span className="font-semibold">{row.original.currencyCode}</span>
+            {curInfo?.symbol && (
+              <span className="text-muted-foreground bg-muted px-1.5 py-0.5 rounded text-[11px]">
+                {curInfo.symbol}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       accessorKey: "isActive",

@@ -2,10 +2,17 @@ import { sendSuccess, sendError, sendList, parsePagination } from '../../utils/r
 import { authenticateAdmin } from '../../middleware/authenticate.js';
 import * as geoService from './geo.service.js';
 import * as cityTypeService from './city-type.service.js';
+import * as serviceAreaService from './service-area.service.js';
+import * as currencyService from './currency.service.js';
 
 export async function geoRoutes(app) {
 
   // ── Public — cascading picker for the driver app ────────────────────────────
+
+  app.get('/currencies', async (request, reply) => {
+    const data = await currencyService.listCurrencies(true);
+    return sendSuccess(reply, data);
+  });
 
   app.get('/countries', async (request, reply) => {
     const data = await geoService.listCountries(true);
@@ -24,6 +31,11 @@ export async function geoRoutes(app) {
 
   app.get('/city-types', async (request, reply) => {
     const data = await cityTypeService.listCityTypes(true);
+    return sendSuccess(reply, data);
+  });
+
+  app.get('/service-areas', async (request, reply) => {
+    const data = await serviceAreaService.listServiceAreas(request.query.cityId);
     return sendSuccess(reply, data);
   });
 
@@ -162,6 +174,96 @@ export async function geoRoutes(app) {
 
   app.patch('/admin/cities/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const data = await geoService.setCityActive(request.params.id, false);
+    return sendSuccess(reply, data);
+  });
+
+  // ── Admin — service areas ────────────────────────────────────────────────────
+
+  app.get('/admin/service-areas', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const filters = {
+      cityId:    request.query.cityId,
+      countryId: request.query.countryId,
+      status:    request.query.status,
+      isActive:  request.query.isActive !== undefined ? request.query.isActive === 'true' : undefined,
+    };
+    const { rows, pagination } = await serviceAreaService.listServiceAreasPaginated(page, limit, offset, filters);
+    return sendList(reply, rows, pagination);
+  });
+
+  app.get('/admin/service-areas/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await serviceAreaService.getServiceAreaById(request.params.id);
+    return sendSuccess(reply, data);
+  });
+
+  app.post('/admin/service-areas', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { cityId, name, polygon } = request.body;
+    if (!cityId || !name || !polygon) return sendError(reply, 'cityId, name and polygon are required');
+    const data = await serviceAreaService.createServiceArea(request.body);
+    return sendSuccess(reply, data, 201);
+  });
+
+  app.patch('/admin/service-areas/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await serviceAreaService.updateServiceArea(request.params.id, request.body);
+    return sendSuccess(reply, data);
+  });
+
+  app.patch('/admin/service-areas/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await serviceAreaService.setServiceAreaActive(request.params.id, true);
+    return sendSuccess(reply, data);
+  });
+
+  app.patch('/admin/service-areas/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await serviceAreaService.setServiceAreaActive(request.params.id, false);
+    return sendSuccess(reply, data);
+  });
+
+  app.delete('/admin/service-areas/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await serviceAreaService.deleteServiceArea(request.params.id);
+    return sendSuccess(reply, data);
+  });
+
+  // ── Admin — currencies ───────────────────────────────────────────────────────
+
+  app.get('/admin/currencies', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const filters = {
+      search:   request.query.search,
+      isActive: request.query.isActive !== undefined ? request.query.isActive === 'true' : undefined,
+    };
+    const { rows, pagination } = await currencyService.listCurrenciesPaginated(page, limit, offset, filters);
+    return sendList(reply, rows, pagination);
+  });
+
+  app.get('/admin/currencies/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await currencyService.getCurrencyById(request.params.id);
+    return sendSuccess(reply, data);
+  });
+
+  app.post('/admin/currencies', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { code, name, symbol } = request.body;
+    if (!code || !name || !symbol) return sendError(reply, 'code, name and symbol are required');
+    const data = await currencyService.createCurrency(request.body);
+    return sendSuccess(reply, data, 201);
+  });
+
+  app.patch('/admin/currencies/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await currencyService.updateCurrency(request.params.id, request.body);
+    return sendSuccess(reply, data);
+  });
+
+  app.patch('/admin/currencies/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await currencyService.setCurrencyActive(request.params.id, true);
+    return sendSuccess(reply, data);
+  });
+
+  app.patch('/admin/currencies/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await currencyService.setCurrencyActive(request.params.id, false);
+    return sendSuccess(reply, data);
+  });
+
+  app.post('/admin/currencies/seed-defaults', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await currencyService.seedDefaultCurrencies();
     return sendSuccess(reply, data);
   });
 }

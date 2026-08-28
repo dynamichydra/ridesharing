@@ -1,13 +1,16 @@
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { CountryFormValues } from "../schema";
+import type { Currency } from "../types";
 
 interface CountryFormProps {
   form: UseFormReturn<CountryFormValues>;
+  currencies?: Currency[];
 }
 
-export function CountryForm({ form }: CountryFormProps) {
+export function CountryForm({ form, currencies = [] }: CountryFormProps) {
   const {
     register,
     control,
@@ -38,13 +41,24 @@ export function CountryForm({ form }: CountryFormProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="c-currencyCode">Currency Code</Label>
-          <Input
-            id="c-currencyCode"
-            placeholder="e.g. INR"
-            maxLength={3}
-            {...register("currencyCode")}
-          />
+          <Label htmlFor="c-currencyCode">Currency</Label>
+          {currencies.length > 0 ? (
+            <NativeSelect id="c-currencyCode" {...register("currencyCode")}>
+              <NativeSelectOption value="">Select currency</NativeSelectOption>
+              {currencies.map((cur) => (
+                <NativeSelectOption key={cur.id} value={cur.code}>
+                  {cur.code} - {cur.name} ({cur.symbol})
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          ) : (
+            <Input
+              id="c-currencyCode"
+              placeholder="e.g. INR"
+              maxLength={3}
+              {...register("currencyCode")}
+            />
+          )}
           {errors.currencyCode && (
             <p className="text-xs text-destructive">{errors.currencyCode.message}</p>
           )}

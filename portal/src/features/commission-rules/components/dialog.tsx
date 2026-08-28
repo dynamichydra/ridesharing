@@ -9,8 +9,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { useCreateCommissionRule, useUpdateCommissionRule } from "../hooks";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { useCreateCommissionRule, useUpdateCommissionRule, useCommissionLookups } from "../hooks";
 import type { CommissionRule } from "../types";
 
 interface CommissionRuleDialogProps {
@@ -25,42 +25,61 @@ export function CommissionRuleDialog({
   ruleToEdit,
 }: CommissionRuleDialogProps) {
   const [name, setName] = useState("");
+  const [countryId, setCountryId] = useState("");
+  const [vehicleTypeId, setVehicleTypeId] = useState("");
   const [subscriberRate, setSubscriberRate] = useState("5");
   const [nonSubscriberRate, setNonSubscriberRate] = useState("20");
-  const [flatCommission, setFlatCommission] = useState("0");
-  const [description, setDescription] = useState("");
+  const [bookingFee, setBookingFee] = useState("0");
+  const [priority, setPriority] = useState("1");
 
+  const { countries, vehicleTypes, isLoading: lookupsLoading } = useCommissionLookups();
   const createMutation = useCreateCommissionRule();
   const updateMutation = useUpdateCommissionRule();
 
   useEffect(() => {
     if (ruleToEdit) {
       setName(ruleToEdit.name || "");
-      setSubscriberRate(String(ruleToEdit.subscriberRate ?? "5"));
-      setNonSubscriberRate(String(ruleToEdit.nonSubscriberRate ?? "20"));
-      setFlatCommission(
-        ruleToEdit.flatCommissionMinor != null
-          ? String(ruleToEdit.flatCommissionMinor / 100)
+      setCountryId(ruleToEdit.countryId || "");
+      setVehicleTypeId(ruleToEdit.vehicleTypeId || "");
+      
+      const sub = Number(ruleToEdit.subscriberRate);
+      const subPct = sub < 1 ? (sub * 100).toFixed(2).replace(/\.00$/, "") : String(sub);
+      setSubscriberRate(subPct);
+
+      const nonSub = Number(ruleToEdit.nonSubscriberRate);
+      const nonSubPct = nonSub < 1 ? (nonSub * 100).toFixed(2).replace(/\.00$/, "") : String(nonSub);
+      setNonSubscriberRate(nonSubPct);
+
+      setBookingFee(
+        ruleToEdit.bookingFeeMinor != null
+          ? String(ruleToEdit.bookingFeeMinor / 100)
           : "0",
       );
-      setDescription(ruleToEdit.description || "");
+      setPriority(String(ruleToEdit.priority ?? 1));
     } else {
       setName("");
+      setCountryId("");
+      setVehicleTypeId("");
       setSubscriberRate("5");
       setNonSubscriberRate("20");
-      setFlatCommission("0");
-      setDescription("");
+      setBookingFee("0");
+      setPriority("1");
     }
   }, [ruleToEdit, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const subPct = parseFloat(subscriberRate) || 0;
+    const nonSubPct = parseFloat(nonSubscriberRate) || 0;
+
     const payload = {
       name,
-      subscriberRate: parseFloat(subscriberRate) || 0,
-      nonSubscriberRate: parseFloat(nonSubscriberRate) || 0,
-      flatCommissionMinor: Math.round((parseFloat(flatCommission) || 0) * 100),
-      description: description || undefined,
+      countryId: countryId || null,
+      vehicleTypeId: vehicleTypeId || null,
+      subscriberRate: subPct / 100,
+      nonSubscriberRate: nonSubPct / 100,
+      bookingFeeMinor: Math.round((parseFloat(bookingFee) || 0) * 100),
+      priority: parseInt(priority, 10) || 1,
     };
 
     if (ruleToEdit) {
@@ -75,7 +94,7 @@ export function CommissionRuleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>
             {ruleToEdit ? "Edit Commission Rule" : "Create Commission Rule"}
@@ -87,10 +106,46 @@ export function CommissionRuleDialog({
             <Input
               id="name"
               required
-              placeholder="e.g. Standard Tier 1"
+              placeholder="e.g. Standard India Auto Commission"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="country">Country Scope</Label>
+              <NativeSelect
+                id="country"
+                value={countryId}
+                onChange={(e) => setCountryId(e.target.value)}
+                disabled={lookupsLoading}
+              >
+                <NativeSelectOption value="">Global (All Countries)</NativeSelectOption>
+                {countries.map((c) => (
+                  <NativeSelectOption key={c.id} value={c.id}>
+                    {c.name}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="vehicleType">Vehicle Type Scope</Label>
+              <NativeSelect
+                id="vehicleType"
+                value={vehicleTypeId}
+                onChange={(e) => setVehicleTypeId(e.target.value)}
+                disabled={lookupsLoading}
+              >
+                <NativeSelectOption value="">All Vehicle Types</NativeSelectOption>
+                {vehicleTypes.map((vt) => (
+                  <NativeSelectOption key={vt.id} value={vt.id}>
+                    {vt.name}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -99,10 +154,11 @@ export function CommissionRuleDialog({
               <Input
                 id="subRate"
                 type="number"
-                step="0.1"
+                step="0.01"
                 min="0"
                 max="100"
                 required
+                placeholder="e.g. 5"
                 value={subscriberRate}
                 onChange={(e) => setSubscriberRate(e.target.value)}
               />
@@ -112,37 +168,43 @@ export function CommissionRuleDialog({
               <Input
                 id="nonSubRate"
                 type="number"
-                step="0.1"
+                step="0.01"
                 min="0"
                 max="100"
                 required
+                placeholder="e.g. 20"
                 value={nonSubscriberRate}
                 onChange={(e) => setNonSubscriberRate(e.target.value)}
               />
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="flatFee">Flat Commission Fee (₹)</Label>
-            <Input
-              id="flatFee"
-              type="number"
-              step="0.5"
-              min="0"
-              value={flatCommission}
-              onChange={(e) => setFlatCommission(e.target.value)}
-            />
-          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="bookingFee">Flat Booking Fee (Base unit)</Label>
+              <Input
+                id="bookingFee"
+                type="number"
+                step="0.5"
+                min="0"
+                placeholder="e.g. 10"
+                value={bookingFee}
+                onChange={(e) => setBookingFee(e.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">Fixed fee platform keeps per ride</p>
+            </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="desc">Description</Label>
-            <Textarea
-              id="desc"
-              rows={2}
-              placeholder="Optional notes about when this rule applies..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
+            <div className="space-y-1.5">
+              <Label htmlFor="priority">Resolution Priority</Label>
+              <Input
+                id="priority"
+                type="number"
+                min="1"
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">Higher wins during overlap</p>
+            </div>
           </div>
 
           <DialogFooter className="pt-2">
@@ -166,3 +228,4 @@ export function CommissionRuleDialog({
     </Dialog>
   );
 }
+

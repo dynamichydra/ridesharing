@@ -7,32 +7,47 @@ import { Button } from "@/components/ui/button";
 
 import { getCommissionRuleColumns } from "../components/column";
 import { CommissionRuleDialog } from "../components/dialog";
-import { useCommissionRules, useToggleCommissionRuleStatus } from "../hooks";
+import { useCommissionRules, useToggleCommissionRuleStatus, useCommissionLookups } from "../hooks";
 import type { CommissionRule } from "../types";
-
-const FILTER_SCHEMA: FilterSchema = {
-  isActive: {
-    label: "Status",
-    operator: "equals",
-    type: "select",
-    field: "isActive",
-    placeholder: "All Statuses",
-    options: [
-      { label: "Active", value: "true" },
-      { label: "Inactive", value: "false" },
-    ],
-  },
-};
 
 export default function CommissionRuleList() {
   const controller = useFilterController();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<CommissionRule | null>(null);
 
+  const { countries } = useCommissionLookups();
+
+  const filterSchema: FilterSchema = useMemo(
+    () => ({
+      countryId: {
+        label: "Country",
+        operator: "equals",
+        type: "select",
+        field: "countryId",
+        placeholder: "All Countries",
+        options: countries.map((c) => ({ label: c.name, value: c.id })),
+      },
+      isActive: {
+        label: "Status",
+        operator: "equals",
+        type: "select",
+        field: "isActive",
+        placeholder: "All Statuses",
+        options: [
+          { label: "Active", value: "true" },
+          { label: "Inactive", value: "false" },
+        ],
+      },
+    }),
+    [countries],
+  );
+
   const page = Number(controller.applied.page) || 1;
   const limit = Number(controller.applied.limit) || 10;
+  const countryId = (controller.applied.countryId as string) || undefined;
 
   const { data, isLoading, isFetching } = useCommissionRules({
+    countryId,
     isActive: controller.applied.isActive !== undefined ? controller.applied.isActive : "",
     page,
     limit,
@@ -90,7 +105,7 @@ export default function CommissionRuleList() {
       </div>
 
       <AutoFilters
-        schema={FILTER_SCHEMA}
+        schema={filterSchema}
         controller={controller}
         isFetching={isLoading}
         compact={true}

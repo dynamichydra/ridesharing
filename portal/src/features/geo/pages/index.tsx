@@ -1,14 +1,20 @@
 import { useState } from "react";
-import { Globe, Landmark, Building2 } from "lucide-react";
+import { Globe, Landmark, Building2, Layers, MapPin, Coins } from "lucide-react";
 import { cn } from "@/lib/utils";
 import CountriesTab from "./countries";
 import StatesTab from "./states";
 import CitiesTab from "./cities";
+import CityTypesTab from "./city-types";
+import ServiceAreasTab from "./service-areas";
+import CurrenciesTab from "./currencies";
 
 const TABS = [
   { key: "countries", label: "Countries", icon: Globe },
+  { key: "currencies", label: "Currencies", icon: Coins },
   { key: "states", label: "States", icon: Landmark },
   { key: "cities", label: "Cities", icon: Building2 },
+  { key: "city-types", label: "City Types / Tiers", icon: Layers },
+  { key: "service-areas", label: "Service Areas", icon: MapPin },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -24,19 +30,19 @@ export default function GeoList() {
             <Globe className="h-5 w-5 text-primary" />
           </div>
           <h2 className="text-xl font-bold tracking-tight text-foreground uppercase">
-            Locations
+            Locations, Boundaries & Currencies
           </h2>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 border-b border-border">
+      <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             type="button"
             onClick={() => setActiveTab(key)}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors cursor-pointer",
+              "flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors cursor-pointer whitespace-nowrap",
               activeTab === key
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground",
@@ -49,8 +55,13 @@ export default function GeoList() {
       </div>
 
       {activeTab === "countries" && <CountriesTab />}
+      {activeTab === "currencies" && <CurrenciesTab />}
       {activeTab === "states" && <StatesTab />}
       {activeTab === "cities" && <CitiesTab />}
+      {activeTab === "city-types" && <CityTypesTab />}
+      {activeTab === "service-areas" && <ServiceAreasTab />}
     </div>
   );
 }
+
+

@@ -1,11 +1,13 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Ban, CheckCircle2, Pencil, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import type { City } from "../types";
 
 interface Props {
   countriesMap: Map<string, string>;
   statesMap: Map<string, string>;
+  cityTypesMap?: Map<string, string>;
   onEdit: (city: City) => void;
   onToggleActive: (city: City) => void;
 }
@@ -13,6 +15,7 @@ interface Props {
 export function getCityColumns({
   countriesMap,
   statesMap,
+  cityTypesMap,
   onEdit,
   onToggleActive,
 }: Props): ColumnDef<City>[] {
@@ -20,13 +23,22 @@ export function getCityColumns({
     {
       accessorKey: "name",
       header: "City",
-      cell: ({ row }) => <span className="font-medium text-foreground">{row.original.name}</span>,
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-foreground">{row.original.name}</span>
+          {row.original.cityTypeId && cityTypesMap?.get(row.original.cityTypeId) && (
+            <Badge variant="outline" className="text-[10px] py-0 font-medium">
+              {cityTypesMap.get(row.original.cityTypeId)}
+            </Badge>
+          )}
+        </div>
+      ),
     },
     {
       accessorKey: "stateId",
       header: "State",
       cell: ({ row }) => (
-        <span className="text-muted-foreground">
+        <span className="text-muted-foreground text-sm">
           {statesMap.get(row.original.stateId) || row.original.stateId}
         </span>
       ),
@@ -35,7 +47,7 @@ export function getCityColumns({
       accessorKey: "countryId",
       header: "Country",
       cell: ({ row }) => (
-        <span className="text-muted-foreground">
+        <span className="text-muted-foreground text-sm">
           {countriesMap.get(row.original.countryId) || row.original.countryId}
         </span>
       ),
@@ -99,3 +111,4 @@ export function getCityColumns({
     },
   ];
 }
+

@@ -2,14 +2,30 @@ export interface CommissionRule {
   id: string;
   name: string;
   countryId?: string | null;
-  subscriberRate: number; // percentage (e.g. 5 for 5%)
-  nonSubscriberRate: number; // percentage (e.g. 20 for 20%)
-  flatCommissionMinor?: number | null;
-  currencyCode?: string;
+  vehicleTypeId?: string | null;
+  bookingFeeMinor: number;
+  subscriberRate: string | number; // e.g. "0.0500" from backend
+  nonSubscriberRate: string | number; // e.g. "0.2000" from backend
+  priority: number;
   isActive: boolean;
-  description?: string | null;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
+  country?: {
+    id: string;
+    name: string;
+    isoCode?: string;
+    currencyCode?: string;
+  } | null;
+  vehicleType?: {
+    id: string;
+    name: string;
+    slug?: string;
+  } | null;
+}
+
+export interface LookupOption {
+  id: string;
+  name: string;
 }
 
 export interface CommissionRuleListParams {
@@ -21,11 +37,12 @@ export interface CommissionRuleListParams {
 
 export interface CreateCommissionRulePayload {
   name: string;
-  subscriberRate: number;
-  nonSubscriberRate: number;
-  flatCommissionMinor?: number;
-  countryId?: string;
-  description?: string;
+  countryId?: string | null;
+  vehicleTypeId?: string | null;
+  bookingFeeMinor?: number;
+  subscriberRate: number; // decimal e.g. 0.05
+  nonSubscriberRate: number; // decimal e.g. 0.20
+  priority?: number;
 }
 
 export interface UpdateCommissionRulePayload extends Partial<CreateCommissionRulePayload> {

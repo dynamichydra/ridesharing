@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const zoneSchema = z.object({
   countryId: z.string().min(1, "Country is required"),
+  cityId: z.string().optional(),
   name: z.string().min(1, "Zone name is required"),
   type: z.string().min(1, "Zone type is required"),
   multiplier: z
@@ -9,6 +10,18 @@ export const zoneSchema = z.object({
     .min(1, "Multiplier is required")
     .regex(/^\d+(\.\d+)?$/, "Enter a valid decimal number")
     .transform((val) => parseFloat(val)),
+  airportFee: z
+    .string()
+    .optional()
+    .refine((val) => !val || /^\d+(\.\d+)?$/.test(val), "Enter a valid fee amount"),
+  pickupFee: z
+    .string()
+    .optional()
+    .refine((val) => !val || /^\d+(\.\d+)?$/.test(val), "Enter a valid fee amount"),
+  dropoffFee: z
+    .string()
+    .optional()
+    .refine((val) => !val || /^\d+(\.\d+)?$/.test(val), "Enter a valid fee amount"),
   description: z.string().optional(),
   polygon: z.string().min(1, "Polygon coordinates are required"),
   // H3 resolution (8-10) — optional; leaving it blank leaves hex indexing untouched.

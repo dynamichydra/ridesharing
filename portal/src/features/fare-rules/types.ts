@@ -11,6 +11,7 @@ export interface FareRule {
   countryId: string;
   ruleType: FareRuleType;
   multiplier: string;
+  flatFareMinor?: number | null;
   priority: number;
   vehicleTypeId: string;
   // Zone-rule field (also present in the "Common Fields" list, but only ever

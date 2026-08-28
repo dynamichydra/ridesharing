@@ -94,7 +94,7 @@ export async function setStateActive(id, isActive) {
 export async function listCities(stateId, onlyActive = true) {
   const conditions = [eq(cities.stateId, stateId)];
   if (onlyActive) conditions.push(eq(cities.isActive, true));
-  return db
+  const rows = await db
     .select({
       city: cities,
       cityType: cityTypes,
@@ -103,6 +103,11 @@ export async function listCities(stateId, onlyActive = true) {
     .leftJoin(cityTypes, eq(cities.cityTypeId, cityTypes.id))
     .where(and(...conditions))
     .orderBy(asc(cities.sortOrder));
+
+  return rows.map((r) => ({
+    ...r.city,
+    cityType: r.cityType || null,
+  }));
 }
 
 export async function listCitiesPaginated(filters, page, limit, offset) {
@@ -126,7 +131,12 @@ export async function listCitiesPaginated(filters, page, limit, offset) {
     .limit(limit)
     .offset(offset);
 
-  return { rows, pagination: paginate(page, limit, total) };
+  const flattenedRows = rows.map((r) => ({
+    ...r.city,
+    cityType: r.cityType || null,
+  }));
+
+  return { rows: flattenedRows, pagination: paginate(page, limit, total) };
 }
 
 export async function getCityById(id) {
@@ -141,7 +151,7 @@ export async function getCityById(id) {
     .limit(1);
 
   if (!row) throw { statusCode: 404, message: 'City not found' };
-  return row;
+  return { ...row.city, cityType: row.cityType || null };
 }
 
 export async function createCity(data, adminId) {

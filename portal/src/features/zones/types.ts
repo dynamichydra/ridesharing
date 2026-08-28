@@ -10,10 +10,14 @@ export interface GeoJSONPolygon {
 export interface Zone {
   id: string;
   countryId: string;
+  cityId?: string | null;
   name: string;
   type: string;
   polygon: GeoJSONPolygon;
   multiplier: number;
+  airportFeeMinor?: number;
+  pickupFeeMinor?: number;
+  dropoffFeeMinor?: number;
   description: string | null;
   isActive: boolean;
   hexCells: string[] | null;
@@ -39,9 +43,13 @@ export interface Pagination {
 export interface ZonePayload {
   name: string;
   countryId: string;
+  cityId?: string | null;
   type: string;
   polygon: GeoJSONPolygon;
   multiplier?: number;
+  airportFeeMinor?: number;
+  pickupFeeMinor?: number;
+  dropoffFeeMinor?: number;
   description?: string;
   // H3 hex-cell resolution (8-10) — when set on create/update, the backend derives
   // hexCells from `polygon` immediately. Omit to leave hex indexing untouched.

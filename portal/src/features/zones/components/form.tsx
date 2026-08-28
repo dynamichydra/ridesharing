@@ -8,9 +8,13 @@ import type { Country, Zone } from "../types";
 
 export interface ZoneFormState {
   countryId: string;
+  cityId?: string;
   name: string;
   type: string;
   multiplier: string;
+  airportFee: string;
+  pickupFee: string;
+  dropoffFee: string;
   polygon: string;
   description: string;
   // H3 hex-cell resolution (8-10) — leave blank to leave hex indexing untouched.
@@ -87,7 +91,7 @@ export default function ZoneForm({
           </Label>
           <Input
             id="z-type"
-            placeholder="e.g. city, airport, suburb"
+            placeholder="e.g. city, airport, suburb, surge"
             value={values.type}
             onChange={(e) => onChange({ ...values, type: e.target.value })}
             required
@@ -104,6 +108,36 @@ export default function ZoneForm({
             value={values.multiplier}
             onChange={(e) => onChange({ ...values, multiplier: e.target.value })}
             required
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="z-airportFee">Airport Fee (₹)</Label>
+          <Input
+            id="z-airportFee"
+            placeholder="0"
+            value={values.airportFee}
+            onChange={(e) => onChange({ ...values, airportFee: e.target.value })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="z-pickupFee">Pickup Fee (₹)</Label>
+          <Input
+            id="z-pickupFee"
+            placeholder="0"
+            value={values.pickupFee}
+            onChange={(e) => onChange({ ...values, pickupFee: e.target.value })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="z-dropoffFee">Dropoff Fee (₹)</Label>
+          <Input
+            id="z-dropoffFee"
+            placeholder="0"
+            value={values.dropoffFee}
+            onChange={(e) => onChange({ ...values, dropoffFee: e.target.value })}
           />
         </div>
       </div>

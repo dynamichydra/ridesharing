@@ -11,19 +11,23 @@ import {
 import { Button } from "@/components/ui/button";
 import { countrySchema, emptyCountryFormValues, type CountryFormValues } from "../schema";
 import { CountryForm } from "./country-form";
-import { useCreateCountry, useUpdateCountry } from "../hooks";
-import type { Country } from "../types";
+import { useCreateCountry, useUpdateCountry, useCurrencyOptions } from "../hooks";
+import type { Country, Currency } from "../types";
 
 interface CountryFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   country: Country | null;
+  currencies?: Currency[];
 }
 
-export function CountryFormDialog({ open, onOpenChange, country }: CountryFormDialogProps) {
+export function CountryFormDialog({ open, onOpenChange, country, currencies: passedCurrencies }: CountryFormDialogProps) {
   const createMutation = useCreateCountry();
   const updateMutation = useUpdateCountry();
   const isPending = createMutation.isPending || updateMutation.isPending;
+
+  const { data: currenciesData } = useCurrencyOptions();
+  const currencies = passedCurrencies || currenciesData?.MESSAGE || [];
 
   const form = useForm<CountryFormValues>({
     resolver: zodResolver(countrySchema),
@@ -75,7 +79,7 @@ export function CountryFormDialog({ open, onOpenChange, country }: CountryFormDi
           <DialogTitle>{country ? "Edit Country" : "Add Country"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit}>
-          <CountryForm form={form} />
+          <CountryForm form={form} currencies={currencies} />
           <DialogFooter className="pt-4">
             <Button
               type="button"

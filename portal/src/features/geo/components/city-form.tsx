@@ -3,15 +3,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { CityFormValues } from "../schema";
-import type { Country, State } from "../types";
+import type { Country, State, CityType } from "../types";
 
 interface CityFormProps {
   form: UseFormReturn<CityFormValues>;
   countries: Country[];
   states: State[];
+  cityTypes?: CityType[];
 }
 
-export function CityForm({ form, countries, states }: CityFormProps) {
+export function CityForm({ form, countries, states, cityTypes = [] }: CityFormProps) {
   const {
     register,
     control,
@@ -67,10 +68,24 @@ export function CityForm({ form, countries, states }: CityFormProps) {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="ct-name">City Name</Label>
-        <Input id="ct-name" placeholder="e.g. Bengaluru" {...register("name")} />
-        {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="ct-name">City Name</Label>
+          <Input id="ct-name" placeholder="e.g. Bengaluru" {...register("name")} />
+          {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="ct-type">City Type / Tier</Label>
+          <NativeSelect id="ct-type" {...register("cityTypeId")}>
+            <NativeSelectOption value="">None / Standard</NativeSelectOption>
+            {cityTypes.map((t) => (
+              <NativeSelectOption key={t.id} value={t.id}>
+                {t.name} ({t.code})
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -90,3 +105,4 @@ export function CityForm({ form, countries, states }: CityFormProps) {
     </div>
   );
 }
+

@@ -77,3 +77,24 @@ export function useToggleCommissionRuleStatus() {
     },
   });
 }
+
+export function useCommissionLookups() {
+  const countriesQuery = useQuery({
+    queryKey: ["geo-countries-lookup"],
+    queryFn: () => commissionRulesApi.listCountries(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const vehicleTypesQuery = useQuery({
+    queryKey: ["vehicle-types-lookup"],
+    queryFn: () => commissionRulesApi.listVehicleTypes(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  return {
+    countries: countriesQuery.data?.MESSAGE ?? [],
+    vehicleTypes: vehicleTypesQuery.data?.MESSAGE ?? [],
+    isLoading: countriesQuery.isLoading || vehicleTypesQuery.isLoading,
+  };
+}
+

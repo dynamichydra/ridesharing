@@ -5,7 +5,7 @@ import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getCountryColumns } from "../components/country-column";
 import { CountryFormDialog } from "../components/country-dialog";
-import { useCountries, useSetCountryActive } from "../hooks";
+import { useCountries, useSetCountryActive, useCurrencyOptions } from "../hooks";
 import type { Country } from "../types";
 import { Plus } from "lucide-react";
 
@@ -17,6 +17,15 @@ export default function CountriesTab() {
   const page = Number(controller.applied.page) || 1;
   const { data, isLoading, isFetching } = useCountries({ page, limit: 20 });
   const setActiveMutation = useSetCountryActive();
+
+  const { data: currenciesData } = useCurrencyOptions();
+  const currencies = currenciesData?.MESSAGE ?? [];
+
+  const currenciesMap = useMemo(() => {
+    const map = new Map<string, { symbol: string; name: string }>();
+    currencies.forEach((c) => map.set(c.code, { symbol: c.symbol, name: c.name }));
+    return map;
+  }, [currencies]);
 
   const handleAdd = useCallback(() => {
     setEditingCountry(null);
@@ -36,8 +45,8 @@ export default function CountriesTab() {
   );
 
   const columns = useMemo(
-    () => getCountryColumns({ onEdit: handleEdit, onToggleActive: handleToggleActive }),
-    [handleEdit, handleToggleActive],
+    () => getCountryColumns({ currenciesMap, onEdit: handleEdit, onToggleActive: handleToggleActive }),
+    [currenciesMap, handleEdit, handleToggleActive],
   );
 
   const handlePageChange = (pageIndex: number) => {
@@ -72,7 +81,9 @@ export default function CountriesTab() {
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         country={editingCountry}
+        currencies={currencies}
       />
     </div>
   );
 }
+

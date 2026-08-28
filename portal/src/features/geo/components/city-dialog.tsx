@@ -11,14 +11,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { citySchema, emptyCityFormValues, type CityFormValues } from "../schema";
 import { CityForm } from "./city-form";
-import { useCreateCity, useUpdateCity, useStates } from "../hooks";
-import type { City, Country } from "../types";
+import { useCreateCity, useUpdateCity, useStates, useCityTypeOptions } from "../hooks";
+import type { City, Country, CityType } from "../types";
 
 interface CityFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   city: City | null;
   countries: Country[];
+  cityTypes?: CityType[];
   defaultCountryId?: string;
   defaultStateId?: string;
 }
@@ -28,12 +29,16 @@ export function CityFormDialog({
   onOpenChange,
   city,
   countries,
+  cityTypes: passedCityTypes,
   defaultCountryId,
   defaultStateId,
 }: CityFormDialogProps) {
   const createMutation = useCreateCity();
   const updateMutation = useUpdateCity();
   const isPending = createMutation.isPending || updateMutation.isPending;
+
+  const { data: cityTypesData } = useCityTypeOptions();
+  const cityTypes = passedCityTypes || cityTypesData?.MESSAGE || [];
 
   const form = useForm<CityFormValues>({
     resolver: zodResolver(citySchema),
@@ -47,6 +52,7 @@ export function CityFormDialog({
         ? {
             countryId: city.countryId,
             stateId: city.stateId,
+            cityTypeId: city.cityTypeId || "",
             name: city.name,
             timezone: city.timezone || "",
             sortOrder: String(city.sortOrder),
@@ -68,7 +74,10 @@ export function CityFormDialog({
 
   const onSubmit = form.handleSubmit((values) => {
     const payload = {
-      ...values,
+      stateId: values.stateId,
+      countryId: values.countryId,
+      cityTypeId: values.cityTypeId || null,
+      name: values.name,
       timezone: values.timezone || undefined,
       sortOrder: Number(values.sortOrder),
     };
@@ -82,12 +91,12 @@ export function CityFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>{city ? "Edit City" : "Add City"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit}>
-          <CityForm form={form} countries={countries} states={states} />
+          <CityForm form={form} countries={countries} states={states} cityTypes={cityTypes} />
           <DialogFooter className="pt-4">
             <Button
               type="button"
@@ -110,3 +119,4 @@ export function CityFormDialog({
     </Dialog>
   );
 }
+

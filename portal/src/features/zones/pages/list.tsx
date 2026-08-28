@@ -31,6 +31,9 @@ const EMPTY_ZONE_FORM: ZoneFormState = {
   name: "",
   type: "",
   multiplier: "1.0",
+  airportFee: "0",
+  pickupFee: "0",
+  dropoffFee: "0",
   polygon: "",
   description: "",
   // Pre-filled (not blank) so hex cells generate in the same click as saving the zone —
@@ -134,6 +137,9 @@ export default function ZoneList() {
       name: zone.name,
       type: zone.type,
       multiplier: String(zone.multiplier),
+      airportFee: zone.airportFeeMinor != null ? String(zone.airportFeeMinor / 100) : "0",
+      pickupFee: zone.pickupFeeMinor != null ? String(zone.pickupFeeMinor / 100) : "0",
+      dropoffFee: zone.dropoffFeeMinor != null ? String(zone.dropoffFeeMinor / 100) : "0",
       polygon: JSON.stringify(zone.polygon),
       description: zone.description || "",
       // Pre-filled with the zone's current resolution (or 9 if never generated) so saving
@@ -162,11 +168,14 @@ export default function ZoneList() {
       toast.error("Draw a zone boundary on the map first");
       return;
     }
-    const { resolution, priority, polygon: _polygonText, ...rest } = formValues;
+    const { resolution, priority, airportFee, pickupFee, dropoffFee, polygon: _polygonText, ...rest } = formValues;
     createMutation.mutate({
       ...rest,
       polygon,
       multiplier: parseFloat(formValues.multiplier) || 1.0,
+      airportFeeMinor: Math.round((parseFloat(airportFee) || 0) * 100),
+      pickupFeeMinor: Math.round((parseFloat(pickupFee) || 0) * 100),
+      dropoffFeeMinor: Math.round((parseFloat(dropoffFee) || 0) * 100),
       priority: priority ? parseInt(priority, 10) : undefined,
       // Omitted entirely (not sent as undefined-but-present) when blank — leaves hex
       // indexing untouched instead of accidentally clearing it.
@@ -184,13 +193,16 @@ export default function ZoneList() {
       toast.error("Draw a zone boundary on the map first");
       return;
     }
-    const { resolution, priority, polygon: _polygonText, ...rest } = formValues;
+    const { resolution, priority, airportFee, pickupFee, dropoffFee, polygon: _polygonText, ...rest } = formValues;
     updateMutation.mutate({
       id: selectedZone.id,
       payload: {
         ...rest,
         polygon,
         multiplier: parseFloat(formValues.multiplier) || 1.0,
+        airportFeeMinor: Math.round((parseFloat(airportFee) || 0) * 100),
+        pickupFeeMinor: Math.round((parseFloat(pickupFee) || 0) * 100),
+        dropoffFeeMinor: Math.round((parseFloat(dropoffFee) || 0) * 100),
         priority: priority ? parseInt(priority, 10) : undefined,
         ...(resolution ? { resolution: parseInt(resolution, 10) } : {}),
       },

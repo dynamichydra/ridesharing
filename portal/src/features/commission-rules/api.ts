@@ -4,6 +4,7 @@ import type {
   CommissionRuleListParams,
   CreateCommissionRulePayload,
   UpdateCommissionRulePayload,
+  LookupOption,
 } from "./types";
 
 const BASE_URL = "/commission-rules";
@@ -19,9 +20,34 @@ function buildQuery(params: CommissionRuleListParams) {
   return query.toString();
 }
 
+interface RawCommissionRuleRow {
+  rule?: CommissionRule;
+  vehicleType?: { id: string; name: string; slug?: string } | null;
+  country?: { id: string; name: string; isoCode?: string; currencyCode?: string } | null;
+  id?: string;
+  name?: string;
+  subscriberRate?: string | number;
+  nonSubscriberRate?: string | number;
+  bookingFeeMinor?: number;
+  priority?: number;
+  isActive?: boolean;
+}
+
 export const commissionRulesApi = {
-  list: (params: CommissionRuleListParams = {}) =>
-    apiClient.get<CommissionRule[]>(`${BASE_URL}?${buildQuery(params)}`),
+  list: async (params: CommissionRuleListParams = {}) => {
+    const res = await apiClient.get<RawCommissionRuleRow[]>(`${BASE_URL}?${buildQuery(params)}`);
+    const unwrapped: CommissionRule[] = (res.MESSAGE ?? []).map((item) => {
+      if (item.rule) {
+        return {
+          ...item.rule,
+          country: item.country ?? item.rule.country ?? null,
+          vehicleType: item.vehicleType ?? item.rule.vehicleType ?? null,
+        };
+      }
+      return item as CommissionRule;
+    });
+    return { ...res, MESSAGE: unwrapped };
+  },
 
   getById: (id: string) => apiClient.get<CommissionRule>(`${BASE_URL}/${id}`),
 
@@ -36,4 +62,8 @@ export const commissionRulesApi = {
 
   disable: (id: string) =>
     apiClient.patch<CommissionRule>(`${BASE_URL}/${id}/disable`, {}),
+
+  listCountries: () => apiClient.get<LookupOption[]>("/geo/countries"),
+  listVehicleTypes: () => apiClient.get<LookupOption[]>("/vehicle-types"),
 };
+
