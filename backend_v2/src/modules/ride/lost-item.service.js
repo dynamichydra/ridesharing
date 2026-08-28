@@ -100,3 +100,20 @@ export async function updateLostItemStatus(reportId, userId, userRole, { status,
 
   return updated;
 }
+
+export async function listAdminLostItems({ page = 1, limit = 10, offset = 0, status = null, rideId = null }) {
+  const conditions = [];
+  if (status) conditions.push(eq(lostItems.status, status));
+  if (rideId) conditions.push(eq(lostItems.rideId, rideId));
+
+  const whereClause = conditions.length ? and(...conditions) : undefined;
+
+  const rows = await db.select().from(lostItems)
+    .where(whereClause)
+    .orderBy(desc(lostItems.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return { rows, pagination: { currentPage: page, itemsPerPage: limit, totalItems: rows.length, totalPages: 1 } };
+}
+

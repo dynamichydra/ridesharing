@@ -1,16 +1,32 @@
-import { reportCashCollection, openCashDispute } from './cash.service.js';
+import { reportCashCollection, openCashDispute, listCashCollections, listCashDisputes } from './cash.service.js';
+import { parsePagination, sendList, sendSuccess } from '../../utils/response.js';
 
 export async function cashRoutes(fastify) {
+  fastify.get('/collections', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { page, limit, offset } = parsePagination(req.query);
+    const filters = { status: req.query.status, driverId: req.query.driverId };
+    const { rows, pagination } = await listCashCollections(page, limit, offset, filters);
+    return sendList(reply, rows, pagination);
+  });
+
   fastify.post('/collections/report', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const result = await reportCashCollection({
       ...req.body,
       driverId: req.user.id || req.body.driverId,
     });
-    return reply.status(201).send({ SUCCESS: true, DATA: result });
+    return sendSuccess(reply, result, 201);
+  });
+
+  fastify.get('/disputes', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { page, limit, offset } = parsePagination(req.query);
+    const filters = { status: req.query.status };
+    const { rows, pagination } = await listCashDisputes(page, limit, offset, filters);
+    return sendList(reply, rows, pagination);
   });
 
   fastify.post('/disputes/open', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const dispute = await openCashDispute(req.body);
-    return reply.status(201).send({ SUCCESS: true, DATA: dispute });
+    return sendSuccess(reply, dispute, 201);
   });
 }
+

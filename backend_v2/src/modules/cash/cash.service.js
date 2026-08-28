@@ -91,3 +91,41 @@ export async function openCashDispute({ cashCollectionId, rideId, driverId, ride
 
   return dispute;
 }
+
+export async function listCashCollections(page = 1, limit = 10, offset = 0, filters = {}) {
+  const conditions = [];
+  if (filters.status) conditions.push(eq(cashCollections.status, filters.status));
+  if (filters.driverId) conditions.push(eq(cashCollections.driverId, filters.driverId));
+
+  const whereClause = conditions.length ? and(...conditions) : undefined;
+
+  const [totalRes] = await db.select({ count: count() }).from(cashCollections).where(whereClause);
+  const total = Number(totalRes?.count || 0);
+
+  const rows = await db.select().from(cashCollections)
+    .where(whereClause)
+    .orderBy(desc(cashCollections.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return { rows, pagination: { currentPage: page, itemsPerPage: limit, totalItems: total, totalPages: Math.ceil(total / limit) || 1 } };
+}
+
+export async function listCashDisputes(page = 1, limit = 10, offset = 0, filters = {}) {
+  const conditions = [];
+  if (filters.status) conditions.push(eq(cashDisputes.status, filters.status));
+
+  const whereClause = conditions.length ? and(...conditions) : undefined;
+
+  const [totalRes] = await db.select({ count: count() }).from(cashDisputes).where(whereClause);
+  const total = Number(totalRes?.count || 0);
+
+  const rows = await db.select().from(cashDisputes)
+    .where(whereClause)
+    .orderBy(desc(cashDisputes.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return { rows, pagination: { currentPage: page, itemsPerPage: limit, totalItems: total, totalPages: Math.ceil(total / limit) || 1 } };
+}
+

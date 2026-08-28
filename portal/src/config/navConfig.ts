@@ -20,7 +20,14 @@ import {
   ScrollText,
   ClipboardList,
   Bell,
-  type LucideIcon
+  Percent,
+  TicketPercent,
+  Building2,
+  Cpu,
+  Coins,
+  PackageSearch,
+  MessageSquareWarning,
+  type LucideIcon,
 } from "lucide-react";
 
 export type NavType = {
@@ -29,7 +36,7 @@ export type NavType = {
   url: string;
   icon?: LucideIcon;
   isActive?: boolean;
-  type: 'dropdown' | 'regular';
+  type: "dropdown" | "regular";
   items?: {
     title: string;
     url: string;
@@ -46,7 +53,7 @@ export const navItem: NavType[] = [
     type: "regular",
   },
   {
-    title: "Users",
+    title: "Users (Riders)",
     url: "/users",
     icon: Users,
     isActive: true,
@@ -67,11 +74,65 @@ export const navItem: NavType[] = [
     type: "regular",
   },
   {
+    title: "Emergency SOS Safety",
+    url: "/sos-alerts",
+    icon: ShieldAlert,
+    isActive: true,
+    type: "regular",
+  },
+  {
+    title: "Lost & Found",
+    url: "/lost-items",
+    icon: PackageSearch,
+    isActive: true,
+    type: "regular",
+  },
+  {
+    title: "Matching & Dispatch",
+    url: "/dispatch-ops",
+    icon: Cpu,
+    isActive: true,
+    type: "regular",
+    roles: ["super_admin"],
+  },
+  {
     title: "Ride Payments",
     url: "/ride-payments",
     icon: Wallet,
     isActive: true,
     type: "regular",
+  },
+  {
+    title: "Cash Collections",
+    url: "/cash-management",
+    icon: Coins,
+    isActive: true,
+    type: "regular",
+    roles: ["super_admin"],
+  },
+  {
+    title: "Promos & Coupons",
+    url: "/promos",
+    icon: TicketPercent,
+    isActive: true,
+    type: "regular",
+    roles: ["super_admin"],
+  },
+  {
+    title: "Commission Rules",
+    url: "/commission-rules",
+    icon: Percent,
+    isActive: true,
+    type: "regular",
+    roles: ["super_admin"],
+  },
+  {
+    title: "Corporate Accounts",
+    url: "/corporate",
+    icon: Building2,
+    isActive: true,
+    type: "regular",
+    roles: ["super_admin"],
   },
   {
     title: "Vehicle Types",
@@ -114,7 +175,7 @@ export const navItem: NavType[] = [
     roles: ["super_admin"],
   },
   {
-    title: "Subscription Plans",
+    title: "Driver Subscription Plans",
     url: "/subscription-plans",
     icon: CreditCard,
     isActive: true,
@@ -157,6 +218,14 @@ export const navItem: NavType[] = [
     title: "Disputes",
     url: "/disputes",
     icon: ShieldAlert,
+    isActive: true,
+    type: "regular",
+    roles: ["super_admin"],
+  },
+  {
+    title: "Content Moderation",
+    url: "/moderation",
+    icon: MessageSquareWarning,
     isActive: true,
     type: "regular",
     roles: ["super_admin"],
@@ -210,3 +279,4 @@ export const navItem: NavType[] = [
     roles: ["super_admin"],
   },
 ];
+

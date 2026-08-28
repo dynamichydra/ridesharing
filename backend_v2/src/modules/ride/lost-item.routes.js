@@ -30,6 +30,19 @@ export async function lostItemRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  // GET /api/v1/lost-items/admin — Admin list all lost items
+  app.get('/admin', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { page = 1, limit = 10, offset = 0, status, rideId } = request.query || {};
+    const { rows, pagination } = await lostItemService.listAdminLostItems({
+      page: parseInt(page, 10),
+      limit: parseInt(limit, 10),
+      offset: parseInt(offset, 10),
+      status,
+      rideId,
+    });
+    return sendSuccess(reply, rows, 200, pagination);
+  });
+
   // PATCH /api/v1/lost-items/:id/status — Update status
   app.patch('/:id/status', { preHandler: [authenticateAny] }, async (request, reply) => {
     const { status, resolutionNotes } = request.body || {};
@@ -41,3 +54,4 @@ export async function lostItemRoutes(app) {
     return sendSuccess(reply, data);
   });
 }
+

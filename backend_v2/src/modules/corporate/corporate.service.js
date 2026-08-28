@@ -158,3 +158,40 @@ export async function payCorporateInvoice(invoiceId, { amountMinor, paymentMetho
 
   return { payment, ledgerResult };
 }
+
+export async function listCorporateAccounts(page = 1, limit = 10, offset = 0, filters = {}) {
+  const conditions = [];
+  if (filters.status) conditions.push(eq(corporateAccounts.status, filters.status));
+
+  const whereClause = conditions.length ? and(...conditions) : undefined;
+
+  const [totalRes] = await db.select({ count: count() }).from(corporateAccounts).where(whereClause);
+  const total = Number(totalRes?.count || 0);
+
+  const rows = await db.select().from(corporateAccounts)
+    .where(whereClause)
+    .orderBy(desc(corporateAccounts.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return { rows, pagination: paginate(total, page, limit) };
+}
+
+export async function listCorporateInvoices(corporateAccountId = null, page = 1, limit = 10, offset = 0) {
+  const conditions = [];
+  if (corporateAccountId) conditions.push(eq(corporateInvoices.corporateAccountId, corporateAccountId));
+
+  const whereClause = conditions.length ? and(...conditions) : undefined;
+
+  const [totalRes] = await db.select({ count: count() }).from(corporateInvoices).where(whereClause);
+  const total = Number(totalRes?.count || 0);
+
+  const rows = await db.select().from(corporateInvoices)
+    .where(whereClause)
+    .orderBy(desc(corporateInvoices.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return { rows, pagination: paginate(total, page, limit) };
+}
+

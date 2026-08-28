@@ -33,6 +33,14 @@ const FlaggedTripList = lazy(() => import("@/features/flagged-trips/pages"));
 const AuditLogList = lazy(() => import("@/features/audit-logs/pages"));
 const OnboardingConfigList = lazy(() => import("@/features/onboarding-config/pages"));
 const NotificationTemplateList = lazy(() => import("@/features/notification-templates/pages/list"));
+const CommissionRuleList = lazy(() => import("@/features/commission-rules/pages"));
+const PromoList = lazy(() => import("@/features/promos/pages"));
+const SosAlertList = lazy(() => import("@/features/sos-alerts/pages"));
+const CorporateList = lazy(() => import("@/features/corporate/pages"));
+const ModerationList = lazy(() => import("@/features/moderation/pages"));
+const DispatchOpsPage = lazy(() => import("@/features/dispatch-ops/pages"));
+const CashManagementList = lazy(() => import("@/features/cash-management/pages"));
+const LostItemList = lazy(() => import("@/features/lost-items/pages"));
 
 const router = createBrowserRouter([
   {
@@ -168,6 +176,26 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: "commission-rules",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <CommissionRuleList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "promos",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <PromoList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: "subscription-plans",
         element: (
           <ProtectedRoute allowedRoles={["super_admin"]}>
@@ -193,6 +221,26 @@ const router = createBrowserRouter([
           <ProtectedRoute allowedRoles={["super_admin"]}>
             <Suspense fallback={<Loader />}>
               <WalletList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "cash-management",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <CashManagementList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "corporate",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <CorporateList />
             </Suspense>
           </ProtectedRoute>
         ),
@@ -248,6 +296,42 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: "sos-alerts",
+        element: (
+          <Suspense fallback={<Loader />}>
+            <SosAlertList />
+          </Suspense>
+        ),
+      },
+      {
+        path: "dispatch-ops",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <DispatchOpsPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "moderation",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <ModerationList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "lost-items",
+        element: (
+          <Suspense fallback={<Loader />}>
+            <LostItemList />
+          </Suspense>
+        ),
+      },
+      {
         path: "flagged-trips",
         element: (
           <ProtectedRoute allowedRoles={["super_admin"]}>
@@ -290,6 +374,7 @@ const router = createBrowserRouter([
     ],
   },
 ]);
+
 
 export function AppRoutes() {
   return <RouterProvider router={router} />;

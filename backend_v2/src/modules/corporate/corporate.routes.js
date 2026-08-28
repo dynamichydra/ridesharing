@@ -1,33 +1,49 @@
 import {
   createCorporateAccount, addCorporateUser, generateCorporateInvoice,
-  payCorporateInvoice, checkCorporateCreditAvailable,
+  payCorporateInvoice, checkCorporateCreditAvailable, listCorporateAccounts,
+  listCorporateInvoices,
 } from './corporate.service.js';
+import { parsePagination, sendList, sendSuccess } from '../../utils/response.js';
 
 export async function corporateRoutes(fastify) {
+  fastify.get('/accounts', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { page, limit, offset } = parsePagination(req.query);
+    const filters = { status: req.query.status };
+    const { rows, pagination } = await listCorporateAccounts(page, limit, offset, filters);
+    return sendList(reply, rows, pagination);
+  });
+
   fastify.post('/accounts', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const account = await createCorporateAccount(req.body);
-    return reply.status(201).send({ SUCCESS: true, DATA: account });
+    return sendSuccess(reply, account, 201);
   });
 
   fastify.post('/accounts/:id/users', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const user = await addCorporateUser(req.params.id, req.body);
-    return reply.status(201).send({ SUCCESS: true, DATA: user });
+    return sendSuccess(reply, user, 201);
   });
 
   fastify.get('/accounts/:id/credit-check', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { amountMinor } = req.query;
     const result = await checkCorporateCreditAvailable(req.params.id, parseInt(amountMinor || '0', 10));
-    return reply.send({ SUCCESS: true, DATA: result });
+    return sendSuccess(reply, result);
+  });
+
+  fastify.get('/invoices', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { page, limit, offset } = parsePagination(req.query);
+    const { rows, pagination } = await listCorporateInvoices(req.query.corporateAccountId, page, limit, offset);
+    return sendList(reply, rows, pagination);
   });
 
   fastify.post('/accounts/:id/invoices', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { periodStart, periodEnd } = req.body;
     const invoice = await generateCorporateInvoice(req.params.id, periodStart, periodEnd);
-    return reply.status(201).send({ SUCCESS: true, DATA: invoice });
+    return sendSuccess(reply, invoice, 201);
   });
 
   fastify.post('/invoices/:id/pay', { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const result = await payCorporateInvoice(req.params.id, req.body);
-    return reply.send({ SUCCESS: true, DATA: result });
+    return sendSuccess(reply, result);
   });
 }
+
