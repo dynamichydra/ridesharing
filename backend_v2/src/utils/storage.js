@@ -141,3 +141,29 @@ export function keyToPublicUrl(key) {
   if (env.S3_PUBLIC_URL) return `${env.S3_PUBLIC_URL.replace(/\/$/, '')}/${key}`;
   return key;
 }
+
+export async function uploadBuffer(folder, contentType, buffer) {
+  const ext = ALLOWED_CONTENT_TYPES[contentType] || 'jpg';
+  const key = `${folder}/${randomUUID()}.${ext}`;
+
+  if (!isS3Configured) {
+    await saveLocalObject(key, buffer);
+    return {
+      key,
+      url: localDevStorageUrl(key),
+    };
+  }
+
+  const command = new PutObjectCommand({
+    Bucket: env.S3_BUCKET,
+    Key: key,
+    Body: buffer,
+    ContentType: contentType,
+  });
+  await s3().send(command);
+
+  return {
+    key,
+    url: keyToPublicUrl(key),
+  };
+}

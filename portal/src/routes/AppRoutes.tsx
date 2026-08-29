@@ -14,6 +14,7 @@ const UserList = lazy(() => import("@/features/users/pages/list"));
 const RiderDetail = lazy(() => import("@/features/users/pages/Detail"));
 const DriverList = lazy(() => import("@/features/drivers/pages/list"));
 const DriverDetail = lazy(() => import("@/features/drivers/pages/Detail"));
+const DriverRegisterWizard = lazy(() => import("@/features/drivers/pages/register-wizard"));
 const RideList = lazy(() => import("@/features/rides/pages"));
 const VehicleTypeList = lazy(() => import("@/features/vehicle-types/pages"));
 const VehicleModelList = lazy(() => import("@/features/vehicle-models/pages"));
@@ -98,6 +99,14 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<Loader />}>
             <DriverList />
+          </Suspense>
+        ),
+      },
+      {
+        path: "drivers/register",
+        element: (
+          <Suspense fallback={<Loader />}>
+            <DriverRegisterWizard />
           </Suspense>
         ),
       },

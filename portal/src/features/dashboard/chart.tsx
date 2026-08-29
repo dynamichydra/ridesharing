@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DollarSign } from "lucide-react";
+import { DollarSign, BarChart2 } from "lucide-react";
 import { useEarningsTrend } from "./hooks";
 
 interface EarningsTrendChartProps {
@@ -51,10 +51,15 @@ export default function EarningsTrendChart({ initialTimeframe = "week" }: Earnin
         </div>
       </CardHeader>
 
-      <CardContent className="p-4 flex-1 flex flex-col justify-end min-h-[260px]">
+      <CardContent className="p-4 flex-1 flex flex-col justify-center min-h-[260px]">
         {isLoading ? (
           <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground">
             Loading trend telemetry…
+          </div>
+        ) : formattedChartData.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-xs text-muted-foreground py-8 gap-1.5">
+            <BarChart2 className="h-7 w-7 text-muted-foreground/50" />
+            <p>No revenue or ride transactions for this timeframe.</p>
           </div>
         ) : (
           <div className="h-[220px] w-full">

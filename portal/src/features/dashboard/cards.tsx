@@ -62,9 +62,9 @@ export function KPICard({
             <>
               <span className="inline-flex items-center font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                 <Minus className="h-3 w-3 mr-0.5" />
-                Stable
+                {growthPct !== undefined && growthPct < 0 ? `${growthPct}%` : "0%"}
               </span>
-              <span className="text-muted-foreground">optimal performance</span>
+              <span className="text-muted-foreground">{growthLabel || "from last week"}</span>
             </>
           )}
         </div>
@@ -75,21 +75,21 @@ export function KPICard({
 
 export function KPICardsGrid({ data }: { data?: DashboardOverviewResponse }) {
   const kpis = data?.kpis;
-  const totalRides = kpis?.totalRides?.value ?? data?.rides?.total ?? 12450;
-  const ridesGrowth = kpis?.totalRides?.growthPct ?? 12;
+  const totalRides = kpis?.totalRides?.value ?? data?.rides?.total ?? 0;
+  const ridesGrowth = kpis?.totalRides?.growthPct ?? 0;
 
-  const activeDrivers = kpis?.activeDrivers?.value ?? data?.fleetStatus?.online ?? 842;
-  const driversGrowth = kpis?.activeDrivers?.growthPct ?? 4;
+  const activeDrivers = kpis?.activeDrivers?.value ?? data?.fleetStatus?.online ?? 0;
+  const driversGrowth = kpis?.activeDrivers?.growthPct ?? 0;
 
-  const weeklyRevenueMinor = kpis?.weeklyEarnings?.valueMinor ?? 1420000;
+  const weeklyRevenueMinor = kpis?.weeklyEarnings?.valueMinor ?? 0;
   const revenueFormatted = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: kpis?.weeklyEarnings?.currencyCode || "USD",
     maximumFractionDigits: 0,
   }).format(weeklyRevenueMinor / 100);
-  const revenueGrowth = kpis?.weeklyEarnings?.growthPct ?? 8;
+  const revenueGrowth = kpis?.weeklyEarnings?.growthPct ?? 0;
 
-  const rating = kpis?.rating?.value ?? 4.8;
+  const rating = kpis?.rating?.value ?? 0;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -108,17 +108,18 @@ export function KPICardsGrid({ data }: { data?: DashboardOverviewResponse }) {
         icon={Car}
       />
       <KPICard
-        title="Weekly Earnings"
+        title="Weekly Revenue"
         value={revenueFormatted}
         growthPct={revenueGrowth}
         growthLabel="from last week"
         icon={DollarSign}
       />
       <KPICard
-        title="Customer Rating"
-        value={rating.toFixed(1)}
-        subValue="/ 5"
-        growthLabel="Stable"
+        title="Fleet Rating"
+        value={rating > 0 ? rating.toFixed(1) : "N/A"}
+        subValue={rating > 0 ? "/ 5.0" : ""}
+        growthPct={0}
+        growthLabel={rating > 0 ? "verified" : "no ratings yet"}
         icon={Star}
       />
     </div>

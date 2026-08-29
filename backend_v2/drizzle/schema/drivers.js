@@ -36,7 +36,6 @@ export const drivers = pgTable('drivers', {
   vehicleTypeId:      uuid('vehicle_type_id').references(() => vehicleTypes.id),
   vehicleNumber:      varchar('vehicle_number', { length: 20 }),
   vehicleModel:       varchar('vehicle_model',  { length: 100 }),
-  vehiclePhoto:       text('vehicle_photo'),
   vehicleYear:        varchar('vehicle_year', { length: 4 }),
   approvalStatus:     varchar('approval_status').default('pending'),
   // pending | approved | rejected

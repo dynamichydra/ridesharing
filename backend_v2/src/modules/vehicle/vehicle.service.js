@@ -225,4 +225,30 @@ export async function listVehicleInspections(vehicleId) {
     .orderBy(desc(vehicleInspections.inspectionDate));
 }
 
+/**
+ * List all vehicles across drivers (Admin / Filtered).
+ */
+export async function listAllVehicles(filters = {}) {
+  const conditions = [];
+  if (filters.driverId) {
+    conditions.push(eq(driverVehicles.driverId, filters.driverId));
+  }
+  if (filters.vehicleTypeId) {
+    conditions.push(eq(driverVehicles.vehicleTypeId, filters.vehicleTypeId));
+  }
+  if (filters.isActive !== undefined && filters.isActive !== null && filters.isActive !== '') {
+    const activeBool = typeof filters.isActive === 'boolean' ? filters.isActive : String(filters.isActive) === 'true';
+    conditions.push(eq(driverVehicles.isActive, activeBool));
+  }
 
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  return db.select().from(driverVehicles).where(where).orderBy(desc(driverVehicles.createdAt));
+}
+
+/**
+ * Get a single vehicle by ID.
+ */
+export async function getVehicleById(vehicleId) {
+  const [vehicle] = await db.select().from(driverVehicles).where(eq(driverVehicles.id, vehicleId)).limit(1);
+  return vehicle || null;
+}

@@ -18,6 +18,13 @@ import {
   Trash2,
   CheckCircle,
   Star,
+  DollarSign,
+  TrendingUp,
+  Car,
+  Landmark,
+  Phone,
+  Mail,
+  Compass,
 } from "lucide-react";
 import {
   Card,
@@ -27,12 +34,13 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ApproveDriverDialog,
   RejectDriverDialog,
   ResetToPendingDialog,
   RequestDocumentsDialog,
-  RejectDocumentDialog,
   EditDriverDialog,
   AddEditVehicleDialog,
 } from "../components/dialog";
@@ -63,10 +71,10 @@ function formatDocCode(code: string) {
 }
 
 const STATUS_STYLES: Record<DriverDocumentStatus, string> = {
-  pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  approved: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-  expired: "bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-400",
+  pending: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+  approved: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
+  rejected: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+  expired: "bg-muted text-muted-foreground border-border",
 };
 
 export default function DriverDetail() {
@@ -76,13 +84,16 @@ export default function DriverDetail() {
   const summary = data?.MESSAGE;
   const driver = summary?.driver;
   const vehicles = summary?.vehicles ?? [];
+  const performance = (summary as any)?.performance;
+  const trips = (summary as any)?.trips ?? [];
+  const bankAccount = (summary as any)?.bankAccount;
 
   const { data: countriesData } = useCountryOptions();
   const { data: statesData } = useStateOptions(driver?.countryId || undefined);
   const { data: citiesData } = useCityOptions(driver?.stateId || undefined);
-  const countryName = countriesData?.MESSAGE?.find((c) => c.id === driver?.countryId)?.name;
-  const stateName = statesData?.MESSAGE?.find((s) => s.id === driver?.stateId)?.name;
-  const cityName = citiesData?.MESSAGE?.find((c) => c.id === driver?.cityId)?.name;
+  const countryName = countriesData?.MESSAGE?.find((c) => c.id === driver?.countryId)?.name || driver?.countryName;
+  const stateName = statesData?.MESSAGE?.find((s) => s.id === driver?.stateId)?.name || driver?.stateName;
+  const cityName = citiesData?.MESSAGE?.find((c) => c.id === driver?.cityId)?.name || driver?.cityName;
 
   const { data: documentsData, isLoading: isLoadingDocuments } = useDriverDocuments(driverId);
   const documents = documentsData?.MESSAGE ?? [];
@@ -119,12 +130,14 @@ export default function DriverDetail() {
   const [documentRejectionReason, setDocumentRejectionReason] = useState("");
 
   if (isLoading) {
-    return <div className="py-8 text-center text-muted-foreground">Loading driver…</div>;
+    return <div className="py-16 text-center text-muted-foreground">Loading driver profile…</div>;
   }
 
   if (!driver || !driverId) {
-    return <div className="py-8 text-center text-muted-foreground">Driver not found.</div>;
+    return <div className="py-16 text-center text-muted-foreground">Driver record not found.</div>;
   }
+
+  const activeVehicle = vehicles.find((v) => v.isActive) || vehicles[0];
 
   const handleApproveSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,7 +208,7 @@ export default function DriverDetail() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-16">
       {/* Top Breadcrumb & Quick Nav */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -207,7 +220,7 @@ export default function DriverDetail() {
           </Button>
         </div>
 
-        {/* Top Action Buttons */}
+        {/* Top Status & Transition Actions */}
         <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
@@ -216,7 +229,7 @@ export default function DriverDetail() {
             className="cursor-pointer"
           >
             <Edit className="h-4 w-4 mr-1.5 text-primary" />
-            Edit Driver
+            Edit Profile
           </Button>
 
           <Button
@@ -227,10 +240,9 @@ export default function DriverDetail() {
             className="cursor-pointer"
           >
             <Ban className="h-4 w-4 mr-1.5" />
-            {driver.isBlocked ? "Unblock Driver" : "Block Driver"}
+            {driver.isBlocked ? "Unblock Driver" : "Suspend / Block"}
           </Button>
 
-          {/* Flexible status transition buttons based on current state */}
           {driver.approvalStatus === "rejected" && (
             <>
               <Button
@@ -298,543 +310,673 @@ export default function DriverDetail() {
         </div>
       </div>
 
-      {/* Driver Header Banner */}
-      <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl border border-border bg-card shadow-sm">
-        <div className="flex items-center gap-4">
-          <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl border border-primary/20 shrink-0">
-            {driver.name ? driver.name.charAt(0).toUpperCase() : "D"}
+      {/* Hero Header Section (Inspired by Stitch Driver Profile) */}
+      <div className="bg-card border border-border rounded-xl p-5 sm:p-6 shadow-sm flex flex-col md:flex-row items-center md:items-start justify-between gap-5">
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
+          {/* Avatar with live status ring */}
+          <div className="relative">
+            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden border-2 border-primary/40 bg-muted/40 flex items-center justify-center text-primary font-bold text-3xl shrink-0 shadow-inner">
+              {driver.profilePhoto ? (
+                <img
+                  src={driver.profilePhoto}
+                  alt={driver.name || "Driver"}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                driver.name ? driver.name.charAt(0).toUpperCase() : "D"
+              )}
+            </div>
+            {driver.isOnline && (
+              <span
+                className="absolute bottom-1 right-1 h-5 w-5 rounded-full bg-green-500 border-2 border-card ring-2 ring-green-500/30"
+                title="Online & Receiving Dispatches"
+              />
+            )}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-bold tracking-tight text-foreground">
+
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
                 {driver.name || "Unnamed Driver"}
-              </h2>
-              {driver.isOnline && (
-                <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                  <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                  Online
+              </h1>
+              <Badge variant="outline" className="font-mono text-xs font-semibold uppercase">
+                ID: #DRV-{driver.id.slice(0, 8).toUpperCase()}
+              </Badge>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Phone className="h-3 w-3 text-primary" /> {driver.phone}
+              </span>
+              {driver.email && (
+                <span className="flex items-center gap-1">
+                  • <Mail className="h-3 w-3 text-primary" /> {driver.email}
+                </span>
+              )}
+              {(cityName || countryName) && (
+                <span className="flex items-center gap-1">
+                  • <MapPin className="h-3 w-3 text-primary" /> {[cityName, stateName, countryName].filter(Boolean).join(", ")}
                 </span>
               )}
             </div>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {driver.phone} {driver.email ? `• ${driver.email}` : ""}
-            </p>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="inline-flex items-center text-xs text-amber-500 font-semibold bg-amber-500/10 px-2 py-0.5 rounded">
-                <Star className="h-3 w-3 mr-1 fill-amber-500" /> {driver.rating} ({driver.totalRatings} ratings • {driver.totalRides} rides)
+
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+              {driver.isOnline ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  Active - Online
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border">
+                  <span className="w-2 h-2 rounded-full bg-muted-foreground" />
+                  Offline
+                </span>
+              )}
+
+              <span
+                className={`inline-flex items-center px-3 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
+                  driver.approvalStatus === "approved"
+                    ? "bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20"
+                    : driver.approvalStatus === "rejected"
+                    ? "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20"
+                    : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                }`}
+              >
+                Approval: {driver.approvalStatus}
               </span>
+
+              {driver.isBlocked && (
+                <Badge variant="destructive" className="text-xs uppercase">
+                  Account Suspended
+                </Badge>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Status badges */}
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="text-right space-y-1">
-            <div className="text-xs text-muted-foreground">Approval Status</div>
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider inline-block ${
-                driver.approvalStatus === "approved"
-                  ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                  : driver.approvalStatus === "rejected"
-                  ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                  : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-              }`}
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {driver.registrationStatus !== "approved" && (
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              className="text-xs cursor-pointer gap-1.5 border-primary/40 text-primary hover:bg-primary/5 font-semibold"
             >
-              {driver.approvalStatus}
-            </span>
-          </div>
-
-          <div className="text-right space-y-1 pl-4 border-l border-border">
-            <div className="text-xs text-muted-foreground">Account Status</div>
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-semibold inline-block ${
-                driver.isBlocked
-                  ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                  : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-              }`}
-            >
-              {driver.isBlocked ? "Blocked" : "Active"}
-            </span>
-          </div>
+              <Link to={`/drivers/register?driverId=${driver.id}`}>
+                <FileText className="h-3.5 w-3.5" />
+                Resume Registration
+              </Link>
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsRequestDocsOpen(true)}
+            className="text-xs cursor-pointer gap-1.5"
+          >
+            <FilePlus2 className="h-3.5 w-3.5" />
+            Request Docs
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditingVehicle(null);
+              setIsAddVehicleOpen(true);
+            }}
+            className="text-xs cursor-pointer gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Vehicle
+          </Button>
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Personal Info */}
-        <Card className="border-border bg-card shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <User className="h-4 w-4 text-primary" /> Personal Information
-              </CardTitle>
-              <CardDescription>Contact details and identity information.</CardDescription>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsEditOpen(true)}
-              className="h-8 text-xs cursor-pointer"
-            >
-              <Edit className="h-3.5 w-3.5 mr-1" /> Edit
-            </Button>
+      {/* 4 Bento Summary KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {/* Bento 1: Personal & Demographic Info */}
+        <Card className="border-border bg-card shadow-sm flex flex-col justify-between">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+              <User className="h-4 w-4 text-primary" /> Personal Profile
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-xs text-muted-foreground block">Phone</span>
-                <span className="font-medium text-foreground">{driver.phone}</span>
-              </div>
-              <div>
-                <span className="text-xs text-muted-foreground block">Email</span>
-                <span className="font-medium text-foreground">{driver.email || "—"}</span>
-              </div>
+          <CardContent className="space-y-2 text-xs">
+            <div className="flex justify-between py-1 border-b border-border/40">
+              <span className="text-muted-foreground">Date of Birth</span>
+              <span className="font-medium text-foreground">{driver.dateOfBirth || "N/A"}</span>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-xs text-muted-foreground block">Date of Birth</span>
-                <span className="font-medium text-foreground">{driver.dateOfBirth || "—"}</span>
-              </div>
-              <div>
-                <span className="text-xs text-muted-foreground block">Gender</span>
-                <span className="font-medium text-foreground capitalize">{driver.gender || "—"}</span>
-              </div>
+            <div className="flex justify-between py-1 border-b border-border/40">
+              <span className="text-muted-foreground">Gender</span>
+              <span className="font-medium text-foreground capitalize">{driver.gender || "N/A"}</span>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-xs text-muted-foreground block">Preferred Language</span>
-                <span className="font-medium text-foreground uppercase">{driver.preferredLanguageCode || "—"}</span>
-              </div>
-              <div>
-                <span className="text-xs text-muted-foreground block">Referral Code</span>
-                <span className="font-medium text-foreground">{driver.referralCode || "—"}</span>
-              </div>
+            <div className="flex justify-between py-1 border-b border-border/40">
+              <span className="text-muted-foreground">Preferred Lang</span>
+              <span className="font-medium text-foreground uppercase">{driver.preferredLanguageCode || "EN"}</span>
             </div>
-            {driver.licenseNumber && (
-              <div>
-                <span className="text-xs text-muted-foreground block">License Number</span>
-                <span className="font-medium text-foreground">{driver.licenseNumber}</span>
-              </div>
-            )}
-            {driver.aadharNumber && (
-              <div>
-                <span className="text-xs text-muted-foreground block">National ID / Aadhar</span>
-                <span className="font-medium text-foreground">{driver.aadharNumber}</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Registration Status */}
-        <Card className="border-border bg-card shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ShieldCheck className="h-4 w-4 text-primary" /> Registration & Onboarding
-              </CardTitle>
-              <CardDescription>Onboarding progress and review decision history.</CardDescription>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsEditOpen(true)}
-              className="h-8 text-xs cursor-pointer"
-            >
-              <Edit className="h-3.5 w-3.5 mr-1" /> Edit
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-xs text-muted-foreground block">Registration Status</span>
-                <span className="font-medium text-foreground capitalize">{driver.registrationStatus.replace(/_/g, " ")}</span>
-              </div>
-              <div>
-                <span className="text-xs text-muted-foreground block">Registration Step</span>
-                <span className="font-medium text-foreground">Step {driver.registrationStep} of 12</span>
-              </div>
-            </div>
-            <div>
-              <span className="text-xs text-muted-foreground block">Approval Status</span>
-              <span className="font-medium text-foreground capitalize">
-                {driver.approvalStatus}
-              </span>
-            </div>
-            <div>
-              <span className="text-xs text-muted-foreground block">Decision Remarks / Notes</span>
+            <div className="flex justify-between py-1">
+              <span className="text-muted-foreground">Joined Platform</span>
               <span className="font-medium text-foreground">
-                {driver.approvalNote || "No note recorded."}
+                {driver.createdAt ? new Date(driver.createdAt).toLocaleDateString() : "—"}
               </span>
             </div>
-            {driver.approvedAt && (
-              <div>
-                <span className="text-xs text-muted-foreground block">Decided At</span>
-                <span className="font-medium text-foreground">
-                  {new Date(driver.approvedAt).toLocaleString()}
-                </span>
+          </CardContent>
+        </Card>
+
+        {/* Bento 2: Active Vehicle Details & Photo */}
+        <Card className="border-border bg-card shadow-sm flex flex-col justify-between overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+              <Car className="h-4 w-4 text-primary" /> Primary Vehicle
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2.5 text-xs">
+            {activeVehicle ? (
+              <>
+                {/* Vehicle photo preview with badge overlay */}
+                <div className="relative rounded-lg overflow-hidden h-24 bg-muted/40 border border-border flex items-center justify-center">
+                  {activeVehicle.image ? (
+                    <img
+                      src={activeVehicle.image}
+                      alt={activeVehicle.model}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                      <Car className="h-8 w-8 text-primary/40" />
+                      <span className="text-[10px]">No photo uploaded</span>
+                    </div>
+                  )}
+                  <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/70 text-white rounded text-[10px] font-semibold">
+                    {activeVehicle.color || "Standard"} • {activeVehicle.year}
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-foreground text-sm">
+                    {activeVehicle.brand ? `${activeVehicle.brand} ` : ""}{activeVehicle.model}
+                  </span>
+                  <span className="font-mono text-[11px] font-bold bg-muted px-2 py-0.5 rounded border border-border">
+                    {activeVehicle.registrationNumber}
+                  </span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Seats: {activeVehicle.seats || 4}</span>
+                  <span className="capitalize">{activeVehicle.fuelType || "Petrol"} • {activeVehicle.transmission || "Auto"}</span>
+                </div>
+              </>
+            ) : (
+              <div className="py-6 text-center text-muted-foreground">
+                <p>No vehicle assigned yet.</p>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Driving Location */}
-        <Card className="border-border bg-card shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <MapPin className="h-4 w-4 text-primary" /> Location & Territory
-              </CardTitle>
-              <CardDescription>Designated driving region and territory.</CardDescription>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsEditOpen(true)}
-              className="h-8 text-xs cursor-pointer"
-            >
-              <Edit className="h-3.5 w-3.5 mr-1" /> Edit
-            </Button>
+        {/* Bento 3: Performance & Telemetry */}
+        <Card className="border-border bg-card shadow-sm flex flex-col justify-between">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+              <TrendingUp className="h-4 w-4 text-primary" /> Performance & Trips
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div>
-              <span className="text-xs text-muted-foreground block">Country</span>
-              <span className="font-medium text-foreground">{countryName || "—"}</span>
+          <CardContent className="space-y-2 text-xs">
+            <div className="flex justify-between py-1 border-b border-border/40">
+              <span className="text-muted-foreground">Driver Rating</span>
+              <span className="font-semibold text-foreground flex items-center gap-1 text-amber-500">
+                <Star className="h-3 w-3 fill-amber-500" />
+                {performance?.rating || driver.rating || "5.0"} ({driver.totalRatings || 0} reviews)
+              </span>
             </div>
-            <div>
-              <span className="text-xs text-muted-foreground block">State</span>
-              <span className="font-medium text-foreground">{stateName || "—"}</span>
+            <div className="flex justify-between py-1 border-b border-border/40">
+              <span className="text-muted-foreground">Completed Rides</span>
+              <span className="font-semibold text-foreground">{performance?.completedTrips ?? driver.totalRides} trips</span>
             </div>
-            <div>
-              <span className="text-xs text-muted-foreground block">City</span>
-              <span className="font-medium text-foreground">{cityName || "—"}</span>
+            <div className="flex justify-between py-1 border-b border-border/40">
+              <span className="text-muted-foreground">Completion Rate</span>
+              <span className="font-semibold text-green-600 dark:text-green-400">
+                {performance?.completionRate ?? 100}%
+              </span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="text-muted-foreground">Acceptance Rate</span>
+              <span className="font-semibold text-primary">
+                {performance?.acceptanceRate ?? 98}%
+              </span>
             </div>
           </CardContent>
         </Card>
 
-        <WalletPanel ownerType="driver" ownerId={driverId} />
-
-        <BankDetailsPanel ownerType="driver" ownerId={driverId} />
-
-        {/* Registered Vehicles */}
-        <Card className="border-border bg-card shadow-sm md:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Truck className="h-4 w-4 text-primary" /> Registered Vehicles ({vehicles.length})
-              </CardTitle>
-              <CardDescription>
-                Vehicles assigned to this driver. You can add, edit, or activate vehicles.
-              </CardDescription>
-            </div>
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditingVehicle(null);
-                setIsAddVehicleOpen(true);
-              }}
-              className="h-8 text-xs cursor-pointer gap-1.5"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add Vehicle
-            </Button>
+        {/* Bento 4: Compliance & Banking */}
+        <Card className="border-border bg-card shadow-sm flex flex-col justify-between">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+              <ShieldCheck className="h-4 w-4 text-primary" /> Compliance & Banking
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            {vehicles.length === 0 ? (
-              <div className="text-center py-6 border border-dashed border-border rounded-lg">
-                <p className="text-sm text-muted-foreground">No vehicle registered yet.</p>
+          <CardContent className="space-y-2 text-xs">
+            <div className="flex justify-between py-1 border-b border-border/40">
+              <span className="text-muted-foreground">License Doc</span>
+              <span className="font-semibold text-foreground">
+                {driver.licenseNumber ? "Provided ✅" : "Pending ⚠️"}
+              </span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-border/40">
+              <span className="text-muted-foreground">National ID / Aadhar</span>
+              <span className="font-semibold text-foreground">
+                {driver.aadharNumber ? "Verified ✅" : "Pending ⚠️"}
+              </span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-border/40">
+              <span className="text-muted-foreground">Payout Bank Account</span>
+              <span className="font-semibold text-foreground">
+                {bankAccount ? `${bankAccount.bankName} (••••${bankAccount.accountNumber?.slice(-4)})` : "Not Configured"}
+              </span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="text-muted-foreground">Subscription Plan</span>
+              <span className="font-semibold text-primary capitalize">
+                {driver.subscriptionStatus || "Standard"}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Tabbed Details Section */}
+      <Tabs defaultValue="vehicles" className="w-full">
+        <TabsList className="grid grid-cols-5 w-full bg-muted/40 p-1 rounded-xl">
+          <TabsTrigger value="vehicles" className="text-xs sm:text-sm font-medium">
+            <Truck className="h-3.5 w-3.5 mr-1.5" />
+            Vehicles ({vehicles.length})
+          </TabsTrigger>
+          <TabsTrigger value="documents" className="text-xs sm:text-sm font-medium">
+            <FileText className="h-3.5 w-3.5 mr-1.5" />
+            Documents ({documents.length})
+          </TabsTrigger>
+          <TabsTrigger value="trips" className="text-xs sm:text-sm font-medium">
+            <Compass className="h-3.5 w-3.5 mr-1.5" />
+            Trips Log ({trips.length})
+          </TabsTrigger>
+          <TabsTrigger value="banking" className="text-xs sm:text-sm font-medium">
+            <Landmark className="h-3.5 w-3.5 mr-1.5" />
+            Bank & Payouts
+          </TabsTrigger>
+          <TabsTrigger value="subscriptions" className="text-xs sm:text-sm font-medium">
+            <DollarSign className="h-3.5 w-3.5 mr-1.5" />
+            Wallet & Plans
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Tab 1: Vehicles */}
+        <TabsContent value="vehicles" className="mt-4">
+          <Card className="border-border bg-card shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div>
+                <CardTitle className="text-base font-semibold">Registered Driver Vehicles</CardTitle>
+                <CardDescription>All vehicles linked to this driver with direct photo and status controls.</CardDescription>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingVehicle(null);
+                  setIsAddVehicleOpen(true);
+                }}
+                className="text-xs cursor-pointer gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add Vehicle
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {vehicles.length === 0 ? (
+                <div className="text-center py-10 border border-dashed border-border rounded-xl">
+                  <Car className="h-10 w-10 text-muted-foreground/50 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">No vehicles registered yet for this driver.</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setEditingVehicle(null);
+                      setIsAddVehicleOpen(true);
+                    }}
+                    className="mt-3 cursor-pointer text-xs"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Add Driver's First Vehicle
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {vehicles.map((vehicle) => (
+                    <div
+                      key={vehicle.id}
+                      className={`border rounded-xl p-4 space-y-3 text-xs transition-all ${
+                        vehicle.isActive
+                          ? "border-primary/50 bg-primary/5 shadow-xs"
+                          : "border-border bg-card"
+                      }`}
+                    >
+                      {/* Vehicle photo */}
+                      <div className="relative rounded-lg overflow-hidden h-36 bg-muted/40 border border-border flex items-center justify-center">
+                        {vehicle.image ? (
+                          <img
+                            src={vehicle.image}
+                            alt={vehicle.model}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <Car className="h-10 w-10 text-muted-foreground/30" />
+                        )}
+                        <span
+                          className={`absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase shadow-sm ${
+                            vehicle.isActive
+                              ? "bg-green-600 text-white"
+                              : "bg-black/60 text-white backdrop-blur-xs"
+                          }`}
+                        >
+                          {vehicle.isActive ? "Active Primary" : "Inactive"}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="font-bold text-foreground text-sm">
+                            {vehicle.brand ? `${vehicle.brand} ` : ""}{vehicle.model}
+                          </div>
+                          <div className="text-muted-foreground text-[11px]">
+                            {vehicle.color || "Standard Color"} • Year {vehicle.year}
+                          </div>
+                        </div>
+                        <span className="font-mono text-xs font-bold bg-muted px-2 py-1 rounded border border-border">
+                          {vehicle.registrationNumber}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 text-muted-foreground pt-1 border-t border-border/50">
+                        <span>Seats: {vehicle.seats || 4}</span>
+                        <span>• Fuel: {vehicle.fuelType || "Petrol"}</span>
+                        {vehicle.transmission && <span>• {vehicle.transmission}</span>}
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/50">
+                        {!vehicle.isActive && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleActivateVehicle(vehicle.id)}
+                            disabled={activateVehicleMutation.isPending}
+                            className="h-7 text-xs cursor-pointer text-green-600 border-green-600/30 hover:bg-green-50 dark:hover:bg-green-950/20"
+                          >
+                            <CheckCircle className="h-3 w-3 mr-1" /> Set Active
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditingVehicle(vehicle);
+                            setIsAddVehicleOpen(true);
+                          }}
+                          className="h-7 text-xs cursor-pointer"
+                        >
+                          <Edit className="h-3 w-3 mr-1" /> Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDeleteVehicle(vehicle.id)}
+                          disabled={deleteVehicleMutation.isPending}
+                          className="h-7 text-xs cursor-pointer text-red-600 border-red-600/30 hover:bg-red-50 dark:hover:bg-red-950/20"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 2: Documents */}
+        <TabsContent value="documents" className="mt-4">
+          <Card className="border-border bg-card shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div>
+                <CardTitle className="text-base font-semibold">Verification Documents</CardTitle>
+                <CardDescription>Verify legal identification, licenses, and permits with one-click administrative review.</CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsRequestDocsOpen(true)}
+                className="text-xs cursor-pointer gap-1.5"
+              >
+                <FilePlus2 className="h-3.5 w-3.5" /> Request Documents
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {isLoadingDocuments ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">Loading documents…</p>
+              ) : documents.length === 0 ? (
+                <div className="py-10 text-center text-muted-foreground border border-dashed border-border rounded-xl">
+                  <FileText className="h-10 w-10 text-muted-foreground/40 mx-auto mb-2" />
+                  <p>No documents uploaded yet for this driver.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="border border-border rounded-xl p-4 flex flex-wrap items-start justify-between gap-3 bg-card"
+                    >
+                      <div className="space-y-1.5 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-sm text-foreground">
+                            {formatDocCode(docTypeCodeMap.get(doc.documentTypeId) || "Document")}
+                          </span>
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${STATUS_STYLES[doc.status]}`}
+                          >
+                            {doc.status}
+                          </span>
+                        </div>
+                        {doc.documentNumber && (
+                          <div className="text-muted-foreground">Document #: {doc.documentNumber}</div>
+                        )}
+                        {doc.expiryDate && (
+                          <div className="text-muted-foreground">
+                            Expires: {new Date(doc.expiryDate).toLocaleDateString()}
+                          </div>
+                        )}
+                        {doc.status === "rejected" && doc.rejectionReason && (
+                          <div className="text-red-600 dark:text-red-400 font-medium">
+                            Rejection Reason: {doc.rejectionReason}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap gap-3 pt-1">
+                          {doc.frontViewUrl && (
+                            <a
+                              href={doc.frontViewUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary font-semibold hover:underline flex items-center gap-1"
+                            >
+                              <ExternalLink className="h-3 w-3" /> View Front
+                            </a>
+                          )}
+                          {doc.backViewUrl && (
+                            <a
+                              href={doc.backViewUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary font-semibold hover:underline flex items-center gap-1"
+                            >
+                              <ExternalLink className="h-3 w-3" /> View Back
+                            </a>
+                          )}
+                          {doc.pdfViewUrl && (
+                            <a
+                              href={doc.pdfViewUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary font-semibold hover:underline flex items-center gap-1"
+                            >
+                              <ExternalLink className="h-3 w-3" /> View PDF
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Document Action Controls */}
+                      <div className="flex items-center gap-2">
+                        {doc.status !== "approved" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleApproveDocument(doc)}
+                            disabled={verifyMutation.isPending}
+                            className="bg-green-600 hover:bg-green-700 text-white text-xs h-8 cursor-pointer"
+                          >
+                            <Check className="h-3.5 w-3.5 mr-1" /> Approve
+                          </Button>
+                        )}
+                        {doc.status !== "rejected" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenRejectDocument(doc)}
+                            disabled={verifyMutation.isPending}
+                            className="border-red-600 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 text-xs h-8 cursor-pointer"
+                          >
+                            <X className="h-3.5 w-3.5 mr-1" /> Reject
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 3: Trips Activity Log */}
+        <TabsContent value="trips" className="mt-4">
+          <Card className="border-border bg-card shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">Driver Ride Activity</CardTitle>
+              <CardDescription>Recent rides serviced by this driver with telemetry & fares.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {trips.length === 0 ? (
+                <div className="py-10 text-center text-muted-foreground border border-dashed border-border rounded-xl">
+                  <Compass className="h-10 w-10 text-muted-foreground/40 mx-auto mb-2" />
+                  <p>No rides logged yet for this driver.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="border-b border-border text-muted-foreground bg-muted/20 uppercase font-semibold">
+                      <tr>
+                        <th className="p-3">Ride ID</th>
+                        <th className="p-3">Pickup Address</th>
+                        <th className="p-3">Drop Address</th>
+                        <th className="p-3">Fare</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {trips.map((ride: any) => (
+                        <tr key={ride.id} className="hover:bg-muted/10">
+                          <td className="p-3 font-mono font-semibold text-foreground">
+                            #{ride.id.slice(0, 8)}
+                          </td>
+                          <td className="p-3 max-w-[200px] truncate text-foreground">
+                            {ride.pickupAddress || "N/A"}
+                          </td>
+                          <td className="p-3 max-w-[200px] truncate text-foreground">
+                            {ride.dropAddress || "N/A"}
+                          </td>
+                          <td className="p-3 font-semibold text-foreground">
+                            {ride.finalFareMinor ? `${ride.currencyCode || "$"} ${(ride.finalFareMinor / 100).toFixed(2)}` : "—"}
+                          </td>
+                          <td className="p-3">
+                            <span className="capitalize px-2 py-0.5 rounded-full text-[10px] font-semibold bg-muted border border-border">
+                              {ride.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-muted-foreground">
+                            {ride.requestedAt ? new Date(ride.requestedAt).toLocaleString() : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 4: Banking & Payouts */}
+        <TabsContent value="banking" className="mt-4">
+          <BankDetailsPanel ownerType="driver" ownerId={driverId} />
+        </TabsContent>
+
+        {/* Tab 5: Subscriptions & Wallets */}
+        <TabsContent value="subscriptions" className="mt-4 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <WalletPanel ownerType="driver" ownerId={driverId} />
+            <DriverSubscriptionPanel driverId={driverId} />
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* Rejection Document Dialog */}
+      {rejectingDoc && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full shadow-xl space-y-4">
+            <h3 className="text-lg font-bold text-foreground">Reject Document</h3>
+            <p className="text-xs text-muted-foreground">
+              Please provide a clear reason for rejecting this document so the driver can upload a valid replacement.
+            </p>
+            <form onSubmit={handleRejectDocumentSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold block mb-1.5">Reason for Rejection *</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={documentRejectionReason}
+                  onChange={(e) => setDocumentRejectionReason(e.target.value)}
+                  placeholder="e.g. Image blurry / expired license / registration number mismatch"
+                  className="w-full text-xs p-2.5 rounded-lg border border-border bg-background"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
                 <Button
+                  type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setEditingVehicle(null);
-                    setIsAddVehicleOpen(true);
-                  }}
-                  className="mt-3 cursor-pointer text-xs"
+                  onClick={() => setRejectingDoc(null)}
                 >
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Add Driver's First Vehicle
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="destructive"
+                  disabled={verifyMutation.isPending}
+                >
+                  Confirm Rejection
                 </Button>
               </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2">
-                {vehicles.map((vehicle) => (
-                  <div
-                    key={vehicle.id}
-                    className={`border rounded-lg p-4 space-y-3 text-sm transition-all ${
-                      vehicle.isActive
-                        ? "border-primary/40 bg-primary/5 shadow-xs"
-                        : "border-border bg-card"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-foreground text-base">
-                        {vehicle.registrationNumber}
-                      </span>
-                      <span
-                        className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                          vehicle.isActive
-                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                            : "bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-400"
-                        }`}
-                      >
-                        {vehicle.isActive ? "Primary Active" : "Inactive"}
-                      </span>
-                    </div>
+            </form>
+          </div>
+        </div>
+      )}
 
-                    <div className="text-muted-foreground">
-                      {vehicle.brand ? `${vehicle.brand} ` : ""}
-                      <span className="font-semibold text-foreground">{vehicle.model}</span> ({vehicle.year})
-                      {vehicle.color ? ` • Color: ${vehicle.color}` : ""}
-                    </div>
-
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                      {vehicle.seats && <span>{vehicle.seats} seats</span>}
-                      {vehicle.fuelType && <span className="capitalize">{vehicle.fuelType}</span>}
-                      {vehicle.transmission && (
-                        <span className="capitalize">{vehicle.transmission}</span>
-                      )}
-                      {vehicle.vin && <span>VIN: {vehicle.vin}</span>}
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
-                      {!vehicle.isActive && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleActivateVehicle(vehicle.id)}
-                          disabled={activateVehicleMutation.isPending}
-                          className="h-7 text-xs cursor-pointer text-green-600 border-green-600/30 hover:bg-green-50 dark:hover:bg-green-950/20"
-                        >
-                          <CheckCircle className="h-3 w-3 mr-1" /> Set Active
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setEditingVehicle(vehicle);
-                          setIsAddVehicleOpen(true);
-                        }}
-                        className="h-7 text-xs cursor-pointer"
-                      >
-                        <Edit className="h-3 w-3 mr-1" /> Edit
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteVehicle(vehicle.id)}
-                        disabled={deleteVehicleMutation.isPending}
-                        className="h-7 text-xs cursor-pointer text-red-600 border-red-600/30 hover:bg-red-50 dark:hover:bg-red-950/20"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <DriverSubscriptionPanel driverId={driverId} />
-
-        {/* Uploaded Documents */}
-        <Card className="border-border bg-card shadow-sm md:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <FileText className="h-4 w-4 text-primary" /> Uploaded Documents ({documents.length})
-              </CardTitle>
-              <CardDescription>Documents submitted for administrative review and verification.</CardDescription>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsRequestDocsOpen(true)}
-              className="h-8 text-xs cursor-pointer gap-1.5"
-            >
-              <FilePlus2 className="h-3.5 w-3.5" /> Request Documents
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {isLoadingDocuments ? (
-              <p className="text-sm text-muted-foreground">Loading documents…</p>
-            ) : documents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No documents uploaded yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {documents.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="border border-border rounded-lg p-4 flex flex-wrap items-start justify-between gap-3 bg-card"
-                  >
-                    <div className="space-y-1.5 text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-foreground">
-                          {formatDocCode(docTypeCodeMap.get(doc.documentTypeId) || "Document")}
-                        </span>
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${STATUS_STYLES[doc.status]}`}
-                        >
-                          {doc.status}
-                        </span>
-                      </div>
-                      {doc.documentNumber && (
-                        <div className="text-muted-foreground">Doc #: {doc.documentNumber}</div>
-                      )}
-                      {doc.expiryDate && (
-                        <div className="text-muted-foreground">
-                          Expires: {new Date(doc.expiryDate).toLocaleDateString()}
-                        </div>
-                      )}
-                      {doc.status === "rejected" && doc.rejectionReason && (
-                        <div className="text-red-600 dark:text-red-400 text-xs">
-                          Reason: {doc.rejectionReason}
-                        </div>
-                      )}
-                      <div className="flex flex-wrap gap-3 pt-1">
-                        {doc.frontViewUrl && (
-                          <a
-                            href={doc.frontViewUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-primary text-xs font-semibold hover:underline flex items-center gap-1"
-                          >
-                            <ExternalLink className="h-3 w-3" /> Front View
-                          </a>
-                        )}
-                        {doc.backViewUrl && (
-                          <a
-                            href={doc.backViewUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-primary text-xs font-semibold hover:underline flex items-center gap-1"
-                          >
-                            <ExternalLink className="h-3 w-3" /> Back View
-                          </a>
-                        )}
-                        {doc.pdfViewUrl && (
-                          <a
-                            href={doc.pdfViewUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-primary text-xs font-semibold hover:underline flex items-center gap-1"
-                          >
-                            <ExternalLink className="h-3 w-3" /> PDF Document
-                          </a>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Verification actions */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      {doc.status !== "approved" && (
-                        <Button
-                          size="sm"
-                          onClick={() => handleApproveDocument(doc)}
-                          disabled={verifyMutation.isPending}
-                          className="bg-green-600 hover:bg-green-700 text-white cursor-pointer h-8 text-xs"
-                        >
-                          <Check className="h-3.5 w-3.5 mr-1" /> Approve
-                        </Button>
-                      )}
-                      {doc.status !== "rejected" && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleOpenRejectDocument(doc)}
-                          className="border-red-600 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 cursor-pointer h-8 text-xs"
-                        >
-                          <X className="h-3.5 w-3.5 mr-1" /> Reject
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Bottom Sticky Action Bar */}
-      <div className="flex flex-wrap gap-2 justify-end pt-4 border-t border-border">
-        <Button
-          variant="outline"
-          onClick={() => setIsEditOpen(true)}
-          className="cursor-pointer"
-        >
-          <Edit className="h-4 w-4 mr-1.5 text-primary" />
-          Edit Driver Details
-        </Button>
-
-        <Button
-          variant="outline"
-          onClick={() => setIsRequestDocsOpen(true)}
-          className="cursor-pointer"
-        >
-          <FilePlus2 className="h-4 w-4 mr-1.5" />
-          Request More Documents
-        </Button>
-
-        {driver.approvalStatus === "rejected" && (
-          <>
-            <Button
-              onClick={() => setIsResetPendingOpen(true)}
-              className="bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
-            >
-              <RotateCcw className="h-4 w-4 mr-1.5" />
-              Change to Pending
-            </Button>
-            <Button
-              onClick={() => setIsApproveOpen(true)}
-              className="bg-green-600 hover:bg-green-700 text-white cursor-pointer"
-            >
-              <Check className="h-4 w-4 mr-1.5" />
-              Approve Driver
-            </Button>
-          </>
-        )}
-
-        {driver.approvalStatus === "approved" && (
-          <>
-            <Button
-              onClick={() => setIsResetPendingOpen(true)}
-              className="bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
-            >
-              <RotateCcw className="h-4 w-4 mr-1.5" />
-              Change to Pending
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setIsRejectOpen(true)}
-              className="border-red-600 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 cursor-pointer"
-            >
-              <X className="h-4 w-4 mr-1.5" />
-              Reject Application
-            </Button>
-          </>
-        )}
-
-        {driver.approvalStatus === "pending" && (
-          <>
-            <Button
-              variant="outline"
-              onClick={() => setIsRejectOpen(true)}
-              className="border-red-600 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 cursor-pointer"
-            >
-              <X className="h-4 w-4 mr-1.5" />
-              Reject Application
-            </Button>
-            <Button
-              onClick={() => setIsApproveOpen(true)}
-              className="bg-green-600 hover:bg-green-700 text-white cursor-pointer"
-            >
-              <Check className="h-4 w-4 mr-1.5" />
-              Approve Partner
-            </Button>
-          </>
-        )}
-      </div>
-
-      {/* Dialogs */}
+      {/* Admin Action Modals */}
       <ApproveDriverDialog
         open={isApproveOpen}
         onOpenChange={setIsApproveOpen}
@@ -843,6 +985,7 @@ export default function DriverDetail() {
         onSubmit={handleApproveSubmit}
         isPending={approveMutation.isPending}
       />
+
       <RejectDriverDialog
         open={isRejectOpen}
         onOpenChange={setIsRejectOpen}
@@ -851,12 +994,13 @@ export default function DriverDetail() {
         onSubmit={handleRejectSubmit}
         isPending={rejectMutation.isPending}
       />
+
       <ResetToPendingDialog
         open={isResetPendingOpen}
         onOpenChange={setIsResetPendingOpen}
         driverId={driverId}
-        driverName={driver.name}
       />
+
       <RequestDocumentsDialog
         open={isRequestDocsOpen}
         onOpenChange={setIsRequestDocsOpen}
@@ -867,19 +1011,13 @@ export default function DriverDetail() {
         onSubmit={handleRequestDocsSubmit}
         isPending={requestDocsMutation.isPending}
       />
-      <RejectDocumentDialog
-        open={!!rejectingDoc}
-        onOpenChange={(open) => { if (!open) setRejectingDoc(null); }}
-        reason={documentRejectionReason}
-        setReason={setDocumentRejectionReason}
-        onSubmit={handleRejectDocumentSubmit}
-        isPending={verifyMutation.isPending}
-      />
+
       <EditDriverDialog
         open={isEditOpen}
         onOpenChange={setIsEditOpen}
         driver={driver}
       />
+
       <AddEditVehicleDialog
         open={isAddVehicleOpen}
         onOpenChange={setIsAddVehicleOpen}

@@ -10,6 +10,64 @@ interface RecentActivityCardProps {
   isLoading?: boolean;
 }
 
+function formatDisplayTimeAgo(timeAgoStr?: string, requestedAt?: string | Date): string {
+  if (timeAgoStr === "Active" || timeAgoStr === "Just now") {
+    return timeAgoStr;
+  }
+
+  // If requestedAt is present, compute precise human-readable time ago
+  if (requestedAt) {
+    const diffMs = Date.now() - new Date(requestedAt).getTime();
+    if (!isNaN(diffMs) && diffMs >= 0) {
+      const totalMin = Math.floor(diffMs / 60000);
+      if (totalMin < 1) return "Just now";
+      if (totalMin < 60) return `${totalMin} ${totalMin === 1 ? "min" : "mins"} ago`;
+
+      const totalHours = Math.floor(totalMin / 60);
+      const remainingMins = totalMin % 60;
+
+      if (totalHours < 24) {
+        if (remainingMins === 0) {
+          return `${totalHours} ${totalHours === 1 ? "hr" : "hrs"} ago`;
+        }
+        return `${totalHours} ${totalHours === 1 ? "hr" : "hrs"} ${remainingMins} min ago`;
+      }
+
+      const days = Math.floor(totalHours / 24);
+      const remainingHours = totalHours % 24;
+      if (days < 7) {
+        if (remainingHours === 0) {
+          return `${days} ${days === 1 ? "day" : "days"} ago`;
+        }
+        return `${days} ${days === 1 ? "day" : "days"} ${remainingHours} hr ago`;
+      }
+
+      const weeks = Math.floor(days / 7);
+      return `${weeks} ${weeks === 1 ? "week" : "weeks"} ago`;
+    }
+  }
+
+  // Fallback parsing if only string like "123 mins ago" is given
+  if (timeAgoStr) {
+    const match = timeAgoStr.match(/^(\d+)\s*mins?\s*ago$/i);
+    if (match) {
+      const totalMin = parseInt(match[1], 10);
+      if (totalMin < 60) return `${totalMin} mins ago`;
+      const hours = Math.floor(totalMin / 60);
+      const mins = totalMin % 60;
+      if (hours < 24) {
+        return mins > 0 ? `${hours} hr ${mins} min ago` : `${hours} hrs ago`;
+      }
+      const days = Math.floor(hours / 24);
+      const remHours = hours % 24;
+      return remHours > 0 ? `${days} day ${remHours} hr ago` : `${days} days ago`;
+    }
+    return timeAgoStr;
+  }
+
+  return "Just now";
+}
+
 export function RecentActivityCard({ items = [] }: RecentActivityCardProps) {
   return (
     <Card className="border-border bg-card shadow-sm flex flex-col h-full">
@@ -40,6 +98,7 @@ export function RecentActivityCard({ items = [] }: RecentActivityCardProps) {
               const isProgress = row.status === "started" || row.status === "arriving" || row.status === "accepted";
               const isCompleted = row.status === "completed";
               const isCancelled = row.status === "cancelled";
+              const displayTime = isProgress ? "Active" : formatDisplayTimeAgo(row.timeAgo, row.requestedAt);
 
               const riderInitials = (row.riderName || "R")
                 .split(" ")
@@ -65,7 +124,7 @@ export function RecentActivityCard({ items = [] }: RecentActivityCardProps) {
                           {row.riderName}
                         </p>
                         <p className="text-[11px] text-muted-foreground truncate">
-                          {row.vehicleTypeName} • {row.timeAgo}
+                          {row.vehicleTypeName} • {displayTime}
                         </p>
                       </div>
                     </div>

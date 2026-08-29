@@ -16,6 +16,38 @@ import {
 } from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
 
+function formatTimeAgo(dateOrTimestamp) {
+  if (!dateOrTimestamp) return 'Just now';
+  const diffMs = Date.now() - new Date(dateOrTimestamp).getTime();
+  if (diffMs < 0 || isNaN(diffMs)) return 'Just now';
+
+  const totalMin = Math.floor(diffMs / 60000);
+  if (totalMin < 1) return 'Just now';
+  if (totalMin < 60) return `${totalMin} ${totalMin === 1 ? 'min' : 'mins'} ago`;
+
+  const totalHours = Math.floor(totalMin / 60);
+  const remainingMins = totalMin % 60;
+
+  if (totalHours < 24) {
+    if (remainingMins === 0) {
+      return `${totalHours} ${totalHours === 1 ? 'hr' : 'hrs'} ago`;
+    }
+    return `${totalHours} ${totalHours === 1 ? 'hr' : 'hrs'} ${remainingMins} min ago`;
+  }
+
+  const days = Math.floor(totalHours / 24);
+  const remainingHours = totalHours % 24;
+  if (days < 7) {
+    if (remainingHours === 0) {
+      return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+    }
+    return `${days} ${days === 1 ? 'day' : 'days'} ${remainingHours} hr ago`;
+  }
+
+  const weeks = Math.floor(days / 7);
+  return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
+}
+
 export async function getDashboardStats() {
   const now = new Date();
   const todayStart = new Date(now);
@@ -67,29 +99,47 @@ export async function getDashboardStats() {
 
   const cWeekRides = Number(currentWeekRides?.total || 0);
   const pWeekRides = Number(priorWeekRides?.total || 0);
-  const ridesGrowth = pWeekRides > 0 ? Math.round(((cWeekRides - pWeekRides) / pWeekRides) * 100) : (cWeekRides > 0 ? 12 : 0);
+  const ridesGrowth = pWeekRides > 0
+    ? Math.round(((cWeekRides - pWeekRides) / pWeekRides) * 100)
+    : (cWeekRides > 0 ? 100 : 0);
 
-  // Revenue (Gross from captured payments or completed rides)
+  // Driver Registrations Growth
+  const [currentWeekDrivers] = await db.select({ total: count() }).from(drivers)
+    .where(gte(drivers.createdAt, sevenDaysAgo));
+  const [priorWeekDrivers] = await db.select({ total: count() }).from(drivers)
+    .where(and(gte(drivers.createdAt, fourteenDaysAgo), lt(drivers.createdAt, sevenDaysAgo)));
+  const cDrivers = Number(currentWeekDrivers?.total || 0);
+  const pDrivers = Number(priorWeekDrivers?.total || 0);
+  const driversGrowth = pDrivers > 0
+    ? Math.round(((cDrivers - pDrivers) / pDrivers) * 100)
+    : (cDrivers > 0 ? 100 : 0);
+
+  // Revenue (Gross from captured payments)
   const revenueResult = await db.execute(sql`
     SELECT
       COALESCE(SUM(amount_minor) FILTER (WHERE created_at >= ${sevenDaysAgo}), 0)::bigint AS current_week_rev,
       COALESCE(SUM(amount_minor) FILTER (WHERE created_at >= ${fourteenDaysAgo} AND created_at < ${sevenDaysAgo}), 0)::bigint AS prior_week_rev,
-      COALESCE(SUM(amount_minor), 0)::bigint AS total_rev
+      COALESCE(SUM(amount_minor), 0)::bigint AS total_rev,
+      COALESCE(currency_code, 'USD') AS currency_code
     FROM payments
     WHERE status = 'captured'
+    GROUP BY currency_code
+    LIMIT 1
   `);
   const revRow = (revenueResult.rows ?? revenueResult)[0] || {};
   const currentWeekRevMinor = Number(revRow.current_week_rev || 0);
   const priorWeekRevMinor = Number(revRow.prior_week_rev || 0);
+  const currencyCode = revRow.currency_code || 'USD';
   const revenueGrowth = priorWeekRevMinor > 0
     ? Math.round(((currentWeekRevMinor - priorWeekRevMinor) / priorWeekRevMinor) * 100)
-    : (currentWeekRevMinor > 0 ? 8 : 0);
+    : (currentWeekRevMinor > 0 ? 100 : 0);
 
   // Average Driver Rating
   const [ratingResult] = await db.select({
-    avgRating: sql`COALESCE(AVG(NULLIF(rating, 0)), 4.85)`,
+    avgRating: sql`COALESCE(AVG(NULLIF(rating, 0)), 0)`,
   }).from(drivers).where(eq(drivers.approvalStatus, 'approved'));
-  const avgRating = Number(Number(ratingResult?.avgRating || 4.85).toFixed(1));
+  const rawAvg = Number(ratingResult?.avgRating || 0);
+  const avgRating = rawAvg > 0 ? Number(rawAvg.toFixed(1)) : 0;
 
   // Fleet Health (Inspections & Documents)
   const [passedInspections] = await db.select({ total: count() }).from(vehicleInspections)
@@ -97,7 +147,7 @@ export async function getDashboardStats() {
   const [totalInspections] = await db.select({ total: count() }).from(vehicleInspections);
   const totalInsp = Number(totalInspections?.total || 0);
   const passedInsp = Number(passedInspections?.total || 0);
-  const inspectionOptimalPct = totalInsp > 0 ? Math.round((passedInsp / totalInsp) * 100) : 94;
+  const inspectionOptimalPct = totalInsp > 0 ? Math.round((passedInsp / totalInsp) * 100) : (totalDriversCount > 0 ? 100 : 0);
 
   const [activeAlertsCount] = await db.select({ total: count() }).from(sosAlerts)
     .where(eq(sosAlerts.status, 'triggered'));
@@ -115,19 +165,19 @@ export async function getDashboardStats() {
       },
       activeDrivers: {
         value: onlineCount,
-        growthPct: 4,
+        growthPct: driversGrowth,
         growthLabel: 'from last week',
       },
       weeklyEarnings: {
-        valueMinor: currentWeekRevMinor > 0 ? currentWeekRevMinor : 1420000,
-        currencyCode: 'USD',
-        growthPct: revenueGrowth > 0 ? revenueGrowth : 8,
+        valueMinor: currentWeekRevMinor,
+        currencyCode,
+        growthPct: revenueGrowth,
         growthLabel: 'from last week',
       },
       rating: {
         value: avgRating,
         scale: 5,
-        trendLabel: 'Stable',
+        trendLabel: avgRating > 0 ? 'Verified' : 'No ratings yet',
       },
     },
     fleetStatus: {
@@ -145,8 +195,8 @@ export async function getDashboardStats() {
       completionRate,
     },
     fleetHealth: {
-      batteryOptimalPct: 94,
-      tireNormalPct: 98,
+      batteryOptimalPct: onlineCount > 0 ? 100 : 0,
+      tireNormalPct: onlineCount > 0 ? 100 : 0,
       inspectionOptimalPct,
       activeAlerts: Number(activeAlertsCount?.total || 0),
     },
@@ -193,7 +243,7 @@ export async function getDispatchQueue(limit = 10) {
         estimatedFareMinor: r.estimated_fare_minor || 0,
         currencyCode: r.currency_code || 'USD',
         status: r.status,
-        waitingMinutes: Math.max(1, Number(r.waiting_minutes || 1)),
+        waitingMinutes: Math.max(0, Number(r.waiting_minutes || 0)),
         etaMinutes: Math.max(1, Number(r.waiting_minutes || 1)),
         riderName: r.rider_name || 'Rider',
       }));
@@ -202,50 +252,7 @@ export async function getDispatchQueue(limit = 10) {
     console.error('getDispatchQueue query error:', err);
   }
 
-  return [
-    {
-      id: 'mock-1',
-      pickupAddress: 'Airport Terminal B',
-      dropAddress: 'Financial District Downtown',
-      vehicleTypeName: 'XL',
-      vehicleCategory: 'SUV',
-      passengerCount: 3,
-      estimatedFareMinor: 4500,
-      currencyCode: 'USD',
-      status: 'searching',
-      waitingMinutes: 12,
-      etaMinutes: 12,
-      riderName: 'Michael Chang',
-    },
-    {
-      id: 'mock-2',
-      pickupAddress: 'Financial District',
-      dropAddress: 'North Beach Pier',
-      vehicleTypeName: 'Economy',
-      vehicleCategory: 'Sedan',
-      passengerCount: 1,
-      estimatedFareMinor: 1850,
-      currencyCode: 'USD',
-      status: 'assigning',
-      waitingMinutes: 4,
-      etaMinutes: 4,
-      riderName: 'Sarah Jenkins',
-    },
-    {
-      id: 'mock-3',
-      pickupAddress: 'Mission District 24th St',
-      dropAddress: 'SOMA Tech Hub',
-      vehicleTypeName: 'Comfort',
-      vehicleCategory: 'Premium Sedan',
-      passengerCount: 2,
-      estimatedFareMinor: 2400,
-      currencyCode: 'USD',
-      status: 'searching',
-      waitingMinutes: 7,
-      etaMinutes: 7,
-      riderName: 'David Lee',
-    },
-  ];
+  return [];
 }
 
 export async function getLiveMonitoringAlerts() {
@@ -310,28 +317,7 @@ export async function getLiveMonitoringAlerts() {
     });
   }
 
-  if (alerts.length === 0) {
-    alerts.push(
-      {
-        id: 'alert-dev-1',
-        type: 'deviation',
-        title: 'Driver Off Route',
-        message: 'Ride #4492 deviated significantly from planned route.',
-        severity: 'warning',
-        createdAt: new Date(Date.now() - 3 * 60 * 1000),
-      },
-      {
-        id: 'alert-surge-1',
-        type: 'surge',
-        title: 'High Demand Zone',
-        message: 'Surge pricing active downtown (1.4x multiplier).',
-        severity: 'info',
-        createdAt: new Date(Date.now() - 8 * 60 * 1000),
-      }
-    );
-  }
-
-  let eventLogs = recentLogs.map((l) => {
+  const eventLogs = recentLogs.map((l) => {
     const timeStr = new Date(l.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     let label = `Ride #${String(l.rideId).slice(0, 6)} changed to ${l.toStatus}`;
     let level = 'info';
@@ -359,19 +345,6 @@ export async function getLiveMonitoringAlerts() {
     };
   });
 
-  if (eventLogs.length === 0) {
-    const baseTime = Date.now();
-    eventLogs = [
-      { id: 'ev-1', time: '10:42', text: 'Ride #123 started', level: 'primary', timestamp: new Date(baseTime - 1 * 60000) },
-      { id: 'ev-2', time: '10:41', text: 'Driver Sarah Williams online', level: 'primary', timestamp: new Date(baseTime - 2 * 60000) },
-      { id: 'ev-3', time: '10:39', text: 'Ride #119 completed', level: 'success', timestamp: new Date(baseTime - 4 * 60000) },
-      { id: 'ev-4', time: '10:37', text: 'New request in Downtown Zone', level: 'info', timestamp: new Date(baseTime - 6 * 60000) },
-      { id: 'ev-5', time: '10:35', text: 'Driver Mike Zhang offline (shift ended)', level: 'neutral', timestamp: new Date(baseTime - 8 * 60000) },
-      { id: 'ev-6', time: '10:32', text: 'Ride #122 started', level: 'primary', timestamp: new Date(baseTime - 11 * 60000) },
-      { id: 'ev-7', time: '10:30', text: 'Ride #121 assigned', level: 'primary', timestamp: new Date(baseTime - 13 * 60000) },
-    ];
-  }
-
   return {
     alerts,
     eventLogs,
@@ -386,49 +359,43 @@ export async function getSupplyDemandAnalytics() {
     multiplier: zones.multiplier,
   }).from(zones).where(eq(zones.isActive, true)).limit(6);
 
-  const zoneList = activeZones.length > 0 ? activeZones : [
-    { id: 'z1', name: 'Downtown Central', type: 'city', multiplier: '1.20' },
-    { id: 'z2', name: 'Airport Corridor', type: 'airport', multiplier: '1.00' },
-    { id: 'z3', name: 'Financial District', type: 'metro', multiplier: '1.40' },
-    { id: 'z4', name: 'Suburban North', type: 'suburb', multiplier: '1.00' },
-  ];
-
   const onlineDriversCount = (await db.select({ total: count() }).from(drivers).where(eq(drivers.isOnline, true)))[0]?.total || 0;
   const activeRidesCount = (await db.select({ total: count() }).from(rides).where(inArray(rides.status, ['searching', 'accepted', 'arriving', 'started'])))[0]?.total || 0;
 
-  const zonesAnalytics = zoneList.map((z, idx) => {
-    let supplyPct = 50;
-    let demandPct = 50;
-    let gapLabel = 'Balanced';
-    let isSurplus = false;
+  const totalOnline = Number(onlineDriversCount);
+  const totalActiveRides = Number(activeRidesCount);
 
-    if (idx === 0) {
-      supplyPct = 45; demandPct = 55; gapLabel = '+10% Gap';
-    } else if (idx === 1) {
-      supplyPct = 70; demandPct = 30; gapLabel = 'Surplus'; isSurplus = true;
-    } else if (idx === 2) {
-      supplyPct = 35; demandPct = 65; gapLabel = '+30% Gap';
-    } else {
-      supplyPct = 52; demandPct = 48; gapLabel = 'Balanced'; isSurplus = true;
-    }
+  let marketEquilibriumScore = 100;
+  if (totalOnline > 0 || totalActiveRides > 0) {
+    const totalVolume = totalOnline + totalActiveRides;
+    const diff = Math.abs(totalOnline - totalActiveRides);
+    marketEquilibriumScore = Math.max(10, Math.round(100 - (diff / totalVolume) * 100));
+  }
+
+  const zonesAnalytics = activeZones.map((z) => {
+    const isSurplus = totalOnline >= totalActiveRides;
+    const supplyPct = totalOnline + totalActiveRides > 0 ? Math.round((totalOnline / (totalOnline + totalActiveRides)) * 100) : 50;
+    const demandPct = 100 - supplyPct;
 
     return {
       zoneId: z.id,
       zoneName: z.name,
       supplyPct,
       demandPct,
-      gapLabel,
+      gapLabel: isSurplus ? 'Surplus' : 'Deficit',
       isSurplus,
       multiplier: Number(z.multiplier || 1.0),
     };
   });
 
   return {
-    marketEquilibriumScore: 88,
-    statusLabel: 'Balanced',
-    summaryMessage: 'System is currently operating at high efficiency. 3 zones require immediate rebalancing.',
-    onlineDriversCount: Number(onlineDriversCount),
-    activeRidesCount: Number(activeRidesCount),
+    marketEquilibriumScore,
+    statusLabel: marketEquilibriumScore >= 75 ? 'Balanced' : 'Attention Required',
+    summaryMessage: activeZones.length > 0
+      ? `System is operating across ${activeZones.length} active service zones with ${totalOnline} online drivers.`
+      : 'No active zones defined in the system yet.',
+    onlineDriversCount: totalOnline,
+    activeRidesCount: totalActiveRides,
     zones: zonesAnalytics,
   };
 }
@@ -456,37 +423,23 @@ export async function getEarningsTrend(timeframe = 'week') {
   `);
 
   const rows = result.rows ?? result;
-
-  if (!rows || rows.length === 0) {
-    const daysArr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const sampleRevenue = [1800, 2400, 1600, 3200, 2900, 3800, 2100];
-    const sampleRides = [120, 160, 110, 210, 195, 260, 140];
-
-    return daysArr.map((d, i) => ({
-      date: `2026-08-${23 + i}`,
-      dayName: d,
-      completedCount: sampleRides[i],
-      cancelledCount: Math.round(sampleRides[i] * 0.05),
-      totalRides: Math.round(sampleRides[i] * 1.05),
-      revenueMinor: sampleRevenue[i] * 100,
-      revenueFormatted: `$${sampleRevenue[i].toLocaleString()}`,
-      currencyCode: 'USD',
-    }));
+  if (rows && rows.length > 0) {
+    return rows.map((r) => {
+      const rev = Number(r.revenue_minor || 0) / 100;
+      return {
+        date: r.date,
+        dayName: r.day_name,
+        completedCount: Number(r.completed_count || 0),
+        cancelledCount: Number(r.cancelled_count || 0),
+        totalRides: Number(r.total_rides || 0),
+        revenueMinor: Number(r.revenue_minor || 0),
+        revenueFormatted: `$${rev.toFixed(0)}`,
+        currencyCode: 'USD',
+      };
+    });
   }
 
-  return rows.map((r) => {
-    const rev = Number(r.revenue_minor || 0) / 100;
-    return {
-      date: r.date,
-      dayName: r.day_name,
-      completedCount: Number(r.completed_count || 0),
-      cancelledCount: Number(r.cancelled_count || 0),
-      totalRides: Number(r.total_rides || 0),
-      revenueMinor: Number(r.revenue_minor || 0),
-      revenueFormatted: `$${rev.toFixed(0)}`,
-      currencyCode: 'USD',
-    };
-  });
+  return [];
 }
 
 export async function getRecentActivity(limit = 10) {
@@ -518,8 +471,7 @@ export async function getRecentActivity(limit = 10) {
     const rows = result.rows ?? result;
     if (rows && rows.length > 0) {
       return rows.map((r) => {
-        const elapsedMin = Math.round((Date.now() - new Date(r.requested_at).getTime()) / 60000);
-        const timeAgo = r.status === 'started' || r.status === 'arriving' ? 'Active' : `${elapsedMin} mins ago`;
+        const timeAgo = r.status === 'started' || r.status === 'arriving' ? 'Active' : formatTimeAgo(r.requested_at);
         const fare = r.final_fare_minor || r.estimated_fare_minor || 0;
 
         return {
@@ -541,73 +493,7 @@ export async function getRecentActivity(limit = 10) {
     console.error('getRecentActivity query error:', err);
   }
 
-  return [
-    {
-      id: 'r-1',
-      riderName: 'Alex Johnson',
-      driverName: 'James Carter',
-      vehicleTypeName: 'Economy',
-      pickupAddress: 'Downtown Mall',
-      dropAddress: 'Westside Apartments',
-      fareMinor: 1450,
-      currencyCode: 'USD',
-      status: 'completed',
-      timeAgo: '2 mins ago',
-      requestedAt: new Date(Date.now() - 2 * 60000),
-    },
-    {
-      id: 'r-2',
-      riderName: 'Sarah Williams',
-      driverName: 'Elena Rostova',
-      vehicleTypeName: 'XL',
-      pickupAddress: 'Grand Central',
-      dropAddress: 'Airport Terminal 2',
-      fareMinor: 4200,
-      currencyCode: 'USD',
-      status: 'started',
-      timeAgo: 'Active',
-      requestedAt: new Date(Date.now() - 10 * 60000),
-    },
-    {
-      id: 'r-3',
-      riderName: 'Michael Chen',
-      driverName: 'David Miller',
-      vehicleTypeName: 'Lux',
-      pickupAddress: 'Hilton Hotel',
-      dropAddress: 'Tech Convention Center',
-      fareMinor: 3800,
-      currencyCode: 'USD',
-      status: 'completed',
-      timeAgo: '15 mins ago',
-      requestedAt: new Date(Date.now() - 15 * 60000),
-    },
-    {
-      id: 'r-4',
-      riderName: 'Emily Davis',
-      driverName: null,
-      vehicleTypeName: 'Economy',
-      pickupAddress: 'North Station',
-      dropAddress: 'City Hospital',
-      fareMinor: 1200,
-      currencyCode: 'USD',
-      status: 'cancelled',
-      timeAgo: '32 mins ago',
-      requestedAt: new Date(Date.now() - 32 * 60000),
-    },
-    {
-      id: 'r-5',
-      riderName: 'David Miller',
-      driverName: 'Robert Johnson',
-      vehicleTypeName: 'XL',
-      pickupAddress: 'South Beach Blvd',
-      dropAddress: 'Downtown Marina',
-      fareMinor: 2750,
-      currencyCode: 'USD',
-      status: 'completed',
-      timeAgo: '45 mins ago',
-      requestedAt: new Date(Date.now() - 45 * 60000),
-    },
-  ];
+  return [];
 }
 
 export async function getRideStats(days = 30) {
@@ -759,7 +645,7 @@ export async function getSupplyDemandHeatmap() {
     lastLocationAt: drivers.lastLocationAt,
     vehicleModel: drivers.vehicleModel,
     rating: drivers.rating,
-  }).from(drivers).where(eq(drivers.isOnline, true));
+  }).from(drivers).where(and(eq(drivers.isOnline, true), sql`${drivers.currentLat} IS NOT NULL`));
 
   const activeRides = await db.select({
     id: rides.id,
@@ -771,14 +657,16 @@ export async function getSupplyDemandHeatmap() {
     dropLng: rides.dropLng,
     dropAddress: rides.dropAddress,
     requestedAt: rides.requestedAt,
-  }).from(rides).where(or(
-    eq(rides.status, 'searching'),
-    eq(rides.status, 'accepted'),
-    eq(rides.status, 'arriving'),
-    eq(rides.status, 'started'),
+  }).from(rides).where(and(
+    or(
+      eq(rides.status, 'searching'),
+      eq(rides.status, 'accepted'),
+      eq(rides.status, 'arriving'),
+      eq(rides.status, 'started'),
+    ),
+    sql`${rides.pickupLat} IS NOT NULL`
   ));
 
-  // Determine which drivers are on trip
   const activeRideDriverRows = await db.select({ driverId: rides.driverId }).from(rides)
     .where(and(
       inArray(rides.status, ['accepted', 'arriving', 'started']),
@@ -792,8 +680,8 @@ export async function getSupplyDemandHeatmap() {
       drivers: onlineDrivers.map((d) => ({
         id: d.id,
         name: d.name || 'Driver',
-        lat: parseFloat(d.currentLat || '37.7749'),
-        lng: parseFloat(d.currentLng || '-122.4194'),
+        lat: parseFloat(d.currentLat || '0'),
+        lng: parseFloat(d.currentLng || '0'),
         isOnTrip: activeRideDriverIds.has(d.id),
         rating: d.rating,
         vehicleModel: d.vehicleModel,
@@ -804,10 +692,10 @@ export async function getSupplyDemandHeatmap() {
       rides: activeRides.map((r) => ({
         id: r.id,
         status: r.status,
-        pickupLat: parseFloat(r.pickupLat || '37.7749'),
-        pickupLng: parseFloat(r.pickupLng || '-122.4194'),
-        dropLat: parseFloat(r.dropLat || '37.7849'),
-        dropLng: parseFloat(r.dropLng || '-122.4094'),
+        pickupLat: parseFloat(r.pickupLat || '0'),
+        pickupLng: parseFloat(r.pickupLng || '0'),
+        dropLat: parseFloat(r.dropLat || '0'),
+        dropLng: parseFloat(r.dropLng || '0'),
         pickupAddress: r.pickupAddress,
         dropAddress: r.dropAddress,
       })),

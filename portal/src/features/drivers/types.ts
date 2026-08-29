@@ -72,6 +72,7 @@ export interface CreateDriverPayload {
   email?: string;
   dateOfBirth?: string;
   gender?: string;
+  referralCode?: string;
   preferredLanguageCode?: string;
   countryId?: string;
   stateId?: string;
@@ -151,6 +152,7 @@ export interface DriverVehicle {
   id: string;
   driverId: string;
   vehicleTypeId: string;
+  vehicleModelId?: string;
   brand: string | null;
   model: string;
   year: string;
@@ -160,6 +162,8 @@ export interface DriverVehicle {
   seats: number;
   fuelType: string | null;
   transmission: string | null;
+  image?: string | null;
+  images?: string[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -171,6 +175,7 @@ export interface DriverDocument {
   id: string;
   driverId: string;
   documentTypeId: string;
+  documentTypeName?: string;
   frontUrl: string | null;
   backUrl: string | null;
   pdfUrl: string | null;
@@ -200,11 +205,52 @@ export interface DocumentType {
   sortOrder: number;
 }
 
-// GET /drivers/:id (Admin) — an aggregated registration-summary view, not a flat Driver.
+export interface DriverTrip {
+  id: string;
+  status: string;
+  pickupAddress: string | null;
+  dropAddress: string | null;
+  estimatedFareMinor: number | null;
+  finalFareMinor: number | null;
+  currencyCode: string;
+  requestedAt: string;
+  completedAt: string | null;
+}
+
+export interface DriverPerformance {
+  totalTrips: number;
+  completedTrips: number;
+  cancelledTrips: number;
+  completionRate: number;
+  acceptanceRate: number;
+  lifetimeEarningsMinor: number;
+  rating: string;
+  totalRatings: number;
+}
+
+export interface DriverBankAccount {
+  id: string;
+  driverId: string;
+  accountHolderName: string;
+  bankName: string;
+  accountNumber: string;
+  ifscCode?: string;
+  status: string;
+  isDefault: boolean;
+}
+
+// GET /drivers/:id (Admin) — comprehensive registration-summary & performance view.
 export interface DriverDetail {
-  driver: Driver;
+  driver: Driver & {
+    countryName?: string | null;
+    stateName?: string | null;
+    cityName?: string | null;
+  };
   vehicles: DriverVehicle[];
   documents: DriverDocument[];
+  bankAccount?: DriverBankAccount | null;
+  trips?: DriverTrip[];
+  performance?: DriverPerformance;
   answers: unknown[];
   isComplete: boolean;
   missing: string[];
@@ -270,4 +316,5 @@ export interface VehicleModelOption {
   vehicleTypeId: string;
   brand: string;
   name: string;
+  modelYear?: string;
 }

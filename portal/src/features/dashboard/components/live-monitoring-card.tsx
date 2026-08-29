@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Zap, Radio } from "lucide-react";
+import { AlertTriangle, Radio, CheckCircle2 } from "lucide-react";
 import type { LiveMonitoringResponse } from "../types";
 
 interface LiveMonitoringCardProps {
@@ -9,34 +9,8 @@ interface LiveMonitoringCardProps {
 }
 
 export function LiveMonitoringCard({ data }: LiveMonitoringCardProps) {
-  const alerts = data?.alerts || [
-    {
-      id: "mock-alt-1",
-      type: "deviation",
-      title: "Driver Off Route",
-      message: "Ride #4492 deviated significantly from planned route.",
-      severity: "warning",
-      createdAt: new Date(),
-    },
-    {
-      id: "mock-alt-2",
-      type: "surge",
-      title: "High Demand Zone",
-      message: "Surge pricing active downtown (1.4x multiplier).",
-      severity: "info",
-      createdAt: new Date(),
-    },
-  ];
-
-  const eventLogs = data?.eventLogs || [
-    { id: "e1", time: "10:42", text: "Ride #123 started", level: "primary" },
-    { id: "e2", time: "10:41", text: "Driver Sarah online", level: "primary" },
-    { id: "e3", time: "10:39", text: "Ride #119 completed", level: "success" },
-    { id: "e4", time: "10:37", text: "New request in Zone B", level: "info" },
-    { id: "e5", time: "10:35", text: "Driver Mike offline (shift ended)", level: "neutral" },
-    { id: "e6", time: "10:32", text: "Ride #122 started", level: "primary" },
-    { id: "e7", time: "10:30", text: "Ride #121 assigned", level: "primary" },
-  ];
+  const alerts = data?.alerts || [];
+  const eventLogs = data?.eventLogs || [];
 
   return (
     <Card className="border-border bg-card shadow-sm flex flex-col h-full overflow-hidden">
@@ -58,70 +32,69 @@ export function LiveMonitoringCard({ data }: LiveMonitoringCardProps) {
           <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-1">
             Active Alerts
           </p>
-          {alerts.slice(0, 2).map((alert) => {
-            const isEmergency = alert.severity === "critical";
-            const isSurge = alert.type === "surge";
-
-            return (
-              <div
-                key={alert.id}
-                className={`p-3 rounded-lg border flex items-start gap-3 transition-colors ${
-                  isEmergency
-                    ? "bg-destructive/10 border-destructive/20 text-destructive"
-                    : isSurge
-                    ? "bg-primary/10 border-primary/20 text-foreground"
-                    : "bg-amber-500/10 border-amber-500/20 text-foreground"
-                }`}
-              >
-                {isEmergency ? (
-                  <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                ) : isSurge ? (
-                  <Zap className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                ) : (
-                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-foreground">
-                    {alert.title}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                    {alert.message}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Live Scrolling Event Feed */}
-        <div className="p-3 flex-1 flex flex-col">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2 px-1">
-            Telemetry Stream
-          </p>
-          <div className="space-y-2.5 overflow-y-auto max-h-[160px] pr-1">
-            {eventLogs.map((log) => {
-              let dotColor = "bg-primary";
-
-              if (log.level === "success") {
-                dotColor = "bg-green-500";
-              } else if (log.level === "error") {
-                dotColor = "bg-destructive";
-              } else if (log.level === "neutral") {
-                dotColor = "bg-muted-foreground";
-              }
-
+          {alerts.length === 0 ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground px-2 py-3 bg-card rounded-md border border-border">
+              <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+              <span>No critical alerts. All operations running smoothly.</span>
+            </div>
+          ) : (
+            alerts.map((alt) => {
+              const isCrit = alt.severity === "critical";
               return (
-                <div key={log.id} className="flex items-center gap-2.5 text-xs">
-                  <span className={`h-2 w-2 rounded-full ${dotColor} shrink-0`} />
-                  <span className="font-mono text-muted-foreground w-12 text-[11px]">
-                    {log.time}
-                  </span>
-                  <span className="text-foreground truncate flex-1 font-medium">
-                    {log.text}
-                  </span>
+                <div
+                  key={alt.id}
+                  className={`p-2.5 rounded-md border flex items-start gap-2.5 text-xs transition-colors ${
+                    isCrit
+                      ? "bg-destructive/10 border-destructive/30 text-destructive dark:text-red-400"
+                      : "bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-300"
+                  }`}
+                >
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold">{alt.title}</p>
+                    <p className="text-[11px] opacity-90 mt-0.5">{alt.message}</p>
+                  </div>
                 </div>
               );
-            })}
+            })
+          )}
+        </div>
+
+        {/* Live Scrolling Activity Event Stream */}
+        <div className="p-3 flex-1 flex flex-col">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-1 mb-2">
+            Telemetry Stream
+          </p>
+          <div className="flex-1 space-y-2 overflow-y-auto max-h-[180px] pr-1 text-xs">
+            {eventLogs.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-4 text-center">
+                No recent telemetry events recorded.
+              </p>
+            ) : (
+              eventLogs.map((ev) => {
+                let badgeColor = "bg-muted text-muted-foreground";
+                if (ev.level === "primary") badgeColor = "bg-primary/10 text-primary";
+                if (ev.level === "success") badgeColor = "bg-primary/15 text-primary font-medium";
+                if (ev.level === "error") badgeColor = "bg-destructive/10 text-destructive";
+
+                return (
+                  <div
+                    key={ev.id}
+                    className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-muted/40 transition-colors border border-transparent hover:border-border/50"
+                  >
+                    <span className="text-muted-foreground text-[11px] font-mono shrink-0">
+                      {ev.time}
+                    </span>
+                    <span className="truncate mx-2 text-foreground font-medium flex-1">
+                      {ev.text}
+                    </span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 uppercase font-semibold ${badgeColor}`}>
+                      {ev.level || "event"}
+                    </span>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </CardContent>

@@ -21,15 +21,6 @@ declare global {
 const DEFAULT_CENTER = { lat: 37.7749, lng: -122.4194 };
 const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY || "AIzaSyCa9c3EMWliRd2AUcZA-LpJF7VwhEjsd7g";
 
-// Simulated mock drivers if live drivers list is empty
-const MOCK_DRIVERS = [
-  { id: "d-1", name: "Sarah Williams", lat: 37.779, lng: -122.418, isOnTrip: true, rating: 4.9, vehicleModel: "Toyota Camry" },
-  { id: "d-2", name: "David Chen", lat: 37.765, lng: -122.425, isOnTrip: false, rating: 4.8, vehicleModel: "Honda Accord" },
-  { id: "d-3", name: "Marcus Brody", lat: 37.785, lng: -122.405, isOnTrip: true, rating: 5.0, vehicleModel: "Tesla Model 3" },
-  { id: "d-4", name: "Elena Rostova", lat: 37.771, lng: -122.435, isOnTrip: false, rating: 4.7, vehicleModel: "Hyundai Ioniq" },
-  { id: "d-5", name: "James Carter", lat: 37.792, lng: -122.412, isOnTrip: false, rating: 4.9, vehicleModel: "Ford Fusion" },
-];
-
 export function LiveMapCard({ fleetStatus, heatmapData }: LiveMapCardProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -61,37 +52,48 @@ export function LiveMapCard({ fleetStatus, heatmapData }: LiveMapCardProps) {
     }
   }, []);
 
-  // Initialize Map
+  // Initialize Google Map
   useEffect(() => {
-    if (!mapLoaded || !mapContainerRef.current || !window.google?.maps || mapInstanceRef.current) return;
+    if (!mapLoaded || !mapContainerRef.current || mapInstanceRef.current || !window.google?.maps) return;
 
     try {
       const isDarkMode = document.documentElement.classList.contains("dark");
-      
+
       const darkMapStyles = [
-        { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-        { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-        { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-        { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
-        { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
-        { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
-        { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
-        { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#746855" }] },
-        { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
+        { elementType: "geometry", stylers: [{ color: "#1e293b" }] },
+        { elementType: "labels.text.stroke", stylers: [{ color: "#1e293b" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
+        { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#cbd5e1" }] },
+        { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
+        { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#0f172a" }] },
+        { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#64748b" }] },
+        { featureType: "road", elementType: "geometry", stylers: [{ color: "#334155" }] },
+        { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#1e293b" }] },
+        { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
+        { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#475569" }] },
+        { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1e293b" }] },
+        { featureType: "transit", elementType: "geometry", stylers: [{ color: "#1e293b" }] },
+        { featureType: "water", elementType: "geometry", stylers: [{ color: "#0f172a" }] },
+        { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#475569" }] },
       ];
 
       const lightMapStyles = [
-        { featureType: "all", elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
-        { featureType: "water", elementType: "geometry", stylers: [{ color: "#e9edf0" }] },
+        { elementType: "geometry", stylers: [{ color: "#f8fafc" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#475569" }] },
+        { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
         { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-        { featureType: "poi", elementType: "all", stylers: [{ visibility: "off" }] },
+        { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#e2e8f0" }] },
+        { featureType: "water", elementType: "geometry", stylers: [{ color: "#e0f2fe" }] },
       ];
 
       const map = new window.google.maps.Map(mapContainerRef.current, {
         center: DEFAULT_CENTER,
         zoom: 13,
-        disableDefaultUI: true,
+        disableDefaultUI: false,
         zoomControl: true,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: true,
         styles: isDarkMode ? darkMapStyles : lightMapStyles,
       });
 
@@ -112,52 +114,63 @@ export function LiveMapCard({ fleetStatus, heatmapData }: LiveMapCardProps) {
     markersRef.current = [];
 
     const rawDrivers = heatmapData?.supply?.drivers || [];
-    const driversToRender = rawDrivers.length > 0 ? rawDrivers : MOCK_DRIVERS;
 
-    driversToRender.forEach((d) => {
-      const isTrip = d.isOnTrip;
-      // Driver Marker Icon (SVG)
-      const svgIcon = {
-        path: window.google.maps.SymbolPath.CIRCLE,
-        scale: 7,
-        fillColor: isTrip ? "#3b82f6" : "#0b9f53",
-        fillOpacity: 1,
-        strokeColor: "#ffffff",
-        strokeWeight: 2,
-      };
+    if (rawDrivers.length > 0) {
+      const bounds = new window.google.maps.LatLngBounds();
 
-      const marker = new window.google.maps.Marker({
-        position: { lat: Number(d.lat), lng: Number(d.lng) },
-        map: mapInstanceRef.current,
-        title: d.name,
-        icon: svgIcon,
+      rawDrivers.forEach((d) => {
+        if (!d.lat || !d.lng) return;
+        const isTrip = d.isOnTrip;
+        const pos = { lat: Number(d.lat), lng: Number(d.lng) };
+        bounds.extend(pos);
+
+        // Driver Marker Icon (SVG)
+        const svgIcon = {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 7,
+          fillColor: isTrip ? "#3b82f6" : "#0b9f53",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
+        };
+
+        const marker = new window.google.maps.Marker({
+          position: pos,
+          map: mapInstanceRef.current,
+          title: d.name,
+          icon: svgIcon,
+        });
+
+        marker.addListener("click", () => {
+          if (!infoWindowRef.current) return;
+          const content = `
+            <div style="padding: 6px; font-family: inherit; color: #1e293b;">
+              <div style="font-weight: 700; font-size: 14px;">${d.name}</div>
+              <div style="font-size: 12px; color: #64748b; margin-top: 2px;">
+                ${d.vehicleModel || "Vehicle"} • ⭐ ${d.rating || "5.0"}
+              </div>
+              <div style="margin-top: 4px;">
+                <span style="display: inline-block; padding: 2px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; background: ${isTrip ? '#dbeafe' : '#dcfce7'}; color: ${isTrip ? '#1e40af' : '#166534'};">
+                  ${isTrip ? "On Trip" : "Idle (Available)"}
+                </span>
+              </div>
+            </div>
+          `;
+          infoWindowRef.current.setContent(content);
+          infoWindowRef.current.open(mapInstanceRef.current, marker);
+        });
+
+        markersRef.current.push(marker);
       });
 
-      marker.addListener("click", () => {
-        if (!infoWindowRef.current) return;
-        const content = `
-          <div style="padding: 6px; font-family: inherit; color: #1e293b;">
-            <div style="font-weight: 700; font-size: 14px;">${d.name}</div>
-            <div style="font-size: 12px; color: #64748b; margin-top: 2px;">
-              ${d.vehicleModel || "Vehicle"} • ⭐ ${d.rating || "5.0"}
-            </div>
-            <div style="margin-top: 4px;">
-              <span style="display: inline-block; padding: 2px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; background: ${isTrip ? '#dbeafe' : '#dcfce7'}; color: ${isTrip ? '#1e40af' : '#166534'};">
-                ${isTrip ? "On Trip" : "Idle (Available)"}
-              </span>
-            </div>
-          </div>
-        `;
-        infoWindowRef.current.setContent(content);
-        infoWindowRef.current.open(mapInstanceRef.current, marker);
-      });
-
-      markersRef.current.push(marker);
-    });
+      if (rawDrivers.length > 1) {
+        mapInstanceRef.current.fitBounds(bounds);
+      }
+    }
 
     // Render active ride pickup points
     const ridesToRender = heatmapData?.demand?.rides || [];
-    ridesToRender.slice(0, 5).forEach((r) => {
+    ridesToRender.forEach((r) => {
       if (!r.pickupLat || !r.pickupLng) return;
       const rideMarker = new window.google.maps.Marker({
         position: { lat: Number(r.pickupLat), lng: Number(r.pickupLng) },
@@ -178,10 +191,10 @@ export function LiveMapCard({ fleetStatus, heatmapData }: LiveMapCardProps) {
     });
   }, [heatmapData, mapLoaded]);
 
-  const online = fleetStatus?.online ?? 680;
-  const onTrip = fleetStatus?.onTrip ?? 452;
-  const idle = fleetStatus?.idle ?? 228;
-  const offline = fleetStatus?.offline ?? 162;
+  const online = fleetStatus?.online ?? 0;
+  const onTrip = fleetStatus?.onTrip ?? 0;
+  const idle = fleetStatus?.idle ?? 0;
+  const offline = fleetStatus?.offline ?? 0;
 
   return (
     <Card className="border-border bg-card shadow-sm overflow-hidden flex flex-col h-full">

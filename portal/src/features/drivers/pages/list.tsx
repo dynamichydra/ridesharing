@@ -139,8 +139,12 @@ export default function DriverList() {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => setIsCreateOpen(true)} size="sm" className="gap-2 h-8 cursor-pointer">
-            <UserPlus className="h-4 w-4" /> Register Driver
+          <Button
+            onClick={() => navigate("/drivers/register")}
+            size="sm"
+            className="gap-2 h-8 cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+          >
+            <UserPlus className="h-4 w-4" /> Onboard New Driver
           </Button>
           <Button
             onClick={handleExport}

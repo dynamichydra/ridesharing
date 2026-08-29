@@ -44,11 +44,10 @@ export const driversApi = {
   list: (params: DriverListParams) =>
     apiClient.get<Driver[]>(`${BASE_URL}?${buildQuery(params)}`),
 
-  // POST /drivers  (Admin) — manual registration; only name + (phone or email) are required
+  // POST /drivers  (Admin) — manual registration
   create: (payload: CreateDriverPayload) => apiClient.post<Driver>(BASE_URL, payload),
 
-  // GET /drivers/:id  (Admin) — aggregated registration-summary view:
-  // { driver, vehicles, documents, answers, isComplete, missing } — NOT a flat Driver.
+  // GET /drivers/:id  (Admin) — comprehensive registration-summary & performance view
   getById: (id: string) => apiClient.get<DriverDetail>(`${BASE_URL}/${id}`),
 
   // PATCH /drivers/:id  (Admin) — full edit on driver
@@ -87,6 +86,21 @@ export const vehiclesApi = {
   add: (driverId: string, payload: AdminVehiclePayload) =>
     apiClient.post<DriverVehicle>(`${VEHICLES_BASE_URL}/admin/drivers/${driverId}`, payload),
 
+  // Unified POST /vehicles (Works for both driver and admin when driverId is passed)
+  createVehicle: (payload: AdminVehiclePayload & { driverId?: string }) =>
+    apiClient.post<DriverVehicle>(`${VEHICLES_BASE_URL}`, payload),
+
+  // POST /vehicles/upload-image (Multipart direct image upload)
+  uploadImage: async (file: File): Promise<{ url: string; key: string }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiClient.post<{ url: string; key: string }>(`${VEHICLES_BASE_URL}/upload-image`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
+
   // PATCH /vehicles/admin/drivers/:driverId/:vehicleId
   update: (driverId: string, vehicleId: string, payload: Partial<AdminVehiclePayload>) =>
     apiClient.patch<DriverVehicle>(`${VEHICLES_BASE_URL}/admin/drivers/${driverId}/${vehicleId}`, payload),
@@ -101,7 +115,7 @@ export const vehiclesApi = {
 };
 
 export const documentsApi = {
-  // GET /documents/admin/drivers/:driverId  (Admin) — uploaded docs with short-lived signed preview URLs
+  // GET /documents/admin/drivers/:driverId  (Admin)
   getForDriver: (driverId: string) =>
     apiClient.get<DriverDocument[]>(`${DOCUMENTS_BASE_URL}/admin/drivers/${driverId}`),
 
@@ -109,7 +123,7 @@ export const documentsApi = {
   verify: (docId: string, payload: VerifyDocumentPayload) =>
     apiClient.post<DriverDocument>(`${DOCUMENTS_BASE_URL}/admin/${docId}/verify`, payload),
 
-  // GET /documents/admin/types  (Admin) — used to label a document's documentTypeId with its code
+  // GET /documents/admin/types  (Admin)
   listTypes: () =>
     apiClient.get<DocumentType[]>(`${DOCUMENTS_BASE_URL}/admin/types?page=1&limit=100`),
 };
@@ -129,6 +143,6 @@ export const driverSubscriptionsApi = {
 };
 
 export const vehicleModelsLookupApi = {
-  // GET /vehicle-models  (Public) — used only for the Create Driver form's dropdown
+  // GET /vehicle-models  (Public) — used for vehicle models catalog dropdown
   list: () => apiClient.get<VehicleModelOption[]>("/vehicle-models"),
 };

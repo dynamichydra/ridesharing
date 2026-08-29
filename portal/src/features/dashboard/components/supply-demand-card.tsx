@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { BarChart3, Sparkles } from "lucide-react";
+import { BarChart3, Sparkles, MapPin } from "lucide-react";
 import type { SupplyDemandResponse } from "../types";
 
 interface SupplyDemandCardProps {
@@ -10,17 +10,13 @@ interface SupplyDemandCardProps {
 }
 
 export function SupplyDemandCard({ data }: SupplyDemandCardProps) {
-  const score = data?.marketEquilibriumScore ?? 88;
-  const statusLabel = data?.statusLabel ?? "Balanced";
+  const score = data?.marketEquilibriumScore ?? 100;
+  const statusLabel = data?.statusLabel ?? (score >= 75 ? "Balanced" : "Attention Required");
   const summaryMessage =
     data?.summaryMessage ??
-    "System is currently operating at high efficiency. 3 zones require immediate rebalancing.";
+    "System is operating across active service zones.";
 
-  const zones = data?.zones || [
-    { zoneId: "z1", zoneName: "Downtown Central", supplyPct: 45, demandPct: 55, gapLabel: "+10% Gap", isSurplus: false },
-    { zoneId: "z2", zoneName: "Airport Corridor", supplyPct: 70, demandPct: 30, gapLabel: "Surplus", isSurplus: true },
-    { zoneId: "z3", zoneName: "Financial District", supplyPct: 35, demandPct: 65, gapLabel: "+30% Gap", isSurplus: false },
-  ];
+  const zones = data?.zones || [];
 
   return (
     <Card className="border-border bg-card shadow-sm flex flex-col">
@@ -59,73 +55,67 @@ export function SupplyDemandCard({ data }: SupplyDemandCardProps) {
             </div>
           </div>
 
-          <div className="space-y-3">
-            {zones.map((z) => (
-              <div key={z.zoneId} className="flex items-center justify-between gap-3 text-xs">
-                <span className="font-medium text-foreground w-28 sm:w-36 truncate">
-                  {z.zoneName}
-                </span>
-                <div className="flex-1 flex h-5 rounded-md overflow-hidden bg-secondary">
-                  <div
-                    className="bg-primary h-full transition-all duration-500"
-                    style={{ width: `${z.supplyPct}%` }}
-                    title={`Supply: ${z.supplyPct}%`}
-                  />
-                  <div
-                    className="bg-destructive/80 h-full transition-all duration-500"
-                    style={{ width: `${z.demandPct}%` }}
-                    title={`Demand: ${z.demandPct}%`}
-                  />
+          {zones.length === 0 ? (
+            <div className="py-6 text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-1">
+              <MapPin className="h-5 w-5 text-muted-foreground/60" />
+              <p>No service zones configured in the system yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {zones.map((z) => (
+                <div key={z.zoneId} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="font-medium text-foreground w-28 sm:w-36 truncate">
+                    {z.zoneName}
+                  </span>
+
+                  {/* Dual split progress bar */}
+                  <div className="flex-1 bg-muted h-2.5 rounded-full overflow-hidden flex">
+                    <div
+                      className="bg-primary h-full transition-all duration-300"
+                      style={{ width: `${z.supplyPct}%` }}
+                      title={`Supply: ${z.supplyPct}%`}
+                    />
+                    <div
+                      className="bg-destructive h-full transition-all duration-300"
+                      style={{ width: `${z.demandPct}%` }}
+                      title={`Demand: ${z.demandPct}%`}
+                    />
+                  </div>
+
+                  <span
+                    className={`font-semibold shrink-0 text-right w-16 ${
+                      z.isSurplus ? "text-primary" : "text-destructive"
+                    }`}
+                  >
+                    {z.gapLabel}
+                  </span>
                 </div>
-                <span
-                  className={`w-16 text-right font-semibold ${
-                    z.isSurplus ? "text-primary" : "text-destructive"
-                  }`}
-                >
-                  {z.gapLabel}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Circular Equilibrium Score Gauge (1 col) */}
-        <div className="bg-muted/30 rounded-xl p-4 flex flex-col justify-center items-center text-center border border-border">
-          <div className="relative w-20 h-20 flex items-center justify-center mb-2">
-            <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-              <circle
-                className="stroke-secondary"
-                cx="18"
-                cy="18"
-                fill="none"
-                r="16"
-                strokeWidth="3"
-              />
-              <circle
-                className="stroke-primary"
-                cx="18"
-                cy="18"
-                fill="none"
-                r="16"
-                strokeDasharray={`${score}, 100`}
-                strokeLinecap="round"
-                strokeWidth="3"
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-lg font-bold text-foreground">{score}%</span>
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Score</span>
+        {/* Market Equilibrium Score & Auto Dispatcher (1 col) */}
+        <div className="md:col-span-1 bg-muted/30 border border-border rounded-xl p-4 flex flex-col items-center justify-between text-center space-y-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Market Equilibrium Score
+            </p>
+            <div className="text-4xl font-extrabold text-foreground mt-2">
+              {score}
+              <span className="text-lg font-normal text-muted-foreground">%</span>
             </div>
+            <p className="text-xs text-muted-foreground mt-1 max-w-[200px] leading-relaxed">
+              {summaryMessage}
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground px-2 line-clamp-2">
-            {summaryMessage}
-          </p>
+
           <Button
-            variant="ghost"
             size="sm"
-            className="mt-3 text-xs font-semibold text-primary hover:text-primary hover:bg-primary/10 h-7"
+            variant="outline"
+            className="w-full text-xs h-9 bg-card border-border hover:bg-primary hover:text-primary-foreground transition-colors"
           >
-            <Sparkles className="h-3.5 w-3.5 mr-1" />
+            <Sparkles className="h-3.5 w-3.5 mr-1.5 text-primary group-hover:text-primary-foreground" />
             Auto-Rebalance Fleet
           </Button>
         </div>

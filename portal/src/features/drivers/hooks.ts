@@ -274,3 +274,12 @@ export function useToggleBlockDriver() {
     },
   });
 }
+
+export function useVehicleModelsLookup() {
+  return useQuery({
+    queryKey: ["vehicle-models-lookup"],
+    queryFn: () => vehicleModelsLookupApi.list(),
+    staleTime: 10 * 60 * 1000,
+  });
+}
+

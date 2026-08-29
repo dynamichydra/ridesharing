@@ -42,7 +42,7 @@ export function LogOut() {
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-  const data: User = LocalStorage.get("rideshare-admin-user");
+  const data = LocalStorage.get<User>("rideshare-admin-user");
   if (!data) return null;
   return { ...data };
 }

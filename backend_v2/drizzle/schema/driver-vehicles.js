@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, integer, unique } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, integer, unique, jsonb } from 'drizzle-orm/pg-core';
 import { drivers } from './drivers.js';
 import { vehicleTypes } from './vehicle-types.js';
 import { vehicleModels } from './vehicle-models.js';
@@ -23,6 +23,8 @@ export const driverVehicles = pgTable('driver_vehicles', {
   seats:              integer('seats').default(4),
   fuelType:           varchar('fuel_type', { length: 20 }),      // petrol | diesel | electric | hybrid | cng
   transmission:       varchar('transmission', { length: 20 }),   // manual | automatic
+  image:              varchar('image', { length: 500 }),         // main vehicle photo URL
+  images:             jsonb('images').default([]),               // gallery/additional vehicle photos
   isActive:           boolean('is_active').default(true),
   createdAt:          timestamp('created_at').defaultNow(),
   updatedAt:          timestamp('updated_at').defaultNow(),

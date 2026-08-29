@@ -8,9 +8,9 @@ interface FleetHealthCardProps {
 }
 
 export function FleetHealthCard({ health }: FleetHealthCardProps) {
-  const batteryPct = health?.batteryOptimalPct ?? 94;
-  const tirePct = health?.tireNormalPct ?? 98;
-  const inspectionPct = health?.inspectionOptimalPct ?? 94;
+  const batteryPct = health?.batteryOptimalPct ?? 100;
+  const tirePct = health?.tireNormalPct ?? 100;
+  const inspectionPct = health?.inspectionOptimalPct ?? 100;
   const alertsCount = health?.activeAlerts ?? 0;
 
   return (
