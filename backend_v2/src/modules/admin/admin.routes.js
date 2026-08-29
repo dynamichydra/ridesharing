@@ -8,8 +8,42 @@ export async function adminRoutes(app) {
   // All admin routes require admin JWT
   app.addHook('preHandler', authenticateAdmin);
 
+  // GET /api/v1/admin/dashboard — Main KPI metrics, fleet status counters, health telemetry
   app.get('/dashboard', async (request, reply) => {
     const data = await adminService.getDashboardStats();
+    return sendSuccess(reply, data);
+  });
+
+  // GET /api/v1/admin/dashboard/dispatch-queue — Live unassigned / searching ride requests
+  app.get('/dashboard/dispatch-queue', async (request, reply) => {
+    const limit = parseInt(request.query.limit || '10', 10);
+    const data = await adminService.getDispatchQueue(limit);
+    return sendSuccess(reply, data);
+  });
+
+  // GET /api/v1/admin/dashboard/alerts — High priority alerts (SOS/Flagged trips) + live event stream
+  app.get('/dashboard/alerts', async (request, reply) => {
+    const data = await adminService.getLiveMonitoringAlerts();
+    return sendSuccess(reply, data);
+  });
+
+  // GET /api/v1/admin/dashboard/supply-demand — Zone equilibrium and supply/demand gaps
+  app.get('/dashboard/supply-demand', async (request, reply) => {
+    const data = await adminService.getSupplyDemandAnalytics();
+    return sendSuccess(reply, data);
+  });
+
+  // GET /api/v1/admin/dashboard/earnings — Daily / Weekly / Monthly revenue breakdown
+  app.get('/dashboard/earnings', async (request, reply) => {
+    const timeframe = request.query.timeframe || 'week';
+    const data = await adminService.getEarningsTrend(timeframe);
+    return sendSuccess(reply, data);
+  });
+
+  // GET /api/v1/admin/dashboard/recent-activity — Real-time live trips activity
+  app.get('/dashboard/recent-activity', async (request, reply) => {
+    const limit = parseInt(request.query.limit || '10', 10);
+    const data = await adminService.getRecentActivity(limit);
     return sendSuccess(reply, data);
   });
 
@@ -43,7 +77,7 @@ export async function adminRoutes(app) {
     return sendList(reply, rows, pagination);
   });
 
-  // GET /api/v1/admin/ride-history?rideId=...  — global status-change log across all rides
+  // GET /api/v1/admin/ride-history?rideId=... — global status-change log across all rides
   app.get('/ride-history', async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);
     const filters = { rideId: request.query.rideId };

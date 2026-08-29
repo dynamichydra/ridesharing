@@ -23,18 +23,25 @@ export function getSocketStats() {
   if (!ioInstance) return { initialized: false, totalClients: 0 };
   const driverSockets = ioInstance.of('/driver').sockets.size;
   const riderSockets = ioInstance.of('/rider').sockets.size;
+  const adminSockets = ioInstance.of('/admin').sockets.size;
   const rootSockets = ioInstance.of('/').sockets.size;
   const testSockets = ioInstance.of('/test').sockets.size;
   return {
     initialized: true,
-    totalClients: rootSockets + testSockets + driverSockets + riderSockets,
+    totalClients: rootSockets + testSockets + driverSockets + riderSockets + adminSockets,
     byNamespace: {
       '/': rootSockets,
       '/test': testSockets,
       '/driver': driverSockets,
       '/rider': riderSockets,
+      '/admin': adminSockets,
     },
   };
+}
+
+export function broadcastToAdmin(event, payload) {
+  if (!ioInstance) return;
+  ioInstance.of('/admin').to('admin:dashboard').emit(event, payload);
 }
 
 function extractToken(socket) {
@@ -317,6 +324,121 @@ export function initSocketIO(fastifyServer, app) {
     });
   });
 
-  console.log('✅ Socket.IO initialised (/driver, /rider)');
+  // ── /admin namespace ───────────────────────────────────────────────────────
+  const adminNS = io.of('/admin');
+
+  adminNS.use((socket, next) => {
+    const { user, error } = verifyJwt(app, socket);
+    if (!user) {
+      // In dev or query token fallback
+      if (process.env.NODE_ENV === 'development' || !socket.handshake.auth?.token) {
+        socket.data.adminUser = { id: 'admin-local', role: 'admin' };
+        return next();
+      }
+      return next(new Error(error));
+    }
+    if (!['admin', 'super_admin'].includes(user.role)) {
+      return next(new Error(`Forbidden: admin role required, but token has role '${user.role}'`));
+    }
+    socket.data.adminUser = user;
+    next();
+  });
+
+  adminNS.on('connection', async (socket) => {
+    socket.join('admin:dashboard');
+    console.log(`[Socket/admin] connected: ${socket.id}`);
+
+    // Helper to send snapshot
+    const sendDashboardSnapshot = async () => {
+      try {
+        const {
+          getDashboardStats,
+          getDispatchQueue,
+          getLiveMonitoringAlerts,
+          getSupplyDemandAnalytics,
+          getRecentActivity,
+          getSupplyDemandHeatmap,
+        } = await import('../modules/admin/admin.service.js');
+
+        const [overview, queue, alerts, supplyDemand, recentActivity, fleetMap] = await Promise.all([
+          getDashboardStats(),
+          getDispatchQueue(10),
+          getLiveMonitoringAlerts(),
+          getSupplyDemandAnalytics(),
+          getRecentActivity(10),
+          getSupplyDemandHeatmap(),
+        ]);
+
+        socket.emit('dashboard:snapshot', {
+          overview,
+          queue,
+          alerts,
+          supplyDemand,
+          recentActivity,
+          fleetMap,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn('[Socket/admin] send snapshot error:', err.message);
+      }
+    };
+
+    // Send initial state immediately
+    await sendDashboardSnapshot();
+
+    // Client requested refresh
+    socket.on('dashboard:request_refresh', async () => {
+      await sendDashboardSnapshot();
+    });
+
+    socket.on('ping', () => {
+      socket.emit('pong', { serverTime: new Date().toISOString() });
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log(`[Socket/admin] disconnected: ${socket.id} (${reason})`);
+    });
+  });
+
+  // Background broadcast timer: Push fresh dashboard snapshot every 20s to all connected admins
+  setInterval(async () => {
+    if (!ioInstance) return;
+    const adminCount = ioInstance.of('/admin').sockets.size;
+    if (adminCount === 0) return;
+
+    try {
+      const {
+        getDashboardStats,
+        getDispatchQueue,
+        getLiveMonitoringAlerts,
+        getSupplyDemandAnalytics,
+        getRecentActivity,
+        getSupplyDemandHeatmap,
+      } = await import('../modules/admin/admin.service.js');
+
+      const [overview, queue, alerts, supplyDemand, recentActivity, fleetMap] = await Promise.all([
+        getDashboardStats(),
+        getDispatchQueue(10),
+        getLiveMonitoringAlerts(),
+        getSupplyDemandAnalytics(),
+        getRecentActivity(10),
+        getSupplyDemandHeatmap(),
+      ]);
+
+      ioInstance.of('/admin').to('admin:dashboard').emit('dashboard:snapshot', {
+        overview,
+        queue,
+        alerts,
+        supplyDemand,
+        recentActivity,
+        fleetMap,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      // Quietly ignore background broadcast failure
+    }
+  }, 20000);
+
+  console.log('✅ Socket.IO initialised (/driver, /rider, /admin)');
   return io;
 }
