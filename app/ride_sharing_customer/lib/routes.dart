@@ -27,6 +27,7 @@ import 'features/profile/presentation/pages/help_page.dart';
 import 'features/profile/presentation/pages/settings_page.dart';
 import 'features/profile/presentation/pages/ride_history_page.dart';
 import 'features/profile/presentation/pages/ride_detail_page.dart';
+import 'features/subscription/presentation/pages/subscription_management_page.dart';
 import 'features/wallet/presentation/pages/transactions_page.dart';
 
 class AppRoutes {
@@ -50,6 +51,7 @@ class AppRoutes {
   static const String paymentMethods = '/payment-methods';
   static const String help = '/help';
   static const String settings = '/settings';
+  static const String subscription = '/subscription';
   static const String rideHistory = '/ride-history';
   static const String rideDetail = '/ride-detail';
   static const String transactions = '/transactions';
@@ -148,6 +150,18 @@ class AppRoutes {
               GoRoute(
                 path: profile,
                 builder: (context, state) => const ProfilePage(),
+                routes: [
+                  GoRoute(
+                    parentNavigatorKey: _rootNavigatorKey,
+                    path: 'settings',
+                    builder: (context, state) => const SettingsPage(),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: _rootNavigatorKey,
+                    path: 'subscription',
+                    builder: (context, state) => const SubscriptionManagementPage(),
+                  ),
+                ],
               ),
             ],
           ),
@@ -197,6 +211,11 @@ class AppRoutes {
         parentNavigatorKey: _rootNavigatorKey,
         path: settings,
         builder: (context, state) => const SettingsPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: subscription,
+        builder: (context, state) => const SubscriptionManagementPage(),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,

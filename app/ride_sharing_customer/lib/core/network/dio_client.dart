@@ -66,9 +66,9 @@ class DioClient {
 
   /// Platform-aware local API URL (Android emulator vs iOS/web/desktop)
   static String get baseUrl =>
-         // Platform.isAndroid ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+         Platform.isAndroid ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
       // Platform.isAndroid ? 'https://rideshareapi.dokume.in' : 'https://rideshareapi.dokume.in';
-         Platform.isAndroid ? 'https://ryva.duckdns.org' : 'https://ryva.duckdns.org';
+      //    Platform.isAndroid ? 'https://ryva.duckdns.org' : 'https://ryva.duckdns.org';
 
   /// Socket.IO base URL — just the origin, no path prefix.
   /// Socket.IO is mounted on the raw HTTP server, not under /api/v1.

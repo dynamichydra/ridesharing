@@ -12,6 +12,11 @@ class LoadPlans extends SubscriptionEvent {
   LoadPlans({required this.countryId});
 }
 
+class LoadSubscriptionOverview extends SubscriptionEvent {
+  final String countryId;
+  LoadSubscriptionOverview({required this.countryId});
+}
+
 class PurchasePlanRequested extends SubscriptionEvent {
   final String planId;
   PurchasePlanRequested({required this.planId});
@@ -43,7 +48,12 @@ class PlansLoading extends SubscriptionState {}
 
 class PlansLoaded extends SubscriptionState {
   final List<SubscriptionPlan> plans;
-  PlansLoaded({required this.plans});
+  final ActiveSubscription? activeSubscription;
+
+  PlansLoaded({
+    required this.plans,
+    this.activeSubscription,
+  });
 }
 
 class PlansLoadFailed extends SubscriptionState {
@@ -82,12 +92,17 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
   /// Kept so a cancelled/failed purchase can return to the already-fetched
   /// plan list instead of re-fetching or leaving the UI stateless.
   List<SubscriptionPlan> _cachedPlans = const [];
+  ActiveSubscription? _cachedActiveSub;
 
   SubscriptionBloc({required this.subscriptionRepository}) : super(SubscriptionInitial()) {
     on<LoadPlans>(_onLoadPlans);
+    on<LoadSubscriptionOverview>(_onLoadOverview);
     on<PurchasePlanRequested>(_onPurchasePlanRequested);
     on<VerifyPurchaseRequested>(_onVerifyPurchaseRequested);
-    on<PurchaseCancelled>((event, emit) => emit(PlansLoaded(plans: _cachedPlans)));
+    on<PurchaseCancelled>((event, emit) => emit(PlansLoaded(
+      plans: _cachedPlans,
+      activeSubscription: _cachedActiveSub,
+    )));
   }
 
   Future<void> _onLoadPlans(LoadPlans event, Emitter<SubscriptionState> emit) async {
@@ -95,7 +110,25 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     try {
       final plans = await subscriptionRepository.getPlans(event.countryId);
       _cachedPlans = plans;
-      emit(PlansLoaded(plans: plans));
+      emit(PlansLoaded(plans: plans, activeSubscription: _cachedActiveSub));
+    } catch (e) {
+      emit(PlansLoadFailed(message: e.toString()));
+    }
+  }
+
+  Future<void> _onLoadOverview(LoadSubscriptionOverview event, Emitter<SubscriptionState> emit) async {
+    emit(PlansLoading());
+    try {
+      final results = await Future.wait([
+        subscriptionRepository.getMySubscription(),
+        subscriptionRepository.getPlans(event.countryId),
+      ]);
+      _cachedActiveSub = results[0] as ActiveSubscription?;
+      _cachedPlans = (results[1] as List<SubscriptionPlan>?) ?? [];
+      emit(PlansLoaded(
+        plans: _cachedPlans,
+        activeSubscription: _cachedActiveSub,
+      ));
     } catch (e) {
       emit(PlansLoadFailed(message: e.toString()));
     }
@@ -107,6 +140,7 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
       final result = await subscriptionRepository.initiateSubscription(event.planId);
       switch (result) {
         case SubscriptionAlreadyActive(:final subscription):
+          _cachedActiveSub = subscription;
           emit(PurchaseSucceeded(subscription: subscription));
         case RazorpayCheckoutRequired():
           emit(RazorpayCheckoutReady(data: result, planId: event.planId));
@@ -127,6 +161,7 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
         paymentRef: event.paymentRef,
         signature: event.signature,
       );
+      _cachedActiveSub = subscription;
       emit(PurchaseSucceeded(subscription: subscription));
     } catch (e) {
       emit(PurchaseFailed(message: e.toString()));

@@ -40,7 +40,7 @@ class AppRouter {
           return null;
         }
 
-        if (isOnboarding || state.matchedLocation == '/' || state.matchedLocation == '/subscription') {
+        if (isOnboarding || state.matchedLocation == '/') {
           return '/dashboard';
         }
       } else if (authState is Unauthenticated) {
@@ -130,6 +130,47 @@ class AppRouter {
               GoRoute(
                 path: '/profile',
                 builder: (context, state) => const ProfilePage(),
+                routes: [
+                  GoRoute(
+                    parentNavigatorKey: _rootNavigatorKey,
+                    path: 'documents',
+                    builder: (context, state) => const DriverDocumentsPage(),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: _rootNavigatorKey,
+                    path: 'vehicle-info',
+                    builder: (context, state) => const VehicleInfoPage(),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: _rootNavigatorKey,
+                    path: 'subscription',
+                    builder: (context, state) {
+                      final authState = authBloc.state;
+                      final countryId = authState is Authenticated ? (authState.driver.countryId ?? '') : '';
+                      return SubscriptionPlansScreen(
+                        countryId: countryId,
+                        onSubscribed: () {},
+                        onLogout: () {
+                          authBloc.add(LogoutRequested());
+                        },
+                      );
+                    },
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: _rootNavigatorKey,
+                    path: 'settings',
+                    builder: (context, state) {
+                      final authState = authBloc.state;
+                      final driver = authState is Authenticated ? authState.driver : null;
+                      return SettingsPage(
+                        driver: driver,
+                        onLogout: () {
+                          authBloc.add(LogoutRequested());
+                        },
+                      );
+                    },
+                  ),
+                ],
               ),
             ],
           ),

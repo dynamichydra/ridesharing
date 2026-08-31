@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../style/appcolors.dart';
 import '../../../common/entities/driver_profile.dart';
 
@@ -84,6 +85,16 @@ class _SettingsPageState extends State<SettingsPage> {
               ]),
             ),
 
+          _sectionHeader('Subscription & Plan'),
+          _navTile(
+            icon: Icons.card_membership_rounded,
+            iconColor: AppColors.secondary,
+            title: 'Manage Subscription',
+            trailing: widget.driver?.subscriptionStatus == 'active' ? 'Active' : 'Get Plan',
+            onTap: () => context.push('/subscription'),
+          ),
+
+          const SizedBox(height: 8),
           _sectionHeader('Notifications'),
           _switchTile(
             icon: Icons.notifications_active_rounded,

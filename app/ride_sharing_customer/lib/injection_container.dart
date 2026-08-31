@@ -50,6 +50,11 @@ import 'features/profile/domain/repositories/profile_repository.dart';
 import 'features/profile/presentation/bloc/profile_bloc.dart';
 import 'core/theme/theme_bloc.dart';
 
+// Subscription
+import 'features/subscription/data/datasources/rider_subscription_datasource.dart';
+import 'features/subscription/domain/repositories/rider_subscription_repository.dart';
+import 'features/subscription/presentation/bloc/subscription_bloc.dart';
+
 final sl = GetIt.instance;
 
 
@@ -120,4 +125,11 @@ Future<void> init() async {
   sl.registerLazySingleton<ProfileRepository>(() => ProfileRepositoryImpl(sl<ProfileDataSource>()));
   sl.registerFactory(() => ProfileBloc(sl<ProfileRepository>()));
   sl.registerFactory(() => ThemeBloc(sl<StorageService>()));
+
+  // ==========================================
+  // Subscription Feature
+  // ==========================================
+  sl.registerLazySingleton<RiderSubscriptionDataSource>(() => RiderSubscriptionDataSourceImpl(sl<DioClient>()));
+  sl.registerLazySingleton<RiderSubscriptionRepository>(() => RiderSubscriptionRepositoryImpl(sl<RiderSubscriptionDataSource>()));
+  sl.registerFactory(() => SubscriptionBloc(sl<RiderSubscriptionRepository>()));
 }

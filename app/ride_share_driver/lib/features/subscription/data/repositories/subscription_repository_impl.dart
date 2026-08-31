@@ -77,6 +77,13 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
     // unlike the dev-mode initiate response which returns the subscriptions row flat.
     final subscriptionJson = json['subscription'] as Map<String, dynamic>?;
     if (subscriptionJson == null) return null;
-    return ActiveSubscription.fromJson(subscriptionJson);
+    
+    SubscriptionPlan? plan;
+    if (json['plan'] != null) {
+      try {
+        plan = SubscriptionPlan.fromJson(json['plan'] as Map<String, dynamic>);
+      } catch (_) {}
+    }
+    return ActiveSubscription.fromJson(subscriptionJson, plan: plan);
   }
 }

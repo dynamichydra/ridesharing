@@ -15,6 +15,8 @@ import '../../../../features/ride/presentation/widgets/ride_request_card.dart';
 import '../../../../common/entities/driver_dashboard_summary.dart';
 import '../../../../common/entities/driver_profile.dart';
 import '../../../../core/storage/secure_storage.dart';
+import '../../../../features/subscription/domain/repositories/subscription_repository.dart';
+import '../../../../features/subscription/domain/entities/active_subscription.dart';
 import 'widgets/pulsing_radar_view.dart';
 import 'widgets/offline_mode_view.dart';
 import 'driver_main_layout.dart';
@@ -123,6 +125,395 @@ class _DriverDashboardState extends State<DriverDashboard>
     super.dispose();
   }
 
+  Future<void> _showSubscriptionRequiredDialog(BuildContext context, String message) async {
+    ActiveSubscription? activeSub;
+    try {
+      activeSub = await di.sl<SubscriptionRepository>().getMySubscription();
+    } catch (_) {}
+
+    if (!context.mounted) return;
+
+    final isExpired = activeSub != null && (activeSub.isExpired || activeSub.status.toLowerCase() == 'expired');
+    final hasNoPlan = activeSub == null;
+
+    String dateLabel = '';
+    if (activeSub?.endDate != null) {
+      final dt = DateTime.tryParse(activeSub!.endDate!);
+      if (dt != null) {
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        final formattedDate = '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+        dateLabel = isExpired ? 'Expired on $formattedDate' : 'Valid until $formattedDate';
+      } else {
+        dateLabel = isExpired ? 'Expired' : 'Active';
+      }
+    } else if (activeSub != null && activeSub.endDate == null) {
+      dateLabel = 'Lifetime Access';
+    } else {
+      dateLabel = 'No active membership';
+    }
+
+    final title = isExpired ? 'Your subscription\nhas expired' : 'Subscription\nRequired';
+    final subtitle = isExpired
+        ? 'Your driver subscription has ended.\nRenew your subscription to go Live and\nstart accepting rides.'
+        : 'An active subscription plan is required.\nSubscribe now to go Live and start\naccepting rides.';
+    final badgeText = isExpired ? 'EXPIRED' : (hasNoPlan ? 'NO PLAN' : 'INACTIVE');
+    final statusText = isExpired ? 'Expired' : (hasNoPlan ? 'Not Subscribed' : 'Inactive');
+    final buttonText = isExpired ? 'Renew Subscription' : 'Get Subscription';
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogCtx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        backgroundColor: Colors.white,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Top close button (X)
+              Align(
+                alignment: Alignment.topRight,
+                child: IconButton(
+                  visualDensity: VisualDensity.compact,
+                  splashRadius: 20,
+                  icon: const Icon(Icons.close_rounded, size: 22, color: Color(0xFF64748B)),
+                  onPressed: () => Navigator.pop(dialogCtx),
+                ),
+              ),
+
+              // Calendar + Lock Badge Illustration with Sparkles
+              SizedBox(
+                height: 120,
+                width: 140,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Background soft circular glow
+                    Container(
+                      width: 90,
+                      height: 90,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFEF3C7),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+
+                    // Left Sparkle (Green + blue)
+                    Positioned(
+                      left: 4,
+                      top: 24,
+                      child: Icon(Icons.star_rounded, size: 14, color: const Color(0xFF10B981).withValues(alpha: 0.8)),
+                    ),
+                    Positioned(
+                      left: 12,
+                      bottom: 30,
+                      child: Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFF3B82F6), width: 1.5),
+                        ),
+                      ),
+                    ),
+
+                    // Right Sparkle (Yellow + Green)
+                    Positioned(
+                      right: 6,
+                      top: 36,
+                      child: Icon(Icons.star_rounded, size: 14, color: const Color(0xFFF59E0B).withValues(alpha: 0.8)),
+                    ),
+
+                    // Main Calendar Card
+                    Container(
+                      width: 72,
+                      height: 74,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          // Green Top Header with rings
+                          Container(
+                            height: 22,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF009048),
+                              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                Container(
+                                  width: 4,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                                Container(
+                                  width: 4,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Calendar Grid dots
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                              child: GridView.count(
+                                crossAxisCount: 4,
+                                mainAxisSpacing: 3,
+                                crossAxisSpacing: 3,
+                                physics: const NeverScrollableScrollPhysics(),
+                                children: List.generate(
+                                  12,
+                                  (index) => Container(
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFE2E8F0),
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Yellow Lock Badge overlaid on bottom-right of calendar
+                    Positioned(
+                      right: 18,
+                      bottom: 10,
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFACC15), Color(0xFFEAB308)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFEAB308).withValues(alpha: 0.4),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.lock_rounded,
+                          color: Color(0xFF1E293B),
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              // Title
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0F172A),
+                  height: 1.2,
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // Subtitle
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF64748B),
+                  height: 1.4,
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Subscription Status Info Box
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+                ),
+                child: Row(
+                  children: [
+                    // Icon with soft green circular bg
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDCFCE7),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.assignment_turned_in_outlined,
+                          color: Color(0xFF009048),
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Details text
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Subscription',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            statusText,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFEF4444),
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            dateLabel,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Status Badge (EXPIRED)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEE2E2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        badgeText,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFFDC2626),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Green Primary Action Button
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF009048),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(dialogCtx);
+                    context.push('/subscription');
+                  },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.workspace_premium_rounded,
+                          color: Color(0xFF009048),
+                          size: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        buttonText,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.chevron_right_rounded, size: 20),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Not Now Text Button
+              GestureDetector(
+                onTap: () => Navigator.pop(dialogCtx),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    'Not Now',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF2563EB),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _toggleOnlineStatus(bool currentIsOnline) {
     if (currentIsOnline) {
       _driverStatusBloc.add(GoOfflineRequested());
@@ -155,7 +546,11 @@ class _DriverDashboardState extends State<DriverDashboard>
           bloc: _driverStatusBloc,
           listener: (context, state) {
             if (state is DriverStatusError) {
-              CustomToast.show(context, state.message);
+              if (state.message.toLowerCase().contains('subscription')) {
+                _showSubscriptionRequiredDialog(context, state.message);
+              } else {
+                CustomToast.show(context, state.message);
+              }
             } else if (state is DriverStatusOnline) {
               _rideBloc.add(ConnectRideSocket());
             } else if (state is DriverStatusOffline) {
