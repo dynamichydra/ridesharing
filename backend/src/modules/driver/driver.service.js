@@ -587,18 +587,34 @@ export async function submitApplication(driverId) {
 
 export async function goOnline(driverId, lat, lng) {
   const [driver] = await db.select({
-    approvalStatus: drivers.approvalStatus,
-    isBlocked:      drivers.isBlocked,
+    approvalStatus:     drivers.approvalStatus,
+    subscriptionStatus: drivers.subscriptionStatus,
+    isBlocked:          drivers.isBlocked,
   }).from(drivers).where(eq(drivers.id, driverId)).limit(1);
 
   if (!driver)                              throw { statusCode: 404, message: 'Driver not found' };
   if (driver.isBlocked)                     throw { statusCode: 403, message: 'Account is blocked' };
   if (driver.approvalStatus !== 'approved') throw { statusCode: 403, message: 'Account not approved yet' };
 
-  // A subscription is no longer required to go online (see commission.service.js) — but a
-  // driver still needs somewhere for the platform to actually pay them, so an approved payout
-  // account (Stripe Connect or RazorpayX, see payout-account/bank-account modules) is now the
-  // gate instead of subscriptionStatus.
+  // Check active driver subscription in subscriptions table
+  const [activeSub] = await db.select({ id: subscriptions.id })
+    .from(subscriptions)
+    .where(
+      and(
+        eq(subscriptions.driverId, driverId),
+        eq(subscriptions.status, 'active'),
+        sql`(${subscriptions.endDate} IS NULL OR ${subscriptions.endDate} > NOW())`
+      )
+    ).limit(1);
+
+  if (!activeSub || driver.subscriptionStatus !== 'active') {
+    throw {
+      statusCode: 403,
+      message: 'Active subscription required. Please purchase or renew a subscription plan to go online and accept rides.',
+    };
+  }
+
+  // Check approved payout bank details
   const [payoutAccount] = await db.select({ status: driverPayoutAccounts.status })
     .from(driverPayoutAccounts).where(eq(driverPayoutAccounts.driverId, driverId)).limit(1);
   if (!payoutAccount || payoutAccount.status !== 'approved') {

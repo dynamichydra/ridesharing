@@ -233,7 +233,7 @@ export async function getMySubscription(driverId) {
     plan:         subscriptionPlans,
   }).from(subscriptions)
     .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
-    .where(and(eq(subscriptions.driverId, driverId), eq(subscriptions.status, 'active')))
+    .where(eq(subscriptions.driverId, driverId))
     .orderBy(desc(subscriptions.createdAt)).limit(1);
   return sub || null;
 }
