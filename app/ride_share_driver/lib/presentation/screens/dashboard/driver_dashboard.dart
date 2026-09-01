@@ -600,12 +600,7 @@ class _DriverDashboardState extends State<DriverDashboard>
         BlocListener<ProfileBloc, ProfileState>(
           bloc: _profileBloc,
           listener: (context, state) {
-            if (!_hasCheckedExpiredOnLaunch && state is ProfileLoaded) {
-              if (state.profile.isExpiredSubscription) {
-                _hasCheckedExpiredOnLaunch = true;
-                _showSubscriptionRequiredDialog(context, 'Subscription expired');
-              }
-            }
+            // Profile data is loaded into dashboard state
           },
         ),
       ],

@@ -31,6 +31,7 @@ class AppRouter {
     redirect: (context, state) {
       final authState = authBloc.state;
       final isOnboarding = state.matchedLocation == '/onboarding';
+      final isSubscriptionPage = state.matchedLocation == '/subscription';
 
       if (authState is Authenticated) {
         final isFullyApproved = authState.driver.isApproved;
@@ -40,12 +41,17 @@ class AppRouter {
           return null;
         }
 
-        // If driver has never subscribed before, take them directly to the subscription screen
         final isNeverSubscribed = authState.driver.isNeverSubscribed;
-        final isSubscriptionPage = state.matchedLocation == '/subscription';
+        final isExpiredSubscription = authState.driver.isExpiredSubscription;
 
+        // Never subscribed → force to subscription screen first
         if (isNeverSubscribed) {
           if (!isSubscriptionPage) return '/subscription';
+          return null;
+        }
+
+        // Expired drivers can access /subscription for renewal — don't redirect them away
+        if (isExpiredSubscription && isSubscriptionPage) {
           return null;
         }
 
