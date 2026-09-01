@@ -58,6 +58,7 @@ dependencies:
   responsive_framework: ^1.1.1
   flutter_native_splash: ^2.3.10
   fluttertoast: ^9.1.0
+  calendar_date_picker2: ^3.0.0
   google_fonts: ^8.1.0
   file_picker: ^11.0.2
   image_picker: ^1.2.3
@@ -66,6 +67,7 @@ dependencies:
   flutter_stripe: ^13.1.0
   socket_io_client: ^3.1.6
   lottie: ^3.1.2
+  material_symbols_icons: ^4.2801.0
 
 dev_dependencies:
   flutter_test:

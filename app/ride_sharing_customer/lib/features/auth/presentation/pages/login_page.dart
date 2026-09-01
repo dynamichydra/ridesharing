@@ -89,6 +89,11 @@ class _LoginPageState extends State<LoginPage> {
             : CountryConfig.supportedCountries.firstWhere((c) => c.isoCode == 'IN'),
       );
 
+      final resolvedIso = (matched.isoCode == 'CA' || matched.isoCode == 'US') ? 'CA' : 'IN';
+      try {
+        sl<StorageService>().setCountryCode(resolvedIso);
+      } catch (_) {}
+
       setState(() {
         _selectedCountry = matched;
         _hasLocationPermission = true;
@@ -263,6 +268,9 @@ class _LoginPageState extends State<LoginPage> {
         }
         phone = '${_selectedCountry.dialCode}$digits';
       }
+      try {
+        sl<StorageService>().setCountryCode(_selectedCountry.isoCode);
+      } catch (_) {}
       context.read<AuthBloc>().add(LoginSubmitted(phone));
     }
   }

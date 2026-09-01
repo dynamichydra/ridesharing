@@ -4,6 +4,7 @@ import '../../../../injection_container.dart' as di;
 import '../bloc/profile_bloc.dart';
 import '../../data/models/driver_document_model.dart';
 import '../../../../common/widgets/custom_toast.dart';
+import '../../../../common/widgets/app_date_picker.dart';
 
 class DriverDocumentsPage extends StatefulWidget {
   const DriverDocumentsPage({super.key});
@@ -111,7 +112,7 @@ class _DriverDocumentsPageState extends State<DriverDocumentsPage> {
                   const SizedBox(height: 6),
                   InkWell(
                     onTap: () async {
-                      final picked = await showDatePicker(
+                      final picked = await AppDatePicker.showCustomDatePicker(
                         context: context,
                         initialDate: selectedExpiry ?? DateTime.now().add(const Duration(days: 365)),
                         firstDate: DateTime.now(),

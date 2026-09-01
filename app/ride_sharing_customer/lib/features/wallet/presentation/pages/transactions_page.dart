@@ -379,8 +379,10 @@ class _TransactionsPageState extends State<TransactionsPage>
       body: BlocBuilder<WalletBloc, WalletState>(
         builder: (context, state) {
           List<Map<String, dynamic>> allTxs = [];
+          String currencySymbol = '₹';
           if (state is WalletLoaded) {
             allTxs = _parseTransactions(state.transactions);
+            currencySymbol = state.currency == 'CAD' ? '\$' : '₹';
           }
 
           // Apply date range filter if selected
@@ -409,9 +411,9 @@ class _TransactionsPageState extends State<TransactionsPage>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildTransactionListView(allTxs),
-                _buildTransactionListView(moneyIn),
-                _buildTransactionListView(moneyOut),
+                _buildTransactionListView(allTxs, currencySymbol),
+                _buildTransactionListView(moneyIn, currencySymbol),
+                _buildTransactionListView(moneyOut, currencySymbol),
               ],
             ),
           );
@@ -420,7 +422,7 @@ class _TransactionsPageState extends State<TransactionsPage>
     );
   }
 
-  Widget _buildTransactionListView(List<Map<String, dynamic>> txList) {
+  Widget _buildTransactionListView(List<Map<String, dynamic>> txList, String currencySymbol) {
     if (txList.isEmpty) {
       return Center(
         child: SingleChildScrollView(
@@ -473,7 +475,7 @@ class _TransactionsPageState extends State<TransactionsPage>
                 ),
               ),
               const SizedBox(height: 12),
-              ...entry.value.map((tx) => _buildTransactionCard(tx)),
+              ...entry.value.map((tx) => _buildTransactionCard(tx, currencySymbol)),
               const SizedBox(height: 20),
             ],
           );
@@ -482,7 +484,7 @@ class _TransactionsPageState extends State<TransactionsPage>
     );
   }
 
-  Widget _buildTransactionCard(Map<String, dynamic> tx) {
+  Widget _buildTransactionCard(Map<String, dynamic> tx, String currencySymbol) {
     final isAdd = tx['isAdd'] as bool;
     final assetPath = isAdd ? 'assets/icons/money-in.png' : 'assets/icons/cab-payment.png';
 
@@ -546,7 +548,7 @@ class _TransactionsPageState extends State<TransactionsPage>
             ),
           ),
           Text(
-            '${isAdd ? '+' : '-'} ₹${tx['amount']}',
+            '${isAdd ? '+' : '-'} $currencySymbol${tx['amount']}',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.bold,

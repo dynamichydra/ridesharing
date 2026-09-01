@@ -139,6 +139,15 @@ class DriverProfile extends Equatable {
         activeSubscriptionPlanName != null;
   }
 
+  bool get isExpiredSubscription {
+    final sub = subscriptionStatus.toLowerCase();
+    return sub == 'expired';
+  }
+
+  bool get isNeverSubscribed {
+    return !hasActiveSubscription && !isExpiredSubscription;
+  }
+
   @override
   List<Object?> get props => [
         id,

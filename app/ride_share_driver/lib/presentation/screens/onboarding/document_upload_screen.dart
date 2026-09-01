@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../style/appcolors.dart';
 import '../../../domain/entities/document.dart';
 import '../../../common/widgets/custom_toast.dart';
+import '../../../common/widgets/app_date_picker.dart';
 import 'widgets/three_dots_loader.dart';
 
 class DocumentUploadScreen extends StatefulWidget {
@@ -98,43 +99,12 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
 
   Future<void> _selectDate(BuildContext context) async {
     debugPrint('[DocumentUploadScreen] Expiration date selector clicked');
-    final DateTime? picked = await showDatePicker(
+    final DateTime? picked = await AppDatePicker.showCustomDatePicker(
       context: context,
       initialDate:
           _selectedExpiryDate ?? DateTime.now().add(const Duration(days: 365)),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365 * 15)),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            useMaterial3: true,
-            colorScheme: const ColorScheme.light(
-              primary: AppColors.primary,
-              onPrimary: Colors.white,
-              secondary: AppColors.secondary,
-              onSecondary: Colors.white,
-              surface: Colors.white,
-              onSurface: AppColors.textPrimary,
-            ),
-            dialogTheme: DialogThemeData(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              elevation: 8,
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.secondary,
-                textStyle: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-          ),
-          child: child!,
-        );
-      },
     );
     if (picked != null && picked != _selectedExpiryDate) {
       debugPrint('[DocumentUploadScreen] Date selected: $picked');

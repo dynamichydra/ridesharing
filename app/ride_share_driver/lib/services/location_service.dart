@@ -32,28 +32,32 @@ class LocationService {
       }
     } catch (_) {}
 
-    // 2. Otherwise get current position with short 2s timeout
+    // 2. Otherwise get current position with short 3s timeout
     try {
       return await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.medium,
-        timeLimit: const Duration(seconds: 2),
+        timeLimit: const Duration(seconds: 3),
       );
     } catch (_) {
       final lastKnown = await Geolocator.getLastKnownPosition();
       if (lastKnown != null) return lastKnown;
-      return Position(
-        latitude: 22.5726,
-        longitude: 88.3639,
-        timestamp: DateTime.now(),
-        accuracy: 10.0,
-        altitude: 0.0,
-        altitudeAccuracy: 0.0,
-        heading: 0.0,
-        headingAccuracy: 0.0,
-        speed: 0.0,
-        speedAccuracy: 0.0,
-      );
+      rethrow;
     }
+  }
+
+  /// Returns 'IN' for India, 'CA' for Canada, or null if outside supported regions.
+  static String? getSupportedCountryCode(double latitude, double longitude) {
+    // Canada bounds approx: Lat 41.0 to 83.0, Lon -141.0 to -52.0
+    if (latitude >= 41.0 && latitude <= 83.0 &&
+        longitude >= -141.0 && longitude <= -52.0) {
+      return 'CA';
+    }
+    // India bounds approx: Lat 6.0 to 37.5, Lon 68.0 to 97.5
+    if (latitude >= 6.0 && latitude <= 37.5 &&
+        longitude >= 68.0 && longitude <= 97.5) {
+      return 'IN';
+    }
+    return null;
   }
 
   Stream<Position> getPositionStream({LocationSettings? locationSettings}) {

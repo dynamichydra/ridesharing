@@ -5,6 +5,12 @@ import '../../../../core/services/storage_service.dart';
 abstract class WalletDataSource {
   Future<Map<String, dynamic>> getWalletDetails();
   Future<void> addFunds(double amount, String paymentMethodId);
+  Future<Map<String, dynamic>> initiateTopup(double amount);
+  Future<void> verifyTopup({
+    required String orderRef,
+    required String paymentRef,
+    String? signature,
+  });
   Future<Map<String, dynamic>> payRideWithWallet(String rideId);
 }
 
@@ -87,32 +93,47 @@ class WalletDataSourceImpl implements WalletDataSource {
   @override
   Future<void> addFunds(double amount, String paymentMethodId) async {
     final amountMinor = (amount * 100).round();
+    await _dioClient.dio.post(
+      '/api/v1/wallets/me/topup/demo',
+      data: {'amountMinor': amountMinor},
+    );
+    await _storageService.clearCache();
+  }
+
+  @override
+  Future<Map<String, dynamic>> initiateTopup(double amount) async {
+    final amountMinor = (amount * 100).round();
     final idempotencyKey = 'topup_${DateTime.now().millisecondsSinceEpoch}';
-    
-    if (paymentMethodId == 'demo') {
-      await _dioClient.dio.post(
-        '/api/v1/wallets/me/topup/demo',
-        data: {'amountMinor': amountMinor},
-      );
-    } else {
-      try {
-        await _dioClient.dio.post(
-          '/api/v1/wallets/me/topup/initiate',
-          data: {'amountMinor': amountMinor},
-          options: Options(
-            headers: {'Idempotency-Key': idempotencyKey},
-          ),
-        );
-      } catch (e) {
-        // If gateway keys are not configured or error occurs, fallback to demo topup
-        await _dioClient.dio.post(
-          '/api/v1/wallets/me/topup/demo',
-          data: {'amountMinor': amountMinor},
-        );
-      }
+    final response = await _dioClient.dio.post(
+      '/api/v1/wallets/me/topup/initiate',
+      data: {'amountMinor': amountMinor},
+      options: Options(
+        headers: {'Idempotency-Key': idempotencyKey},
+      ),
+    );
+    dynamic raw = response.data;
+    if (raw is Map && raw['MESSAGE'] is Map) {
+      return Map<String, dynamic>.from(raw['MESSAGE'] as Map);
+    } else if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
     }
-    
-    // Clear cached wallet so next fetch gets the fresh balance from server
+    return {};
+  }
+
+  @override
+  Future<void> verifyTopup({
+    required String orderRef,
+    required String paymentRef,
+    String? signature,
+  }) async {
+    await _dioClient.dio.post(
+      '/api/v1/wallets/me/topup/verify',
+      data: {
+        'orderRef': orderRef,
+        'paymentRef': paymentRef,
+        if (signature != null) 'signature': signature,
+      },
+    );
     await _storageService.clearCache();
   }
 

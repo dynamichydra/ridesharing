@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/constants/constants.dart';
+import '../../../../core/services/storage_service.dart';
+import '../../../../core/services/razorpay_checkout_launcher.dart';
+import '../../../../core/services/stripe_checkout_launcher.dart';
+import '../../../../injection_container.dart' as di;
 import '../bloc/wallet_bloc.dart';
 import '../../../../core/widgets/custom_toast.dart';
 
@@ -14,54 +17,152 @@ class AddFundsPage extends StatefulWidget {
 }
 
 class _AddFundsPageState extends State<AddFundsPage> {
-  final TextEditingController _amountController = TextEditingController(text: '200');
-  double _selectedAmount = 200.0;
-  String _selectedMethodType = 'demo';
+  late final TextEditingController _amountController;
+  late double _selectedAmount;
+  String _selectedMethodType = 'gateway'; // 'gateway' or 'demo'
+  String _countryCode = 'IN'; // Strict based on logged in user's profile: 'IN' or 'CA'
 
-  final List<double> _presets = [100.0, 200.0, 500.0, 1000.0, 2000.0];
+  List<double> get _presets => _countryCode == 'CA'
+      ? [10.0, 20.0, 50.0, 100.0, 200.0]
+      : [100.0, 200.0, 500.0, 1000.0, 2000.0];
 
-  final List<Map<String, dynamic>> _paymentMethods = [
-    {
-      'id': 'demo',
-      'title': '⚡ Demo Money (Sandbox)',
-      'subtitle': 'Add simulated money instantly for testing',
-      'asset': 'assets/icons/money-in.png',
-      'isFeatured': true,
-    },
-    {
-      'id': 'upi',
-      'title': 'Instant UPI (GPay / PhonePe / Paytm)',
-      'subtitle': 'Pay using any UPI app (GPay, PhonePe, Paytm)',
-      'asset': 'assets/icons/money-in.png',
-      'isFeatured': false,
-    },
-    {
-      'id': 'card',
-      'title': 'Credit / Debit Card',
-      'subtitle': 'Visa, Mastercard, Rupay',
-      'asset': 'assets/icons/cab-payment.png',
-      'isFeatured': false,
-    },
-    {
-      'id': 'netbanking',
-      'title': 'Net Banking',
-      'subtitle': 'All major Indian banks supported',
-      'asset': 'assets/icons/money-in.png',
-      'isFeatured': false,
-    },
-    {
-      'id': 'wallet',
-      'title': 'Other Wallets',
-      'subtitle': 'Paytm, PhonePe, Amazon Pay',
-      'asset': 'assets/icons/money-in.png',
-      'isFeatured': false,
-    },
-  ];
+  String get _currencySymbol => _countryCode == 'CA' ? '\$' : '₹';
+  String get _currencyCode => _countryCode == 'CA' ? 'CAD' : 'INR';
+
+  @override
+  void initState() {
+    super.initState();
+    _amountController = TextEditingController(text: '200');
+    _selectedAmount = 200.0;
+    _resolveUserCountry();
+  }
+
+  void _resolveUserCountry() {
+    try {
+      final storage = di.sl<StorageService>();
+      
+      // 1. First check cached wallet data (authoritative from server /api/v1/wallets/me)
+      final cachedWallet = storage.getCachedData('cached_wallet_data');
+      if (cachedWallet is Map && cachedWallet['currency'] != null) {
+        final currency = cachedWallet['currency'].toString().toUpperCase();
+        if (currency == 'CAD') {
+          _countryCode = 'CA';
+        } else if (currency == 'INR') {
+          _countryCode = 'IN';
+        }
+      } else {
+        // 2. Fallback to stored user profile phone / country code
+        final cachedProfile = storage.getCachedData('cached_profile_data');
+        if (cachedProfile is Map && cachedProfile['phone'] != null) {
+          final phone = cachedProfile['phone'].toString();
+          if (phone.startsWith('+1')) {
+            _countryCode = 'CA';
+          } else if (phone.startsWith('+91')) {
+            _countryCode = 'IN';
+          }
+        } else {
+          final storedCountry = storage.getCountryCode().toUpperCase();
+          if (storedCountry == 'CA') {
+            _countryCode = 'CA';
+          } else {
+            _countryCode = 'IN';
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (_countryCode == 'CA') {
+      _selectedAmount = 50.0;
+      _amountController.text = '50';
+    }
+  }
+
+  List<Map<String, dynamic>> get _paymentMethods {
+    if (_countryCode == 'CA') {
+      return [
+        {
+          'id': 'gateway',
+          'gateway': 'stripe',
+          'title': 'Credit / Debit Card',
+          'subtitle': 'Visa, Mastercard, American Express, Apple Pay',
+          'iconData': Icons.credit_card_rounded,
+        },
+        {
+          'id': 'demo',
+          'gateway': 'demo',
+          'title': '⚡ Demo Money (Sandbox)',
+          'subtitle': 'Add simulated CAD funds instantly for testing',
+          'iconData': Icons.bolt_rounded,
+          'badge': 'Test Mode',
+        },
+      ];
+    } else {
+      return [
+        {
+          'id': 'gateway',
+          'gateway': 'razorpay',
+          'title': 'Instant UPI / Cards / NetBanking',
+          'subtitle': 'GPay, PhonePe, Paytm, Cards & NetBanking',
+          'iconData': Icons.account_balance_wallet_rounded,
+        },
+        {
+          'id': 'demo',
+          'gateway': 'demo',
+          'title': '⚡ Demo Money (Sandbox)',
+          'subtitle': 'Add simulated INR money instantly for testing',
+          'iconData': Icons.bolt_rounded,
+          'badge': 'Test Mode',
+        },
+      ];
+    }
+  }
 
   @override
   void dispose() {
     _amountController.dispose();
     super.dispose();
+  }
+
+  Future<void> _launchRazorpay(RazorpayTopupReady state) async {
+    final result = await RazorpayCheckoutLauncher().checkout(
+      keyId: state.keyId,
+      gatewayOrderId: state.gatewayOrderId,
+      amountMinor: state.amountMinor,
+      currencyCode: state.currencyCode,
+      description: state.description,
+    );
+
+    if (!mounted) return;
+
+    if (result.success) {
+      context.read<WalletBloc>().add(VerifyWalletTopup(
+            orderRef: result.orderId!,
+            paymentRef: result.paymentId!,
+            signature: result.signature,
+          ));
+    } else {
+      CustomToast.show(context, result.errorMessage ?? 'Payment was cancelled or failed.');
+      context.read<WalletBloc>().add(TopupCancelled());
+    }
+  }
+
+  Future<void> _launchStripe(StripeTopupReady state) async {
+    final success = await StripeCheckoutLauncher().checkout(
+      clientSecret: state.clientSecret,
+      publishableKey: state.publishableKey,
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      context.read<WalletBloc>().add(VerifyWalletTopup(
+            orderRef: state.gatewayOrderId,
+            paymentRef: state.gatewayOrderId,
+          ));
+    } else {
+      CustomToast.show(context, 'Payment was cancelled or failed.');
+      context.read<WalletBloc>().add(TopupCancelled());
+    }
   }
 
   void _submit() {
@@ -74,17 +175,24 @@ class _AddFundsPageState extends State<AddFundsPage> {
     }
 
     final double? amount = double.tryParse(text);
-    if (amount == null || amount < 10) {
-      CustomToast.show(context, 'Minimum amount to add is ₹10');
+    final minAmount = _countryCode == 'CA' ? 1.0 : 10.0;
+    if (amount == null || amount < minAmount) {
+      CustomToast.show(context, 'Minimum amount to add is $_currencySymbol$minAmount');
       return;
     }
 
-    context.read<WalletBloc>().add(
-          AddWalletFunds(
-            amount: amount,
-            paymentMethodId: _selectedMethodType,
-          ),
-        );
+    if (_selectedMethodType == 'demo') {
+      context.read<WalletBloc>().add(
+            AddWalletFunds(
+              amount: amount,
+              paymentMethodId: 'demo',
+            ),
+          );
+    } else {
+      context.read<WalletBloc>().add(
+            InitiateWalletTopup(amount: amount),
+          );
+    }
   }
 
   @override
@@ -110,7 +218,11 @@ class _AddFundsPageState extends State<AddFundsPage> {
       ),
       body: BlocConsumer<WalletBloc, WalletState>(
         listener: (context, state) {
-          if (state is AddFundsSuccess) {
+          if (state is RazorpayTopupReady) {
+            _launchRazorpay(state);
+          } else if (state is StripeTopupReady) {
+            _launchStripe(state);
+          } else if (state is AddFundsSuccess) {
             CustomToast.show(context, 'Funds added successfully!');
             context.pop();
           } else if (state is WalletError) {
@@ -118,7 +230,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
           }
         },
         builder: (context, walletState) {
-          final isLoading = walletState is WalletLoading;
+          final isLoading = walletState is WalletLoading || walletState is TopupProcessing;
 
           return SafeArea(
             child: SingleChildScrollView(
@@ -147,9 +259,9 @@ class _AddFundsPageState extends State<AddFundsPage> {
                       children: [
                         Row(
                           children: [
-                            const Text(
-                              '₹ ',
-                              style: TextStyle(
+                            Text(
+                              '$_currencySymbol ',
+                              style: const TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF0A2540),
@@ -183,6 +295,21 @@ class _AddFundsPageState extends State<AddFundsPage> {
                                 },
                               ),
                             ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                _currencyCode,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 16),
@@ -199,7 +326,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
                                 },
                                 child: Container(
                                   height: 40,
-                                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                                  margin: const EdgeInsets.symmetric(horizontal: 3),
                                   decoration: BoxDecoration(
                                     color: isSelected ? const Color(0xFF009048) : const Color(0xFFF8FAFC),
                                     borderRadius: BorderRadius.circular(10),
@@ -209,11 +336,11 @@ class _AddFundsPageState extends State<AddFundsPage> {
                                   ),
                                   child: Center(
                                     child: Text(
-                                      '₹${preset.toStringAsFixed(0)}',
+                                      '$_currencySymbol${preset.toStringAsFixed(0)}',
                                       style: TextStyle(
                                         color: isSelected ? Colors.white : const Color(0xFF0A2540),
                                         fontWeight: FontWeight.w600,
-                                        fontSize: 13,
+                                        fontSize: 12,
                                       ),
                                     ),
                                   ),
@@ -258,39 +385,52 @@ class _AddFundsPageState extends State<AddFundsPage> {
                                 padding: const EdgeInsets.all(16),
                                 child: Row(
                                   children: [
-                                    if (pm['iconText'] != null)
-                                      Container(
-                                        width: 36,
-                                        height: 24,
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          pm['iconText'] as String,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF64748B),
-                                            fontStyle: FontStyle.italic,
-                                          ),
-                                        ),
-                                      )
-                                    else
-                                      Icon(
-                                        (pm['iconData'] as IconData?) ?? Icons.account_balance_wallet_outlined,
-                                        color: const Color(0xFF0A2540),
-                                        size: 24,
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF009048).withValues(alpha: 0.08),
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
+                                      child: Icon(
+                                        pm['iconData'] as IconData,
+                                        color: const Color(0xFF009048),
+                                        size: 22,
+                                      ),
+                                    ),
                                     const SizedBox(width: 14),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            pm['title'] as String,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              color: Color(0xFF0A2540),
-                                            ),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  pm['title'] as String,
+                                                  style: const TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Color(0xFF0A2540),
+                                                  ),
+                                                ),
+                                              ),
+                                              if (pm['badge'] != null)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFF1F5F9),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    pm['badge'] as String,
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: Color(0xFF475569),
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
@@ -303,6 +443,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
                                         ],
                                       ),
                                     ),
+                                    const SizedBox(width: 10),
                                     Container(
                                       width: 20,
                                       height: 20,
@@ -355,9 +496,9 @@ class _AddFundsPageState extends State<AddFundsPage> {
                                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
                             )
-                          : const Text(
-                              'Add Money Securely',
-                              style: TextStyle(
+                          : Text(
+                              'Add $_currencySymbol${_amountController.text.trim()} Securely',
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
@@ -375,13 +516,13 @@ class _AddFundsPageState extends State<AddFundsPage> {
                   const SizedBox(height: 16),
 
                   // Security note footer
-                  Row(
+                  const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
+                    children: [
                       Icon(Icons.check_circle_rounded, color: Color(0xFF009048), size: 14),
                       SizedBox(width: 6),
                       Text(
-                        'Your payment is encrypted and secure',
+                        'End-to-end 256-bit encrypted & secure payment',
                         style: TextStyle(
                           fontSize: 12,
                           color: Color(0xFF64748B),

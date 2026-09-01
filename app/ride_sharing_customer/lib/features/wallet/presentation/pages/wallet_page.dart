@@ -86,10 +86,12 @@ class _WalletPageState extends State<WalletPage> {
       body: BlocBuilder<WalletBloc, WalletState>(
         builder: (context, state) {
           double balance = 0.0;
+          String currencySymbol = '₹';
           List<Map<String, dynamic>> recentTxs = [];
 
           if (state is WalletLoaded) {
             balance = state.balance;
+            currencySymbol = state.currency == 'CAD' ? '\$' : '₹';
             recentTxs = _parseTransactions(state.transactions);
           } else if (state is WalletLoading) {
             // Keep previous data if any
@@ -138,7 +140,7 @@ class _WalletPageState extends State<WalletPage> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          '₹${balance.toStringAsFixed(2)}',
+                          '$currencySymbol${balance.toStringAsFixed(2)}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 32,
@@ -293,7 +295,7 @@ class _WalletPageState extends State<WalletPage> {
                       separatorBuilder: (context, index) =>
                           const Divider(height: 1, color: Color(0xFFF1F5F9)),
                       itemBuilder: (context, index) {
-                        return _buildTransactionItem(recentTxs[index]);
+                        return _buildTransactionItem(recentTxs[index], currencySymbol);
                       },
                     ),
                   const SizedBox(height: 20),
@@ -306,7 +308,7 @@ class _WalletPageState extends State<WalletPage> {
     );
   }
 
-  Widget _buildTransactionItem(Map<String, dynamic> tx) {
+  Widget _buildTransactionItem(Map<String, dynamic> tx, String currencySymbol) {
     final isAdd = tx['isAdd'] as bool;
     final assetPath = isAdd ? 'assets/icons/money-in.png' : 'assets/icons/cab-payment.png';
 
@@ -357,7 +359,7 @@ class _WalletPageState extends State<WalletPage> {
             ),
           ),
           Text(
-            '${isAdd ? '+' : '-'} ₹${tx['amount']}',
+            '${isAdd ? '+' : '-'} $currencySymbol${tx['amount']}',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.bold,

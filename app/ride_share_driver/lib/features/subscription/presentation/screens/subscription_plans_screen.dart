@@ -57,6 +57,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
           signature: result.signature,
         ));
       } else {
+        setState(() => _isProcessing = false);
         CustomToast.show(context, result.errorMessage ?? 'Payment was not completed.');
         _bloc.add(PurchaseCancelled());
       }
@@ -73,6 +74,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
           paymentRef: state.data.gatewayOrderId,
         ));
       } else {
+        setState(() => _isProcessing = false);
         CustomToast.show(context, 'Payment was not completed.');
         _bloc.add(PurchaseCancelled());
       }
@@ -222,9 +224,13 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
               _plans = state.plans;
               _activeSubscription = state.activeSubscription;
               _loadError = null;
+              _isProcessing = false;
             });
           } else if (state is PlansLoadFailed) {
-            setState(() => _loadError = state.message);
+            setState(() {
+              _loadError = state.message;
+              _isProcessing = false;
+            });
           } else if (state is PurchaseInProgress) {
             setState(() => _isProcessing = true);
           } else if (state is RazorpayCheckoutReady || state is StripeCheckoutReady) {

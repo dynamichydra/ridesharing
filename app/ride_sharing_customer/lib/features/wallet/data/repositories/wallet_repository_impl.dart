@@ -26,6 +26,32 @@ class WalletRepositoryImpl implements WalletRepository {
   }
 
   @override
+  Future<Map<String, dynamic>> initiateTopup(double amount) async {
+    try {
+      return await _walletDataSource.initiateTopup(amount);
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<void> verifyTopup({
+    required String orderRef,
+    required String paymentRef,
+    String? signature,
+  }) async {
+    try {
+      await _walletDataSource.verifyTopup(
+        orderRef: orderRef,
+        paymentRef: paymentRef,
+        signature: signature,
+      );
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
   Future<Map<String, dynamic>> payRideWithWallet(String rideId) async {
     try {
       return await _walletDataSource.payRideWithWallet(rideId);

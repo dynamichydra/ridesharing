@@ -8,6 +8,7 @@ import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../../presentation/screens/dashboard/driver_main_layout.dart';
 import '../../../../common/entities/driver_profile.dart';
 import '../../../../common/widgets/custom_toast.dart';
+import '../../../../common/widgets/app_date_picker.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -187,7 +188,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             const SizedBox(height: 6),
                             InkWell(
                               onTap: () async {
-                                final picked = await showDatePicker(
+                                final picked = await AppDatePicker.showCustomDatePicker(
                                   context: context,
                                   initialDate: selectedDob ?? DateTime(1995, 1, 1),
                                   firstDate: DateTime(1940),

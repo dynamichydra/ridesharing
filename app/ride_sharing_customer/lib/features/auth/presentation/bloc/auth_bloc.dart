@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import '../../../../core/errors/failures.dart';
 import '../../domain/repositories/auth_repository.dart';
 
 // ==========================================
@@ -139,13 +140,22 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
+  String _extractErrorMessage(dynamic e) {
+    if (e is Failure) return e.message;
+    String msg = e.toString();
+    if (msg.startsWith('Exception: ')) {
+      msg = msg.substring(11);
+    }
+    return msg;
+  }
+
   Future<void> _onLoginSubmitted(LoginSubmitted event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
     try {
       await _authRepository.login(event.phone);
       emit(OtpRequired(event.phone));
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError(_extractErrorMessage(e)));
     }
   }
 
@@ -155,7 +165,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await _authRepository.login(event.phone);
       emit(OtpRequired(event.phone));
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError(_extractErrorMessage(e)));
     }
   }
 
@@ -169,7 +179,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(AuthAuthenticated());
       }
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError(_extractErrorMessage(e)));
     }
   }
 
@@ -179,7 +189,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await _authRepository.registerProfileDetails(event.name, event.email);
       emit(AuthAuthenticated());
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError(_extractErrorMessage(e)));
     }
   }
 
@@ -189,7 +199,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await _authRepository.sendForgotPasswordEmail(event.email);
       emit(ForgotPasswordSuccess());
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError(_extractErrorMessage(e)));
     }
   }
 

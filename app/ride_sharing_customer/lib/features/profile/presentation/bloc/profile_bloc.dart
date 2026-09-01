@@ -122,7 +122,11 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       emit(ProfileUpdateSuccess());
       add(LoadProfile());
     } catch (e) {
-      emit(ProfileError(e.toString()));
+      String msg = e.toString();
+      if (msg.startsWith('Exception: ')) {
+        msg = msg.substring(11);
+      }
+      emit(ProfileError(msg));
     }
   }
 

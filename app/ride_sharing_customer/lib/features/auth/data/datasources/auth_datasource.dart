@@ -65,9 +65,14 @@ class AuthDataSourceImpl implements AuthDataSource {
     }
 
     try {
+      final countryCode = _storageService.getCountryCode();
+      final countryName = countryCode == 'CA' ? 'Canada' : 'India';
+
       final response = await _dioClient.dio.post('/api/v1/auth/rider/verify-otp', data: {
         'phone': phone,
         'otp': code,
+        'countryCode': countryCode,
+        'country': countryName,
       });
 
       if (response.data['SUCCESS'] == true) {
@@ -77,6 +82,7 @@ class AuthDataSourceImpl implements AuthDataSource {
         final user = data['user'] ?? {};
         final userId = user['id'] ?? '';
         final isNew = data['isNew'] ?? false;
+        final country = data['country'];
 
         if (token.isNotEmpty) {
           await _storageService.saveToken(token);
@@ -86,6 +92,9 @@ class AuthDataSourceImpl implements AuthDataSource {
         }
         if (userId.isNotEmpty) {
           await _storageService.saveUserId(userId);
+        }
+        if (country is Map && country['isoCode'] != null) {
+          await _storageService.setCountryCode(country['isoCode'].toString().toUpperCase());
         }
 
         // If user has empty name or email, treat as new/incomplete registration
@@ -115,9 +124,14 @@ class AuthDataSourceImpl implements AuthDataSource {
   @override
   Future<void> registerProfileDetails(String name, String email) async {
     try {
+      final countryCode = _storageService.getCountryCode();
+      final countryName = countryCode == 'CA' ? 'Canada' : 'India';
+
       final response = await _dioClient.dio.patch('/api/v1/riders/profile', data: {
         'name': name,
         'email': email,
+        'countryCode': countryCode,
+        'country': countryName,
       });
       if (response.data['SUCCESS'] != true) {
         throw Exception(response.data['MESSAGE'] ?? 'Failed to complete profile registration.');

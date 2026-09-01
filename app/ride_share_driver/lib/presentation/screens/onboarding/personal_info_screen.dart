@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../style/appcolors.dart';
+import '../../../common/widgets/app_date_picker.dart';
 import 'widgets/three_dots_loader.dart';
 
 class PersonalInfoScreen extends StatefulWidget {
@@ -58,44 +59,13 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
 
   Future<void> _selectDate(BuildContext context) async {
     debugPrint('[PersonalInfoScreen] Date of birth picker clicked');
-    final DateTime? picked = await showDatePicker(
+    final DateTime? picked = await AppDatePicker.showCustomDatePicker(
       context: context,
       initialDate: _selectedDateOfBirth ?? DateTime(2000, 1, 1),
       firstDate: DateTime(1950, 1, 1),
       lastDate: DateTime.now().subtract(
         const Duration(days: 365 * 18),
       ), // 18+ check
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            useMaterial3: true,
-            colorScheme: const ColorScheme.light(
-              primary: AppColors.primary,
-              onPrimary: Colors.white,
-              secondary: AppColors.secondary,
-              onSecondary: Colors.white,
-              surface: Colors.white,
-              onSurface: AppColors.textPrimary,
-            ),
-            dialogTheme: DialogThemeData(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              elevation: 8,
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.secondary,
-                textStyle: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-          ),
-          child: child!,
-        );
-      },
     );
     if (picked != null && picked != _selectedDateOfBirth) {
       debugPrint('[PersonalInfoScreen] Date selected: $picked');

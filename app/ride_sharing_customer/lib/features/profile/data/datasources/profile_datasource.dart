@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/services/storage_service.dart';
 
@@ -50,11 +51,14 @@ class ProfileDataSourceImpl implements ProfileDataSource {
   @override
   Future<void> updateUserProfile(String name, String email, String phone) async {
     try {
-      await _dioClient.dio.patch('/api/v1/riders/profile', data: {
+      final response = await _dioClient.dio.patch('/api/v1/riders/profile', data: {
         'name': name,
         'email': email,
         'phone': phone,
       });
+      if (response.data is Map && response.data['SUCCESS'] == false) {
+        throw Exception(response.data['MESSAGE'] ?? 'Failed to update profile.');
+      }
       final current = await getUserProfile();
       final updated = {
         ...current,
@@ -64,6 +68,17 @@ class ProfileDataSourceImpl implements ProfileDataSource {
       };
       await _storageService.cacheData(_profileCacheKey, updated);
     } catch (e) {
+      if (e is DioException) {
+        if (e.response != null && e.response?.data is Map) {
+          final msg = e.response?.data['MESSAGE'] ?? e.response?.data['message'];
+          if (msg != null && msg.toString().isNotEmpty) {
+            throw Exception(msg.toString());
+          }
+        }
+      }
+      if (e is Exception) {
+        rethrow;
+      }
       throw Exception('Failed to update profile: $e');
     }
   }

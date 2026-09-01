@@ -29,7 +29,8 @@ class OtpVerificationScreen extends StatefulWidget {
   State<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
 }
 
-class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
+class _OtpVerificationScreenState extends State<OtpVerificationScreen>
+    with TickerProviderStateMixin {
   late final OTPTextEditController _otpController;
   late final OTPInteractor _otpInteractor;
   bool _isValid = true;
@@ -37,9 +38,64 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   Timer? _timer;
   final _focusNode = FocusNode();
 
+  // Entrance animations
+  late final AnimationController _entranceController;
+  late final Animation<double> _titleOpacity;
+  late final Animation<Offset> _titleSlide;
+  late final Animation<double> _cardOpacity;
+  late final Animation<Offset> _cardSlide;
+
+  // OTP box stagger animation
+  late final AnimationController _otpStaggerController;
+
   @override
   void initState() {
     super.initState();
+
+    // Set up entrance animations
+    _entranceController = AnimationController(
+      duration: const Duration(milliseconds: 700),
+      vsync: this,
+    );
+
+    _titleOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+      ),
+    );
+    _titleSlide = Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _cardOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.3, 0.9, curve: Curves.easeOut),
+      ),
+    );
+    _cardSlide = Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.3, 0.9, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    // OTP boxes stagger: 600ms total, each box starts 80ms apart
+    _otpStaggerController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    _entranceController.forward();
+    // Start OTP stagger slightly after card appears
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) _otpStaggerController.forward();
+    });
+
     _focusNode.addListener(() {
       setState(() {});
     });
@@ -81,6 +137,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   void dispose() {
     _timer?.cancel();
     _focusNode.dispose();
+    _entranceController.dispose();
+    _otpStaggerController.dispose();
     if (Platform.isAndroid) {
       _otpController.stopListen();
     }
@@ -99,6 +157,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
+  Animation<double> _otpBoxOpacity(int index) {
+    final start = (index * 0.12).clamp(0.0, 0.7);
+    final end = (start + 0.4).clamp(0.0, 1.0);
+    return Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _otpStaggerController,
+        curve: Interval(start, end, curve: Curves.easeOut),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -109,215 +178,207 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           CustomToast.show(context, 'OTP resent successfully');
         }
       },
-      child: Stack(
-        children: [
-          // Full screen background image
-          Positioned.fill(
-            child: Image.asset(
-              'assets/images/onboarding_driver.png',
-              fit: BoxFit.cover,
-            ),
-          ),
-          // Dark gradient overlay
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.2),
-                    Colors.black.withOpacity(0.55),
-                    Colors.black.withOpacity(0.9),
-                  ],
-                  stops: const [0.0, 0.45, 0.9],
-                ),
-              ),
-            ),
-          ),
-          // Main Content
-          Column(
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_entranceController, _otpStaggerController]),
+        builder: (context, _) {
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Spacer(),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.verifyCode,
-                      style: const TextStyle(
-                        fontSize: 34,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      l10n.verifyCodeDesc(widget.phoneNumber),
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white.withOpacity(0.85),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 36),
-              // White card container for inputs
-              Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(28),
-                    topRight: Radius.circular(28),
-                  ),
-                ),
-                padding: EdgeInsets.only(
-                  left: 24,
-                  right: 24,
-                  top: 32,
-                  bottom: MediaQuery.of(context).padding.bottom + 24,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Stack(
+              SlideTransition(
+                position: _titleSlide,
+                child: FadeTransition(
+                  opacity: _titleOpacity,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Opacity(
-                          opacity: 0.0,
-                          child: SizedBox(
-                            height: 56,
-                            child: TextField(
-                              controller: _otpController,
-                              focusNode: _focusNode,
-                              keyboardType: TextInputType.number,
-                              maxLength: 6,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              enableSuggestions: false,
-                              autocorrect: false,
-                              showCursor: false,
-                              decoration: const InputDecoration(
-                                counterText: '',
-                                border: InputBorder.none,
-                              ),
-                              onChanged: (val) {
-                                setState(() {
-                                  if (!_isValid && val.length == 6) {
-                                    _isValid = true;
-                                  }
-                                });
-                                if (val.length == 6) {
-                                  _submit();
-                                }
-                              },
-                            ),
+                        Text(
+                          l10n.verifyCode,
+                          style: const TextStyle(
+                            fontSize: 34,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: -0.5,
                           ),
                         ),
-                        GestureDetector(
-                          onTap: () {
-                            _focusNode.requestFocus();
-                          },
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: List.generate(6, (index) {
-                              final text = _otpController.text;
-                              String char = '';
-                              if (index < text.length) {
-                                char = text[index];
-                              }
-                              final isFocused =
-                                  _focusNode.hasFocus && index == text.length;
-
-                              return Container(
-                                width: 44,
-                                height: 52,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade50,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: !_isValid
-                                        ? AppColors.error
-                                        : isFocused
-                                        ? AppColors.secondary
-                                        : Colors.grey.shade300,
-                                    width: isFocused ? 2 : 1.5,
-                                  ),
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  char,
-                                  style: const TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                              );
-                            }),
+                        const SizedBox(height: 8),
+                        Text(
+                          l10n.verifyCodeDesc(widget.phoneNumber),
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.white.withOpacity(0.85),
                           ),
                         ),
                       ],
                     ),
-                    if (!_isValid) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        l10n.validationOtp,
-                        style: const TextStyle(
-                          color: AppColors.error,
-                          fontSize: 13,
-                        ),
-                        textAlign: TextAlign.left,
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    TextButton(
-                      onPressed: _resendCountdown > 0
-                          ? null
-                          : () {
-                              widget.onResendRequested();
-                            },
-                      child: Text(
-                        _resendCountdown > 0
-                            ? '${l10n.resendCode} (${_resendCountdown}s)'
-                            : l10n.resendCode,
-                        style: TextStyle(
-                          color: _resendCountdown > 0
-                              ? Colors.grey
-                              : AppColors.secondary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 36),
+              // White card container for inputs
+              SlideTransition(
+                position: _cardSlide,
+                child: FadeTransition(
+                  opacity: _cardOpacity,
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(28),
+                        topRight: Radius.circular(28),
                       ),
                     ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: widget.isLoading ? null : _submit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: widget.isLoading
-                          ? const ThreeDotsLoader()
-                          : Text(l10n.verifyContinue),
+                    padding: EdgeInsets.only(
+                      left: 24,
+                      right: 24,
+                      top: 32,
+                      bottom: MediaQuery.of(context).padding.bottom + 24,
                     ),
-                  ],
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Stack(
+                          children: [
+                            Opacity(
+                              opacity: 0.0,
+                              child: SizedBox(
+                                height: 56,
+                                child: TextField(
+                                  controller: _otpController,
+                                  focusNode: _focusNode,
+                                  keyboardType: TextInputType.number,
+                                  maxLength: 6,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
+                                  enableSuggestions: false,
+                                  autocorrect: false,
+                                  showCursor: false,
+                                  decoration: const InputDecoration(
+                                    counterText: '',
+                                    border: InputBorder.none,
+                                  ),
+                                  onChanged: (val) {
+                                    setState(() {
+                                      if (!_isValid && val.length == 6) {
+                                        _isValid = true;
+                                      }
+                                    });
+                                    if (val.length == 6) {
+                                      _submit();
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                _focusNode.requestFocus();
+                              },
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: List.generate(6, (index) {
+                                  final text = _otpController.text;
+                                  String char = '';
+                                  if (index < text.length) {
+                                    char = text[index];
+                                  }
+                                  final isFocused =
+                                      _focusNode.hasFocus && index == text.length;
+
+                                  return FadeTransition(
+                                    opacity: _otpBoxOpacity(index),
+                                    child: Container(
+                                      width: 44,
+                                      height: 52,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade50,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: !_isValid
+                                              ? AppColors.error
+                                              : isFocused
+                                              ? AppColors.secondary
+                                              : Colors.grey.shade300,
+                                          width: isFocused ? 2 : 1.5,
+                                        ),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        char,
+                                        style: const TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (!_isValid) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            l10n.validationOtp,
+                            style: const TextStyle(
+                              color: AppColors.error,
+                              fontSize: 13,
+                            ),
+                            textAlign: TextAlign.left,
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        TextButton(
+                          onPressed: _resendCountdown > 0
+                              ? null
+                              : () {
+                                  widget.onResendRequested();
+                                },
+                          child: Text(
+                            _resendCountdown > 0
+                                ? '${l10n.resendCode} (${_resendCountdown}s)'
+                                : l10n.resendCode,
+                            style: TextStyle(
+                              color: _resendCountdown > 0
+                                  ? Colors.grey
+                                  : AppColors.secondary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          onPressed: widget.isLoading ? null : _submit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: widget.isLoading
+                              ? const ThreeDotsLoader()
+                              : Text(l10n.verifyContinue),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 }
+

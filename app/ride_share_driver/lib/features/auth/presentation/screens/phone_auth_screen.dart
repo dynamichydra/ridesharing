@@ -4,6 +4,7 @@ import '../../../../style/appcolors.dart';
 import '../../../../presentation/screens/onboarding/widgets/three_dots_loader.dart';
 import '../../../../core/localization/app_localizations.dart';
 import '../../../../services/location_service.dart';
+import '../../../../presentation/screens/onboarding/service_not_available_screen.dart';
 
 class _CountryCode {
   final String name;
@@ -45,16 +46,61 @@ class PhoneAuthScreen extends StatefulWidget {
   State<PhoneAuthScreen> createState() => _PhoneAuthScreenState();
 }
 
-class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
+class _PhoneAuthScreenState extends State<PhoneAuthScreen>
+    with SingleTickerProviderStateMixin {
   late final TextEditingController _phoneController;
   bool _isValid = true;
   _CountryCode? _selectedCountry;
   bool _isCheckingLocation = true;
   String? _locationError;
 
+  // Entrance animations
+  late final AnimationController _entranceController;
+  late final Animation<double> _titleOpacity;
+  late final Animation<Offset> _titleSlide;
+  late final Animation<double> _cardOpacity;
+  late final Animation<Offset> _cardSlide;
+
   @override
   void initState() {
     super.initState();
+
+    // Set up entrance animations
+    _entranceController = AnimationController(
+      duration: const Duration(milliseconds: 700),
+      vsync: this,
+    );
+
+    // Title: 0ms–350ms
+    _titleOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+      ),
+    );
+    _titleSlide = Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    // Card: 200ms–650ms
+    _cardOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.3, 0.9, curve: Curves.easeOut),
+      ),
+    );
+    _cardSlide = Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.3, 0.9, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _entranceController.forward();
+
     String p = widget.initialPhone ?? '';
     for (final c in _countries) {
       if (p.startsWith(c.dialCode)) {
@@ -76,20 +122,33 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     try {
       final locService = LocationService();
       final position = await locService.getCurrentPosition();
-      
-      _CountryCode? detectedCountry;
-      if (position.latitude >= 41.0 && position.latitude <= 83.0 &&
-          position.longitude >= -141.0 && position.longitude <= -52.0) {
-        detectedCountry = _countries[1]; // Canada (+1)
-      } else if (position.latitude >= 6.0 && position.latitude <= 37.0 &&
-                 position.longitude >= 68.0 && position.longitude <= 97.0) {
-        detectedCountry = _countries[0]; // India (+91)
+      final countryCode = LocationService.getSupportedCountryCode(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (countryCode == null) {
+        // Location is outside India and Canada
+        if (mounted) {
+          setState(() {
+            _isCheckingLocation = false;
+            _selectedCountry = null;
+            _locationError = 'Service is not available in your location. The driver app is currently only available in India and Canada.';
+          });
+          _showLocationNotAvailableDialog();
+        }
+        return;
       }
+
+      final detectedCountry = _countries.firstWhere(
+        (c) => c.code == countryCode,
+        orElse: () => _countries[0],
+      );
 
       if (mounted) {
         setState(() {
           _isCheckingLocation = false;
-          _selectedCountry = detectedCountry ?? _countries[0];
+          _selectedCountry = detectedCountry;
           _locationError = null;
         });
       }
@@ -102,6 +161,72 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         });
       }
     }
+  }
+
+  void _showLocationNotAvailableDialog() {
+    final l10n = AppLocalizations.of(context);
+    final title = l10n?.serviceNotAvailableTitle ?? 'Service Not Available';
+    final message = l10n?.serviceNotAvailableMsg ??
+        'This service is not available in your location. The driver app is currently only available in India and Canada.';
+    final retryText = l10n?.retryLocation ?? 'Retry Location Check';
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.location_off_rounded, color: Colors.red, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(
+            fontSize: 14,
+            height: 1.4,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _detectLocationCountry();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            child: Text(
+              retryText,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showCountryPicker() {
@@ -143,6 +268,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   }
 
   void _submit() {
+    if (_locationError != null && _selectedCountry == null) {
+      _showLocationNotAvailableDialog();
+      return;
+    }
     _selectedCountry ??= _countries[0];
     final phone = _phoneController.text.trim();
     if (phone.length == 10 && RegExp(r'^[0-9]+$').hasMatch(phone)) {
@@ -155,286 +284,287 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   }
 
   @override
+  void dispose() {
+    _entranceController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_locationError != null && _selectedCountry == null) {
+      return ServiceNotAvailableScreen(
+        onRetry: _detectLocationCountry,
+      );
+    }
+
     final l10n = AppLocalizations.of(context)!;
-    return Stack(
-      children: [
-        // Full screen background image
-        Positioned.fill(
-          child: Image.asset(
-            'assets/images/onboarding_driver.png',
-            fit: BoxFit.cover,
-          ),
-        ),
-        // Dark gradient overlay
-        Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withOpacity(0.2),
-                  Colors.black.withOpacity(0.55),
-                  Colors.black.withOpacity(0.9),
-                ],
-                stops: const [0.0, 0.45, 0.9],
-              ),
-            ),
-          ),
-        ),
-        // Main Content
-        Column(
+    return AnimatedBuilder(
+      animation: _entranceController,
+      builder: (context, _) {
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Spacer(),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.isLogin ? l10n.loginTitle : l10n.registerTitle,
-                    style: const TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.isLogin
-                        ? l10n.enterPhoneDescLogin
-                        : l10n.enterPhoneDescRegister,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.white.withOpacity(0.85),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 36),
-            // White card container for inputs
-            Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(28),
-                  topRight: Radius.circular(28),
-                ),
-              ),
-              padding: EdgeInsets.only(
-                left: 24,
-                right: 24,
-                top: 32,
-                bottom: MediaQuery.of(context).padding.bottom + 24,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_isCheckingLocation) ...[
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          SizedBox(width: 12),
-                          Text(
-                            'Detecting location...',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ] else if (_locationError != null && _selectedCountry == null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline, color: Colors.red),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _locationError!,
-                              style: const TextStyle(
-                                color: Colors.red,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.refresh, color: Colors.red, size: 20),
-                            onPressed: _detectLocationCountry,
-                            tooltip: 'Retry location detection',
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  Row(
+            SlideTransition(
+              position: _titleSlide,
+              child: FadeTransition(
+                opacity: _titleOpacity,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Interactive Country Selector Pill
-                      InkWell(
-                        onTap: _showCountryPicker,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          height: 52,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: _isValid
-                                  ? Colors.grey.shade300
-                                  : Colors.redAccent,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                _selectedCountry != null
-                                    ? '${_selectedCountry!.flag} ${_selectedCountry!.dialCode}'
-                                    : '🇮🇳 +91',
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary, size: 20),
-                            ],
-                          ),
+                      Text(
+                        widget.isLogin ? l10n.loginTitle : l10n.registerTitle,
+                        style: const TextStyle(
+                          fontSize: 34,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: _phoneController,
-                          keyboardType: TextInputType.phone,
-                          maxLength: 10,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 1,
-                            color: AppColors.textPrimary,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: '98765 43210',
-                            hintStyle: const TextStyle(
-                              color: Colors.grey,
-                              fontWeight: FontWeight.normal,
-                              letterSpacing: 0,
-                            ),
-                            counterText: '',
-                            errorText: _isValid ? null : l10n.validationPhone,
-                            filled: true,
-                            fillColor: Colors.grey.shade50,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade300,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade200,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(
-                                color: AppColors.secondary,
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                          onChanged: (val) {
-                            if (!_isValid && val.length == 10) {
-                              setState(() {
-                                _isValid = true;
-                              });
-                            }
-                          },
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.isLogin
+                            ? l10n.enterPhoneDescLogin
+                            : l10n.enterPhoneDescRegister,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.white.withOpacity(0.85),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
-                  GestureDetector(
-                    onTap: () {
-                      if (widget.onLoginModeChanged != null) {
-                        widget.onLoginModeChanged!(!widget.isLogin);
-                      }
-                    },
-                    child: Text(
-                      widget.isLogin
-                          ? l10n.newNumberFindAccount
-                          : l10n.loginBtn,
-                      style: const TextStyle(
-                        color: AppColors.secondary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                      ),
-                      textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+            const SizedBox(height: 36),
+            // White card container for inputs
+            SlideTransition(
+              position: _cardSlide,
+              child: FadeTransition(
+                opacity: _cardOpacity,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(28),
+                      topRight: Radius.circular(28),
                     ),
                   ),
-                  const SizedBox(height: 28),
-                  ElevatedButton(
-                    onPressed: widget.isLoading ? null : _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: widget.isLoading
-                        ? const ThreeDotsLoader()
-                        : Text(
-                            l10n.getStarted,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                  padding: EdgeInsets.only(
+                    left: 24,
+                    right: 24,
+                    top: 32,
+                    bottom: MediaQuery.of(context).padding.bottom + 24,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_isCheckingLocation) ...[
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              SizedBox(width: 12),
+                              Text(
+                                'Detecting location...',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else if (_locationError != null && _selectedCountry == null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.red.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline, color: Colors.red),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _locationError!,
+                                  style: const TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.refresh, color: Colors.red, size: 20),
+                                onPressed: _detectLocationCountry,
+                                tooltip: 'Retry location detection',
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Interactive Country Selector Pill
+                          InkWell(
+                            onTap: _showCountryPicker,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              height: 52,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _isValid
+                                      ? Colors.grey.shade300
+                                      : Colors.redAccent,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _selectedCountry != null
+                                        ? '${_selectedCountry!.flag} ${_selectedCountry!.dialCode}'
+                                        : '🇮🇳 +91',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary, size: 20),
+                                ],
+                              ),
                             ),
                           ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: _phoneController,
+                              keyboardType: TextInputType.phone,
+                              maxLength: 10,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 1,
+                                color: AppColors.textPrimary,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: '98765 43210',
+                                hintStyle: const TextStyle(
+                                  color: Colors.grey,
+                                  fontWeight: FontWeight.normal,
+                                  letterSpacing: 0,
+                                ),
+                                counterText: '',
+                                errorText: _isValid ? null : l10n.validationPhone,
+                                filled: true,
+                                fillColor: Colors.grey.shade50,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade200,
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                    color: AppColors.secondary,
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                              onChanged: (val) {
+                                if (!_isValid && val.length == 10) {
+                                  setState(() {
+                                    _isValid = true;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      GestureDetector(
+                        onTap: () {
+                          if (widget.onLoginModeChanged != null) {
+                            widget.onLoginModeChanged!(!widget.isLogin);
+                          }
+                        },
+                        child: Text(
+                          widget.isLogin
+                              ? l10n.newNumberFindAccount
+                              : l10n.loginBtn,
+                          style: const TextStyle(
+                            color: AppColors.secondary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      ElevatedButton(
+                        onPressed: widget.isLoading ? null : _submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: widget.isLoading
+                            ? const ThreeDotsLoader()
+                            : Text(
+                                l10n.getStarted,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ],
-        ),
-      ],
+        );
+      },
     );
   }
 }
+

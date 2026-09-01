@@ -40,7 +40,16 @@ class AppRouter {
           return null;
         }
 
-        if (isOnboarding || state.matchedLocation == '/') {
+        // If driver has never subscribed before, take them directly to the subscription screen
+        final isNeverSubscribed = authState.driver.isNeverSubscribed;
+        final isSubscriptionPage = state.matchedLocation == '/subscription';
+
+        if (isNeverSubscribed) {
+          if (!isSubscriptionPage) return '/subscription';
+          return null;
+        }
+
+        if (isOnboarding || state.matchedLocation == '/' || isSubscriptionPage) {
           return '/dashboard';
         }
       } else if (authState is Unauthenticated) {
@@ -75,7 +84,9 @@ class AppRouter {
           final countryId = authState is Authenticated ? (authState.driver.countryId ?? '') : '';
           return SubscriptionPlansScreen(
             countryId: countryId,
-            onSubscribed: () {},
+            onSubscribed: () {
+              context.go('/dashboard');
+            },
             onLogout: () {
               authBloc.add(LogoutRequested());
             },

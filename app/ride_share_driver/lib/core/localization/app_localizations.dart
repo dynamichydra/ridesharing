@@ -35,6 +35,9 @@ class AppLocalizations {
       'welcome_aboard': 'Welcome Ryva Ride',
       'enter_number_desc': 'Enter your number to log in.',
       'new_number_find_account': "Don't have an account? Create new",
+      'service_not_available_title': 'Service Not Available',
+      'service_not_available_msg': 'This service is not available in your location. The driver app is currently only available in India and Canada.',
+      'retry_location': 'Retry Location Check',
     },
     'hi': {
       'welcome_title': 'अच्छा पैसा कमाएं, बेहतरीन लोगों से मिलें',
@@ -58,10 +61,13 @@ class AppLocalizations {
       'login_title': 'खाते में लॉगिन करें',
       'register_title': 'पार्टनर के रूप में पंजीकरण',
       'get_started': 'शुरू करें',
-        'continue': 'आगे बढ़ें',
+      'continue': 'आगे बढ़ें',
       'welcome_aboard': 'राइवा राइड में स्वागत है',
       'enter_number_desc': 'लॉग इन करने के लिए अपना नंबर दर्ज करें।',
       'new_number_find_account': 'खाता नहीं है? नया बनाएं',
+      'service_not_available_title': 'सेवा उपलब्ध नहीं है',
+      'service_not_available_msg': 'यह सेवा आपके स्थान पर उपलब्ध नहीं है। ड्राइवर ऐप वर्तमान में केवल भारत और कनाडा में उपलब्ध है।',
+      'retry_location': 'पुनः प्रयास करें',
     }
   };
 
@@ -89,6 +95,9 @@ class AppLocalizations {
   String stepNOf8(int step) => (_localizedValues[locale.languageCode]?['step_n_of_8'] ?? '').replaceAll('{step}', step.toString());
   String get loginTitle => _localizedValues[locale.languageCode]?['login_title'] ?? '';
   String get registerTitle => _localizedValues[locale.languageCode]?['register_title'] ?? '';
+  String get serviceNotAvailableTitle => _localizedValues[locale.languageCode]?['service_not_available_title'] ?? 'Service Not Available';
+  String get serviceNotAvailableMsg => _localizedValues[locale.languageCode]?['service_not_available_msg'] ?? 'This service is not available in your location. The driver app is currently only available in India and Canada.';
+  String get retryLocation => _localizedValues[locale.languageCode]?['retry_location'] ?? 'Retry Location Check';
 }
 
 class AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

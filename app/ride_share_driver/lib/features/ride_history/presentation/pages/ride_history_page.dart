@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../../injection_container.dart' as di;
 import '../../../../presentation/screens/dashboard/driver_main_layout.dart';
+import '../../../../common/widgets/app_date_picker.dart';
 import '../bloc/ride_history_bloc.dart';
 
 class RideHistoryPage extends StatefulWidget {
@@ -228,21 +229,12 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
                     // From Date Input Box
                     InkWell(
                       onTap: () async {
-                        final picked = await showDatePicker(
+                        final picked = await AppDatePicker.showCustomDatePicker(
                           context: context,
                           initialDate: tempFromDate ?? DateTime.now(),
                           firstDate: DateTime(2023),
                           lastDate: DateTime.now().add(const Duration(days: 1)),
-                          builder: (context, child) {
-                            return Theme(
-                              data: Theme.of(context).copyWith(
-                                colorScheme: const ColorScheme.light(
-                                  primary: Color(0xFF009048),
-                                ),
-                              ),
-                              child: child!,
-                            );
-                          },
+                          primaryColor: const Color(0xFF009048),
                         );
                         if (picked != null) {
                           setModalState(() => tempFromDate = picked);
@@ -306,22 +298,13 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
                     // To Date Input Box
                     InkWell(
                       onTap: () async {
-                        final picked = await showDatePicker(
+                        final picked = await AppDatePicker.showCustomDatePicker(
                           context: context,
                           initialDate:
                               tempToDate ?? tempFromDate ?? DateTime.now(),
                           firstDate: tempFromDate ?? DateTime(2023),
                           lastDate: DateTime.now().add(const Duration(days: 1)),
-                          builder: (context, child) {
-                            return Theme(
-                              data: Theme.of(context).copyWith(
-                                colorScheme: const ColorScheme.light(
-                                  primary: Color(0xFF009048),
-                                ),
-                              ),
-                              child: child!,
-                            );
-                          },
+                          primaryColor: const Color(0xFF009048),
                         );
                         if (picked != null) {
                           setModalState(() => tempToDate = picked);

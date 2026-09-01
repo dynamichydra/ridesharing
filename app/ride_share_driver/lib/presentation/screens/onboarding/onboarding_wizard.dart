@@ -7,6 +7,7 @@ import '../../bloc/onboarding/onboarding_bloc.dart';
 import '../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../domain/entities/document.dart';
+import '../../../services/location_service.dart';
 
 // Screens
 import 'welcome_screen.dart';
@@ -25,6 +26,7 @@ import 'bank_details_screen.dart';
 import 'emergency_contact_screen.dart';
 import 'questionnaire_screen.dart';
 import 'registration_status_screen.dart';
+import 'service_not_available_screen.dart';
 
 class OnboardingWizard extends StatefulWidget {
   final VoidCallback onComplete;
@@ -35,13 +37,16 @@ class OnboardingWizard extends StatefulWidget {
   State<OnboardingWizard> createState() => _OnboardingWizardState();
 }
 
-class _OnboardingWizardState extends State<OnboardingWizard> {
+class _OnboardingWizardState extends State<OnboardingWizard>
+    with TickerProviderStateMixin {
   int _currentStep = 0;
+  bool _isForward = true;
   // 0: Welcome, 1: Phone, 2: OTP, 3: PersonalInfo, 4: Terms, 5: Location, 6: VehiclePref, 7: VehicleForm, 8: Checklist
   // Sub-flows: 9: Document DL, 10: Document Aadhar, 11: Questionnaire, 12: ProfilePhoto, 13: BankDetails, 14: EmergencyContact
 
   String _phoneNumber = '';
   bool _isLogin = false;
+  bool _isLocationUnsupported = false;
   OnboardingConfig? _config;
   RegistrationSummary? _summary;
 
@@ -82,11 +87,32 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
       }
       context.read<OnboardingBloc>().add(LoadOnboardingConfig());
       _currentStep = 2;
+    } else {
+      // Prompt location permission and detect region immediately on app startup / welcome screen
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkInitialLocation();
+      });
+    }
+  }
+
+  Future<void> _checkInitialLocation() async {
+    try {
+      final locService = LocationService();
+      final pos = await locService.getCurrentPosition();
+      final code = LocationService.getSupportedCountryCode(pos.latitude, pos.longitude);
+      if (mounted) {
+        setState(() {
+          _isLocationUnsupported = (code == null);
+        });
+      }
+    } catch (_) {
+      // If location detection fails or is pending permission, proceed to login where it retries
     }
   }
 
   void _nextStep() {
     setState(() {
+      _isForward = true;
       _currentStep++;
     });
   }
@@ -94,6 +120,7 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
   void _prevStep() {
     if (_currentStep > 0) {
       setState(() {
+        _isForward = false;
         if (_enteredFromChecklist) {
           _currentStep = 9;
           _enteredFromChecklist = false;
@@ -498,32 +525,34 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
                       ),
                     )
                   : null,
-              body: SafeArea(
-                top: _currentStep >= 3,
-                bottom: _currentStep >= 3,
-                child: Column(
-                  children: [
-                    if (_currentStep >= 3 && _currentStep < 9)
-                      LinearProgressIndicator(
-                        value: (_currentStep - 2) / 7.0,
-                        color: AppColors.primary,
-                        backgroundColor: AppColors.border,
-                        minHeight: 3,
-                      ),
-                    if (state is OnboardingLoading)
-                      const LinearProgressIndicator(
-                        minHeight: 3,
-                        color: AppColors.secondary,
-                      ),
-                    Expanded(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        child: _buildStepContent(context),
+              body: _currentStep <= 2 && !_isLocationUnsupported
+                  ? _buildOnboardingBody(context)
+                  : SafeArea(
+                      top: _currentStep >= 3,
+                      bottom: _currentStep >= 3,
+                      child: Column(
+                        children: [
+                          if (_currentStep >= 3 && _currentStep < 9)
+                            LinearProgressIndicator(
+                              value: (_currentStep - 2) / 7.0,
+                              color: AppColors.primary,
+                              backgroundColor: AppColors.border,
+                              minHeight: 3,
+                            ),
+                          if (state is OnboardingLoading)
+                            const LinearProgressIndicator(
+                              minHeight: 3,
+                              color: AppColors.secondary,
+                            ),
+                          Expanded(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child: _buildStepContent(context),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
             );
           },
         ),
@@ -531,11 +560,74 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
     );
   }
 
-  Widget _buildStepContent(BuildContext context) {
+  /// Builds the shared-background layout for steps 0–2.
+  /// The background image + gradient are rendered once here, and only the
+  /// foreground content is animated via a direction-aware slide+fade.
+  Widget _buildOnboardingBody(BuildContext context) {
+    return Stack(
+      children: [
+        // Stable background — never re-renders between steps
+        Positioned.fill(
+          child: Image.asset(
+            'assets/images/onboarding_driver.png',
+            fit: BoxFit.cover,
+          ),
+        ),
+        Positioned.fill(
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withOpacity(_currentStep == 0 ? 0.1 : 0.2),
+                  Colors.black.withOpacity(_currentStep == 0 ? 0.4 : 0.55),
+                  Colors.black.withOpacity(_currentStep == 0 ? 0.85 : 0.9),
+                ],
+                stops: _currentStep == 0
+                    ? const [0.0, 0.4, 0.8]
+                    : const [0.0, 0.45, 0.9],
+              ),
+            ),
+          ),
+        ),
+        // Animated foreground content
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 350),
+          switchInCurve: Curves.easeInOutCubic,
+          switchOutCurve: Curves.easeInOutCubic,
+          transitionBuilder: (Widget child, Animation<double> animation) {
+            // Determine direction based on the key comparison
+            final isIncoming = child.key == ValueKey<int>(_currentStep);
+            final slideOffset = _isForward
+                ? (isIncoming
+                    ? Tween<Offset>(begin: const Offset(0.15, 0), end: Offset.zero)
+                    : Tween<Offset>(begin: Offset.zero, end: const Offset(-0.15, 0)))
+                : (isIncoming
+                    ? Tween<Offset>(begin: const Offset(-0.15, 0), end: Offset.zero)
+                    : Tween<Offset>(begin: Offset.zero, end: const Offset(0.15, 0)));
+
+            return SlideTransition(
+              position: slideOffset.animate(animation),
+              child: FadeTransition(
+                opacity: animation,
+                child: child,
+              ),
+            );
+          },
+          child: KeyedSubtree(
+            key: ValueKey<int>(_currentStep),
+            child: _buildForegroundContent(context),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Builds only the foreground content for steps 0–2 (no background).
+  Widget _buildForegroundContent(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    final onboardingState = context.watch<OnboardingBloc>().state;
     final isAuthLoading = authState is AuthLoading;
-    final isOnboardingLoading = onboardingState is OnboardingLoading;
 
     switch (_currentStep) {
       case 0:
@@ -543,12 +635,14 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
           isLoading: isAuthLoading,
           onRegister: () {
             setState(() {
+              _isForward = true;
               _isLogin = false;
               _currentStep = 1;
             });
           },
           onLogin: () {
             setState(() {
+              _isForward = true;
               _isLogin = true;
               _currentStep = 1;
             });
@@ -586,6 +680,31 @@ class _OnboardingWizardState extends State<OnboardingWizard> {
             );
           },
         );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildStepContent(BuildContext context) {
+    if (_isLocationUnsupported) {
+      return ServiceNotAvailableScreen(
+        onRetry: () {
+          _checkInitialLocation();
+        },
+      );
+    }
+
+    final authState = context.watch<AuthBloc>().state;
+    final onboardingState = context.watch<OnboardingBloc>().state;
+    final isAuthLoading = authState is AuthLoading;
+    final isOnboardingLoading = onboardingState is OnboardingLoading;
+
+    switch (_currentStep) {
+      case 0:
+      case 1:
+      case 2:
+        // Steps 0–2 are now rendered via _buildOnboardingBody
+        return const SizedBox.shrink();
       case 3:
         return PersonalInfoScreen(
           initialName: _summary?.driver.name,

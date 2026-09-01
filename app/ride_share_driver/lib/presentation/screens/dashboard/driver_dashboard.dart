@@ -44,6 +44,7 @@ class _DriverDashboardState extends State<DriverDashboard>
   late final Animation<double> _moneyScaleAnim;
   double? _lastAddedAmount;
   bool _showMoneyBadge = false;
+  bool _hasCheckedExpiredOnLaunch = false;
 
   @override
   void initState() {
@@ -134,31 +135,32 @@ class _DriverDashboardState extends State<DriverDashboard>
     if (!context.mounted) return;
 
     final isExpired = activeSub != null && (activeSub.isExpired || activeSub.status.toLowerCase() == 'expired');
-    final hasNoPlan = activeSub == null;
+
+    // If subscription is not expired (e.g. no plan or inactive), route directly to subscription screen
+    if (!isExpired) {
+      context.push('/subscription');
+      return;
+    }
 
     String dateLabel = '';
-    if (activeSub?.endDate != null) {
-      final dt = DateTime.tryParse(activeSub!.endDate!);
+    if (activeSub.endDate != null) {
+      final dt = DateTime.tryParse(activeSub.endDate!);
       if (dt != null) {
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         final formattedDate = '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
-        dateLabel = isExpired ? 'Expired on $formattedDate' : 'Valid until $formattedDate';
+        dateLabel = 'Expired on $formattedDate';
       } else {
-        dateLabel = isExpired ? 'Expired' : 'Active';
+        dateLabel = 'Expired';
       }
-    } else if (activeSub != null && activeSub.endDate == null) {
-      dateLabel = 'Lifetime Access';
     } else {
-      dateLabel = 'No active membership';
+      dateLabel = 'Expired';
     }
 
-    final title = isExpired ? 'Your subscription\nhas expired' : 'Subscription\nRequired';
-    final subtitle = isExpired
-        ? 'Your driver subscription has ended.\nRenew your subscription to go Live and\nstart accepting rides.'
-        : 'An active subscription plan is required.\nSubscribe now to go Live and start\naccepting rides.';
-    final badgeText = isExpired ? 'EXPIRED' : (hasNoPlan ? 'NO PLAN' : 'INACTIVE');
-    final statusText = isExpired ? 'Expired' : (hasNoPlan ? 'Not Subscribed' : 'Inactive');
-    final buttonText = isExpired ? 'Renew Subscription' : 'Get Subscription';
+    const title = 'Your subscription\nhas expired';
+    const subtitle = 'Your driver subscription has ended.\nRenew your subscription to go Live and\nstart accepting rides.';
+    const badgeText = 'EXPIRED';
+    const statusText = 'Expired';
+    const buttonText = 'Renew Subscription';
 
     showDialog(
       context: context,
@@ -597,7 +599,14 @@ class _DriverDashboardState extends State<DriverDashboard>
         ),
         BlocListener<ProfileBloc, ProfileState>(
           bloc: _profileBloc,
-          listener: (context, state) {},
+          listener: (context, state) {
+            if (!_hasCheckedExpiredOnLaunch && state is ProfileLoaded) {
+              if (state.profile.isExpiredSubscription) {
+                _hasCheckedExpiredOnLaunch = true;
+                _showSubscriptionRequiredDialog(context, 'Subscription expired');
+              }
+            }
+          },
         ),
       ],
       child: BlocBuilder<AuthBloc, AuthState>(
