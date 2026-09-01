@@ -72,9 +72,9 @@ export async function authRoutes(app) {
 
   // POST /api/v1/auth/rider/verify-otp
   app.post('/rider/verify-otp', async (request, reply) => {
-    const { phone, otp } = request.body;
+    const { phone, otp, countryCode, country, countryName } = request.body;
     if (!phone || !otp) return sendError(reply, 'Phone and OTP are required');
-    const data = await authService.verifyRiderOtp(phone, otp, app);
+    const data = await authService.verifyRiderOtp(phone, otp, app, { countryCode, country, countryName });
     return sendSuccess(reply, data);
   });
 

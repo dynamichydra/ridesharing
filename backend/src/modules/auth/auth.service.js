@@ -1,4 +1,4 @@
-import { eq, and, or, like, sql } from 'drizzle-orm';
+import { eq, and, or, like, ilike, sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { db } from '../../config/db.js';
 import { users, drivers, admins, driverDevices } from '../../../drizzle/schema/index.js';
@@ -82,17 +82,57 @@ export async function sendOtp(phone, role = 'rider') {
   return { sent: true };
 }
 
-export async function verifyRiderOtp(phone, otp, app) {
+export async function verifyRiderOtp(phone, otp, app, options = {}) {
   const valid = await verifyOtp(phone, otp);
   if (!valid) throw { statusCode: 400, message: 'Invalid or expired OTP' };
+
+  // Resolve country by countryCode, country name, or phone dial code
+  let targetCountry = null;
+  const { countries } = await import('../../../drizzle/schema/index.js');
+  const { getDefaultCountry } = await import('../geo/geo.service.js');
+
+  const countryQuery = (options.countryCode || options.country || options.countryName || '').trim();
+  if (countryQuery) {
+    const [matched] = await db.select().from(countries)
+      .where(or(
+        ilike(countries.isoCode, countryQuery),
+        ilike(countries.name, countryQuery),
+        ilike(countries.dialCode, countryQuery)
+      )).limit(1);
+    if (matched) targetCountry = matched;
+  }
+
+  if (!targetCountry && phone) {
+    if (phone.startsWith('+1')) {
+      const [ca] = await db.select().from(countries).where(eq(countries.isoCode, 'CA')).limit(1);
+      if (ca) targetCountry = ca;
+    } else if (phone.startsWith('+91')) {
+      const [ind] = await db.select().from(countries).where(eq(countries.isoCode, 'IN')).limit(1);
+      if (ind) targetCountry = ind;
+    }
+  }
+
+  if (!targetCountry) {
+    try {
+      targetCountry = await getDefaultCountry();
+    } catch (_) {}
+  }
 
   let [user] = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
   const isNew = !user;
 
   if (!user) {
-    [user] = await db.insert(users).values({ phone, isVerified: true }).returning();
+    [user] = await db.insert(users).values({
+      phone,
+      isVerified: true,
+      countryId: targetCountry?.id || null,
+    }).returning();
   } else {
-    await db.update(users).set({ isVerified: true }).where(eq(users.id, user.id));
+    const updates = { isVerified: true };
+    if (targetCountry?.id && (!user.countryId || options.countryCode || options.country)) {
+      updates.countryId = targetCountry.id;
+    }
+    [user] = await db.update(users).set(updates).where(eq(users.id, user.id)).returning();
   }
 
   const accessToken = app.jwt.sign({ id: user.id, role: 'rider', phone });
@@ -102,7 +142,7 @@ export async function verifyRiderOtp(phone, otp, app) {
   );
   await redis.setex(REDIS_KEYS.refreshToken(user.id), 30 * 86400, refreshToken);
 
-  return { accessToken, refreshToken, isNew, user };
+  return { accessToken, refreshToken, isNew, user, country: targetCountry };
 }
 
 // ── Driver mobile auth (device-scoped) ─────────────────────────────────────────

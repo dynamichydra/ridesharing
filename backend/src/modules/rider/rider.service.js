@@ -1,4 +1,4 @@
-import { eq, desc, count, and, or, ilike } from 'drizzle-orm';
+import { eq, desc, count, and, or, ilike, ne } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { users, rides } from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
@@ -10,8 +10,38 @@ export async function getProfile(riderId) {
 }
 
 export async function updateProfile(riderId, data) {
-  const allowed = ['name', 'email', 'avatar', 'fcmToken'];
+  const allowed = ['name', 'email', 'avatar', 'fcmToken', 'countryId'];
   const updates = Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
+
+  if (data.country || data.countryCode) {
+    const countryQuery = (data.countryCode || data.country || '').trim();
+    const { countries } = await import('../../../drizzle/schema/index.js');
+    const [matched] = await db.select().from(countries)
+      .where(or(
+        ilike(countries.isoCode, countryQuery),
+        ilike(countries.name, countryQuery),
+        ilike(countries.dialCode, countryQuery)
+      )).limit(1);
+    if (matched) {
+      updates.countryId = matched.id;
+    }
+  }
+
+  if (updates.email) {
+    const normalizedEmail = updates.email.trim().toLowerCase();
+    updates.email = normalizedEmail;
+
+    const [existing] = await db.select({ id: users.id }).from(users)
+      .where(and(eq(users.email, normalizedEmail), ne(users.id, riderId))).limit(1);
+    if (existing) {
+      throw { statusCode: 409, message: 'This email address is already in use by another account.' };
+    }
+  }
+
+  if (updates.name) {
+    updates.name = updates.name.trim();
+  }
+
   updates.updatedAt = new Date();
   const [updated] = await db.update(users).set(updates).where(eq(users.id, riderId)).returning();
   return updated;
@@ -58,6 +88,16 @@ export async function listRiders(filters = {}, page, limit, offset) {
 }
 
 export async function adminCreateRider(data) {
+  if (data.email) {
+    const normalizedEmail = data.email.trim().toLowerCase();
+    const [existing] = await db.select({ id: users.id }).from(users)
+      .where(eq(users.email, normalizedEmail)).limit(1);
+    if (existing) {
+      throw { statusCode: 409, message: 'This email address is already in use by another account.' };
+    }
+    data.email = normalizedEmail;
+  }
+
   const [created] = await db.insert(users).values({
     phone: data.phone,
     name: data.name,
@@ -75,6 +115,18 @@ export async function adminCreateRider(data) {
 export async function adminUpdateRider(riderId, data) {
   const allowed = ['name', 'email', 'phone', 'avatar', 'isVerified', 'isBlocked', 'countryId', 'stateId', 'cityId'];
   const updates = Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
+
+  if (updates.email) {
+    const normalizedEmail = updates.email.trim().toLowerCase();
+    updates.email = normalizedEmail;
+
+    const [existing] = await db.select({ id: users.id }).from(users)
+      .where(and(eq(users.email, normalizedEmail), ne(users.id, riderId))).limit(1);
+    if (existing) {
+      throw { statusCode: 409, message: 'This email address is already in use by another account.' };
+    }
+  }
+
   updates.updatedAt = new Date();
   const [updated] = await db.update(users).set(updates).where(eq(users.id, riderId)).returning();
   return updated;

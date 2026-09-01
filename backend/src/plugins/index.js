@@ -81,12 +81,27 @@ export async function registerPlugins(app) {
 
   app.setErrorHandler((error, request, reply) => {
     app.log.error(error);
+    
+    // Check for PostgreSQL unique constraint violation (error code 23505)
+    if (error.code === '23505' || (error.message && error.message.includes('duplicate key value violates unique constraint'))) {
+      let field = 'entry';
+      if (error.message && error.message.includes('users_email_key')) {
+        field = 'email address';
+      } else if (error.message && error.message.includes('users_phone_key') || error.message?.includes('phone')) {
+        field = 'phone number';
+      }
+      return reply.status(409).send({
+        SUCCESS: false,
+        MESSAGE: `This ${field} is already in use by another account.`,
+      });
+    }
+
     const statusCode = error.statusCode || 500;
     reply.status(statusCode).send({
       SUCCESS: false,
       MESSAGE: env.NODE_ENV === 'production' && statusCode === 500
         ? 'Internal server error'
-        : error.message,
+        : (error.message || 'An unexpected error occurred'),
     });
   });
 }

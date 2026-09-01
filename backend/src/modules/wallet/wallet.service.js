@@ -42,10 +42,19 @@ export async function getWallet(ownerType, ownerId) {
 }
 
 export async function getOrCreateWallet(ownerType, ownerId) {
-  const existing = await getWallet(ownerType, ownerId);
-  if (existing) return existing;
-
   const country = await resolveOwnerCountry(ownerType, ownerId);
+  const existing = await getWallet(ownerType, ownerId);
+  if (existing) {
+    if (country?.currencyCode && existing.currencyCode !== country.currencyCode) {
+      const [updated] = await db.update(wallets)
+        .set({ currencyCode: country.currencyCode, updatedAt: new Date() })
+        .where(eq(wallets.id, existing.id))
+        .returning();
+      return updated;
+    }
+    return existing;
+  }
+
   const values = { balanceMinor: 0, currencyCode: country.currencyCode };
   if (ownerType === 'driver') values.driverId = ownerId; else values.riderId = ownerId;
 
