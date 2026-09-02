@@ -36,6 +36,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatDate, formatDateTime } from "@/lib/utils";
 import {
   ApproveDriverDialog,
   RejectDriverDialog,
@@ -457,7 +458,7 @@ export default function DriverDetail() {
             <div className="flex justify-between py-1">
               <span className="text-muted-foreground">Joined Platform</span>
               <span className="font-medium text-foreground">
-                {driver.createdAt ? new Date(driver.createdAt).toLocaleDateString() : "—"}
+                {driver.createdAt ? formatDate(driver.createdAt) : "—"}
               </span>
             </div>
           </CardContent>
@@ -786,7 +787,7 @@ export default function DriverDetail() {
                         )}
                         {doc.expiryDate && (
                           <div className="text-muted-foreground">
-                            Expires: {new Date(doc.expiryDate).toLocaleDateString()}
+                            Expires: {formatDate(doc.expiryDate)}
                           </div>
                         )}
                         {doc.status === "rejected" && doc.rejectionReason && (
@@ -907,7 +908,7 @@ export default function DriverDetail() {
                             </span>
                           </td>
                           <td className="p-3 text-muted-foreground">
-                            {ride.requestedAt ? new Date(ride.requestedAt).toLocaleString() : "—"}
+                            {ride.requestedAt ? formatDateTime(ride.requestedAt) : "—"}
                           </td>
                         </tr>
                       ))}
@@ -921,14 +922,22 @@ export default function DriverDetail() {
 
         {/* Tab 4: Banking & Payouts */}
         <TabsContent value="banking" className="mt-4">
-          <BankDetailsPanel ownerType="driver" ownerId={driverId} />
+          {driverId && <BankDetailsPanel ownerType="driver" ownerId={driverId} />}
         </TabsContent>
 
         {/* Tab 5: Subscriptions & Wallets */}
         <TabsContent value="subscriptions" className="mt-4 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <WalletPanel ownerType="driver" ownerId={driverId} />
-            <DriverSubscriptionPanel driverId={driverId} />
+            {driverId && <WalletPanel ownerType="driver" ownerId={driverId} />}
+            {driverId && (
+              <DriverSubscriptionPanel
+                driverId={driverId}
+                countryId={driver?.countryId || undefined}
+                driverName={driver?.name || undefined}
+                driverEmail={driver?.email || undefined}
+                driverPhone={driver?.phone || undefined}
+              />
+            )}
           </div>
         </TabsContent>
       </Tabs>

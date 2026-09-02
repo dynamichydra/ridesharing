@@ -14,15 +14,21 @@ import {
   Sparkles,
   Save,
   Clock,
+  ExternalLink,
+  Globe,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useVehicleModelsLookup, useDriver } from "../hooks";
 import { vehiclesApi, driversApi } from "../api";
 import { bankDetailsApi } from "@/features/bank-details/api";
+import { useDriverPayoutSetup } from "@/features/bank-details/hooks";
 import toast from "react-hot-toast";
 
 const STEPS = [
@@ -52,6 +58,18 @@ export default function DriverRegisterWizardPage() {
   const existingDriver = existingSummary?.driver;
   const existingVehicles = existingSummary?.vehicles ?? [];
   const existingActiveVehicle = existingVehicles.find((v) => v.isActive) || existingVehicles[0];
+
+  const { data: payoutSetupData } = useDriverPayoutSetup(driverId || undefined);
+  const payoutSetup = payoutSetupData?.MESSAGE ?? null;
+  const isStripeHosted = payoutSetup?.type === "hosted_redirect";
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const handleCopyStripeLink = (url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    toast.success("Stripe Onboarding link copied to clipboard!");
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
 
   // Form State
   const [formData, setFormData] = useState({
@@ -647,54 +665,104 @@ export default function DriverRegisterWizardPage() {
         {currentStep === 4 && (
           <div>
             <CardHeader className="p-4 sm:p-6 border-b border-border">
-              <div className="flex items-center gap-2">
-                <Landmark className="h-5 w-5 text-primary" />
-                <CardTitle className="text-lg">Step 4: Bank & Payout Details</CardTitle>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Landmark className="h-5 w-5 text-primary" />
+                  <CardTitle className="text-lg">
+                    Step 4: Bank & Payout Details {isStripeHosted ? "(Stripe Connect)" : "(Razorpay / Direct Bank)"}
+                  </CardTitle>
+                </div>
+                {isStripeHosted && (
+                  <Badge variant={payoutSetup?.isReady ? "default" : "outline"} className={payoutSetup?.isReady ? "bg-green-600 text-white" : ""}>
+                    {payoutSetup?.isReady ? "Stripe Active" : "Stripe Express Pending"}
+                  </Badge>
+                )}
               </div>
               <CardDescription>
-                Enter payout banking information to receive trip fare disbursements.
+                {isStripeHosted
+                  ? "This driver is in a Stripe-supported country (e.g. US, Canada, UK). Onboard via Stripe Express for automated payouts."
+                  : "Enter payout banking or UPI information. In India, RazorpayX runs automated Penny Drop and VPA verification."}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="accName">Account Holder Name</Label>
-                  <Input
-                    id="accName"
-                    placeholder={formData.name || "Legal Name on Account"}
-                    value={formData.accountHolderName}
-                    onChange={(e) => handleChange("accountHolderName", e.target.value)}
-                  />
+              {isStripeHosted && payoutSetup?.onboardingUrl && (
+                <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Globe className="h-4 w-4 text-primary" />
+                    <span>Stripe Connect Express Onboarding</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Stripe handles secure bank detail collection, KYC, and direct deposits. You can open or share the onboarding link with the driver:
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                    <a href={payoutSetup.onboardingUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+                      <Button size="sm" type="button" className="w-full gap-2 cursor-pointer">
+                        <ExternalLink className="h-4 w-4" /> Open Stripe Express Onboarding
+                      </Button>
+                    </a>
+                    <Button
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                      className="gap-2 cursor-pointer"
+                      onClick={() => handleCopyStripeLink(payoutSetup.onboardingUrl)}
+                    >
+                      {copiedLink ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                      {copiedLink ? "Copied" : "Copy Link"}
+                    </Button>
+                  </div>
                 </div>
+              )}
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="bankName">Bank Name</Label>
-                  <Input
-                    id="bankName"
-                    placeholder="e.g. Chase / HDFC / RBC"
-                    value={formData.bankName}
-                    onChange={(e) => handleChange("bankName", e.target.value)}
-                  />
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">
+                    {isStripeHosted ? "Direct Bank Details (Optional Record)" : "Bank Account Details"}
+                  </span>
+                  {!isStripeHosted && (
+                    <span className="text-[11px] text-muted-foreground">Automated verification via RazorpayX</span>
+                  )}
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="accName">Account Holder Name</Label>
+                    <Input
+                      id="accName"
+                      placeholder={formData.name || "Legal Name on Account"}
+                      value={formData.accountHolderName}
+                      onChange={(e) => handleChange("accountHolderName", e.target.value)}
+                    />
+                  </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="accNo">Account Number / IBAN</Label>
-                  <Input
-                    id="accNo"
-                    placeholder="e.g. 918274619284"
-                    value={formData.accountNumber}
-                    onChange={(e) => handleChange("accountNumber", e.target.value)}
-                  />
-                </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="bankName">Bank Name</Label>
+                    <Input
+                      id="bankName"
+                      placeholder="e.g. Chase / HDFC / RBC"
+                      value={formData.bankName}
+                      onChange={(e) => handleChange("bankName", e.target.value)}
+                    />
+                  </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="routingCode">Routing / IFSC / Swift Code</Label>
-                  <Input
-                    id="routingCode"
-                    placeholder="e.g. HDFC0001234"
-                    value={formData.routingCode}
-                    onChange={(e) => handleChange("routingCode", e.target.value)}
-                  />
+                  <div className="space-y-1.5">
+                    <Label htmlFor="accNo">Account Number / IBAN</Label>
+                    <Input
+                      id="accNo"
+                      placeholder="e.g. 918274619284"
+                      value={formData.accountNumber}
+                      onChange={(e) => handleChange("accountNumber", e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="routingCode">Routing / IFSC / SWIFT Code</Label>
+                    <Input
+                      id="routingCode"
+                      placeholder="e.g. HDFC0001234"
+                      value={formData.routingCode}
+                      onChange={(e) => handleChange("routingCode", e.target.value)}
+                    />
+                  </div>
                 </div>
               </div>
             </CardContent>

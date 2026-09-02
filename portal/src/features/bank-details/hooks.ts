@@ -3,7 +3,18 @@ import toast from "react-hot-toast";
 import { bankDetailsApi } from "./api";
 import type { BankDetailsOwnerType, BankDetailsPayload } from "./types";
 
+import { payoutAccountsApi } from "../payouts/api";
+
 const BANK_DETAILS_KEY = "bank-details";
+const DRIVER_PAYOUT_SETUP_KEY = "driver-payout-setup";
+
+export function useDriverPayoutSetup(driverId: string | undefined) {
+  return useQuery({
+    queryKey: [DRIVER_PAYOUT_SETUP_KEY, driverId],
+    queryFn: () => payoutAccountsApi.getDriverSetup(driverId as string),
+    enabled: !!driverId,
+  });
+}
 
 export function useBankDetails(ownerType: BankDetailsOwnerType, ownerId: string | undefined) {
   return useQuery({
@@ -37,6 +48,25 @@ export function useSetRiderBankVerified(riderId: string | undefined) {
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to update verification status");
+    },
+  });
+}
+
+export function useValidateDriverBank(driverId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => bankDetailsApi.validateDriverBank(driverId as string),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: [BANK_DETAILS_KEY, "driver", driverId], refetchType: "active" });
+      queryClient.invalidateQueries({ queryKey: [DRIVER_PAYOUT_SETUP_KEY, driverId], refetchType: "active" });
+      if (data?.MESSAGE?.autoVerified) {
+        toast.success(`Razorpay Penny Drop Verified! (Name Match: ${data.MESSAGE.nameMatchScore || "100"}%)`);
+      } else {
+        toast.success(`Razorpay validation executed. Account status: ${data?.MESSAGE?.accountStatus || "Pending"}`);
+      }
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Razorpay validation failed");
     },
   });
 }

@@ -5,6 +5,7 @@ import type { Zone } from "../types";
 
 interface Props {
   countriesMap: Map<string, string>;
+  onViewHex: (zone: Zone) => void;
   onEdit: (zone: Zone) => void;
   onToggleActive: (zone: Zone) => void;
   onGenerateHex: (zone: Zone) => void;
@@ -12,6 +13,7 @@ interface Props {
 
 export function getZoneColumns({
   countriesMap,
+  onViewHex,
   onEdit,
   onToggleActive,
   onGenerateHex,
@@ -68,14 +70,32 @@ export function getZoneColumns({
       header: "H3 Index",
       cell: ({ row }) =>
         row.original.resolution != null ? (
-          <span className="flex items-center gap-1.5 text-xs">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewHex(row.original);
+            }}
+            className="inline-flex items-center gap-1.5 font-mono text-xs text-primary hover:text-primary/80 hover:underline cursor-pointer bg-primary/5 hover:bg-primary/10 px-2 py-1 rounded border border-primary/20 transition-colors"
+            title="Click to view H3 Hexagons on Google Maps"
+          >
             <Hexagon className="h-3.5 w-3.5 text-primary" />
-            <span className="font-mono text-foreground">
+            <span>
               res {row.original.resolution} · {row.original.hexCells?.length ?? 0} cells
             </span>
-          </span>
+          </button>
         ) : (
-          <span className="text-xs text-muted-foreground italic">Not generated</span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewHex(row.original);
+            }}
+            className="text-xs text-muted-foreground italic hover:text-foreground cursor-pointer underline"
+            title="View Boundary on Google Maps"
+          >
+            View boundary map
+          </button>
         ),
     },
     {
@@ -94,42 +114,58 @@ export function getZoneColumns({
     },
     {
       id: "actions",
-      size: 120,
-      header: () => <div className="w-full text-center">Actions</div>,
+      header: () => <div className="text-right pr-2">Actions</div>,
       cell: ({ row }) => (
-        <div className="w-full flex items-center justify-center gap-2">
+        <div className="flex items-center justify-end gap-1.5">
           <Button
             variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewHex(row.original);
+            }}
+            className="h-8 gap-1 text-xs text-primary border-primary/30 hover:bg-primary/10 cursor-pointer"
+            title="View H3 Hexagon Google Map"
+          >
+            <Hexagon className="h-3.5 w-3.5" />
+            <span>View Map</span>
+          </Button>
+          <Button
+            variant="ghost"
             size="icon"
             onClick={(e) => {
               e.stopPropagation();
               onEdit(row.original);
             }}
-            className="h-8 w-8"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
             title="Edit zone"
           >
             <Pencil className="h-3.5 w-3.5" />
           </Button>
           <Button
-            variant="outline"
+            variant="ghost"
             size="icon"
             onClick={(e) => {
               e.stopPropagation();
               onGenerateHex(row.original);
             }}
-            className="h-8 w-8"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
             title={row.original.resolution != null ? "Regenerate hex cells" : "Generate hex cells"}
           >
             <Hexagon className="h-3.5 w-3.5" />
           </Button>
           <Button
-            variant={row.original.isActive ? "destructive" : "outline"}
+            variant="ghost"
             size="icon"
             onClick={(e) => {
               e.stopPropagation();
               onToggleActive(row.original);
             }}
-            className="h-8 w-8"
+            className={`h-8 w-8 cursor-pointer ${
+              row.original.isActive
+                ? "text-destructive hover:bg-destructive/10"
+                : "text-emerald-600 hover:bg-emerald-500/10"
+            }`}
             title={row.original.isActive ? "Disable zone" : "Enable zone"}
           >
             <Ban className="h-3.5 w-3.5" />

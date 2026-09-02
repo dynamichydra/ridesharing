@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Eye, Edit2, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { FareRule, LookupOption } from "../types";
+import { formatDate } from "@/lib/utils";
 
 interface Props {
   onView: (rule: FareRule) => void;
@@ -101,7 +102,7 @@ export function getFareRuleColumns({
       header: "Created Date",
       cell: ({ row }) => (
         <span className="text-muted-foreground text-xs">
-          {row.original.createdAt ? new Date(row.original.createdAt).toLocaleDateString() : "—"}
+          {formatDate(row.original.createdAt)}
         </span>
       ),
     },

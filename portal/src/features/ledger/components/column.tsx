@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { LedgerTransaction } from "../types";
+import { formatDateTime } from "@/lib/utils";
 
 interface Actions {
   onViewEntries: (transaction: LedgerTransaction) => void;
@@ -44,7 +45,7 @@ export function getLedgerTransactionColumns({ onViewEntries }: Actions): ColumnD
       accessorKey: "createdAt",
       header: "Posted At",
       cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">{new Date(row.original.createdAt).toLocaleString()}</span>
+        <span className="text-xs text-muted-foreground">{formatDateTime(row.original.createdAt)}</span>
       ),
     },
     {

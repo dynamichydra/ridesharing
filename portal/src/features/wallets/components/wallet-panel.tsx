@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Wallet as WalletIcon, Plus, Minus } from "lucide-react";
+import { Wallet as WalletIcon, Plus, Minus, CreditCard } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useDriverWallet, useRiderWallet, useWalletTransactions, useAdjustWallet } from "../hooks";
 import type { WalletOwnerType, WalletTransactionType } from "../types";
+import { formatDateTime } from "@/lib/utils";
+import { PaymentCheckoutModal } from "@/components/payments/payment-checkout-modal";
 
 function formatMinor(amountMinor: number, currencyCode: string): string {
   const amount = amountMinor / 100;
@@ -97,10 +99,11 @@ function AdjustWalletDialog({ open, onOpenChange, ownerType, ownerId }: AdjustDi
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="wa-description">Description (Optional)</Label>
+            <Label htmlFor="wa-desc">Description (optional)</Label>
             <Textarea
-              id="wa-description"
-              placeholder="Internal note for this adjustment"
+              id="wa-desc"
+              rows={2}
+              placeholder="Internal notes..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
@@ -110,7 +113,7 @@ function AdjustWalletDialog({ open, onOpenChange, ownerType, ownerId }: AdjustDi
               Cancel
             </Button>
             <Button type="submit" disabled={adjustMutation.isPending} className="cursor-pointer">
-              {type === "credit" ? "Credit Wallet" : "Debit Wallet"}
+              Save Adjustment
             </Button>
           </DialogFooter>
         </form>
@@ -128,6 +131,9 @@ interface WalletPanelProps {
 // action. Drivers always resolve to a wallet (auto-created server-side); riders may have none.
 export function WalletPanel({ ownerType, ownerId }: WalletPanelProps) {
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
+  const [isGatewayPayOpen, setIsGatewayPayOpen] = useState(false);
+  const adjustMutation = useAdjustWallet(ownerType, ownerId);
+
   const driverWalletQuery = useDriverWallet(ownerType === "driver" ? ownerId : undefined);
   const riderWalletQuery = useRiderWallet(ownerType === "rider" ? ownerId : undefined);
   const { data: walletData, isLoading } = ownerType === "driver" ? driverWalletQuery : riderWalletQuery;
@@ -135,6 +141,16 @@ export function WalletPanel({ ownerType, ownerId }: WalletPanelProps) {
 
   const { data: txnData, isLoading: txnLoading } = useWalletTransactions(wallet?.id);
   const transactions = txnData?.MESSAGE ?? [];
+
+  const handleGatewaySuccess = (payment: { gateway: string; paymentId: string; amount: number; currency: string }) => {
+    const amountMinor = Math.round(payment.amount * 100);
+    adjustMutation.mutate({
+      type: "credit",
+      amountMinor,
+      reason: "gateway_topup",
+      description: `Direct top-up via ${payment.gateway.toUpperCase()} (Ref: ${payment.paymentId})`,
+    });
+  };
 
   return (
     <Card className="border-border bg-card shadow-sm md:col-span-2">
@@ -147,9 +163,14 @@ export function WalletPanel({ ownerType, ownerId }: WalletPanelProps) {
             {ownerType === "driver" ? "Balance and ledger for this driver." : "Optional balance and ledger for this rider."}
           </CardDescription>
         </div>
-        <Button size="sm" onClick={() => setIsAdjustOpen(true)} className="cursor-pointer shrink-0">
-          <Plus className="h-3.5 w-3.5 mr-1" /> Adjust Balance
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button size="sm" variant="outline" onClick={() => setIsGatewayPayOpen(true)} className="cursor-pointer gap-1.5">
+            <CreditCard className="h-3.5 w-3.5 text-primary" /> Pay via Gateway
+          </Button>
+          <Button size="sm" onClick={() => setIsAdjustOpen(true)} className="cursor-pointer">
+            <Plus className="h-3.5 w-3.5 mr-1" /> Adjust Balance
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (
@@ -189,7 +210,7 @@ export function WalletPanel({ ownerType, ownerId }: WalletPanelProps) {
                     <div>
                       <div className="font-semibold text-foreground capitalize">{txn.reason.replace(/_/g, " ")}</div>
                       <div className="text-xs text-muted-foreground">
-                        {new Date(txn.createdAt).toLocaleString()}
+                        {formatDateTime(txn.createdAt)}
                         {txn.description ? ` · ${txn.description}` : ""}
                       </div>
                     </div>
@@ -219,6 +240,16 @@ export function WalletPanel({ ownerType, ownerId }: WalletPanelProps) {
         onOpenChange={setIsAdjustOpen}
         ownerType={ownerType}
         ownerId={ownerId}
+      />
+
+      <PaymentCheckoutModal
+        open={isGatewayPayOpen}
+        onOpenChange={setIsGatewayPayOpen}
+        title={`Top-up ${ownerType === "driver" ? "Driver" : "Rider"} Wallet`}
+        description="Process live or dummy card / UPI top-up via integrated Stripe & Razorpay gateways."
+        currencyCode={wallet?.currencyCode || "INR"}
+        defaultAmount={50}
+        onSuccess={handleGatewaySuccess}
       />
     </Card>
   );

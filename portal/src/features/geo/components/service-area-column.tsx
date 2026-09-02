@@ -1,14 +1,16 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Power, Edit, Trash2, MapPin } from "lucide-react";
+import { Power, Edit, Trash2, MapPin, Hexagon } from "lucide-react";
 import type { CityServiceArea } from "../types";
 
 export function getServiceAreaColumns({
+  onViewHex,
   onEdit,
   onToggleActive,
   onDelete,
 }: {
+  onViewHex: (area: CityServiceArea) => void;
   onEdit: (area: CityServiceArea) => void;
   onToggleActive: (area: CityServiceArea) => void;
   onDelete: (area: CityServiceArea) => void;
@@ -48,9 +50,15 @@ export function getServiceAreaColumns({
       accessorKey: "resolution",
       header: "H3 Index Resolution",
       cell: ({ row }) => (
-        <span className="font-mono text-xs text-muted-foreground">
+        <button
+          type="button"
+          onClick={() => onViewHex(row.original)}
+          className="inline-flex items-center gap-1.5 font-mono text-xs text-primary hover:text-primary/80 hover:underline cursor-pointer bg-primary/5 hover:bg-primary/10 px-2 py-1 rounded border border-primary/20 transition-colors"
+          title="Click to view H3 Hexagons on Google Maps"
+        >
+          <Hexagon className="h-3.5 w-3.5 text-primary" />
           Res {row.original.resolution ?? 9} ({row.original.hexCells?.length ?? 0} cells)
-        </span>
+        </button>
       ),
     },
     {
@@ -73,6 +81,16 @@ export function getServiceAreaColumns({
       header: "Actions",
       cell: ({ row }) => (
         <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1 text-xs text-primary border-primary/30 hover:bg-primary/10 cursor-pointer"
+            onClick={() => onViewHex(row.original)}
+            title="View H3 Hexagon Map"
+          >
+            <Hexagon className="h-3.5 w-3.5" />
+            <span>View Map</span>
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -109,3 +127,4 @@ export function getServiceAreaColumns({
     },
   ];
 }
+

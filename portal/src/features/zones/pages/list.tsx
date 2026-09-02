@@ -12,6 +12,7 @@ import {
   ZoneDetectDialog,
   GenerateHexDialog,
 } from "../components/dialog";
+import { ZoneHexModal } from "../components/zone-hex-modal";
 import {
   useZones,
   useAllZones,
@@ -23,7 +24,8 @@ import {
   useResolveHexZones,
   useGenerateHexCells,
 } from "../hooks";
-import type { Zone, Pagination, GeoJSONPolygon } from "../types";
+import { parseGeoJSONPolygonInput } from "@/features/geo/utils";
+import type { Zone, Pagination } from "../types";
 import type { ZoneFormState, ZoneDetectFormState, GenerateHexFormState } from "../components/form";
 
 const EMPTY_ZONE_FORM: ZoneFormState = {
@@ -36,8 +38,6 @@ const EMPTY_ZONE_FORM: ZoneFormState = {
   dropoffFee: "0",
   polygon: "",
   description: "",
-  // Pre-filled (not blank) so hex cells generate in the same click as saving the zone —
-  // no separate "Generate Hex Cells" step needed for the normal create/edit flow.
   resolution: "9",
   priority: "1",
 };
@@ -51,20 +51,6 @@ const EMPTY_GENERATE_HEX_FORM: GenerateHexFormState = {
   resolution: "9",
 };
 
-// ZoneFormState.polygon stays a string throughout the form/map (convenient for the advanced
-// raw-GeoJSON textarea) — this is the one place it gets converted to the real object the
-// backend's jsonb column expects. Sending a string here instead gets double-JSON-encoded by
-// the DB driver and comes back unusable (see the "generate hex cells" investigation).
-function parseZonePolygon(polygonJson: string): GeoJSONPolygon | null {
-  try {
-    const parsed = JSON.parse(polygonJson);
-    if (parsed?.type === "Polygon" && Array.isArray(parsed.coordinates)) return parsed;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 export default function ZoneList() {
   const controller = useFilterController();
   const [pageSize, setPageSize] = useState(10);
@@ -74,6 +60,8 @@ export default function ZoneList() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDetectOpen, setIsDetectOpen] = useState(false);
   const [isGenerateHexOpen, setIsGenerateHexOpen] = useState(false);
+  const [viewingHexZone, setViewingHexZone] = useState<Zone | null>(null);
+  const [isHexModalOpen, setIsHexModalOpen] = useState(false);
 
   const [selectedZone, setSelectedZone] = useState<Zone | null>(null);
   const [hexZone, setHexZone] = useState<Zone | null>(null);
@@ -93,8 +81,6 @@ export default function ZoneList() {
     countryId,
   });
 
-  // Map context overlays: other zones in the same country while drawing/editing a boundary,
-  // and every active zone while picking a point in the Detect dialog (no country selected there).
   const { data: countryZonesData } = useAllZones(formValues.countryId || undefined);
   const { data: allZonesData } = useAllZones();
   const formContextZones = useMemo(
@@ -140,15 +126,17 @@ export default function ZoneList() {
       airportFee: zone.airportFeeMinor != null ? String(zone.airportFeeMinor / 100) : "0",
       pickupFee: zone.pickupFeeMinor != null ? String(zone.pickupFeeMinor / 100) : "0",
       dropoffFee: zone.dropoffFeeMinor != null ? String(zone.dropoffFeeMinor / 100) : "0",
-      polygon: JSON.stringify(zone.polygon),
+      polygon: zone.polygon ? JSON.stringify(zone.polygon, null, 2) : "",
       description: zone.description || "",
-      // Pre-filled with the zone's current resolution (or 9 if never generated) so saving
-      // an edit — e.g. after adjusting the polygon on the map — regenerates hex cells to
-      // match in the same click, same as create.
       resolution: zone.resolution != null ? String(zone.resolution) : "9",
       priority: String(zone.priority ?? 1),
     });
     setIsEditOpen(true);
+  }, []);
+
+  const handleViewHex = useCallback((zone: Zone) => {
+    setViewingHexZone(zone);
+    setIsHexModalOpen(true);
   }, []);
 
   const handleGenerateHexClick = useCallback((zone: Zone) => {
@@ -163,9 +151,9 @@ export default function ZoneList() {
 
   const handleCreateSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
-    const polygon = parseZonePolygon(formValues.polygon);
-    if (!polygon) {
-      toast.error("Draw a zone boundary on the map first");
+    const { polygon, error } = parseGeoJSONPolygonInput(formValues.polygon);
+    if (error || !polygon) {
+      toast.error(error || "Please enter a valid GeoJSON polygon");
       return;
     }
     const { resolution, priority, airportFee, pickupFee, dropoffFee, polygon: _polygonText, ...rest } = formValues;
@@ -177,8 +165,6 @@ export default function ZoneList() {
       pickupFeeMinor: Math.round((parseFloat(pickupFee) || 0) * 100),
       dropoffFeeMinor: Math.round((parseFloat(dropoffFee) || 0) * 100),
       priority: priority ? parseInt(priority, 10) : undefined,
-      // Omitted entirely (not sent as undefined-but-present) when blank — leaves hex
-      // indexing untouched instead of accidentally clearing it.
       ...(resolution ? { resolution: parseInt(resolution, 10) } : {}),
     }, {
       onSuccess: () => setIsCreateOpen(false),
@@ -188,9 +174,9 @@ export default function ZoneList() {
   const handleEditSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedZone) return;
-    const polygon = parseZonePolygon(formValues.polygon);
-    if (!polygon) {
-      toast.error("Draw a zone boundary on the map first");
+    const { polygon, error } = parseGeoJSONPolygonInput(formValues.polygon);
+    if (error || !polygon) {
+      toast.error(error || "Please enter a valid GeoJSON polygon");
       return;
     }
     const { resolution, priority, airportFee, pickupFee, dropoffFee, polygon: _polygonText, ...rest } = formValues;
@@ -237,11 +223,12 @@ export default function ZoneList() {
     () =>
       getZoneColumns({
         countriesMap,
+        onViewHex: handleViewHex,
         onEdit: handleEditClick,
         onToggleActive: handleToggleActive,
         onGenerateHex: handleGenerateHexClick,
       }),
-    [countriesMap, handleEditClick, handleToggleActive, handleGenerateHexClick]
+    [countriesMap, handleViewHex, handleEditClick, handleToggleActive, handleGenerateHexClick]
   );
 
   return (
@@ -252,7 +239,7 @@ export default function ZoneList() {
             <MapIcon className="h-5 w-5 text-primary" />
           </div>
           <h2 className="text-xl font-bold tracking-tight text-foreground uppercase">
-            Zones
+            Operational Zones
           </h2>
           <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest bg-accent px-2 py-0.5 rounded-full opacity-70">
             {totalItems} Total
@@ -269,14 +256,14 @@ export default function ZoneList() {
               setHexMatches(undefined);
               setIsDetectOpen(true);
             }}
-            className="gap-2 h-8"
+            className="gap-2 h-8 cursor-pointer"
           >
             <Navigation className="h-4 w-4" /> Detect Zone
           </Button>
           <Button
             onClick={handleAddClick}
             size="sm"
-            className="gap-2 shadow-sm hover:shadow-md transition-all active:scale-[0.98] h-8"
+            className="gap-2 shadow-sm hover:shadow-md transition-all active:scale-[0.98] h-8 cursor-pointer"
           >
             <Plus className="h-4 w-4" /> Add Zone
           </Button>
@@ -346,6 +333,13 @@ export default function ZoneList() {
         onChange={setGenerateHexValues}
         onSubmit={handleGenerateHexSubmit}
         isPending={generateHexMutation.isPending}
+      />
+
+      <ZoneHexModal
+        open={isHexModalOpen}
+        onOpenChange={setIsHexModalOpen}
+        zone={viewingHexZone}
+        countryName={viewingHexZone ? countriesMap.get(viewingHexZone.countryId) : undefined}
       />
     </div>
   );

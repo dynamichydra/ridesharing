@@ -75,3 +75,36 @@ export function useSetSubscriptionPlanActive() {
     },
   });
 }
+
+export function useActiveSubscriptionPlans(countryId?: string) {
+  return useQuery({
+    queryKey: [SUBSCRIPTION_PLANS_KEY, "active-plans", countryId],
+    queryFn: () => subscriptionPlansApi.listActive(countryId),
+  });
+}
+
+export function useInitiateDriverSubscription() {
+  return useMutation({
+    mutationFn: ({ driverId, planId }: { driverId: string; planId: string }) =>
+      subscriptionPlansApi.initiateDriverSub(driverId, planId),
+    onError: (err: any) => {
+      toast.error(err?.message ?? "Failed to initiate subscription");
+    },
+  });
+}
+
+export function useVerifyDriverSubscription() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ driverId, payload }: { driverId: string; payload: { planId: string; orderRef: string; paymentRef: string; signature?: string } }) =>
+      subscriptionPlansApi.verifyDriverSub(driverId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["driver-subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["driver-payments"] });
+      toast.success("Driver subscription successfully activated!");
+    },
+    onError: (err: any) => {
+      toast.error(err?.message ?? "Failed to verify subscription payment");
+    },
+  });
+}

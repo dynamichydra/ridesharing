@@ -17,9 +17,10 @@ declare global {
   }
 }
 
+import { loadGoogleMapsScript } from "@/lib/google-maps";
+
 // San Francisco default center
 const DEFAULT_CENTER = { lat: 37.7749, lng: -122.4194 };
-const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY || "AIzaSyCa9c3EMWliRd2AUcZA-LpJF7VwhEjsd7g";
 
 export function LiveMapCard({ fleetStatus, heatmapData }: LiveMapCardProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -31,26 +32,16 @@ export function LiveMapCard({ fleetStatus, heatmapData }: LiveMapCardProps) {
 
   // Load Google Maps API Script
   useEffect(() => {
-    if (window.google?.maps) {
+    if (window.google?.maps?.Map) {
       setMapLoaded(true);
       return;
     }
 
-    const existingScript = document.getElementById("google-maps-script");
-    if (!existingScript) {
-      const script = document.createElement("script");
-      script.id = "google-maps-script";
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}&libraries=places,geometry`;
-      script.async = true;
-      script.defer = true;
-      script.onload = () => setMapLoaded(true);
-      script.onerror = () => setLoadError(true);
-      document.head.appendChild(script);
-    } else {
-      existingScript.addEventListener("load", () => setMapLoaded(true));
-      existingScript.addEventListener("error", () => setLoadError(true));
-    }
+    loadGoogleMapsScript()
+      .then(() => setMapLoaded(true))
+      .catch(() => setLoadError(true));
   }, []);
+
 
   // Initialize Google Map
   useEffect(() => {

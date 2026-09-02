@@ -40,6 +40,14 @@ export const payoutAccountsApi = {
   // PATCH /payout-accounts/:id/verify  { approve, rejectionReason? }  (Admin)
   verify: (id: string, payload: VerifyPayoutAccountPayload) =>
     apiClient.patch<PayoutAccount>(`${PAYOUT_ACCOUNTS_BASE}/${id}/verify`, payload),
+
+  // GET /payout-accounts/drivers/:driverId/setup (Admin)
+  getDriverSetup: (driverId: string) =>
+    apiClient.get<any>(`${PAYOUT_ACCOUNTS_BASE}/drivers/${driverId}/setup`),
+
+  // POST /payout-accounts/drivers/:driverId/setup (Admin)
+  submitDriverSetup: (driverId: string, payload: any) =>
+    apiClient.post<any>(`${PAYOUT_ACCOUNTS_BASE}/drivers/${driverId}/setup`, payload),
 };
 
 export const payoutsApi = {

@@ -22,5 +22,8 @@ const DM_CORE_CONFIG = {
   VERSION: '1.0.0',
   PRIVATE_KEY: 'rideshare-admin-secret-key',
   PAGESIZE: 10,
+  // Payment Gateway Keys
+  STRIPE_PUBLISHABLE_KEY: 'pk_test_TYooMQauvdEDq54NiTphI7jx',
+  RAZORPAY_KEY_ID: 'rzp_test_1DP5mmOlF5G5ag',
 }
 export default DM_CORE_CONFIG;

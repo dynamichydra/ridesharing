@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Refund } from "../types";
+import { formatDateTime } from "@/lib/utils";
 
 function formatMinor(amountMinor: number, currencyCode: string): string {
   const amount = amountMinor / 100;
@@ -68,7 +69,7 @@ export function getRefundColumns(): ColumnDef<Refund>[] {
       header: "Created At",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground">
-          {new Date(row.original.createdAt).toLocaleString()}
+          {formatDateTime(row.original.createdAt)}
         </span>
       ),
     },

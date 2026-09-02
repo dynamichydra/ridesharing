@@ -7,6 +7,7 @@ import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getServiceAreaColumns } from "../components/service-area-column";
 import { ServiceAreaDialog } from "../components/service-area-dialog";
+import { ServiceAreaHexModal } from "../components/service-area-hex-modal";
 import { useServiceAreas, useSetServiceAreaActive, useDeleteServiceArea, useCities } from "../hooks";
 import type { CityServiceArea } from "../types";
 
@@ -14,6 +15,8 @@ export default function ServiceAreasTab() {
   const controller = useFilterController();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingArea, setEditingArea] = useState<CityServiceArea | null>(null);
+  const [viewingHexArea, setViewingHexArea] = useState<CityServiceArea | null>(null);
+  const [isHexModalOpen, setIsHexModalOpen] = useState(false);
 
   const page = Number(controller.applied.page) || 1;
   const limit = Number(controller.applied.limit) || 20;
@@ -63,6 +66,11 @@ export default function ServiceAreasTab() {
     setIsDialogOpen(true);
   }, []);
 
+  const handleViewHex = useCallback((area: CityServiceArea) => {
+    setViewingHexArea(area);
+    setIsHexModalOpen(true);
+  }, []);
+
   const handleToggleActive = useCallback(
     (area: CityServiceArea) => {
       setActiveMutation.mutate({ id: area.id, isActive: !area.isActive });
@@ -82,11 +90,12 @@ export default function ServiceAreasTab() {
   const columns = useMemo(
     () =>
       getServiceAreaColumns({
+        onViewHex: handleViewHex,
         onEdit: handleEdit,
         onToggleActive: handleToggleActive,
         onDelete: handleDelete,
       }),
-    [handleEdit, handleToggleActive, handleDelete],
+    [handleViewHex, handleEdit, handleToggleActive, handleDelete],
   );
 
   const areas = data?.MESSAGE ?? [];
@@ -131,6 +140,13 @@ export default function ServiceAreasTab() {
         areaToEdit={editingArea}
         cities={cities}
       />
+
+      <ServiceAreaHexModal
+        open={isHexModalOpen}
+        onOpenChange={setIsHexModalOpen}
+        area={viewingHexArea}
+      />
     </div>
   );
 }
+

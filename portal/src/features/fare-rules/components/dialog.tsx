@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import FareRuleForm from "./form";
 import type { FareRuleFormValues } from "../schema";
 import type { FareRule, LookupOption } from "../types";
+import { formatDateTime } from "@/lib/utils";
 
 
 // View details dialog — read-only, backed by GET /fare/rules/:id      
@@ -132,7 +133,7 @@ export function ViewFareRuleDialog({
             <div className="border-t border-border pt-3">
               <span className="text-xs text-muted-foreground block">Created</span>
               <span className="font-medium text-foreground">
-                {rule.createdAt ? new Date(rule.createdAt).toLocaleString() : "—"}
+                {formatDateTime(rule.createdAt)}
               </span>
             </div>
           </div>

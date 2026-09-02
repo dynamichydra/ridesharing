@@ -1,6 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Info, Banknote, CreditCard, Wallet, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatDateTime } from "@/lib/utils";
 import type { Ride } from "../types";
 
 interface Props {
@@ -36,7 +37,7 @@ export function getRideColumns({ onViewDetails, onViewPayments, onDownloadInvoic
         <>
           <div className="font-semibold text-foreground">ID: {row.original.id.slice(0, 8)}...</div>
           <div className="text-xs text-muted-foreground">
-            {new Date(row.original.requestedAt).toLocaleString()}
+            {formatDateTime(row.original.requestedAt)}
           </div>
         </>
       ),

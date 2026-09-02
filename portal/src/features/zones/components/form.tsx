@@ -1,9 +1,12 @@
+import { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { DialogFooter } from "@/components/ui/dialog";
-import { ZonePolygonMap, ZonePointMap } from "./zone-map";
+import { CheckCircle2, AlertCircle, Wand2, MapPin, Sparkles } from "lucide-react";
+import { parseGeoJSONPolygonInput } from "@/features/geo/utils";
 import type { Country, Zone } from "../types";
 
 export interface ZoneFormState {
@@ -17,7 +20,6 @@ export interface ZoneFormState {
   dropoffFee: string;
   polygon: string;
   description: string;
-  // H3 hex-cell resolution (8-10) — leave blank to leave hex indexing untouched.
   resolution: string;
   priority: string;
 }
@@ -30,8 +32,6 @@ interface ZoneFormProps {
   onCancel: () => void;
   isPending: boolean;
   submitLabel: string;
-  // Other active zones (usually scoped to the selected country) drawn translucent on the map
-  // for spatial context, and the zone's own hex cells once generated (edit mode only).
   contextZones?: Zone[];
   hexCells?: string[] | null;
 }
@@ -44,9 +44,56 @@ export default function ZoneForm({
   onCancel,
   isPending,
   submitLabel,
-  contextZones,
-  hexCells,
 }: ZoneFormProps) {
+  const [geoJsonInfo, setGeoJsonInfo] = useState<{
+    valid: boolean;
+    message?: string;
+    pointsCount?: number;
+    sourceType?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!values.polygon || !values.polygon.trim()) {
+      setGeoJsonInfo(null);
+      return;
+    }
+    const result = parseGeoJSONPolygonInput(values.polygon);
+    if (result.error) {
+      setGeoJsonInfo({ valid: false, message: result.error });
+    } else if (result.polygon) {
+      const points = result.polygon.coordinates[0]?.length ?? 0;
+      setGeoJsonInfo({
+        valid: true,
+        pointsCount: points,
+        sourceType: result.sourceType,
+      });
+    }
+  }, [values.polygon]);
+
+  const handleNormalize = () => {
+    if (!values.polygon) return;
+    const result = parseGeoJSONPolygonInput(values.polygon);
+    if (result.polygon) {
+      onChange({ ...values, polygon: JSON.stringify(result.polygon, null, 2) });
+    }
+  };
+
+  const handleInsertSample = () => {
+    const sample = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [77.58, 12.96],
+          [77.62, 12.96],
+          [77.62, 13.01],
+          [77.58, 13.01],
+          [77.58, 12.96],
+        ],
+      ],
+    };
+    onChange({ ...values, polygon: JSON.stringify(sample, null, 2) });
+  };
+
   return (
     <form onSubmit={onSubmit} className="space-y-4 py-3 text-foreground">
       <div className="grid grid-cols-2 gap-4">
@@ -61,7 +108,9 @@ export default function ZoneForm({
             onChange={(e) => onChange({ ...values, countryId: e.target.value })}
             required
           >
-            <option value="" disabled>Select Country</option>
+            <option value="" disabled>
+              Select Country
+            </option>
             {countries.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -76,7 +125,7 @@ export default function ZoneForm({
           </Label>
           <Input
             id="z-name"
-            placeholder="e.g. Downtown Core"
+            placeholder="e.g. Bengaluru Central Core"
             value={values.name}
             onChange={(e) => onChange({ ...values, name: e.target.value })}
             required
@@ -100,7 +149,7 @@ export default function ZoneForm({
 
         <div className="space-y-2">
           <Label htmlFor="z-multiplier">
-            Multiplier <span className="text-red-500">*</span>
+            Pricing Multiplier <span className="text-red-500">*</span>
           </Label>
           <Input
             id="z-multiplier"
@@ -142,57 +191,92 @@ export default function ZoneForm({
         </div>
       </div>
 
+      {/* GeoJSON Polygon Coordinates Section */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label>
-            Zone Boundary <span className="text-red-500">*</span>
-          </Label>
-          {!values.polygon && (
-            <span className="text-xs text-amber-600 dark:text-amber-400">Draw a boundary below</span>
-          )}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="z-polygon">
+              GeoJSON Polygon Coordinates <span className="text-red-500">*</span>
+            </Label>
+            {geoJsonInfo && (
+              geoJsonInfo.valid ? (
+                <Badge
+                  variant="outline"
+                  className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[11px] py-0 gap-1 font-normal"
+                >
+                  <CheckCircle2 className="h-3 w-3" />
+                  {geoJsonInfo.pointsCount} points{" "}
+                  {geoJsonInfo.sourceType && geoJsonInfo.sourceType !== "Polygon"
+                    ? `(${geoJsonInfo.sourceType} detected)`
+                    : ""}
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="bg-destructive/10 text-destructive border-destructive/20 text-[11px] py-0 gap-1 font-normal"
+                >
+                  <AlertCircle className="h-3 w-3" /> Invalid GeoJSON
+                </Badge>
+              )
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {geoJsonInfo?.valid && geoJsonInfo.sourceType && geoJsonInfo.sourceType !== "Polygon" && (
+              <button
+                type="button"
+                onClick={handleNormalize}
+                className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1 font-medium"
+              >
+                <Wand2 className="h-3 w-3" /> Extract & Clean Polygon
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleInsertSample}
+              className="text-xs text-muted-foreground hover:text-foreground cursor-pointer flex items-center gap-1"
+            >
+              <Sparkles className="h-3 w-3" /> Insert Sample
+            </button>
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Click the polygon tool (top-right of the map), then click to place each vertex and
-          click the first vertex again to close the shape. Or use the circle tool to click a
-          center and drag out a radius — it snaps to the H3 hex grid automatically instead of
-          staying a smooth circle. Drag a vertex to adjust, use the trash tool to clear and redraw.
-        </p>
-        <ZonePolygonMap
+
+        <Textarea
+          id="z-polygon"
+          rows={6}
+          className="font-mono text-xs max-h-48 resize-y border-border bg-background"
+          placeholder='Paste Polygon, Feature, or FeatureCollection GeoJSON here...'
           value={values.polygon}
-          onChange={(polygon) => onChange({ ...values, polygon })}
-          contextZones={contextZones}
-          hexCells={hexCells}
+          onChange={(e) => onChange({ ...values, polygon: e.target.value })}
+          required
         />
-        <details className="text-xs group">
-          <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
-            Advanced: paste raw GeoJSON instead (e.g. an OpenStreetMap export)
-          </summary>
-          <Textarea
-            id="z-polygon"
-            placeholder='{"type":"Polygon","coordinates":[[[lng,lat], ...]]}'
-            className="font-mono text-xs border-border bg-background mt-2"
-            rows={3}
-            value={values.polygon}
-            onChange={(e) => onChange({ ...values, polygon: e.target.value })}
-          />
-        </details>
+
+        {geoJsonInfo && !geoJsonInfo.valid && (
+          <p className="text-xs text-destructive flex items-center gap-1">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            {geoJsonInfo.message}
+          </p>
+        )}
+
+        <p className="text-[11px] text-muted-foreground">
+          Supports direct <code>Polygon</code>, <code>Feature</code>, or <code>FeatureCollection</code> exported from geojson.io, QGIS, or OSM.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="z-resolution">H3 Resolution</Label>
-          <Input
+          <select
             id="z-resolution"
-            type="number"
-            min={8}
-            max={10}
-            placeholder="9"
+            className="w-full flex h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 font-mono"
             value={values.resolution}
             onChange={(e) => onChange({ ...values, resolution: e.target.value })}
-          />
-          <p className="text-xs text-muted-foreground">
-            Hex cells are (re)generated from the polygon automatically when you save — 8 (~461m),
-            9 (~174m, city-block), 10 (~65m). Clear this field to leave hex indexing untouched.
+          >
+            <option value="8">Res 8 (~0.7 km² per cell)</option>
+            <option value="9">Res 9 (~0.1 km² per cell - Recommended)</option>
+            <option value="10">Res 10 (~0.015 km² high precision)</option>
+          </select>
+          <p className="text-[11px] text-muted-foreground">
+            Hex cells are automatically (re)generated from the GeoJSON polygon when you save.
           </p>
         </div>
 
@@ -206,8 +290,8 @@ export default function ZoneForm({
             value={values.priority}
             onChange={(e) => onChange({ ...values, priority: e.target.value })}
           />
-          <p className="text-xs text-muted-foreground">
-            Higher wins when a point matches multiple hex zones (e.g. airport over city surge).
+          <p className="text-[11px] text-muted-foreground">
+            Higher number wins when a point matches multiple hex zones (e.g. airport over city).
           </p>
         </div>
       </div>
@@ -233,7 +317,7 @@ export default function ZoneForm({
           disabled={isPending}
           className="bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer"
         >
-          {submitLabel}
+          {isPending ? "Saving..." : submitLabel}
         </Button>
       </DialogFooter>
     </form>
@@ -252,11 +336,7 @@ interface ZoneDetectFormProps {
   onCancel: () => void;
   isPending: boolean;
   detectedZoneName?: string | null;
-  // Priority-ordered H3 hex-zone matches (most specific first) — additive alongside the
-  // polygon-based `detectedZoneName` result above; undefined = not looked up yet.
   hexMatches?: Zone[];
-  // Existing zones drawn translucent on the map so an admin can click "inside the airport
-  // zone" visually instead of needing to already know its coordinates.
   contextZones?: Zone[];
 }
 
@@ -268,63 +348,59 @@ export function ZoneDetectForm({
   isPending,
   detectedZoneName,
   hexMatches,
-  contextZones,
 }: ZoneDetectFormProps) {
-  const lat = values.lat ? parseFloat(values.lat) : null;
-  const lng = values.lng ? parseFloat(values.lng) : null;
-
   return (
     <form onSubmit={onSubmit} className="space-y-4 py-3 text-foreground">
-      <div className="space-y-2">
-        <Label>Point to Check</Label>
-        <p className="text-xs text-muted-foreground">
-          Click anywhere on the map, or drag the marker, to set the coordinate.
-        </p>
-        <ZonePointMap
-          lat={lat}
-          lng={lng}
-          onChange={(newLat, newLng) => onChange({ lat: String(newLat), lng: String(newLng) })}
-          contextZones={contextZones}
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <Label htmlFor="d-lat" className="text-xs text-muted-foreground">Latitude</Label>
-          <Input
-            id="d-lat"
-            placeholder="e.g. 40.7128"
-            className="font-mono text-xs h-8"
-            value={values.lat}
-            onChange={(e) => onChange({ ...values, lat: e.target.value })}
-            required
-          />
+      <div className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2">
+        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <MapPin className="h-4 w-4 text-primary" /> Enter Coordinates to Evaluate
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="d-lng" className="text-xs text-muted-foreground">Longitude</Label>
-          <Input
-            id="d-lng"
-            placeholder="e.g. -74.0060"
-            className="font-mono text-xs h-8"
-            value={values.lng}
-            onChange={(e) => onChange({ ...values, lng: e.target.value })}
-            required
-          />
+        <p className="text-xs text-muted-foreground">
+          Check if a GPS coordinate falls inside any active operational geofence or H3 index zone.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3 pt-1">
+          <div className="space-y-1">
+            <Label htmlFor="d-lat" className="text-xs text-muted-foreground">
+              Latitude <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="d-lat"
+              placeholder="e.g. 12.9716"
+              className="font-mono text-xs h-9 bg-background"
+              value={values.lat}
+              onChange={(e) => onChange({ ...values, lat: e.target.value })}
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="d-lng" className="text-xs text-muted-foreground">
+              Longitude <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="d-lng"
+              placeholder="e.g. 77.5946"
+              className="font-mono text-xs h-9 bg-background"
+              value={values.lng}
+              onChange={(e) => onChange({ ...values, lng: e.target.value })}
+              required
+            />
+          </div>
         </div>
       </div>
 
       {detectedZoneName !== undefined && (
-        <div className="rounded-lg border border-border p-4 bg-muted/40 text-center">
-          <span className="text-xs text-muted-foreground block uppercase font-semibold tracking-wider mb-1">
-            Detection Outcome
+        <div className="rounded-lg border border-border p-4 bg-muted/40 text-center space-y-1">
+          <span className="text-[11px] text-muted-foreground block uppercase font-semibold tracking-wider">
+            Polygon Geofence Match
           </span>
           {detectedZoneName ? (
-            <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-              Matches Inside Zone: <span className="underline">{detectedZoneName}</span>
+            <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+              Matches Inside: <span className="underline">{detectedZoneName}</span>
             </p>
           ) : (
             <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
-              Outside all operational zones.
+              Outside all operational zone polygons.
             </p>
           )}
         </div>
@@ -337,19 +413,23 @@ export function ZoneDetectForm({
           </span>
           {hexMatches.length === 0 ? (
             <p className="text-sm font-medium text-amber-600 dark:text-amber-400 text-center">
-              No hex zone matches this point.
+              No H3 hex zone matches this point.
             </p>
           ) : (
             <ul className="space-y-1.5">
               {hexMatches.map((z) => (
                 <li
                   key={z.id}
-                  className="flex items-center justify-between text-sm bg-background rounded-md border border-border px-3 py-1.5"
+                  className="flex items-center justify-between text-sm bg-background rounded-md border border-border px-3 py-2"
                 >
-                  <span className="font-medium text-foreground">{z.name}</span>
+                  <span className="font-semibold text-foreground">{z.name}</span>
                   <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="capitalize">{z.type}</span>
-                    <span className="font-mono bg-muted px-1.5 py-0.5 rounded">priority {z.priority}</span>
+                    <Badge variant="outline" className="capitalize text-[11px]">
+                      {z.type}
+                    </Badge>
+                    <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px]">
+                      priority {z.priority}
+                    </span>
                   </span>
                 </li>
               ))}
@@ -414,16 +494,17 @@ export function GenerateHexForm({
         <Label htmlFor="gh-resolution">
           H3 Resolution <span className="text-red-500">*</span>
         </Label>
-        <Input
+        <select
           id="gh-resolution"
-          type="number"
-          min={8}
-          max={10}
-          placeholder="9"
+          className="w-full flex h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 font-mono"
           value={values.resolution}
           onChange={(e) => onChange({ resolution: e.target.value })}
           required
-        />
+        >
+          <option value="8">Res 8 (~0.7 km² per cell)</option>
+          <option value="9">Res 9 (~0.1 km² per cell - Recommended)</option>
+          <option value="10">Res 10 (~0.015 km² high precision)</option>
+        </select>
         <p className="text-xs text-muted-foreground">
           Re-derives hexCells from the zone's stored polygon at this resolution — safe to re-run any time.
         </p>

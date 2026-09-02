@@ -1,6 +1,10 @@
-import { CreditCard, Wallet } from "lucide-react";
+import { useState } from "react";
+import { CreditCard, Wallet, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useDriverPayments, useDriverSubscriptionHistory } from "../hooks";
+import { formatDate, formatDateTime } from "@/lib/utils";
+import { SubscribeDriverDialog } from "./subscribe-driver-dialog";
 
 function formatMinor(amountMinor: number | null, currencyCode: string | null): string {
   if (amountMinor == null || !currencyCode) return "—";
@@ -28,9 +32,14 @@ const PAYMENT_STATUS_STYLES: Record<string, string> = {
 
 interface Props {
   driverId: string;
+  countryId?: string;
+  driverName?: string;
+  driverEmail?: string;
+  driverPhone?: string;
 }
 
-export function DriverSubscriptionPanel({ driverId }: Props) {
+export function DriverSubscriptionPanel({ driverId, countryId, driverName, driverEmail, driverPhone }: Props) {
+  const [isSubscribeOpen, setIsSubscribeOpen] = useState(false);
   const { data: historyData, isLoading: historyLoading } = useDriverSubscriptionHistory(driverId);
   const { data: paymentsData, isLoading: paymentsLoading } = useDriverPayments(driverId);
 
@@ -40,11 +49,16 @@ export function DriverSubscriptionPanel({ driverId }: Props) {
   return (
     <>
       <Card className="border-border bg-card shadow-sm md:col-span-2">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <CreditCard className="h-4 w-4 text-primary" /> Subscription History
-          </CardTitle>
-          <CardDescription>All subscriptions this driver has held, most recent first.</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <CreditCard className="h-4 w-4 text-primary" /> Subscription History
+            </CardTitle>
+            <CardDescription>All subscriptions this driver has held, most recent first.</CardDescription>
+          </div>
+          <Button size="sm" onClick={() => setIsSubscribeOpen(true)} className="gap-1.5 cursor-pointer shrink-0">
+            <Plus className="h-4 w-4" /> Subscribe Driver
+          </Button>
         </CardHeader>
         <CardContent>
           {historyLoading ? (
@@ -63,8 +77,8 @@ export function DriverSubscriptionPanel({ driverId }: Props) {
                       {plan.name} <span className="text-xs text-muted-foreground capitalize">({plan.type})</span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {new Date(subscription.startDate).toLocaleDateString()}
-                      {subscription.endDate ? ` – ${new Date(subscription.endDate).toLocaleDateString()}` : " – Lifetime"}
+                      {formatDate(subscription.startDate)}
+                      {subscription.endDate ? ` – ${formatDate(subscription.endDate)}` : " – Lifetime"}
                     </div>
                     {subscription.cancelNote && (
                       <div className="text-xs text-red-600 dark:text-red-400">
@@ -118,7 +132,7 @@ export function DriverSubscriptionPanel({ driverId }: Props) {
                       {plan.name} <span className="text-xs text-muted-foreground uppercase">via {payment.gateway}</span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {new Date(payment.createdAt).toLocaleString()}
+                      {formatDateTime(payment.createdAt)}
                       {payment.gatewayPaymentId && ` · ${payment.gatewayPaymentId}`}
                     </div>
                   </div>
@@ -140,6 +154,16 @@ export function DriverSubscriptionPanel({ driverId }: Props) {
           )}
         </CardContent>
       </Card>
+
+      <SubscribeDriverDialog
+        open={isSubscribeOpen}
+        onOpenChange={setIsSubscribeOpen}
+        driverId={driverId}
+        countryId={countryId}
+        driverName={driverName}
+        driverEmail={driverEmail}
+        driverPhone={driverPhone}
+      />
     </>
   );
 }

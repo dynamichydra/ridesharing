@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Power, Edit } from "lucide-react";
 import type { Promo } from "../types";
+import { formatDate, moment } from "@/lib/utils";
 
 export function getPromoColumns({
   onEdit,
@@ -67,10 +68,10 @@ export function getPromoColumns({
       header: "Expiry",
       cell: ({ row }) => {
         if (!row.original.expiresAt) return <span className="text-xs text-muted-foreground">Never</span>;
-        const isExpired = new Date(row.original.expiresAt).getTime() < Date.now();
+        const isExpired = moment(row.original.expiresAt).isBefore(moment());
         return (
           <span className={`text-xs ${isExpired ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-            {new Date(row.original.expiresAt).toLocaleDateString()}
+            {formatDate(row.original.expiresAt)}
             {isExpired && " (Expired)"}
           </span>
         );

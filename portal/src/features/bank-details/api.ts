@@ -16,9 +16,11 @@ export const bankDetailsApi = {
   upsert: (ownerType: BankDetailsOwnerType, ownerId: string, payload: BankDetailsPayload) =>
     apiClient.put<BankDetails>(`${BASE_URL}/${ownerSegment(ownerType)}/${ownerId}/bank-details`, payload),
 
-  // PATCH /admin/riders/:id/bank-details/verify  { isVerified }  (Admin, rider only — driver
-  // verification instead flows through the existing driver_payout_accounts approval in
-  // features/payouts/, since only riders lack that workflow.)
+  // PATCH /admin/riders/:id/bank-details/verify  { isVerified }  (Admin, rider only)
   setRiderVerified: (riderId: string, isVerified: boolean) =>
     apiClient.patch<BankDetails>(`${BASE_URL}/riders/${riderId}/bank-details/verify`, { isVerified }),
+
+  // POST /admin/drivers/:driverId/bank-details/validate (Admin trigger for RazorpayX Penny Drop / VPA check)
+  validateDriverBank: (driverId: string) =>
+    apiClient.post<any>(`${BASE_URL}/drivers/${driverId}/bank-details/validate`, {}),
 };

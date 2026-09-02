@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Check, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { FlaggedTrip } from "../types";
+import { formatDateTime } from "@/lib/utils";
 
 function formatMinor(amountMinor: number | null, currencyCode: string | null): string {
   if (amountMinor == null || !currencyCode) return "—";
@@ -89,7 +90,7 @@ export function getFlaggedTripColumns({ onApprove, onAdjust }: Actions): ColumnD
       accessorKey: "createdAt",
       header: "Flagged At",
       cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">{new Date(row.original.createdAt).toLocaleString()}</span>
+        <span className="text-xs text-muted-foreground">{formatDateTime(row.original.createdAt)}</span>
       ),
     },
     {

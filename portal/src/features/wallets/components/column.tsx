@@ -1,6 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Car, User } from "lucide-react";
 import type { WalletListItem } from "../types";
+import { formatDate } from "@/lib/utils";
 
 function formatMinor(amountMinor: number, currencyCode: string): string {
   const amount = amountMinor / 100;
@@ -65,7 +66,7 @@ export function getWalletColumns(): ColumnDef<WalletListItem>[] {
       header: "Created At",
       cell: ({ row }) => (
         <span className="text-muted-foreground text-xs">
-          {new Date(row.original.createdAt).toLocaleDateString()}
+          {formatDate(row.original.createdAt)}
         </span>
       ),
     },

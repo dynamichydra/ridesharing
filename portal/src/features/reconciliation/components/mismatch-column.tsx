@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Mismatch } from "../types";
+import { formatDateTime } from "@/lib/utils";
 
 function formatMinor(amountMinor: number | null): string {
   if (amountMinor == null) return "—";
@@ -71,7 +72,7 @@ export function getMismatchColumns({ onResolve, onIgnore }: Actions): ColumnDef<
       accessorKey: "createdAt",
       header: "Found At",
       cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">{new Date(row.original.createdAt).toLocaleString()}</span>
+        <span className="text-xs text-muted-foreground">{formatDateTime(row.original.createdAt)}</span>
       ),
     },
     {

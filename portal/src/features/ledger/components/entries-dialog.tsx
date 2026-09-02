@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useLedgerTransaction } from "../hooks";
+import { formatDateTime } from "@/lib/utils";
 
 function formatMinor(amountMinor: number, currencyCode: string): string {
   const amount = amountMinor / 100;
@@ -50,7 +51,7 @@ export function LedgerEntriesDialog({ open, onOpenChange, transactionId }: Props
                 {detail.transaction.businessType.replace(/_/g, " ")}
               </span>
               {" · "}
-              {new Date(detail.transaction.createdAt).toLocaleString()}
+              {formatDateTime(detail.transaction.createdAt)}
             </div>
             {detail.entries.map((entry) => (
               <div

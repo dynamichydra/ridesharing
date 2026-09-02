@@ -19,6 +19,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { formatDateTime } from "@/lib/utils";
 import { RiderFormDialog } from "../components/dialog";
 import { RiderSubscriptionPanel } from "../components/subscription-panel";
 import { WalletPanel } from "@/features/wallets/components/wallet-panel";
@@ -241,7 +242,7 @@ export default function RiderDetail() {
                         {ride.pickupAddress || "Pickup"} → {ride.dropAddress || "Drop"}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {new Date(ride.requestedAt).toLocaleString()}
+                        {formatDateTime(ride.requestedAt)}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">

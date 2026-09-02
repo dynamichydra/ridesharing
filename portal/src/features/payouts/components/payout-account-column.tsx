@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Check, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PayoutAccount } from "../types";
+import { formatDateTime } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
   approved: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
@@ -112,7 +113,7 @@ export function getPayoutAccountColumns({ onApprove, onReject, onPayNow }: Actio
       accessorKey: "createdAt",
       header: "Requested At",
       cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">{new Date(row.original.createdAt).toLocaleString()}</span>
+        <span className="text-xs text-muted-foreground">{formatDateTime(row.original.createdAt)}</span>
       ),
     },
     {

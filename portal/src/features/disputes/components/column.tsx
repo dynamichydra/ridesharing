@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { NotebookPen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Dispute } from "../types";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 function formatMinor(amountMinor: number, currencyCode: string): string {
   const amount = amountMinor / 100;
@@ -68,7 +69,7 @@ export function getDisputeColumns({ onEditNotes }: Actions): ColumnDef<Dispute>[
       header: "Evidence Due",
       cell: ({ row }) =>
         row.original.evidenceDueBy ? (
-          <span className="text-xs text-muted-foreground">{new Date(row.original.evidenceDueBy).toLocaleDateString()}</span>
+          <span className="text-xs text-muted-foreground">{formatDate(row.original.evidenceDueBy)}</span>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         ),
@@ -84,7 +85,7 @@ export function getDisputeColumns({ onEditNotes }: Actions): ColumnDef<Dispute>[
       accessorKey: "createdAt",
       header: "Opened At",
       cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">{new Date(row.original.createdAt).toLocaleString()}</span>
+        <span className="text-xs text-muted-foreground">{formatDateTime(row.original.createdAt)}</span>
       ),
     },
     {

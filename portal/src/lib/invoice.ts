@@ -1,4 +1,5 @@
 import type { RideInvoice } from "@/features/ride-payments/types";
+import { formatDateTime } from "@/lib/utils";
 
 function money(amountMinor: number | null, currencyCode: string): string {
   if (amountMinor == null) return "—";
@@ -48,7 +49,7 @@ export function downloadInvoice(invoice: RideInvoice) {
 </head>
 <body>
   <h1>Invoice ${invoice.invoiceNumber}</h1>
-  <div class="muted">Ride completed ${invoice.ride.completedAt ? new Date(invoice.ride.completedAt).toLocaleString() : "—"}</div>
+  <div class="muted">Ride completed ${formatDateTime(invoice.ride.completedAt)}</div>
 
   <div class="grid">
     <div class="box">
@@ -73,7 +74,7 @@ export function downloadInvoice(invoice: RideInvoice) {
       <div class="muted" style="margin-top:6px;">
         ${invoice.payment.method ?? "—"} via ${invoice.payment.gateway ?? "—"}
       </div>
-      <div class="muted">${invoice.payment.paidAt ? new Date(invoice.payment.paidAt).toLocaleString() : "Not yet paid"}</div>
+      <div class="muted">${invoice.payment.paidAt ? formatDateTime(invoice.payment.paidAt) : "Not yet paid"}</div>
     </div>
   </div>
 

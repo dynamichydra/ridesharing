@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Payout, PayoutBatch } from "../types";
+import { formatDateTime } from "@/lib/utils";
 
 function formatMinor(amountMinor: number, currencyCode: string): string {
   const amount = amountMinor / 100;
@@ -79,7 +80,7 @@ export function getPayoutColumns(): ColumnDef<Payout>[] {
       accessorKey: "createdAt",
       header: "Created At",
       cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">{new Date(row.original.createdAt).toLocaleString()}</span>
+        <span className="text-xs text-muted-foreground">{formatDateTime(row.original.createdAt)}</span>
       ),
     },
   ];
@@ -130,7 +131,7 @@ export function getPayoutBatchColumns({ onViewPayouts }: BatchActions): ColumnDe
       accessorKey: "createdAt",
       header: "Run At",
       cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">{new Date(row.original.createdAt).toLocaleString()}</span>
+        <span className="text-xs text-muted-foreground">{formatDateTime(row.original.createdAt)}</span>
       ),
     },
     {

@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { CheckCircle, Pencil, CreditCard, Ban, XCircle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SubscriptionPlan, LookupOption } from "../types";
+import { formatDate } from "@/lib/utils";
 
 interface Props {
   onEdit: (plan: SubscriptionPlan) => void;
@@ -86,7 +87,7 @@ export function getSubscriptionPlanColumns({
       header: "Created At",
       cell: ({ row }) => (
         <span className="text-muted-foreground text-xs">
-          {row.original.createdAt ? new Date(row.original.createdAt).toLocaleDateString() : "—"}
+          {formatDate(row.original.createdAt)}
         </span>
       ),
     },

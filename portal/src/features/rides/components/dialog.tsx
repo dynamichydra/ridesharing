@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Ban, Compass, History, MapPin, Route, X } from "lucide-react";
 import type { Ride, RideOffer, RideTimelineEvent } from "../types";
+import { formatTime } from "@/lib/utils";
 
 const CANCELLABLE_STATUSES: Ride["status"][] = ["searching", "accepted", "arriving", "started"];
 
@@ -137,7 +138,7 @@ export function RideDetailsDialog({
                         <div className="absolute -left-[17px] mt-0.5 h-2 w-2 rounded-full bg-primary" />
                         <div className="font-semibold text-foreground capitalize">{event.status}</div>
                         <div className="text-muted-foreground text-[10px]">
-                          {new Date(event.createdAt).toLocaleTimeString()}
+                          {formatTime(event.createdAt)}
                         </div>
                         {event.note && (
                           <div className="text-[11px] text-muted-foreground italic mt-0.5">{event.note}</div>

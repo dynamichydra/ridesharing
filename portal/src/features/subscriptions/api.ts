@@ -34,6 +34,17 @@ export const subscriptionPlansApi = {
   // PATCH /subscriptions/plans/:id/enable | /disable  (Admin)
   setActive: (id: string, isActive: boolean) =>
     apiClient.patch<SubscriptionPlan>(`${BASE_URL}/${id}/${isActive ? "enable" : "disable"}`, {}),
+
+  // Public/Active plans for a country
+  listActive: (countryId?: string) =>
+    apiClient.get<SubscriptionPlan[]>(`/subscriptions/plans${countryId ? `?countryId=${countryId}` : ""}`),
+
+  // Driver on-behalf-of Subscription (Admin)
+  initiateDriverSub: (driverId: string, planId: string) =>
+    apiClient.post<any>(`/subscriptions/admin/drivers/${driverId}/initiate`, { planId }),
+
+  verifyDriverSub: (driverId: string, payload: { planId: string; orderRef: string; paymentRef: string; signature?: string }) =>
+    apiClient.post<any>(`/subscriptions/admin/drivers/${driverId}/verify`, payload),
 };
 
 

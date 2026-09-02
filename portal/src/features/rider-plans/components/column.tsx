@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { CheckCircle, Pencil, CreditCard, Ban, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { RiderPlan, LookupOption } from "../types";
+import { formatDate } from "@/lib/utils";
 
 interface Props {
   onEdit: (plan: RiderPlan) => void;
@@ -108,7 +109,7 @@ export function getRiderPlanColumns({ onEdit, onToggleActive, countries }: Props
       header: "Created At",
       cell: ({ row }) => (
         <span className="text-muted-foreground text-xs">
-          {row.original.createdAt ? new Date(row.original.createdAt).toLocaleDateString() : "—"}
+          {formatDate(row.original.createdAt)}
         </span>
       ),
     },

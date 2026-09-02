@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import type { ReconciliationRun } from "../types";
+import { formatDateTime } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
   completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
@@ -22,7 +23,7 @@ export function getRunColumns({ onViewMismatches }: Actions): ColumnDef<Reconcil
       header: "Window",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground">
-          {new Date(row.original.windowFrom).toLocaleString()} → {new Date(row.original.windowTo).toLocaleString()}
+          {formatDateTime(row.original.windowFrom)} → {formatDateTime(row.original.windowTo)}
         </span>
       ),
     },
@@ -57,7 +58,7 @@ export function getRunColumns({ onViewMismatches }: Actions): ColumnDef<Reconcil
       accessorKey: "createdAt",
       header: "Run At",
       cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">{new Date(row.original.createdAt).toLocaleString()}</span>
+        <span className="text-xs text-muted-foreground">{formatDateTime(row.original.createdAt)}</span>
       ),
     },
     {

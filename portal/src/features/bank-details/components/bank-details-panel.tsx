@@ -1,7 +1,11 @@
 import { useState } from "react";
-import { Landmark, Pencil, BadgeCheck, BadgeX } from "lucide-react";
+import { Landmark, Pencil, BadgeCheck, BadgeX, ExternalLink, Globe, Copy, Check, Zap, Loader2, ShieldCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useQueryClient } from "@tanstack/react-query";
+import { apiClient } from "@/lib/api-client";
+import toast from "react-hot-toast";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useBankDetails, useUpsertBankDetails, useSetRiderBankVerified } from "../hooks";
+import { useBankDetails, useUpsertBankDetails, useSetRiderBankVerified, useDriverPayoutSetup, useValidateDriverBank } from "../hooks";
 import type { BankDetailsOwnerType, BankDetailsPayload } from "../types";
 
 interface EditDialogProps {
@@ -75,7 +79,7 @@ function EditBankDetailsDialog({ open, onOpenChange, ownerType, ownerId }: EditD
               <Input id="bd-account-number" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="bd-routing-code">Routing Code (IFSC/SWIFT)</Label>
+              <Label htmlFor="bd-routing-code">Routing Code (IFSC/SWIFT/Transit)</Label>
               <Input id="bd-routing-code" value={routingCode} onChange={(e) => setRoutingCode(e.target.value)} />
             </div>
           </div>
@@ -124,30 +128,130 @@ interface BankDetailsPanelProps {
 // features/bank-details/api.ts and backend bank-account.routes.js's adminBankAccountRoutes.
 export function BankDetailsPanel({ ownerType, ownerId }: BankDetailsPanelProps) {
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const { data, isLoading } = useBankDetails(ownerType, ownerId);
+  const { data: setupData, isLoading: isSetupLoading } = useDriverPayoutSetup(ownerType === "driver" ? ownerId : undefined);
   const bankDetails = data?.MESSAGE ?? null;
+  const payoutSetup = setupData?.MESSAGE ?? null;
   const setVerifiedMutation = useSetRiderBankVerified(ownerType === "rider" ? ownerId : undefined);
+  const validateDriverBankMutation = useValidateDriverBank(ownerType === "driver" ? ownerId : undefined);
+
+  const isStripeHosted = ownerType === "driver" && payoutSetup?.type === "hosted_redirect";
+
+  const queryClient = useQueryClient();
+  const [isSimulatingStripe, setIsSimulatingStripe] = useState(false);
+
+  const handleCopyLink = (url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    toast.success("Stripe Onboarding Link copied to clipboard!");
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleSimulateStripeApprove = async () => {
+    try {
+      setIsSimulatingStripe(true);
+      await apiClient.get(`/payout-accounts/stripe/onboarding-return?driverId=${ownerId}&mock=true`);
+      queryClient.invalidateQueries({ queryKey: ["driver-payout-setup", ownerId] });
+      toast.success("Driver Stripe payout account verified & approved!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to simulate Stripe approval");
+    } finally {
+      setIsSimulatingStripe(false);
+    }
+  };
 
   return (
     <Card className="border-border bg-card shadow-sm md:col-span-2">
       <CardHeader className="flex flex-row items-start justify-between gap-2">
         <div>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Landmark className="h-4 w-4 text-primary" /> Bank Details
+            <Landmark className="h-4 w-4 text-primary" /> {isStripeHosted ? "Payout Account (Stripe Connect)" : "Bank Details (Razorpay / Direct)"}
           </CardTitle>
           <CardDescription>
-            {ownerType === "driver"
-              ? "Payout destination — also drives RazorpayX payouts once approved in Driver Payouts."
+            {isStripeHosted
+              ? "Stripe Express Connect is used for automated CAD / USD / EUR payouts in this driver's country."
+              : ownerType === "driver"
+              ? "RazorpayX payout destination — automated penny drop / UPI verification & fast disbursements."
               : "Bank/UPI details on file for this rider. Records only — no payout is triggered from here."}
           </CardDescription>
         </div>
-        <Button size="sm" onClick={() => setIsEditOpen(true)} className="cursor-pointer shrink-0">
-          <Pencil className="h-3.5 w-3.5 mr-1" /> {bankDetails ? "Edit" : "Add"}
+        <Button size="sm" onClick={() => setIsEditOpen(true)} className="cursor-pointer shrink-0" variant={isStripeHosted ? "outline" : "default"}>
+          <Pencil className="h-3.5 w-3.5 mr-1" /> {bankDetails ? "Edit Direct Bank" : "Add Direct Bank"}
         </Button>
       </CardHeader>
       <CardContent className="space-y-3">
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading bank details…</p>
+        {isLoading || (ownerType === "driver" && isSetupLoading) ? (
+          <p className="text-sm text-muted-foreground">Loading payout details…</p>
+        ) : isStripeHosted ? (
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/40">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-primary" />
+                <span className="font-medium text-foreground">Stripe Connect ({payoutSetup.countryCode})</span>
+              </div>
+              <Badge variant={payoutSetup.isReady ? "default" : "outline"} className={payoutSetup.isReady ? "bg-green-600 text-white" : ""}>
+                {payoutSetup.isReady ? "Payouts Active" : "Pending Onboarding"}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <span className="text-xs text-muted-foreground block">Gateway</span>
+                <span className="font-medium text-foreground uppercase">{payoutSetup.gateway}</span>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block">Account Status</span>
+                <span className="font-medium text-foreground capitalize">{payoutSetup.status}</span>
+              </div>
+            </div>
+
+            {payoutSetup.onboardingUrl && (
+              <div className="pt-2 flex flex-col sm:flex-row gap-2">
+                <a href={payoutSetup.onboardingUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+                  <Button size="sm" className="w-full gap-2 cursor-pointer">
+                    <ExternalLink className="h-4 w-4" /> Open Stripe Express Onboarding Link
+                  </Button>
+                </a>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2 cursor-pointer"
+                  onClick={() => handleCopyLink(payoutSetup.onboardingUrl)}
+                >
+                  {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                  {copied ? "Copied" : "Copy Link"}
+                </Button>
+              </div>
+            )}
+
+            {!payoutSetup.isReady && (
+              <div className="pt-1">
+                {/* TODO: In production, Stripe accounts are verified automatically via Stripe Connect webhooks (account.updated) */}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="w-full gap-1.5 cursor-pointer text-xs"
+                  disabled={isSimulatingStripe}
+                  onClick={handleSimulateStripeApprove}
+                >
+                  {isSimulatingStripe ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5 text-primary" />}
+                  Verify & Approve Payout Account
+                </Button>
+              </div>
+            )}
+
+            {bankDetails && (
+              <div className="border-t border-border pt-3 mt-3">
+                <span className="text-xs font-semibold text-muted-foreground block mb-1">Direct Bank Details (Optional Record):</span>
+                <div className="text-xs text-muted-foreground flex gap-4">
+                  <span>Bank: {bankDetails.bankName || "—"}</span>
+                  <span>Account: •••• {bankDetails.accountNumberLast4 || "—"}</span>
+                  <span>Routing: {bankDetails.routingCode || "—"}</span>
+                </div>
+              </div>
+            )}
+          </div>
         ) : !bankDetails ? (
           <p className="text-sm text-muted-foreground">No bank details on file yet.</p>
         ) : (
@@ -204,6 +308,22 @@ export function BankDetailsPanel({ ownerType, ownerId }: BankDetailsPanelProps) 
                   onClick={() => setVerifiedMutation.mutate(!bankDetails.isVerified)}
                 >
                   Mark {bankDetails.isVerified ? "Unverified" : "Verified"}
+                </Button>
+              )}
+              {ownerType === "driver" && !isStripeHosted && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer h-7 text-xs gap-1.5"
+                  disabled={validateDriverBankMutation.isPending}
+                  onClick={() => validateDriverBankMutation.mutate()}
+                >
+                  {validateDriverBankMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Zap className="h-3.5 w-3.5 text-blue-600" />
+                  )}
+                  Verify via RazorpayX (Penny Drop)
                 </Button>
               )}
             </div>

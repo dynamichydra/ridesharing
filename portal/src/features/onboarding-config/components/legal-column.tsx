@@ -1,6 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { CheckCircle2, ExternalLink, XCircle } from "lucide-react";
 import type { LegalDocument, LookupOption } from "../types";
+import { formatDate } from "@/lib/utils";
 
 interface Props {
   countries: LookupOption[];
@@ -38,7 +39,7 @@ export function getLegalDocumentColumns({ countries }: Props): ColumnDef<LegalDo
       header: "Effective From",
       cell: ({ row }) => (
         <span className="text-muted-foreground text-xs">
-          {new Date(row.original.effectiveFrom).toLocaleDateString()}
+          {formatDate(row.original.effectiveFrom)}
         </span>
       ),
     },

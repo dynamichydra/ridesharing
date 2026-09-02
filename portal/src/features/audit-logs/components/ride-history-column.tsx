@@ -1,6 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { ArrowRight } from "lucide-react";
 import type { RideStatusHistoryEntry } from "../types";
+import { formatDateTime } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
   completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
@@ -27,7 +28,7 @@ export function getRideStatusHistoryColumns(): ColumnDef<RideStatusHistoryEntry>
       header: "When",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {new Date(row.original.createdAt).toLocaleString()}
+          {formatDateTime(row.original.createdAt)}
         </span>
       ),
     },

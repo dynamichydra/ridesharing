@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Edit3 } from "lucide-react";
 import type { LostItem } from "../types";
 import { Link } from "react-router-dom";
+import { formatDateTime } from "@/lib/utils";
 
 export function getLostItemColumns({
   onEditStatus,
@@ -77,7 +78,7 @@ export function getLostItemColumns({
       header: "Reported At",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground">
-          {new Date(row.original.createdAt).toLocaleString()}
+          {formatDateTime(row.original.createdAt)}
         </span>
       ),
     },

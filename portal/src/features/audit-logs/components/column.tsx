@@ -1,6 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Shield, Smartphone, User, Cog } from "lucide-react";
 import type { AuditLog } from "../types";
+import { formatDateTime } from "@/lib/utils";
 
 const ACTOR_ICON: Record<string, typeof Shield> = {
   admin: Shield,
@@ -33,7 +34,7 @@ export function getAuditLogColumns(): ColumnDef<AuditLog>[] {
       header: "When",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {new Date(row.original.createdAt).toLocaleString()}
+          {formatDateTime(row.original.createdAt)}
         </span>
       ),
     },

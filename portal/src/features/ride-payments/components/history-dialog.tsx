@@ -7,6 +7,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { useRidePaymentHistory } from "../hooks";
+import { formatDateTime } from "@/lib/utils";
 
 function formatMinor(amountMinor: number | null, currencyCode: string | null): string {
   if (amountMinor == null || !currencyCode) return "—";
@@ -63,7 +64,7 @@ export function RidePaymentHistoryDialog({ open, onOpenChange, rideId }: Props) 
                     {payment.gateway}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {new Date(payment.createdAt).toLocaleString()}
+                    {formatDateTime(payment.createdAt)}
                     {payment.gatewayPaymentId && ` · ${payment.gatewayPaymentId}`}
                   </div>
                 </div>

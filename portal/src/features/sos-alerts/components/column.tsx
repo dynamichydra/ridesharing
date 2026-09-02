@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { AlertTriangle, CheckCircle2, ExternalLink, MapPin } from "lucide-react";
 import type { SosAlert } from "../types";
 import { Link } from "react-router-dom";
+import { formatDateTime } from "@/lib/utils";
 
 export function getSosAlertColumns({
   onResolve,
@@ -89,7 +90,7 @@ export function getSosAlertColumns({
       header: "Triggered Time",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground">
-          {new Date(row.original.triggeredAt).toLocaleString()}
+          {formatDateTime(row.original.triggeredAt)}
         </span>
       ),
     },

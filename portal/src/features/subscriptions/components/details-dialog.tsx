@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { SubscriptionPlan, LookupOption } from "../types";
+import { formatDateTime } from "@/lib/utils";
 
 interface SubscriptionPlanDetailsDialogProps {
   open: boolean;
@@ -99,7 +100,7 @@ export function SubscriptionPlanDetailsDialog({
               />
               <InfoField
                 label="Created"
-                value={plan.createdAt ? new Date(plan.createdAt).toLocaleString() : "—"}
+                value={formatDateTime(plan.createdAt)}
               />
             </div>
           </div>

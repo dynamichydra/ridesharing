@@ -1,6 +1,7 @@
 import { CreditCard, Receipt } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useRiderSubscriptionHistory, useRiderSubscriptionPayments } from "../hooks";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 function formatMinor(amountMinor: number | null, currencyCode: string | null): string {
   if (amountMinor == null || !currencyCode) return "—";
@@ -63,8 +64,8 @@ export function RiderSubscriptionPanel({ riderId }: Props) {
                       {plan.name} <span className="text-xs text-muted-foreground capitalize">({plan.type})</span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {new Date(subscription.startDate).toLocaleDateString()}
-                      {subscription.endDate ? ` – ${new Date(subscription.endDate).toLocaleDateString()}` : " – Lifetime"}
+                      {formatDate(subscription.startDate)}
+                      {subscription.endDate ? ` – ${formatDate(subscription.endDate)}` : " – Lifetime"}
                     </div>
                     {subscription.cancelNote && (
                       <div className="text-xs text-red-600 dark:text-red-400">{subscription.cancelNote}</div>
@@ -113,7 +114,7 @@ export function RiderSubscriptionPanel({ riderId }: Props) {
                       {plan.name} <span className="text-xs text-muted-foreground uppercase">via {payment.gateway}</span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {new Date(payment.createdAt).toLocaleString()}
+                      {formatDateTime(payment.createdAt)}
                       {payment.gatewayPaymentId && ` · ${payment.gatewayPaymentId}`}
                     </div>
                   </div>

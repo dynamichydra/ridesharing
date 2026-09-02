@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertCircle } from "lucide-react";
 import type { CashCollection } from "../types";
 import { Link } from "react-router-dom";
+import { formatDateTime } from "@/lib/utils";
 
 export function getCashCollectionColumns(): ColumnDef<CashCollection>[] {
   return [
@@ -85,7 +86,7 @@ export function getCashCollectionColumns(): ColumnDef<CashCollection>[] {
       header: "Time",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground">
-          {new Date(row.original.createdAt).toLocaleString()}
+          {formatDateTime(row.original.createdAt)}
         </span>
       ),
     },

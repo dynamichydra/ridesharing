@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Banknote, CreditCard, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { RidePayment } from "../types";
+import { formatDateTime } from "@/lib/utils";
 
 function formatMinor(amountMinor: number | null, currencyCode: string | null): string {
   if (amountMinor == null || !currencyCode) return "—";
@@ -90,7 +91,7 @@ export function getRidePaymentColumns({ onRefund }: RidePaymentColumnActions): C
       header: "Recorded At",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground">
-          {new Date(row.original.payment.createdAt).toLocaleString()}
+          {formatDateTime(row.original.payment.createdAt)}
         </span>
       ),
     },
