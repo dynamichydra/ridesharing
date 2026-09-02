@@ -1,7 +1,90 @@
 import { eq, desc, count, and, or, ilike } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { users, rides } from '../../../drizzle/schema/index.js';
+import {
+  users,
+  rides,
+  countries,
+  states,
+  cities,
+  wallets,
+  riderPreferences,
+  riderSubscriptions,
+  riderSubscriptionPlans,
+  savedPlaces,
+} from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
+
+export async function getRiderMe(riderId) {
+  const [user] = await db.select().from(users).where(eq(users.id, riderId)).limit(1);
+  if (!user) throw { statusCode: 404, message: 'User not found' };
+
+  let country = null;
+  let state = null;
+  let city = null;
+
+  if (user.countryId) {
+    const [c] = await db.select().from(countries).where(eq(countries.id, user.countryId)).limit(1);
+    country = c || null;
+  }
+  if (user.stateId) {
+    const [s] = await db.select().from(states).where(eq(states.id, user.stateId)).limit(1);
+    state = s || null;
+  }
+  if (user.cityId) {
+    const [ct] = await db.select().from(cities).where(eq(cities.id, user.cityId)).limit(1);
+    city = ct || null;
+  }
+
+  // Preferences
+  const [prefs] = await db.select().from(riderPreferences).where(eq(riderPreferences.riderId, riderId)).limit(1);
+
+  // Active Rider Subscription
+  const [activeSub] = await db.select({
+    id: riderSubscriptions.id,
+    planId: riderSubscriptions.planId,
+    status: riderSubscriptions.status,
+    startDate: riderSubscriptions.startDate,
+    endDate: riderSubscriptions.endDate,
+    amountMinor: riderSubscriptions.amountMinor,
+    currencyCode: riderSubscriptions.currencyCode,
+    planName: riderSubscriptionPlans.name,
+    planType: riderSubscriptionPlans.type,
+    discountPercentage: riderSubscriptionPlans.discountPercentage,
+    maxDiscountMinor: riderSubscriptionPlans.maxDiscountMinor,
+    freeRidesPerMonth: riderSubscriptionPlans.freeRidesPerMonth,
+  }).from(riderSubscriptions)
+    .innerJoin(riderSubscriptionPlans, eq(riderSubscriptions.planId, riderSubscriptionPlans.id))
+    .where(
+      and(
+        eq(riderSubscriptions.riderId, riderId),
+        eq(riderSubscriptions.status, 'active'),
+      )
+    ).limit(1);
+
+  // Wallet
+  const [wallet] = await db.select().from(wallets).where(eq(wallets.riderId, riderId)).limit(1);
+
+  // Saved Places
+  const places = await db.select().from(savedPlaces).where(eq(savedPlaces.userId, riderId));
+
+  return {
+    ...user,
+    userType: 'rider',
+    role: 'rider',
+    country,
+    state,
+    city,
+    preferences: prefs || null,
+    activeSubscription: activeSub || null,
+    wallet: wallet ? {
+      id: wallet.id,
+      balanceMinor: wallet.balanceMinor,
+      currencyCode: wallet.currencyCode,
+      status: wallet.status,
+    } : null,
+    savedPlaces: places || [],
+  };
+}
 
 export async function getProfile(riderId) {
   const [user] = await db.select().from(users).where(eq(users.id, riderId)).limit(1);

@@ -4,7 +4,7 @@ import { countries } from './countries.js';
 import { states } from './states.js';
 import { cities } from './cities.js';
 
-import { driverStatusEnum, subscriptionStatusEnum } from './enums.js';
+import { driverStatusEnum, subscriptionStatusEnum, driverRegistrationStatusEnum, driverApprovalStatusEnum } from './enums.js';
 
 export const drivers = pgTable('drivers', {
   id:                 uuid('id').primaryKey().defaultRandom(),
@@ -25,7 +25,7 @@ export const drivers = pgTable('drivers', {
   stateId:            uuid('state_id').references(() => states.id),
   cityId:             uuid('city_id').references(() => cities.id),
   // ── Registration state machine ───────────────────────────────────────────
-  registrationStatus: varchar('registration_status', { length: 30 }).default('new'),
+  registrationStatus: driverRegistrationStatusEnum('registration_status').default('new'),
   // new | mobile_verified | email_verified | registration_in_progress | documents_pending
   // | pending_review | under_verification | approved | rejected | suspended | active | inactive
   registrationStep:  integer('registration_step').default(0), // furthest completed step, 0-12
@@ -37,7 +37,7 @@ export const drivers = pgTable('drivers', {
   vehicleNumber:      varchar('vehicle_number', { length: 20 }),
   vehicleModel:       varchar('vehicle_model',  { length: 100 }),
   vehicleYear:        varchar('vehicle_year', { length: 4 }),
-  approvalStatus:     varchar('approval_status').default('pending'),
+  approvalStatus:     driverApprovalStatusEnum('approval_status').default('pending'),
   // pending | approved | rejected
   approvalNote:       text('approval_note'),
   approvedBy:         uuid('approved_by'),

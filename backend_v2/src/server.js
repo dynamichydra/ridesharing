@@ -11,6 +11,7 @@ import { startAllConsumers } from './kafka/consumers/index.js';
 import { startJobs } from './jobs/index.js';
 
 import { authRoutes } from './modules/auth/auth.routes.js';
+import { userRoutes } from './modules/auth/user.routes.js';
 import { driverRoutes } from './modules/driver/driver.routes.js';
 import { riderRoutes } from './modules/rider/rider.routes.js';
 import { vehicleTypeRoutes } from './modules/vehicle-type/vehicle-type.routes.js';
@@ -76,6 +77,7 @@ async function build() {
 
   // Routes
   await app.register(authRoutes, { prefix: `${PREFIX}/auth` });
+  await app.register(userRoutes, { prefix: `${PREFIX}/users` });
   await app.register(driverRoutes, { prefix: `${PREFIX}/drivers` });
   await app.register(riderRoutes, { prefix: `${PREFIX}/riders` });
   await app.register(vehicleTypeRoutes, { prefix: `${PREFIX}/vehicle-types` });

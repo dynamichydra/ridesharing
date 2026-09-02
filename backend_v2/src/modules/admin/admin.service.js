@@ -1,6 +1,7 @@
 import { eq, count, desc, and, gte, lt, sql, or, inArray } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import {
+  admins,
   drivers,
   users,
   rides,
@@ -15,6 +16,39 @@ import {
   payments,
 } from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
+
+export async function getAdminMe(adminId) {
+  const [admin] = await db.select({
+    id: admins.id,
+    email: admins.email,
+    name: admins.name,
+    role: admins.role,
+    isActive: admins.isActive,
+    lastLoginAt: admins.lastLoginAt,
+    createdAt: admins.createdAt,
+    updatedAt: admins.updatedAt,
+  }).from(admins).where(eq(admins.id, adminId)).limit(1);
+
+  if (!admin) throw { statusCode: 404, message: 'Admin not found' };
+
+  return {
+    ...admin,
+    userType: 'admin',
+    permissions: admin.role === 'super_admin' ? ['*'] : [
+      'drivers.read', 'drivers.write',
+      'riders.read', 'riders.write',
+      'rides.read', 'rides.write',
+      'payments.read',
+      'payouts.read', 'payouts.write',
+      'subscriptions.read', 'subscriptions.write',
+      'pricing.read', 'pricing.write',
+      'zones.read', 'zones.write',
+      'moderation.read', 'moderation.write',
+      'disputes.read', 'disputes.write',
+      'notifications.read', 'notifications.write',
+    ],
+  };
+}
 
 function formatTimeAgo(dateOrTimestamp) {
   if (!dateOrTimestamp) return 'Just now';

@@ -1,6 +1,6 @@
 import { eq, desc, count, and, or, ilike, ne, sql, gte } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { drivers, subscriptions, cities, driverPayoutAccounts, vehicleModels, rides, countries } from '../../../drizzle/schema/index.js';
+import { drivers, subscriptions, subscriptionPlans, cities, states, driverPayoutAccounts, vehicleModels, vehicleTypes, rides, countries, wallets, walletTransactions, driverDocuments } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
@@ -117,6 +117,388 @@ export async function getDashboardSummary(driverId) {
       totalWorkingHours: hoursNum,
       formattedWorkingHours: formattedHours,
     },
+  };
+}
+
+export async function getDriverEarnings(driverId, { period = 'daily', weekOffset = 0, monthOffset = 0 } = {}) {
+  const [driver] = await db.select({
+    id: drivers.id,
+    countryId: drivers.countryId,
+  }).from(drivers).where(eq(drivers.id, driverId)).limit(1);
+
+  if (!driver) throw { statusCode: 404, message: 'Driver not found' };
+
+  let timezone = 'UTC';
+  let currencyCode = 'USD';
+  if (driver.countryId) {
+    const [country] = await db.select({
+      timezone: countries.timezone,
+      currencyCode: countries.currencyCode,
+    }).from(countries).where(eq(countries.id, driver.countryId)).limit(1);
+    if (country?.timezone) timezone = country.timezone;
+    if (country?.currencyCode) currencyCode = country.currencyCode.toUpperCase();
+  }
+
+  const now = new Date();
+  let currentStart, currentEnd, prevStart, prevEnd, growthPeriodText, listTitle;
+
+  if (period === 'weekly') {
+    const dayOfWeek = (now.getUTCDay() + 6) % 7; // 0=Mon, 6=Sun
+    const startOfWeek = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dayOfWeek + (weekOffset * 7), 0, 0, 0, 0));
+    const endOfWeek = new Date(startOfWeek.getTime() + 7 * 86400000 - 1);
+
+    currentStart = startOfWeek;
+    currentEnd = endOfWeek;
+    prevStart = new Date(startOfWeek.getTime() - 7 * 86400000);
+    prevEnd = new Date(startOfWeek.getTime() - 1);
+    growthPeriodText = 'vs Last Week';
+    listTitle = weekOffset === 0 ? 'This Week' : 'Selected Week';
+  } else if (period === 'monthly') {
+    const targetMonthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + monthOffset, 1, 0, 0, 0, 0));
+    currentStart = targetMonthDate;
+    currentEnd = new Date(Date.UTC(targetMonthDate.getUTCFullYear(), targetMonthDate.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+
+    prevStart = new Date(Date.UTC(targetMonthDate.getUTCFullYear(), targetMonthDate.getUTCMonth() - 1, 1, 0, 0, 0, 0));
+    prevEnd = new Date(Date.UTC(targetMonthDate.getUTCFullYear(), targetMonthDate.getUTCMonth(), 0, 23, 59, 59, 999));
+    growthPeriodText = 'vs Last Month';
+    listTitle = monthOffset === 0 ? 'This Month' : 'Selected Month';
+  } else {
+    currentStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    currentEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+    prevStart = new Date(currentStart.getTime() - 86400000);
+    prevEnd = new Date(currentStart.getTime() - 1);
+    growthPeriodText = 'vs Yesterday';
+    listTitle = 'Last 7 Days';
+  }
+
+  const currentRides = await db.select({
+    id: rides.id,
+    finalFareMinor: rides.finalFareMinor,
+    estimatedFareMinor: rides.estimatedFareMinor,
+    paymentMethod: rides.paymentMethod,
+    completedAt: rides.completedAt,
+    startedAt: rides.startedAt,
+    actualDurationMin: rides.actualDurationMin,
+    durationMin: rides.durationMin,
+  }).from(rides).where(
+    and(
+      eq(rides.driverId, driverId),
+      eq(rides.status, 'completed'),
+      gte(rides.completedAt, currentStart),
+      sql`${rides.completedAt} <= ${currentEnd}`
+    )
+  );
+
+  const prevRides = await db.select({
+    finalFareMinor: rides.finalFareMinor,
+    estimatedFareMinor: rides.estimatedFareMinor,
+  }).from(rides).where(
+    and(
+      eq(rides.driverId, driverId),
+      eq(rides.status, 'completed'),
+      gte(rides.completedAt, prevStart),
+      sql`${rides.completedAt} <= ${prevEnd}`
+    )
+  );
+
+  let incentivesMinor = 0;
+  const [driverWallet] = await db.select({ id: wallets.id }).from(wallets).where(eq(wallets.driverId, driverId)).limit(1);
+  if (driverWallet) {
+    const incentiveTxs = await db.select({
+      amountMinor: walletTransactions.amountMinor,
+    }).from(walletTransactions).where(
+      and(
+        eq(walletTransactions.walletId, driverWallet.id),
+        eq(walletTransactions.type, 'credit'),
+        or(
+          eq(walletTransactions.reason, 'referral_bonus'),
+          eq(walletTransactions.reason, 'incentive'),
+          eq(walletTransactions.reason, 'bonus'),
+          eq(walletTransactions.reason, 'driver_incentive')
+        ),
+        gte(walletTransactions.createdAt, currentStart),
+        sql`${walletTransactions.createdAt} <= ${currentEnd}`
+      )
+    );
+    for (const tx of incentiveTxs) {
+      incentivesMinor += (tx.amountMinor || 0);
+    }
+  }
+
+  let fareAmountMinor = 0;
+  let cashCollectedMinor = 0;
+  let walletPaymentsMinor = 0;
+  let totalMinutes = 0;
+
+  for (const r of currentRides) {
+    const fare = r.finalFareMinor || r.estimatedFareMinor || 0;
+    fareAmountMinor += fare;
+    if (r.paymentMethod === 'cash') {
+      cashCollectedMinor += fare;
+    } else {
+      walletPaymentsMinor += fare;
+    }
+
+    if (r.actualDurationMin) {
+      totalMinutes += r.actualDurationMin;
+    } else if (r.startedAt && r.completedAt) {
+      const mins = Math.ceil((new Date(r.completedAt) - new Date(r.startedAt)) / 60000);
+      totalMinutes += (mins > 0 ? mins : 0);
+    } else if (r.durationMin) {
+      totalMinutes += r.durationMin;
+    }
+  }
+
+  const tripsCount = currentRides.length;
+  const deductionsMinor = Math.round(fareAmountMinor * 0.15);
+  const otherEarningsMinor = 0;
+  const grossEarningsMinor = fareAmountMinor + incentivesMinor + otherEarningsMinor;
+  const netEarningsMinor = grossEarningsMinor - deductionsMinor;
+
+  let prevFareMinor = 0;
+  for (const r of prevRides) {
+    prevFareMinor += (r.finalFareMinor || r.estimatedFareMinor || 0);
+  }
+  const prevNetMinor = Math.round(prevFareMinor * 0.85);
+  let growthPercentNum = 0;
+  if (prevNetMinor > 0) {
+    growthPercentNum = ((netEarningsMinor - prevNetMinor) / prevNetMinor) * 100;
+  } else if (netEarningsMinor > 0) {
+    growthPercentNum = 100;
+  }
+
+  const formattedHours = totalMinutes >= 60
+    ? `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`
+    : `${totalMinutes}m`;
+
+  const totalFare = fareAmountMinor / 100;
+  const cashPercent = totalFare > 0 ? (cashCollectedMinor / fareAmountMinor) * 100 : 50.0;
+  const walletPercent = totalFare > 0 ? (walletPaymentsMinor / fareAmountMinor) * 100 : 50.0;
+  const avgPerTripMinor = tripsCount > 0 ? Math.round(netEarningsMinor / tripsCount) : 0;
+
+  const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const monthsOfYear = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const formatAmount = (minor) => {
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencyCode,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format((minor || 0) / 100);
+    } catch {
+      return `${currencyCode} ${((minor || 0) / 100).toFixed(2)}`;
+    }
+  };
+
+  let historyItems = [];
+
+  if (period === 'weekly') {
+    for (let i = 0; i < 7; i++) {
+      const dayDate = new Date(currentStart.getTime() + i * 86400000);
+      const dayStart = new Date(Date.UTC(dayDate.getUTCFullYear(), dayDate.getUTCMonth(), dayDate.getUTCDate(), 0, 0, 0, 0));
+      const dayEnd = new Date(Date.UTC(dayDate.getUTCFullYear(), dayDate.getUTCMonth(), dayDate.getUTCDate(), 23, 59, 59, 999));
+
+      const dayRides = currentRides.filter(r => {
+        const cDate = new Date(r.completedAt);
+        return cDate >= dayStart && cDate <= dayEnd;
+      });
+
+      let dayFareMinor = 0;
+      for (const r of dayRides) dayFareMinor += (r.finalFareMinor || r.estimatedFareMinor || 0);
+      const dayNetMinor = Math.round(dayFareMinor * 0.85);
+
+      const title = `${daysOfWeek[dayDate.getUTCDay()]}, ${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
+      historyItems.push({
+        title,
+        trips: dayRides.length,
+        amountMinor: dayNetMinor,
+        amount: formatAmount(dayNetMinor),
+      });
+    }
+  } else if (period === 'monthly') {
+    const totalDaysInMonth = new Date(Date.UTC(currentStart.getUTCFullYear(), currentStart.getUTCMonth() + 1, 0)).getUTCDate();
+    for (let d = 1; d <= Math.min(totalDaysInMonth, 7); d++) {
+      const dayDate = new Date(Date.UTC(currentStart.getUTCFullYear(), currentStart.getUTCMonth(), d, 0, 0, 0, 0));
+      const dayStart = dayDate;
+      const dayEnd = new Date(Date.UTC(currentStart.getUTCFullYear(), currentStart.getUTCMonth(), d, 23, 59, 59, 999));
+
+      const dayRides = currentRides.filter(r => {
+        const cDate = new Date(r.completedAt);
+        return cDate >= dayStart && cDate <= dayEnd;
+      });
+
+      let dayFareMinor = 0;
+      for (const r of dayRides) dayFareMinor += (r.finalFareMinor || r.estimatedFareMinor || 0);
+      const dayNetMinor = Math.round(dayFareMinor * 0.85);
+
+      const title = `${daysOfWeek[dayDate.getUTCDay()]}, ${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
+      historyItems.push({
+        title,
+        trips: dayRides.length,
+        amountMinor: dayNetMinor,
+        amount: formatAmount(dayNetMinor),
+      });
+    }
+  } else {
+    const sevenDaysAgo = new Date(currentStart.getTime() - 6 * 86400000);
+    const last7DaysRides = await db.select({
+      finalFareMinor: rides.finalFareMinor,
+      estimatedFareMinor: rides.estimatedFareMinor,
+      completedAt: rides.completedAt,
+    }).from(rides).where(
+      and(
+        eq(rides.driverId, driverId),
+        eq(rides.status, 'completed'),
+        gte(rides.completedAt, sevenDaysAgo)
+      )
+    );
+
+    for (let i = 0; i < 7; i++) {
+      const dayDate = new Date(currentStart.getTime() - i * 86400000);
+      const dayStart = new Date(Date.UTC(dayDate.getUTCFullYear(), dayDate.getUTCMonth(), dayDate.getUTCDate(), 0, 0, 0, 0));
+      const dayEnd = new Date(Date.UTC(dayDate.getUTCFullYear(), dayDate.getUTCMonth(), dayDate.getUTCDate(), 23, 59, 59, 999));
+
+      const dayRides = last7DaysRides.filter(r => {
+        const cDate = new Date(r.completedAt);
+        return cDate >= dayStart && cDate <= dayEnd;
+      });
+
+      let dayFareMinor = 0;
+      for (const r of dayRides) dayFareMinor += (r.finalFareMinor || r.estimatedFareMinor || 0);
+      const dayNetMinor = Math.round(dayFareMinor * 0.85);
+
+      let title = '';
+      let dateSubtitle = null;
+      let isToday = false;
+
+      if (i === 0) {
+        title = 'Today';
+        dateSubtitle = `${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
+        isToday = true;
+      } else if (i === 1) {
+        title = 'Yesterday';
+        dateSubtitle = `${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
+      } else {
+        title = `${daysOfWeek[dayDate.getUTCDay()]}, ${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
+      }
+
+      historyItems.push({
+        title,
+        dateSubtitle,
+        isToday,
+        trips: dayRides.length,
+        amountMinor: dayNetMinor,
+        amount: formatAmount(dayNetMinor),
+      });
+    }
+  }
+
+  return {
+    period,
+    currencyCode,
+    totalEarnings: formatAmount(netEarningsMinor),
+    totalEarningsMinor: netEarningsMinor,
+    growthPercent: `${growthPercentNum >= 0 ? '+' : ''}${growthPercentNum.toFixed(1)}%`,
+    growthPeriod: growthPeriodText,
+    cashCollected: formatAmount(cashCollectedMinor),
+    cashCollectedMinor,
+    incentivesAmount: formatAmount(incentivesMinor),
+    incentivesMinor,
+    trips: tripsCount,
+    onlineHours: formattedHours,
+    avgPerTrip: formatAmount(avgPerTripMinor),
+    cashPercent: parseFloat(cashPercent.toFixed(1)),
+    walletPercent: parseFloat(walletPercent.toFixed(1)),
+    fareAmount: formatAmount(fareAmountMinor),
+    incentives: formatAmount(incentivesMinor),
+    otherEarnings: formatAmount(otherEarningsMinor),
+    grossEarnings: formatAmount(grossEarningsMinor),
+    deductions: deductionsMinor > 0 ? `-${formatAmount(deductionsMinor)}` : formatAmount(0),
+    netEarnings: formatAmount(netEarningsMinor),
+    listTitle,
+    historyItems,
+  };
+}
+
+export async function getDriverMe(driverId) {
+  const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId)).limit(1);
+  if (!driver) throw { statusCode: 404, message: 'Driver not found' };
+
+  let country = null;
+  let state = null;
+  let city = null;
+
+  if (driver.countryId) {
+    const [c] = await db.select().from(countries).where(eq(countries.id, driver.countryId)).limit(1);
+    country = c || null;
+  }
+  if (driver.stateId) {
+    const [s] = await db.select().from(states).where(eq(states.id, driver.stateId)).limit(1);
+    state = s || null;
+  }
+  if (driver.cityId) {
+    const [ct] = await db.select().from(cities).where(eq(cities.id, driver.cityId)).limit(1);
+    city = ct || null;
+  }
+
+  let vehicleType = null;
+  if (driver.vehicleTypeId) {
+    const [vt] = await db.select().from(vehicleTypes).where(eq(vehicleTypes.id, driver.vehicleTypeId)).limit(1);
+    vehicleType = vt || null;
+  }
+
+  // Active Subscription
+  const [activeSub] = await db.select({
+    id: subscriptions.id,
+    planId: subscriptions.planId,
+    status: subscriptions.status,
+    startDate: subscriptions.startDate,
+    endDate: subscriptions.endDate,
+    amountMinor: subscriptions.amountMinor,
+    currencyCode: subscriptions.currencyCode,
+    planName: subscriptionPlans.name,
+    planType: subscriptionPlans.type,
+    maxRidesPerDay: subscriptionPlans.maxRidesPerDay,
+    priorityMatching: subscriptionPlans.priorityMatching,
+  }).from(subscriptions)
+    .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+    .where(
+      and(
+        eq(subscriptions.driverId, driverId),
+        eq(subscriptions.status, 'active'),
+      )
+    ).limit(1);
+
+  // Payout Account
+  const [payoutAccount] = await db.select().from(driverPayoutAccounts)
+    .where(eq(driverPayoutAccounts.driverId, driverId)).limit(1);
+
+  // Wallet
+  const [wallet] = await db.select().from(wallets).where(eq(wallets.driverId, driverId)).limit(1);
+
+  // Today Summary
+  const todaySummary = await getDashboardSummary(driverId).catch(() => null);
+
+  const { aadharNumber, aadharDoc, licenseDoc, ...safeDriver } = driver;
+
+  return {
+    ...safeDriver,
+    userType: 'driver',
+    role: 'driver',
+    country,
+    state,
+    city,
+    vehicleType,
+    activeSubscription: activeSub || null,
+    payoutAccount: payoutAccount || null,
+    wallet: wallet ? {
+      id: wallet.id,
+      balanceMinor: wallet.balanceMinor,
+      currencyCode: wallet.currencyCode,
+      status: wallet.status,
+    } : null,
+    todaySummary: todaySummary?.today || null,
   };
 }
 

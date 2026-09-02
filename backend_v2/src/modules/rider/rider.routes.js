@@ -6,6 +6,11 @@ export async function riderRoutes(app) {
 
   // ── Rider self ──────────────────────────────────────────────────────────────
 
+  app.get('/me', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const data = await riderService.getRiderMe(request.user.id);
+    return sendSuccess(reply, data);
+  });
+
   app.get('/profile', { preHandler: [authenticateRider] }, async (request, reply) => {
     const data = await riderService.getProfile(request.user.id);
     return sendSuccess(reply, data);

@@ -8,6 +8,12 @@ export async function adminRoutes(app) {
   // All admin routes require admin JWT
   app.addHook('preHandler', authenticateAdmin);
 
+  // GET /api/v1/admin/me — Authenticated Admin info and permissions
+  app.get('/me', async (request, reply) => {
+    const data = await adminService.getAdminMe(request.user.id);
+    return sendSuccess(reply, data);
+  });
+
   // GET /api/v1/admin/dashboard — Main KPI metrics, fleet status counters, health telemetry
   app.get('/dashboard', async (request, reply) => {
     const data = await adminService.getDashboardStats();
