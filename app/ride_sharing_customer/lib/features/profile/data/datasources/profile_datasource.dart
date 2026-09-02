@@ -21,23 +21,7 @@ class ProfileDataSourceImpl implements ProfileDataSource {
 
   @override
   Future<Map<String, dynamic>> getUserProfile() async {
-    try {
-      final response = await _dioClient.dio.get('/api/v1/riders/profile');
-      if (response.data['SUCCESS'] == true) {
-        final profile = Map<String, dynamic>.from(response.data['MESSAGE'] as Map);
-        await _storageService.cacheData(_profileCacheKey, profile);
-        return profile;
-      }
-    } catch (_) {
-      // Fallback to cache if request fails
-      final cached = _storageService.getCachedData(_profileCacheKey);
-      if (cached != null) {
-        return Map<String, dynamic>.from(cached as Map);
-      }
-    }
-
-    // Default basic structure if everything is missing
-    return {
+    Map<String, dynamic> profile = {
       'id': 'unknown',
       'name': 'Rider User',
       'email': '',
@@ -46,6 +30,50 @@ class ProfileDataSourceImpl implements ProfileDataSource {
       'saved_places': [],
       'payment_methods': []
     };
+
+    try {
+      final response = await _dioClient.dio.get('/api/v1/riders/profile');
+      if (response.data['SUCCESS'] == true) {
+        profile = Map<String, dynamic>.from(response.data['MESSAGE'] as Map);
+      }
+    } catch (_) {
+      final cached = _storageService.getCachedData(_profileCacheKey);
+      if (cached != null) {
+        profile = Map<String, dynamic>.from(cached as Map);
+      }
+    }
+
+    // Fetch live saved places from backend /api/v1/saved-places
+    try {
+      final spResponse = await _dioClient.dio.get('/api/v1/saved-places');
+      if (spResponse.data['SUCCESS'] == true && spResponse.data['MESSAGE'] is List) {
+        final List<dynamic> spList = spResponse.data['MESSAGE'];
+        final mappedSavedPlaces = spList.map((e) {
+          final item = Map<String, dynamic>.from(e as Map);
+          return {
+            'id': item['id']?.toString() ?? '',
+            'type': item['label']?.toString() ?? 'favorite',
+            'name': item['name']?.toString() ?? (item['label']?.toString() ?? 'Place'),
+            'address': item['address']?.toString() ?? '',
+            'latitude': double.tryParse(item['lat']?.toString() ?? '') ?? 0.0,
+            'longitude': double.tryParse(item['lng']?.toString() ?? '') ?? 0.0,
+            'isDefaultPickup': item['isDefaultPickup'] == true,
+          };
+        }).toList();
+        profile['saved_places'] = mappedSavedPlaces;
+      }
+    } catch (_) {
+      // Keep cached or profile saved_places if saved-places endpoint is unreachable
+      if (profile['saved_places'] == null) {
+        final cached = _storageService.getCachedData(_profileCacheKey);
+        if (cached is Map && cached['saved_places'] != null) {
+          profile['saved_places'] = cached['saved_places'];
+        }
+      }
+    }
+
+    await _storageService.cacheData(_profileCacheKey, profile);
+    return profile;
   }
 
   @override
@@ -104,13 +132,47 @@ class ProfileDataSourceImpl implements ProfileDataSource {
 
   @override
   Future<void> updateSavedPlaces(List<Map<String, dynamic>> places) async {
-    await Future.delayed(const Duration(milliseconds: 400));
     final current = await getUserProfile();
     final updated = {
       ...current,
       'saved_places': places,
     };
     await _storageService.cacheData(_profileCacheKey, updated);
+
+    // Sync each place to backend /api/v1/saved-places
+    try {
+      // First, get remote list to know if we need to delete any deleted places
+      final spResponse = await _dioClient.dio.get('/api/v1/saved-places');
+      if (spResponse.data['SUCCESS'] == true && spResponse.data['MESSAGE'] is List) {
+        final List<dynamic> remoteList = spResponse.data['MESSAGE'];
+        final currentIds = places.map((p) => p['id']?.toString()).toSet();
+        for (final remoteItem in remoteList) {
+          final remoteId = remoteItem['id']?.toString();
+          if (remoteId != null && remoteId.isNotEmpty && !currentIds.contains(remoteId)) {
+            try {
+              await _dioClient.dio.delete('/api/v1/saved-places/$remoteId');
+            } catch (_) {}
+          }
+        }
+      }
+
+      // Upsert current places
+      for (final place in places) {
+        final type = (place['type'] ?? 'favorite').toString().toLowerCase();
+        final label = ['home', 'work', 'favorite', 'custom'].contains(type) ? type : 'custom';
+        final payload = {
+          'label': label,
+          'name': place['name']?.toString() ?? '',
+          'address': place['address']?.toString() ?? '',
+          'lat': place['latitude']?.toString() ?? '0.0',
+          'lng': place['longitude']?.toString() ?? '0.0',
+          'isDefaultPickup': place['isDefaultPickup'] == true,
+        };
+        await _dioClient.dio.post('/api/v1/saved-places', data: payload);
+      }
+    } catch (_) {
+      // If network fails, local cached update above ensures seamless offline/optimistic UX
+    }
   }
 
   @override

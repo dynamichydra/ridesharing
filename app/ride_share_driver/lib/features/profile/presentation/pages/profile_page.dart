@@ -525,10 +525,10 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                           const Divider(height: 1, color: Color(0xFFF1F5F9), indent: 56),
                           _buildMenuItem(
-                            icon: Icons.account_balance_wallet_outlined,
+                            icon: Icons.account_balance_rounded,
                             title: 'Bank & Payout Account',
-                            subtitle: 'Instant payout & earnings withdrawal',
-                            onTap: () => context.go('/wallet'),
+                            subtitle: 'Manage linked bank details & verification',
+                            onTap: () => context.push('/bank-payout'),
                           ),
                           const Divider(height: 1, color: Color(0xFFF1F5F9), indent: 56),
                           _buildMenuItem(

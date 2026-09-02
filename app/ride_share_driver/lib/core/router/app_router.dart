@@ -14,6 +14,7 @@ import '../../features/wallet/presentation/pages/transactions_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
 import '../../features/profile/presentation/pages/vehicle_info_page.dart';
 import '../../features/profile/presentation/pages/driver_documents_page.dart';
+import '../../features/profile/presentation/pages/bank_payout_page.dart';
 import '../../features/ride/presentation/screens/active_ride_screen.dart';
 
 class AppRouter {
@@ -50,12 +51,7 @@ class AppRouter {
           return null;
         }
 
-        // Expired drivers can access /subscription for renewal — don't redirect them away
-        if (isExpiredSubscription && isSubscriptionPage) {
-          return null;
-        }
-
-        if (isOnboarding || state.matchedLocation == '/' || isSubscriptionPage) {
+        if (isOnboarding || state.matchedLocation == '/') {
           return '/dashboard';
         }
       } else if (authState is Unauthenticated) {
@@ -187,6 +183,11 @@ class AppRouter {
                       );
                     },
                   ),
+                  GoRoute(
+                    parentNavigatorKey: _rootNavigatorKey,
+                    path: 'bank-payout',
+                    builder: (context, state) => const BankPayoutPage(),
+                  ),
                 ],
               ),
             ],
@@ -236,6 +237,11 @@ class AppRouter {
             },
           );
         },
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/bank-payout',
+        builder: (context, state) => const BankPayoutPage(),
       ),
     ],
   );

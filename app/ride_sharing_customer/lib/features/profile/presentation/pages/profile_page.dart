@@ -124,11 +124,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     title: 'Payment Methods',
                     onTap: () => context.push('/payment-methods'),
                   ),
-                  // _buildProfileMenuItem(
-                  //   icon: Icons.location_on_outlined,
-                  //   title: 'My Addresses',
-                  //   onTap: () => context.push('/saved-places'),
-                  // ),
+                  _buildProfileMenuItem(
+                    icon: Icons.location_on_outlined,
+                    title: 'Saved Places',
+                    onTap: () => context.push('/saved-places'),
+                  ),
                   // _buildProfileMenuItem(
                   //   icon: Icons.card_giftcard_rounded,
                   //   title: 'Refer & Earn',

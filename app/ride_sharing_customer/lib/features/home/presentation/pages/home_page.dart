@@ -447,27 +447,66 @@ class _HomePageState extends State<HomePage> {
                             scrollDirection: Axis.horizontal,
                             child: Row(
                               children: [
+                                () {
+                                  final homePlace = state.savedPlaces.firstWhere(
+                                    (p) => (p['type'] ?? p['label']) == 'home',
+                                    orElse: () => <String, dynamic>{},
+                                  );
+                                  final hasHome = homePlace.isNotEmpty && (homePlace['address']?.toString().isNotEmpty ?? false);
+                                  return _buildSavedChip(
+                                    icon: Icons.home_rounded,
+                                    label: 'Home',
+                                    address: hasHome ? (homePlace['name'] ?? homePlace['address']) : 'Add address',
+                                    color: const Color(0xFF0165B7),
+                                    onTap: () {
+                                      if (hasHome) {
+                                        handleBookingTap();
+                                      } else {
+                                        context.push('/saved-places');
+                                      }
+                                    },
+                                  );
+                                }(),
+                                const SizedBox(width: 10),
+                                () {
+                                  final workPlace = state.savedPlaces.firstWhere(
+                                    (p) => (p['type'] ?? p['label']) == 'work',
+                                    orElse: () => <String, dynamic>{},
+                                  );
+                                  final hasWork = workPlace.isNotEmpty && (workPlace['address']?.toString().isNotEmpty ?? false);
+                                  return _buildSavedChip(
+                                    icon: Icons.work_rounded,
+                                    label: 'Work',
+                                    address: hasWork ? (workPlace['name'] ?? workPlace['address']) : 'Add address',
+                                    color: const Color(0xFF01A34D),
+                                    onTap: () {
+                                      if (hasWork) {
+                                        handleBookingTap();
+                                      } else {
+                                        context.push('/saved-places');
+                                      }
+                                    },
+                                  );
+                                }(),
+                                const SizedBox(width: 10),
+                                ...state.savedPlaces.where((p) {
+                                  final type = (p['type'] ?? p['label'])?.toString().toLowerCase();
+                                  return type != 'home' && type != 'work';
+                                }).map((p) => Padding(
+                                  padding: const EdgeInsets.only(right: 10),
+                                  child: _buildSavedChip(
+                                    icon: Icons.star_rounded,
+                                    label: (p['name'] ?? 'Saved').toString(),
+                                    address: (p['address'] ?? '').toString(),
+                                    color: Colors.amber.shade700,
+                                    onTap: handleBookingTap,
+                                  ),
+                                )),
                                 _buildSavedChip(
-                                  icon: Icons.home_rounded,
-                                  label: 'Home',
-                                  address: 'Add address',
+                                  icon: Icons.bookmark_add_outlined,
+                                  label: 'Manage',
+                                  address: 'Saved Places',
                                   color: const Color(0xFF0165B7),
-                                  onTap: handleBookingTap,
-                                ),
-                                const SizedBox(width: 10),
-                                _buildSavedChip(
-                                  icon: Icons.work_rounded,
-                                  label: 'Work',
-                                  address: 'Add address',
-                                  color: const Color(0xFF01A34D),
-                                  onTap: handleBookingTap,
-                                ),
-                                const SizedBox(width: 10),
-                                _buildSavedChip(
-                                  icon: Icons.star_rounded,
-                                  label: 'Saved Places',
-                                  address: 'Favorites',
-                                  color: Colors.amber.shade700,
                                   onTap: () => context.push('/saved-places'),
                                 ),
                               ],

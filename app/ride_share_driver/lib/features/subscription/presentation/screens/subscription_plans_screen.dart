@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../style/appcolors.dart';
 import '../../../../common/widgets/custom_toast.dart';
 import '../../../../injection_container.dart' as di;
@@ -203,17 +204,34 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
         foregroundColor: const Color(0xFF0F172A),
         elevation: 0,
         centerTitle: true,
-        leading: Navigator.canPop(context)
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
-                onPressed: () => Navigator.pop(context),
-              )
-            : null,
+        leading: () {
+          final authState = context.read<AuthBloc>().state;
+          final isMandatory = authState is Authenticated && authState.driver.isNeverSubscribed;
+          if (isMandatory) return null;
+          return IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+            onPressed: () {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              } else {
+                context.go('/dashboard');
+              }
+            },
+          );
+        }(),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: widget.onLogout,
-          ),
+          () {
+            final authState = context.read<AuthBloc>().state;
+            final isMandatory = authState is Authenticated && authState.driver.isNeverSubscribed;
+            if (isMandatory) {
+              return IconButton(
+                icon: const Icon(Icons.logout_rounded),
+                onPressed: widget.onLogout,
+                tooltip: 'Logout',
+              );
+            }
+            return const SizedBox.shrink();
+          }(),
         ],
       ),
       body: BlocConsumer<SubscriptionBloc, SubscriptionState>(

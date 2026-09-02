@@ -7,6 +7,7 @@ import '../../../../core/models/route_model.dart';
 import '../../../../core/services/google_routes_service.dart';
 import '../../../../core/widgets/app_map_view.dart';
 import '../../../location/location.dart';
+import '../../../profile/presentation/bloc/profile_bloc.dart';
 import '../bloc/booking_bloc.dart';
 
 // ---------------------------------------------------------------------------
@@ -1026,8 +1027,15 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
         isPickup ? const Color(0xFF009048) : const Color(0xFFE11D48);
 
     if (_searchResults.isEmpty && !_isSearching) {
+      final profileState = context.read<ProfileBloc>().state;
+      List<Map<String, dynamic>> savedPlaces = [];
+      if (profileState is ProfileLoaded) {
+        final raw = profileState.userProfile['saved_places'] as List? ?? [];
+        savedPlaces = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+
       return Container(
-        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        constraints: const BoxConstraints(maxHeight: 280),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -1039,23 +1047,119 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
             ),
           ],
         ),
-        child: Row(
-          children: [
-            Icon(Icons.search_rounded, color: accentColor, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                isPickup
-                    ? 'Type to search pickup locations...'
-                    : 'Type to search destinations...',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF64748B),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            children: [
+              if (savedPlaces.isNotEmpty) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text(
+                    'SAVED PLACES',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                ),
+                ...savedPlaces.map((sp) {
+                  final type = (sp['type'] ?? sp['label'] ?? 'favorite').toString().toLowerCase();
+                  IconData spIcon = Icons.star_rounded;
+                  Color spColor = const Color(0xFFEAB308);
+                  if (type == 'home') {
+                    spIcon = Icons.home_rounded;
+                    spColor = const Color(0xFF0165B7);
+                  } else if (type == 'work') {
+                    spIcon = Icons.work_rounded;
+                    spColor = const Color(0xFF009048);
+                  }
+
+                  return InkWell(
+                    onTap: () => _onSelectLocationItem({
+                      'name': sp['name'] ?? 'Saved Place',
+                      'address': sp['address'] ?? '',
+                      'latitude': sp['latitude'],
+                      'longitude': sp['longitude'],
+                      'type': type,
+                    }),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: spColor.withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(spIcon, size: 18, color: spColor),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  sp['name']?.toString() ?? 'Saved Place',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                ),
+                                if (sp['address'] != null && sp['address'].toString().isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    sp['address'].toString(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Color(0xFFCBD5E1)),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                Divider(height: 1, color: Colors.grey.shade100),
+              ],
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                child: Row(
+                  children: [
+                    Icon(Icons.search_rounded, color: accentColor, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        isPickup
+                            ? 'Type to search any other pickup location...'
+                            : 'Type to search any other destination...',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
