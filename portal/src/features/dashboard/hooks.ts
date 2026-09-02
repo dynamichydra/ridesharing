@@ -55,11 +55,11 @@ export function useSupplyDemandAnalytics() {
   });
 }
 
-export function useEarningsTrend(timeframe = "week") {
+export function useEarningsTrend(timeframe = "week", currencyCode?: string) {
   return useQuery<EarningsTrendItem[]>({
-    queryKey: ["dashboard-earnings-trend", timeframe],
+    queryKey: ["dashboard-earnings-trend", timeframe, currencyCode || "all"],
     queryFn: () =>
-      dashboardApi.getEarningsTrend(timeframe).then((res) => {
+      dashboardApi.getEarningsTrend(timeframe, currencyCode).then((res) => {
         const msg = res.MESSAGE;
         if (Array.isArray(msg)) return msg;
         return [];

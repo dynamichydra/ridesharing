@@ -212,13 +212,17 @@ async function _activateSubscription(riderId, planId, plan, amountMinor, payment
     ],
   });
 
-  await publishEvent(TOPICS.SUBSCRIPTION_ACTIVATED, { id: sub.id, riderId, planId, endDate, ownerType: 'rider' });
-  await publishEvent(TOPICS.NOTIF_PUSH, {
-    userType: 'rider', userId: riderId,
-    type: 'SUBSCRIPTION_ACTIVATED',
-    title: '🎉 Membership Active!',
-    body:  `Your ${plan.name} plan is now active. ${endDate ? `Valid until ${endDate.toDateString()}.` : 'Lifetime access!'}`,
-  });
+  try {
+    await publishEvent(TOPICS.SUBSCRIPTION_ACTIVATED, { id: sub.id, riderId, planId, endDate, ownerType: 'rider' });
+    await publishEvent(TOPICS.NOTIF_PUSH, {
+      userType: 'rider', userId: riderId,
+      type: 'SUBSCRIPTION_ACTIVATED',
+      title: '🎉 Membership Active!',
+      body:  `Your ${plan.name} plan is now active. ${endDate ? `Valid until ${endDate.toDateString()}.` : 'Lifetime access!'}`,
+    });
+  } catch (err) {
+    console.warn('[RiderSubscription] Non-fatal notification/event publishing warning:', err?.message || err);
+  }
   return sub;
 }
 

@@ -77,12 +77,12 @@ export function SubscribeDriverDialog({
       if (gatewayName === "razorpay") {
         // Trigger Razorpay Checkout
         await openRazorpayCheckout({
-          key: data?.key || DM_CORE_CONFIG.RAZORPAY_KEY_ID,
+          key: data?.keyId || data?.key || DM_CORE_CONFIG.RAZORPAY_KEY_ID,
           amountMinor: data?.amountMinor || plan.priceMinor,
           currency: plan.currencyCode || "INR",
           name: "Driver Subscription",
           description: `${plan.name} (${plan.type})`,
-          orderId: data?.gatewayOrderId || data?.id || data?.orderId,
+          orderId: data?.gatewayOrderId || (typeof data?.orderId === "string" && data.orderId.startsWith("order_") ? data.orderId : undefined),
           prefill: {
             name: driverName,
             email: driverEmail,
@@ -152,8 +152,8 @@ export function SubscribeDriverDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden p-6">
+          <DialogHeader className="shrink-0 pb-2">
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Sparkles className="h-5 w-5 text-primary" /> Subscribe Driver to Plan
             </DialogTitle>
@@ -162,50 +162,52 @@ export function SubscribeDriverDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-3">
+          <div className="flex-1 overflow-y-auto pr-1 py-2 space-y-3 min-h-0">
             {isLoadingPlans ? (
-              <div className="py-8 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+              <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 <span className="text-sm">Loading available plans…</span>
               </div>
             ) : plans.length === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground border rounded-lg border-dashed">
+              <div className="py-12 text-center text-sm text-muted-foreground border rounded-xl border-dashed">
                 No active subscription plans available for this country.
               </div>
             ) : (
-              <div className="grid gap-3 max-h-[380px] overflow-y-auto pr-1">
+              <div className="space-y-2.5">
                 {plans.map((plan: any) => {
                   const isRazorpay = plan.currencyCode?.toUpperCase() === "INR";
                   return (
                     <div
                       key={plan.id}
-                      className="border border-border rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:border-primary/50 transition-colors bg-card"
+                      className="border border-border/80 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:border-primary/50 hover:bg-muted/20 transition-all bg-card shadow-xs"
                     >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-foreground">{plan.name}</span>
-                          <Badge variant="outline" className="capitalize text-xs">
+                      <div className="space-y-1.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-foreground text-sm sm:text-base truncate">
+                            {plan.name}
+                          </span>
+                          <Badge variant="outline" className="capitalize text-[11px] py-0 px-2">
                             {plan.type}
                           </Badge>
-                          <Badge variant="secondary" className="text-xs">
+                          <Badge variant="secondary" className="text-[11px] py-0 px-2 font-normal">
                             {isRazorpay ? "Razorpay" : "Stripe"}
                           </Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          {plan.durationDays ? `Valid for ${plan.durationDays} days` : "Lifetime Plan"}
+                        <p className="text-xs text-muted-foreground line-clamp-2 break-words">
+                          {plan.durationDays ? `Valid for ${plan.durationDays} days` : "Lifetime access"}
                           {plan.description ? ` · ${plan.description}` : ""}
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-                        <span className="text-base font-bold text-foreground">
+                      <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/50">
+                        <span className="text-base sm:text-lg font-bold text-foreground">
                           {formatCurrency(plan.priceMinor, plan.currencyCode)}
                         </span>
                         <Button
                           size="sm"
                           disabled={isProcessing}
                           onClick={() => handleSelectAndPay(plan)}
-                          className="gap-1.5 cursor-pointer shrink-0"
+                          className="gap-1.5 cursor-pointer shrink-0 font-medium"
                         >
                           {isProcessing && selectedPlanId === plan.id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -229,10 +231,12 @@ export function SubscribeDriverDialog({
         <PaymentCheckoutModal
           open={!!stripeCheckoutData}
           onOpenChange={(isOpen) => !isOpen && setStripeCheckoutData(null)}
+          clientSecret={stripeCheckoutData.clientSecret}
           defaultAmount={stripeCheckoutData.amount}
           currencyCode={stripeCheckoutData.currency}
           customerEmail={driverEmail}
           customerName={driverName}
+          customerPhone={driverPhone}
           gateway="stripe"
           onSuccess={handleStripeSuccess}
         />

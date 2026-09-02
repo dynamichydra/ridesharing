@@ -27,9 +27,11 @@ export const dashboardApi = {
   // GET /admin/dashboard/supply-demand — Zone equilibrium and gap metrics
   getSupplyDemand: () => apiClient.get<SupplyDemandResponse>(`${BASE_URL}/dashboard/supply-demand`),
 
-  // GET /admin/dashboard/earnings?timeframe= — Revenue trend series
-  getEarningsTrend: (timeframe = "week") =>
-    apiClient.get<EarningsTrendItem[]>(`${BASE_URL}/dashboard/earnings?timeframe=${timeframe}`),
+  // GET /admin/dashboard/earnings?timeframe=&currencyCode= — Revenue trend series
+  getEarningsTrend: (timeframe = "week", currencyCode?: string) =>
+    apiClient.get<EarningsTrendItem[]>(
+      `${BASE_URL}/dashboard/earnings?timeframe=${timeframe}${currencyCode ? `&currencyCode=${currencyCode}` : ""}`
+    ),
 
   // GET /admin/dashboard/recent-activity — Latest platform rides table
   getRecentActivity: (limit = 10) =>

@@ -1,3 +1,11 @@
+export interface CurrencyEarningsItem {
+  currencyCode: string;
+  valueMinor: number;
+  totalMinor?: number;
+  growthPct: number;
+  growthLabel?: string;
+}
+
 export interface DashboardKPIs {
   totalRides: {
     value: number;
@@ -9,12 +17,8 @@ export interface DashboardKPIs {
     growthPct: number;
     growthLabel: string;
   };
-  weeklyEarnings: {
-    valueMinor: number;
-    currencyCode: string;
-    growthPct: number;
-    growthLabel: string;
-  };
+  weeklyEarnings: CurrencyEarningsItem;
+  weeklyEarningsByCurrency?: CurrencyEarningsItem[];
   rating: {
     value: number;
     scale: number;

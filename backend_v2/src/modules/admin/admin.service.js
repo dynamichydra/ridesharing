@@ -114,25 +114,44 @@ export async function getDashboardStats() {
     ? Math.round(((cDrivers - pDrivers) / pDrivers) * 100)
     : (cDrivers > 0 ? 100 : 0);
 
-  // Revenue (Gross from captured payments)
+  // Revenue (Gross from captured payments by currency)
   const revenueResult = await db.execute(sql`
     SELECT
       COALESCE(SUM(amount_minor) FILTER (WHERE created_at >= ${sevenDaysAgo}), 0)::bigint AS current_week_rev,
       COALESCE(SUM(amount_minor) FILTER (WHERE created_at >= ${fourteenDaysAgo} AND created_at < ${sevenDaysAgo}), 0)::bigint AS prior_week_rev,
       COALESCE(SUM(amount_minor), 0)::bigint AS total_rev,
-      COALESCE(currency_code, 'USD') AS currency_code
+      UPPER(COALESCE(currency_code, 'USD')) AS currency_code
     FROM payments
     WHERE status = 'captured'
-    GROUP BY currency_code
-    LIMIT 1
+    GROUP BY UPPER(COALESCE(currency_code, 'USD'))
+    ORDER BY total_rev DESC
   `);
-  const revRow = (revenueResult.rows ?? revenueResult)[0] || {};
-  const currentWeekRevMinor = Number(revRow.current_week_rev || 0);
-  const priorWeekRevMinor = Number(revRow.prior_week_rev || 0);
-  const currencyCode = revRow.currency_code || 'USD';
-  const revenueGrowth = priorWeekRevMinor > 0
-    ? Math.round(((currentWeekRevMinor - priorWeekRevMinor) / priorWeekRevMinor) * 100)
-    : (currentWeekRevMinor > 0 ? 100 : 0);
+  const revRows = revenueResult.rows ?? revenueResult ?? [];
+  const earningsByCurrency = (revRows.length > 0 ? revRows : [{ current_week_rev: 0, prior_week_rev: 0, total_rev: 0, currency_code: 'USD' }]).map((r) => {
+    const currentWeekRevMinor = Number(r.current_week_rev || 0);
+    const priorWeekRevMinor = Number(r.prior_week_rev || 0);
+    const totalRevMinor = Number(r.total_rev || 0);
+    const currencyCode = (r.currency_code || 'USD').toUpperCase();
+    const growthPct = priorWeekRevMinor > 0
+      ? Math.round(((currentWeekRevMinor - priorWeekRevMinor) / priorWeekRevMinor) * 100)
+      : (currentWeekRevMinor > 0 ? 100 : 0);
+
+    return {
+      currencyCode,
+      valueMinor: currentWeekRevMinor,
+      totalMinor: totalRevMinor,
+      growthPct,
+      growthLabel: 'from last week',
+    };
+  });
+
+  const primaryEarnings = earningsByCurrency[0] || {
+    valueMinor: 0,
+    totalMinor: 0,
+    currencyCode: 'USD',
+    growthPct: 0,
+    growthLabel: 'from last week',
+  };
 
   // Average Driver Rating
   const [ratingResult] = await db.select({
@@ -168,12 +187,8 @@ export async function getDashboardStats() {
         growthPct: driversGrowth,
         growthLabel: 'from last week',
       },
-      weeklyEarnings: {
-        valueMinor: currentWeekRevMinor,
-        currencyCode,
-        growthPct: revenueGrowth,
-        growthLabel: 'from last week',
-      },
+      weeklyEarnings: primaryEarnings,
+      weeklyEarningsByCurrency: earningsByCurrency,
       rating: {
         value: avgRating,
         scale: 5,
@@ -413,32 +428,35 @@ export async function getSupplyDemandAnalytics() {
   };
 }
 
-export async function getEarningsTrend(timeframe = 'week') {
+export async function getEarningsTrend(timeframe = 'week', filterCurrency = null) {
   let days = 7;
   if (timeframe === 'month') days = 30;
   if (timeframe === 'last_week') days = 14;
 
   const from = new Date(Date.now() - days * 86400000);
+  const currencyFilter = filterCurrency && filterCurrency !== 'all' ? filterCurrency.toUpperCase() : null;
 
   const result = await db.execute(sql`
     SELECT
       DATE(r.requested_at) AS date,
       TO_CHAR(r.requested_at, 'Dy') AS day_name,
-      COUNT(*) FILTER (WHERE r.status = 'completed')::int AS completed_count,
-      COUNT(*) FILTER (WHERE r.status = 'cancelled')::int AS cancelled_count,
-      COUNT(*)::int AS total_rides,
+      UPPER(COALESCE(p.currency_code, r.currency_code, 'USD')) AS currency_code,
+      COUNT(DISTINCT r.id) FILTER (WHERE r.status = 'completed')::int AS completed_count,
+      COUNT(DISTINCT r.id) FILTER (WHERE r.status = 'cancelled')::int AS cancelled_count,
+      COUNT(DISTINCT r.id)::int AS total_rides,
       COALESCE(SUM(p.amount_minor) FILTER (WHERE p.status = 'captured'), 0)::bigint AS revenue_minor
     FROM rides r
     LEFT JOIN payments p ON p.ride_id = r.id
     WHERE r.requested_at >= ${from}
-    GROUP BY DATE(r.requested_at), TO_CHAR(r.requested_at, 'Dy')
+      ${currencyFilter ? sql`AND (UPPER(p.currency_code) = ${currencyFilter} OR (p.currency_code IS NULL AND UPPER(r.currency_code) = ${currencyFilter}))` : sql``}
+    GROUP BY DATE(r.requested_at), TO_CHAR(r.requested_at, 'Dy'), UPPER(COALESCE(p.currency_code, r.currency_code, 'USD'))
     ORDER BY date ASC
   `);
 
   const rows = result.rows ?? result;
   if (rows && rows.length > 0) {
     return rows.map((r) => {
-      const rev = Number(r.revenue_minor || 0) / 100;
+      const cur = (r.currency_code || 'USD').toUpperCase();
       return {
         date: r.date,
         dayName: r.day_name,
@@ -446,8 +464,7 @@ export async function getEarningsTrend(timeframe = 'week') {
         cancelledCount: Number(r.cancelled_count || 0),
         totalRides: Number(r.total_rides || 0),
         revenueMinor: Number(r.revenue_minor || 0),
-        revenueFormatted: `$${rev.toFixed(0)}`,
-        currencyCode: 'USD',
+        currencyCode: cur,
       };
     });
   }

@@ -238,11 +238,15 @@ async function _activateSubscription(driverId, planId, plan, amountMinor, paymen
     ],
   });
 
-  await publishEvent(TOPICS.SUBSCRIPTION_ACTIVATED, { id: sub.id, driverId, planId, endDate });
-  await publishNotification('SUBSCRIPTION_ACTIVATED', {
-    userId: driverId, userType: 'driver',
-    variables: { planName: plan.name, endDate: endDate ? endDate.toDateString() : 'Lifetime access' },
-  });
+  try {
+    await publishEvent(TOPICS.SUBSCRIPTION_ACTIVATED, { id: sub.id, driverId, planId, endDate });
+    await publishNotification('SUBSCRIPTION_ACTIVATED', {
+      userId: driverId, userType: 'driver',
+      variables: { planName: plan.name, endDate: endDate ? endDate.toDateString() : 'Lifetime access' },
+    });
+  } catch (err) {
+    console.warn('[Subscription] Non-fatal notification/event publishing warning:', err?.message || err);
+  }
   return sub;
 }
 

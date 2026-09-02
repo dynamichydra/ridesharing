@@ -36,7 +36,8 @@ export async function adminRoutes(app) {
   // GET /api/v1/admin/dashboard/earnings — Daily / Weekly / Monthly revenue breakdown
   app.get('/dashboard/earnings', async (request, reply) => {
     const timeframe = request.query.timeframe || 'week';
-    const data = await adminService.getEarningsTrend(timeframe);
+    const currencyCode = request.query.currencyCode || request.query.currency;
+    const data = await adminService.getEarningsTrend(timeframe, currencyCode);
     return sendSuccess(reply, data);
   });
 

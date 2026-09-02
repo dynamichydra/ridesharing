@@ -33,9 +33,6 @@ export function NavProjects({
   const mobCollapseSidebar = () => {
     if (isMobile) {
       toggleSidebar();
-
-      console.log("21");
-      
     }
   };
 
