@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Driver Socket.IO Portal</title>
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card: #121826;
+      --card-alt: #1a2234;
+      --border: #232f48;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border); }
+    h1 { font-size: 22px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 10px; }
+    .status-badge { font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 999px; text-transform: uppercase; }
+    .status-disconnected { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
+    .status-connected { background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid var(--success); }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tab-btn { background: var(--card); border: 1px solid var(--border); color: var(--text-muted); padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+    .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 20px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 18px; }
+    .card-title { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+    label { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; display: block; margin-bottom: 5px; }
+    input, textarea, select { width: 100%; background: var(--card-alt); border: 1px solid var(--border); color: #fff; padding: 9px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+    input:focus, textarea:focus { outline: none; border-color: var(--primary); }
+    .btn { background: var(--primary); color: #fff; border: none; padding: 9px 16px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: 0.15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn:hover { background: var(--primary-hover); }
+    .btn-success { background: #059669; }
+    .btn-success:hover { background: #047857; }
+    .btn-danger { background: #dc2626; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-warning { background: #d97706; }
+    .btn-warning:hover { background: #b45309; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-outline:hover { background: var(--card-alt); }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+    .offer-alert { display: none; background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border: 2px solid var(--warning); border-radius: 12px; padding: 18px; margin-bottom: 18px; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); } 70% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); } 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); } }
+    .log-box { height: 420px; overflow-y: auto; background: #06090e; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; }
+    .log-entry { margin-bottom: 8px; padding: 6px 8px; border-radius: 4px; border-left: 3px solid var(--border); word-break: break-all; }
+    .log-in { border-left-color: var(--success); background: rgba(16, 185, 129, 0.05); }
+    .log-out { border-left-color: var(--primary); background: rgba(59, 130, 246, 0.05); }
+    .log-err { border-left-color: var(--danger); background: rgba(239, 68, 68, 0.08); }
+    .log-time { color: var(--text-muted); font-size: 11px; margin-right: 6px; }
+    .badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; margin-right: 6px; }
+    .badge-in { background: #059669; color: #fff; }
+    .badge-out { background: #2563eb; color: #fff; }
+    .badge-sys { background: #475569; color: #fff; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>🚗 Driver Socket.IO Portal <span id="driverLabel" style="font-size:14px;color:var(--text-muted);font-weight:normal;">(Driver 1)</span></h1>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span id="socketStatus" class="status-badge status-disconnected">Disconnected</span>
+      <button class="btn btn-outline" onclick="toggleConnect()" id="btnConnect">Connect</button>
+    </div>
+  </header>
+
+  <!-- Driver Switcher Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchDriver(1)">Driver 1 (Subrata)</button>
+    <button class="tab-btn" onclick="switchDriver(2)">Driver 2</button>
+    <button class="tab-btn" onclick="switchDriver(3)">Driver 3</button>
+    <button class="tab-btn" onclick="switchDriver(4)">Driver 4</button>
+  </div>
+
+  <!-- Incoming Offer Notification Banner -->
+  <div id="offerAlert" class="offer-alert">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <h3 style="color:var(--warning);font-size:16px;">⚡ NEW RIDE DISPATCH OFFER RECEIVED!</h3>
+      <span id="offerTimer" style="background:#d97706;color:#fff;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:700;">15s</span>
+    </div>
+    <div id="offerDetails" style="font-size:13px;margin-bottom:12px;line-height:1.6;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-success" style="flex:1;" onclick="acceptCurrentOffer()">✅ Accept Ride (<span id="btnAcceptRideId"></span>)</button>
+      <button class="btn btn-danger" onclick="declineCurrentOffer()">❌ Decline</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Left Column: Controls -->
+    <div>
+      <!-- Connection & Auth -->
+      <div class="card">
+        <div class="card-title">1. Connection & Credentials</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label>Socket URL</label>
+            <input type="text" id="socketUrl" value="http://localhost:3000" />
+          </div>
+          <div>
+            <label>Namespace</label>
+            <input type="text" id="namespace" value="/driver" readonly />
+          </div>
+        </div>
+        <label>Driver JWT Token</label>
+        <textarea id="jwtToken" rows="2" placeholder="Paste driver JWT token or click auto-generate"></textarea>
+        <div class="btn-group">
+          <button class="btn btn-outline" onclick="fetchDevToken()">🔑 Auto-Fetch Dev Token</button>
+          <button class="btn btn-danger" onclick="disconnectSocket()">Disconnect</button>
+        </div>
+      </div>
+
+      <!-- Driver State & Location -->
+      <div class="card">
+        <div class="card-title">2. Driver Availability & GPS Location</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label>Latitude</label>
+            <input type="number" step="0.000001" id="driverLat" value="22.572646" />
+          </div>
+          <div>
+            <label>Longitude</label>
+            <input type="number" step="0.000001" id="driverLng" value="88.363895" />
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-success" onclick="emitGoOnline()">🟢 Go Online</button>
+          <button class="btn btn-danger" onclick="emitGoOffline()">🔴 Go Offline</button>
+          <button class="btn btn-outline" onclick="emitLocationUpdate()">📍 Send 1 GPS Ping</button>
+          <button class="btn btn-warning" id="btnSimGps" onclick="toggleGpsSimulation()">🚗 Start Moving Simulation</button>
+        </div>
+      </div>
+
+      <!-- In-Trip Chat & Offer Actions -->
+      <div class="card">
+        <div class="card-title">3. In-Trip Chat & Ride Management</div>
+        <label>Active Ride ID</label>
+        <input type="text" id="activeRideId" placeholder="Ride UUID" />
+        <label>Chat Message Content</label>
+        <input type="text" id="chatContent" placeholder="e.g. I have arrived at the gate." />
+        <div class="btn-group">
+          <button class="btn" onclick="emitSendChat()">💬 Send Chat</button>
+          <button class="btn btn-outline" onclick="emitMarkChatRead()">👁️ Mark Chat Read</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column: Live Event Log -->
+    <div>
+      <div class="card" style="height: 100%;">
+        <div class="card-title">
+          <span>Live Socket Events</span>
+          <button class="btn btn-outline" style="padding:4px 8px;font-size:11px;" onclick="clearLogs()">Clear</button>
+        </div>
+        <div id="logBox" class="log-box">
+          <div class="log-entry" style="color:var(--text-muted);">Ready. Click Connect or Go Online to begin.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let socket = null;
+  let activeDriverIndex = 1;
+  let currentOffer = null;
+  let offerCountdownInterval = null;
+  let gpsSimInterval = null;
+
+  const DRIVER_PRESETS = {
+    1: { name: 'Driver 1 (Subrata)', lat: 22.572646, lng: 88.363895, token: '' },
+    2: { name: 'Driver 2', lat: 22.578000, lng: 88.368000, token: '' },
+    3: { name: 'Driver 3', lat: 22.565000, lng: 88.355000, token: '' },
+    4: { name: 'Driver 4', lat: 22.585000, lng: 88.370000, token: '' },
+  };
+
+  function log(type, eventName, data) {
+    const box = document.getElementById('logBox');
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type === 'in' ? 'log-in' : type === 'out' ? 'log-out' : 'log-err'}`;
+    const time = new Date().toLocaleTimeString();
+    const badgeClass = type === 'in' ? 'badge-in' : type === 'out' ? 'badge-out' : 'badge-sys';
+    entry.innerHTML = `<span class="log-time">${time}</span><span class="badge ${badgeClass}">${type.toUpperCase()}</span> <strong>${eventName}</strong> <pre style="margin-top:4px;white-space:pre-wrap;color:#e2e8f0;">${JSON.stringify(data, null, 2)}</pre>`;
+    box.appendChild(entry);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function clearLogs() {
+    document.getElementById('logBox').innerHTML = '';
+  }
+
+  function switchDriver(index) {
+    if (socket && socket.connected) {
+      if (!confirm(`Disconnect Driver ${activeDriverIndex} and switch to Driver ${index}?`)) return;
+      disconnectSocket();
+    }
+    activeDriverIndex = index;
+    document.querySelectorAll('.tab-btn').forEach((b, i) => {
+      b.classList.toggle('active', i + 1 === index);
+    });
+    document.getElementById('driverLabel').innerText = `(${DRIVER_PRESETS[index].name})`;
+    document.getElementById('driverLat').value = DRIVER_PRESETS[index].lat;
+    document.getElementById('driverLng').value = DRIVER_PRESETS[index].lng;
+    document.getElementById('jwtToken').value = DRIVER_PRESETS[index].token;
+    if (!DRIVER_PRESETS[index].token) fetchDevToken();
+  }
+
+  async function fetchDevToken() {
+    try {
+      const url = document.getElementById('socketUrl').value;
+      const res = await fetch(`${url}/socket-test/quick-auth?role=driver&index=${activeDriverIndex}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.DATA?.token) {
+          document.getElementById('jwtToken').value = json.DATA.token;
+          DRIVER_PRESETS[activeDriverIndex].token = json.DATA.token;
+          log('sys', 'TOKEN_LOADED', { driverId: json.DATA.user?.id, name: json.DATA.user?.name });
+          return;
+        }
+      }
+    } catch (e) {
+      log('err', 'AUTH_ERROR', 'Could not auto-fetch token. You can paste token manually.');
+    }
+  }
+
+  function toggleConnect() {
+    if (socket && socket.connected) disconnectSocket();
+    else connectSocket();
+  }
+
+  function connectSocket() {
+    const url = document.getElementById('socketUrl').value.replace(/\/$/, '');
+    const token = document.getElementById('jwtToken').value.trim();
+    if (!token) { alert('Please enter or fetch a driver JWT token'); return; }
+
+    const statusBadge = document.getElementById('socketStatus');
+    statusBadge.className = 'status-badge status-disconnected';
+    statusBadge.innerText = 'Connecting...';
+
+    socket = io(`${url}/driver`, {
+      auth: { token },
+      query: { token },
+      transports: ['websocket', 'polling'],
+    });
+
+    socket.on('connect', () => {
+      statusBadge.className = 'status-badge status-connected';
+      statusBadge.innerText = 'Connected';
+      document.getElementById('btnConnect').innerText = 'Disconnect';
+      log('sys', 'CONNECTED', { socketId: socket.id, namespace: '/driver' });
+    });
+
+    socket.on('disconnect', (reason) => {
+      statusBadge.className = 'status-badge status-disconnected';
+      statusBadge.innerText = 'Disconnected';
+      document.getElementById('btnConnect').innerText = 'Connect';
+      log('sys', 'DISCONNECTED', { reason });
+    });
+
+    socket.on('connect_error', (err) => {
+      statusBadge.className = 'status-badge status-disconnected';
+      statusBadge.innerText = 'Error';
+      log('err', 'CONNECT_ERROR', err.message);
+    });
+
+    // ── Inbound Driver Events ──────────────────────────────────────────
+    socket.on('status', (data) => log('in', 'status', data));
+    socket.on('error', (data) => log('err', 'error', data));
+
+    // Ride dispatch offer
+    socket.on('ride:new_request', (offer) => {
+      log('in', 'ride:new_request', offer);
+      showOfferAlert(offer);
+    });
+
+    socket.on('ride:accept_ok', (data) => {
+      log('in', 'ride:accept_ok', data);
+      hideOfferAlert();
+      document.getElementById('activeRideId').value = data.rideId;
+      alert(`🎉 Ride accepted successfully! Status: ${data.status}`);
+    });
+
+    socket.on('ride:accept_error', (data) => {
+      log('err', 'ride:accept_error', data);
+      alert(`❌ Accept failed: ${data.message}`);
+    });
+
+    socket.on('ride:taken', (data) => {
+      log('in', 'ride:taken', data);
+      hideOfferAlert();
+      alert(`⚠️ Ride ${data.rideId} was accepted by another driver.`);
+    });
+
+    socket.on('ride:cancelled_by_rider', (data) => {
+      log('in', 'ride:cancelled_by_rider', data);
+      alert(`⚠️ Rider cancelled ride ${data.rideId}.`);
+    });
+
+    // Chat
+    socket.on('chat:message', (msg) => {
+      log('in', 'chat:message', msg);
+      alert(`💬 Rider: ${msg.content}`);
+    });
+    socket.on('chat:send_ok', (data) => log('in', 'chat:send_ok', data));
+    socket.on('chat:error', (err) => log('err', 'chat:error', err));
+  }
+
+  function disconnectSocket() {
+    if (socket) {
+      socket.disconnect();
+      socket = null;
+    }
+  }
+
+  function emitGoOnline() {
+    if (!socket || !socket.connected) return alert('Connect socket first!');
+    const lat = parseFloat(document.getElementById('driverLat').value);
+    const lng = parseFloat(document.getElementById('driverLng').value);
+    const payload = { lat, lng };
+    socket.emit('go_online', payload);
+    log('out', 'go_online', payload);
+  }
+
+  function emitGoOffline() {
+    if (!socket || !socket.connected) return alert('Connect socket first!');
+    socket.emit('go_offline');
+    log('out', 'go_offline', {});
+    stopGpsSimulation();
+  }
+
+  function emitLocationUpdate() {
+    if (!socket || !socket.connected) return alert('Connect socket first!');
+    const lat = parseFloat(document.getElementById('driverLat').value);
+    const lng = parseFloat(document.getElementById('driverLng').value);
+    const payload = {
+      lat, lng,
+      accuracy: 5.0,
+      speedKmh: 32.0,
+      recordedAt: new Date().toISOString(),
+    };
+    socket.emit('location_update', payload);
+    log('out', 'location_update', payload);
+  }
+
+  function toggleGpsSimulation() {
+    if (gpsSimInterval) stopGpsSimulation();
+    else startGpsSimulation();
+  }
+
+  function startGpsSimulation() {
+    if (!socket || !socket.connected) return alert('Connect socket first!');
+    document.getElementById('btnSimGps').innerText = '⏹️ Stop GPS Simulation';
+    document.getElementById('btnSimGps').className = 'btn btn-danger';
+    gpsSimInterval = setInterval(() => {
+      let lat = parseFloat(document.getElementById('driverLat').value);
+      let lng = parseFloat(document.getElementById('driverLng').value);
+      lat += (Math.random() - 0.48) * 0.0003;
+      lng += (Math.random() - 0.48) * 0.0003;
+      document.getElementById('driverLat').value = lat.toFixed(6);
+      document.getElementById('driverLng').value = lng.toFixed(6);
+      emitLocationUpdate();
+    }, 3000);
+    log('sys', 'SIMULATION_STARTED', 'Broadcasting moving GPS location every 3s...');
+  }
+
+  function stopGpsSimulation() {
+    if (gpsSimInterval) {
+      clearInterval(gpsSimInterval);
+      gpsSimInterval = null;
+      document.getElementById('btnSimGps').innerText = '🚗 Start Moving Simulation';
+      document.getElementById('btnSimGps').className = 'btn btn-warning';
+      log('sys', 'SIMULATION_STOPPED', 'GPS movement simulation stopped.');
+    }
+  }
+
+  function showOfferAlert(offer) {
+    currentOffer = offer;
+    document.getElementById('offerAlert').style.display = 'block';
+    document.getElementById('btnAcceptRideId').innerText = offer.rideId.slice(0, 8);
+    document.getElementById('offerDetails').innerHTML = `
+      <strong>Pickup:</strong> ${offer.pickupAddress || 'Coordinates (' + offer.pickupLat + ', ' + offer.pickupLng + ')'}<br/>
+      <strong>Drop:</strong> ${offer.dropAddress || 'Coordinates (' + offer.dropLat + ', ' + offer.dropLng + ')'}<br/>
+      <strong>Estimated Fare:</strong> ${offer.currency || 'INR'} ${offer.estimatedFare || '0'} | <strong>Trip Distance:</strong> ${offer.distanceKm || '0'} km
+    `;
+    let remaining = 15;
+    document.getElementById('offerTimer').innerText = `${remaining}s`;
+    clearInterval(offerCountdownInterval);
+    offerCountdownInterval = setInterval(() => {
+      remaining--;
+      document.getElementById('offerTimer').innerText = `${remaining}s`;
+      if (remaining <= 0) {
+        clearInterval(offerCountdownInterval);
+        hideOfferAlert();
+      }
+    }, 1000);
+  }
+
+  function hideOfferAlert() {
+    document.getElementById('offerAlert').style.display = 'none';
+    clearInterval(offerCountdownInterval);
+    currentOffer = null;
+  }
+
+  function acceptCurrentOffer() {
+    if (!currentOffer || !socket) return;
+    const rideId = currentOffer.rideId;
+    socket.emit('ride:accept', { rideId });
+    log('out', 'ride:accept', { rideId });
+  }
+
+  function declineCurrentOffer() {
+    if (!currentOffer || !socket) return;
+    const rideId = currentOffer.rideId;
+    socket.emit('ride:decline', { rideId, reason: 'Declined from portal' });
+    log('out', 'ride:decline', { rideId, reason: 'Declined from portal' });
+    hideOfferAlert();
+  }
+
+  function emitSendChat() {
+    const rideId = document.getElementById('activeRideId').value.trim();
+    const content = document.getElementById('chatContent').value.trim();
+    if (!rideId || !content) return alert('Enter Ride ID and message');
+    socket.emit('chat:send', { rideId, content, messageType: 'text' });
+    log('out', 'chat:send', { rideId, content });
+    document.getElementById('chatContent').value = '';
+  }
+
+  function emitMarkChatRead() {
+    const rideId = document.getElementById('activeRideId').value.trim();
+    if (!rideId) return alert('Enter Ride ID');
+    socket.emit('chat:read', { rideId });
+    log('out', 'chat:read', { rideId });
+  }
+
+  // Load dev token on page load
+  window.onload = () => { fetchDevToken(); };
+</script>
+</body>
+</html>

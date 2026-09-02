@@ -131,4 +131,25 @@ export async function subscriptionRoutes(app) {
     const { rows, pagination } = await subService.getPaymentsForDriver(request.params.driverId, page, limit, offset);
     return sendList(reply, rows, pagination);
   });
+
+  // POST /api/v1/subscriptions/admin/drivers/:driverId/initiate (Admin purchase subscription on driver behalf)
+  app.post('/admin/drivers/:driverId/initiate', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { planId } = request.body;
+    if (!planId) return sendError(reply, 'planId is required');
+    const idempotencyKey = request.headers['idempotency-key'] || `admin_sub_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const data = await subService.initiateSubscription(request.params.driverId, planId, idempotencyKey);
+    return sendSuccess(reply, data);
+  });
+
+  // POST /api/v1/subscriptions/admin/drivers/:driverId/verify (Admin verify subscription on driver behalf)
+  app.post('/admin/drivers/:driverId/verify', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { planId, orderRef, paymentRef, signature } = request.body;
+    if (!planId || !orderRef || !paymentRef) {
+      return sendError(reply, 'planId, orderRef, paymentRef are required');
+    }
+    const data = await subService.verifyAndActivate(
+      request.params.driverId, planId, orderRef, paymentRef, signature,
+    );
+    return sendSuccess(reply, data);
+  });
 }

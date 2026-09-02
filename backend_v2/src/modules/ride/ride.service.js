@@ -6,6 +6,7 @@ import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { calculateFare, validateAndLockQuote } from '../fare/fare.service.js';
 import { detectZone } from '../zone/zone.service.js';
+import { moment } from '../../utils/time.js';
 
 import {
   startMatchingProcess,
@@ -81,11 +82,12 @@ export async function requestRide({
   let isScheduled = false;
   let scheduledDate = null;
   if (scheduledAt) {
-    scheduledDate = new Date(scheduledAt);
-    if (isNaN(scheduledDate.getTime())) throw { statusCode: 400, message: 'Invalid scheduledAt date format' };
-    if (scheduledDate.getTime() < Date.now() + 25 * 60 * 1000) {
+    const scheduledMoment = moment(scheduledAt);
+    if (!scheduledMoment.isValid()) throw { statusCode: 400, message: 'Invalid scheduledAt date format' };
+    if (scheduledMoment.isBefore(moment().add(25, 'minutes'))) {
       throw { statusCode: 400, message: 'Scheduled rides must be booked at least 30 minutes in advance' };
     }
+    scheduledDate = scheduledMoment.toDate();
     isScheduled = true;
   }
 
@@ -158,7 +160,7 @@ export async function requestRide({
 
     // Generate public trip tracking token for the guest passenger
     const token = crypto.randomBytes(16).toString('hex');
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48h
+    const expiresAt = moment().add(48, 'hours').toDate();
     const [share] = await db.insert(tripShareTokens).values({
       rideId: ride.id,
       riderId,

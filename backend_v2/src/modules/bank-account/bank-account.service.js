@@ -2,6 +2,8 @@ import { eq } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { driverBankAccounts, driverPayoutAccounts, drivers } from '../../../drizzle/schema/index.js';
 import { encrypt } from '../../utils/encryption.js';
+import { gatewayRegistry } from '../payment/registry.js';
+import { countries } from '../../../drizzle/schema/index.js';
 import { razorpayGateway } from '../payment/gateways/razorpay.gateway.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 
@@ -53,21 +55,20 @@ export async function submitBankDetails(driverId, data, actor = { id: driverId, 
     ? await db.update(driverBankAccounts).set(values).where(eq(driverBankAccounts.driverId, driverId)).returning()
     : await db.insert(driverBankAccounts).values(values).returning();
 
-  let [payoutAccount] = await db.select().from(driverPayoutAccounts).where(eq(driverPayoutAccounts.driverId, driverId)).limit(1);
+  const [country] = await db.select({ isoCode: countries.isoCode }).from(countries).where(eq(countries.id, driver.countryId)).limit(1);
+  const gateway = gatewayRegistry.getForCountry(country?.isoCode || 'IN');
 
-  // UPI takes priority when both are submitted — it's the simpler, faster, and (in India) far
-  // more commonly used rail; a driver only falls back to the bank-account fund account when
-  // they haven't given a UPI id.
+  let [payoutAccount] = await db.select().from(driverPayoutAccounts).where(eq(driverPayoutAccounts.driverId, driverId)).limit(1);
   let razorpayContactId = payoutAccount?.razorpayContactId ?? null;
   let razorpayFundAccountId = null;
   let razorpayFundAccountType = null;
-  if (razorpayGateway.isConfigured && (upiId || accountNumber)) {
+  if (gateway && gateway.name === 'razorpay' && gateway.isConfigured && (upiId || accountNumber)) {
     if (!razorpayContactId) {
-      ({ razorpayContactId } = await razorpayGateway.createContact({
+      ({ razorpayContactId } = await gateway.createContact({
         name: driver.name, email: driver.email, phone: driver.phone, referenceId: driverId,
       }));
     }
-    ({ razorpayFundAccountId, razorpayFundAccountType } = await razorpayGateway.createFundAccount(
+    ({ razorpayFundAccountId, razorpayFundAccountType } = await gateway.createFundAccount(
       upiId
         ? { contactId: razorpayContactId, upiId }
         : { contactId: razorpayContactId, bankAccount: { name: accountHolderName || driver.name, routingCode, accountNumber } },
@@ -102,7 +103,7 @@ export async function submitBankDetails(driverId, data, actor = { id: driverId, 
   }
 
   const payoutValues = {
-    driverId, gateway: 'razorpay',
+    driverId, gateway: gateway?.name || 'razorpay',
     status: isAutoVerified ? 'approved' : 'pending',
     rejectionReason: null,
     verifiedBy: null,

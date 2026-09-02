@@ -1,6 +1,7 @@
 import { eq, and, or, sql, gte, lte } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { driverReservations } from '../../../drizzle/schema/index.js';
+import { moment } from '../../utils/time.js';
 
 /**
  * Driver Reservation Service for Scheduled Rides
@@ -15,8 +16,8 @@ const DEFAULT_POST_TRIP_BUFFER_MIN = 15; // 15 mins buffer after trip end
  * Checks if a driver has an overlapping confirmed reservation.
  */
 export async function isDriverReservedForTime(driverId, targetTime = new Date(), bufferMinutes = 45) {
-  const checkTime = new Date(targetTime);
-  const bufferEnd = new Date(checkTime.getTime() + bufferMinutes * 60 * 1000);
+  const checkTime = moment(targetTime).toDate();
+  const bufferEnd = moment(targetTime).add(bufferMinutes, 'minutes').toDate();
 
   const [conflict] = await db
     .select({ id: driverReservations.id })
@@ -42,11 +43,9 @@ export async function createDriverReservation({
   scheduledAt,
   estimatedDurationMin = 30,
 }) {
-  const pickupTime = new Date(scheduledAt);
-  const windowStart = new Date(pickupTime.getTime() - DEFAULT_PRE_TRIP_BUFFER_MIN * 60 * 1000);
-  const windowEnd = new Date(
-    pickupTime.getTime() + (estimatedDurationMin + DEFAULT_POST_TRIP_BUFFER_MIN) * 60 * 1000
-  );
+  const pickupTime = moment(scheduledAt);
+  const windowStart = pickupTime.clone().subtract(DEFAULT_PRE_TRIP_BUFFER_MIN, 'minutes').toDate();
+  const windowEnd = pickupTime.clone().add(estimatedDurationMin + DEFAULT_POST_TRIP_BUFFER_MIN, 'minutes').toDate();
 
   const [reservation] = await db
     .insert(driverReservations)

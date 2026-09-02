@@ -4,9 +4,10 @@ import { rides } from '../../drizzle/schema/index.js';
 import { startMatchingProcess } from '../modules/matching/matching.service.js';
 import { recordStatusChange } from '../modules/ride/ride_status_history.service.js';
 import { publishEvent, TOPICS } from '../config/kafka.js';
+import { moment } from '../utils/time.js';
 
 export async function dispatchDueScheduledRides() {
-  const dispatchThreshold = new Date(Date.now() + 15 * 60 * 1000); // 15 mins from now
+  const dispatchThreshold = moment().add(15, 'minutes').toDate(); // 15 mins from now
 
   const dueRides = await db.select().from(rides).where(and(
     eq(rides.status, 'scheduled'),

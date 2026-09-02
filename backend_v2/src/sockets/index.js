@@ -179,21 +179,25 @@ export function initSocketIO(fastifyServer, app) {
       socket.emit('status', { isOnline: false });
     });
 
-    // ── location_update ────────────────────────────────────────────────────
-    // Bug 3 fix: attach rideId + riderId from Redis so Kafka consumer can
-    //            route this to the correct rider without a DB lookup.
     socket.on('location_update', async ({ lat, lng, accuracy, speedKmh, recordedAt }) => {
       try {
-        // Always update Redis live position (TTL 30s)
-        await redis.setex(REDIS_KEYS.driverLocation(driverId), 30, JSON.stringify({ lat, lng }));
-        await upsertDriverCell(driverId, lat, lng);
+        const now = recordedAt ? new Date(recordedAt) : new Date();
+        const nowMs = now.getTime();
+
+        // Always update Redis live position (TTL 30s) with freshness timestamp
+        await redis.setex(REDIS_KEYS.driverLocation(driverId), 30, JSON.stringify({ lat, lng, updatedAt: nowMs }));
+        await upsertDriverCell(driverId, lat, lng, undefined, nowMs);
+
+        // Update database with latest coordinates and location timestamp
+        await db.update(drivers).set({
+          currentLat: String(lat),
+          currentLng: String(lng),
+          lastLocationAt: now,
+        }).where(eq(drivers.id, driverId));
 
         // Bug 3 fix: handleDriverLocationUpdate reads {rideId,riderId} from Redis
         //            and calls the correct tracking phase (approach or trip)
         await handleDriverLocationUpdate(driverId, lat, lng, { accuracy, speedKmh, recordedAt });
-
-        // Also write to DB every ~30s by letting Redis expire as the signal
-        // (a BullMQ job can batch-flush; here we just keep Redis fresh)
       } catch (err) {
         console.error('[Socket/driver] location_update error:', err.message);
       }

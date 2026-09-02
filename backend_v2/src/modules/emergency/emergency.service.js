@@ -6,6 +6,7 @@ import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { paginate } from '../../utils/response.js';
 import { publishNotification } from '../notification/notification-events.js';
+import { moment } from '../../utils/time.js';
 
 // ── Trusted Contacts ─────────────────────────────────────────────────────────
 
@@ -131,7 +132,7 @@ export async function generateShareToken(rideId, riderId) {
     .where(and(eq(tripShareTokens.rideId, rideId), eq(tripShareTokens.riderId, riderId)))
     .limit(1);
 
-  if (existing && new Date(existing.expiresAt) > new Date()) {
+  if (existing && moment(existing.expiresAt).isAfter(moment())) {
     return {
       token: existing.token,
       sharePath: `/api/v1/tracking/public/${existing.token}`,
@@ -140,7 +141,7 @@ export async function generateShareToken(rideId, riderId) {
   }
 
   const token = crypto.randomBytes(16).toString('hex');
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h validity
+  const expiresAt = moment().add(24, 'hours').toDate(); // 24h validity
 
   const [created] = await db.insert(tripShareTokens).values({
     rideId,
@@ -163,7 +164,7 @@ export async function getPublicTripTracking(token) {
     .where(eq(tripShareTokens.token, token)).limit(1);
 
   if (!shareRecord) throw { statusCode: 404, message: 'Invalid or expired trip share link' };
-  if (new Date(shareRecord.expiresAt) < new Date()) {
+  if (moment(shareRecord.expiresAt).isBefore(moment())) {
     throw { statusCode: 410, message: 'This trip share link has expired' };
   }
 

@@ -1,4 +1,4 @@
-import { Kafka, logLevel } from 'kafkajs';
+import { Kafka, Partitioners, logLevel } from 'kafkajs';
 import { env } from './env.js';
 
 export const kafka = new Kafka({
@@ -10,6 +10,7 @@ export const kafka = new Kafka({
     retries: 10,
   },
 });
+
 
 export const TOPICS = {
   RIDE_REQUESTED: 'ride.requested',
@@ -38,7 +39,10 @@ let _producer = null;
 
 export async function getProducer() {
   if (_producer) return _producer;
-  _producer = kafka.producer({ allowAutoTopicCreation: false });
+  _producer = kafka.producer({
+    allowAutoTopicCreation: false,
+    createPartitioner: Partitioners.DefaultPartitioner,
+  });
   await _producer.connect();
   console.log('✅ Kafka producer connected');
   return _producer;

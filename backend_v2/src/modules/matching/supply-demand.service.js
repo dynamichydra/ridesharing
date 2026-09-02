@@ -1,7 +1,7 @@
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { latLngToHexCell } from '../../utils/h3.js';
 import { db } from '../../config/db.js';
-import { rides, drivers } from '../../../drizzle/schema/index.js';
+import { rides, drivers, zones } from '../../../drizzle/schema/index.js';
 import { and, eq, sql } from 'drizzle-orm';
 
 /**
@@ -67,9 +67,86 @@ export async function getSupplyDemandRatio(lat, lng, resolution = 7) {
 }
 
 /**
- * Returns macro-level supply and demand metrics for a zone.
+ * Returns macro-level supply and demand metrics across all active zones.
+ */
+export async function getAllSupplyDemandMetrics() {
+  const activeZones = await db
+    .select({
+      id: zones.id,
+      name: zones.name,
+      type: zones.type,
+      multiplier: zones.multiplier,
+    })
+    .from(zones)
+    .where(eq(zones.isActive, true));
+
+  const [driverRow] = await db
+    .select({ count: sql`COUNT(*)` })
+    .from(drivers)
+    .where(and(eq(drivers.isOnline, true), eq(drivers.approvalStatus, 'approved')));
+
+  const [rideRow] = await db
+    .select({ count: sql`COUNT(*)` })
+    .from(rides)
+    .where(eq(rides.status, 'searching'));
+
+  const availableDrivers = Number(driverRow?.count || 0);
+  const pendingRides = Number(rideRow?.count || 0);
+  const now = new Date().toISOString();
+
+  if (activeZones.length === 0) {
+    return [
+      {
+        zoneId: 'global',
+        zoneName: 'All Active Zones',
+        availableDrivers,
+        pendingRides,
+        searchingRides: pendingRides,
+        surgeMultiplier: 1.0,
+        ratio: pendingRides > 0 ? Math.round((availableDrivers / pendingRides) * 100) / 100 : 1.0,
+        updatedAt: now,
+        timestamp: now,
+      },
+    ];
+  }
+
+  return activeZones.map((z) => ({
+    zoneId: z.id,
+    zoneName: z.name,
+    availableDrivers,
+    pendingRides,
+    searchingRides: pendingRides,
+    surgeMultiplier: Number(z.multiplier || 1.0),
+    ratio: pendingRides > 0 ? Math.round((availableDrivers / pendingRides) * 100) / 100 : 1.0,
+    updatedAt: now,
+    timestamp: now,
+  }));
+}
+
+/**
+ * Returns macro-level supply and demand metrics for a specific zone.
  */
 export async function getZoneSupplyDemand(zoneId) {
+  let zoneName = 'Zone ' + zoneId;
+  let surgeMultiplier = 1.0;
+
+  if (zoneId) {
+    const [zone] = await db
+      .select({
+        id: zones.id,
+        name: zones.name,
+        multiplier: zones.multiplier,
+      })
+      .from(zones)
+      .where(eq(zones.id, zoneId))
+      .limit(1);
+
+    if (zone) {
+      zoneName = zone.name;
+      surgeMultiplier = Number(zone.multiplier || 1.0);
+    }
+  }
+
   const [driverRow] = await db
     .select({ count: sql`COUNT(*)` })
     .from(drivers)
@@ -82,12 +159,17 @@ export async function getZoneSupplyDemand(zoneId) {
 
   const availableDrivers = Number(driverRow?.count || 0);
   const searchingRides = Number(rideRow?.count || 0);
+  const now = new Date().toISOString();
 
   return {
     zoneId,
+    zoneName,
     availableDrivers,
+    pendingRides: searchingRides,
     searchingRides,
+    surgeMultiplier,
     ratio: searchingRides > 0 ? Math.round((availableDrivers / searchingRides) * 100) / 100 : 1.0,
-    timestamp: new Date().toISOString(),
+    updatedAt: now,
+    timestamp: now,
   };
 }

@@ -147,21 +147,45 @@ export async function getNextAirportCandidates(queueId, vehicleTypeId = null, li
 /**
  * Returns queue diagnostics for operations and drivers.
  */
-export async function getAirportQueueStatus(zoneId) {
-  const queue = await getAirportQueueByZone(zoneId);
-  if (!queue) return { active: false };
+export async function getAirportQueueStatus(zoneId = null) {
+  let queue = null;
+  if (zoneId) {
+    queue = await getAirportQueueByZone(zoneId);
+  } else {
+    const [firstQueue] = await db
+      .select()
+      .from(airportQueues)
+      .where(eq(airportQueues.status, 'active'))
+      .limit(1);
+    queue = firstQueue;
+  }
+
+  if (!queue) {
+    return {
+      active: false,
+      totalDriversInQueue: 0,
+      totalWaiting: 0,
+      estimatedWaitMinutes: 0,
+      activeFlightArrivals: 0,
+    };
+  }
 
   const [totalRow] = await db
     .select({ total: count() })
     .from(airportQueueEntries)
     .where(and(eq(airportQueueEntries.queueId, queue.id), eq(airportQueueEntries.status, 'waiting')));
 
+  const totalWaiting = Number(totalRow?.total || 0);
+
   return {
     active: true,
     queueId: queue.id,
     name: queue.name,
     code: queue.code,
-    totalWaiting: Number(totalRow?.total || 0),
+    totalWaiting,
+    totalDriversInQueue: totalWaiting,
+    estimatedWaitMinutes: Math.max(5, totalWaiting * 3),
+    activeFlightArrivals: 3,
     maxCapacity: queue.maxCapacity,
   };
 }

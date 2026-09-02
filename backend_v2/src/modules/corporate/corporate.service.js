@@ -7,6 +7,7 @@ import {
 import { postTransaction, getOrCreateSystemAccount } from '../ledger/ledger.service.js';
 import { createFinancialTransaction } from '../ledger/financial-transaction.service.js';
 import { paginate } from '../../utils/response.js';
+import { moment } from '../../utils/time.js';
 
 export async function createCorporateAccount(data) {
   const [account] = await db.insert(corporateAccounts).values(data).returning();
@@ -69,14 +70,13 @@ export async function generateCorporateInvoice(corporateAccountId, periodStart, 
   if (!account) throw { statusCode: 404, message: 'Corporate account not found' };
 
   const invoiceNumber = `INV-CORP-${Date.now()}`;
-  const dueDate = new Date();
-  dueDate.setDate(dueDate.getDate() + 30); // Net 30 default
+  const dueDate = moment().add(30, 'days').toDate(); // Net 30 default
 
   const [invoice] = await db.insert(corporateInvoices).values({
     corporateAccountId,
     invoiceNumber,
-    periodStart: new Date(periodStart),
-    periodEnd: new Date(periodEnd),
+    periodStart: moment(periodStart).toDate(),
+    periodEnd: moment(periodEnd).toDate(),
     subtotalMinor: account.currentExposureMinor,
     totalMinor: account.currentExposureMinor,
     currencyCode: account.currencyCode,

@@ -2,6 +2,7 @@ import { eq, and, gt } from 'drizzle-orm';
 import { db } from '../../../config/db.js';
 import { fareQuotes } from '../../../../drizzle/schema/index.js';
 import { FareEngine } from '../engine/fare.engine.js';
+import { moment } from '../../../utils/time.js';
 
 const QUOTE_VALIDITY_MINUTES = 10;
 
@@ -11,7 +12,7 @@ const QUOTE_VALIDITY_MINUTES = 10;
 export async function createFareQuote(request) {
   const fareResult = await FareEngine.calculate({ ...request, skipCache: true });
 
-  const expiresAt = new Date(Date.now() + QUOTE_VALIDITY_MINUTES * 60 * 1000);
+  const expiresAt = moment().add(QUOTE_VALIDITY_MINUTES, 'minutes').toDate();
 
   const [quote] = await db.insert(fareQuotes).values({
     riderId: request.userId || null,

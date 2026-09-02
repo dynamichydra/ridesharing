@@ -5,7 +5,7 @@ import { assignDriverToRide } from './assignment.service.js';
 import { rejectOffer, getDriverOffers } from '../ride/ride_offer.service.js';
 import { joinAirportQueue, leaveAirportQueue, getAirportQueueStatus } from './airport-queue.service.js';
 import { listMatchingPolicies, upsertMatchingPolicy } from './matching-policy.service.js';
-import { getZoneSupplyDemand } from './supply-demand.service.js';
+import { getZoneSupplyDemand, getAllSupplyDemandMetrics } from './supply-demand.service.js';
 import { runMatchingReconciliation } from './matching-reconciliation.service.js';
 import { sendSuccess, sendError } from '../../utils/response.js';
 
@@ -138,10 +138,6 @@ export async function handleLeaveAirportQueue(request, reply) {
 
 export async function handleGetAirportQueueStatus(request, reply) {
   const { zoneId } = request.query || {};
-  if (!zoneId) {
-    return sendError(reply, 'zoneId query param required', 400);
-  }
-
   const status = await getAirportQueueStatus(zoneId);
   return sendSuccess(reply, status);
 }
@@ -185,7 +181,8 @@ export async function handleGetActiveDispatchJobs(request, reply) {
 export async function handleGetSupplyDemand(request, reply) {
   const { zoneId } = request.query || {};
   if (!zoneId) {
-    return sendError(reply, 'zoneId query param required', 400);
+    const metrics = await getAllSupplyDemandMetrics();
+    return sendSuccess(reply, metrics);
   }
 
   const metrics = await getZoneSupplyDemand(zoneId);

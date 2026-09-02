@@ -318,7 +318,20 @@ export async function getLiveMonitoringAlerts() {
   }
 
   const eventLogs = recentLogs.map((l) => {
-    const timeStr = new Date(l.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    let isoTimestamp = new Date().toISOString();
+    let timeStr = '';
+    if (l.createdAt) {
+      const d = new Date(l.createdAt);
+      if (!isNaN(d.getTime())) {
+        isoTimestamp = d.toISOString();
+        const hours = d.getUTCHours();
+        const minutes = d.getUTCMinutes();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        const formattedHours = hours % 12 || 12;
+        const formattedMinutes = minutes < 10 ? `0${minutes}` : String(minutes);
+        timeStr = `${String(formattedHours).padStart(2, '0')}:${formattedMinutes} ${ampm}`;
+      }
+    }
     let label = `Ride #${String(l.rideId).slice(0, 6)} changed to ${l.toStatus}`;
     let level = 'info';
 

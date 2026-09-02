@@ -1,4 +1,5 @@
 import { redis, REDIS_KEYS } from '../../config/redis.js';
+import { moment } from '../../utils/time.js';
 
 const DESTINATION_KEY = (driverId) => `driver:destination_mode:${driverId}`;
 
@@ -47,7 +48,7 @@ export async function setDestinationMode(driverId, { lat, lng, address, radiusKm
   }
 
   const durationSec = Math.min(Math.max(durationHours, 1), 8) * 3600;
-  const expiresAt = new Date(Date.now() + durationSec * 1000).toISOString();
+  const expiresAt = moment().add(durationSec, 'seconds').toISOString();
 
   const data = {
     driverId,

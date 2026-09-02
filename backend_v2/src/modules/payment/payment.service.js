@@ -1,24 +1,12 @@
 import { eq, and, asc, lte, or, isNull } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { paymentProviderRoutes, providerHealth } from '../../../drizzle/schema/index.js';
+import { gatewayRegistry } from './registry.js';
 import { razorpayGateway } from './gateways/razorpay.gateway.js';
 import { stripeGateway } from './gateways/stripe.gateway.js';
 
-const GATEWAYS = {
-  razorpay: razorpayGateway,
-  stripe: stripeGateway,
-};
-
-const DEFAULT_CURRENCY_GATEWAY = {
-  INR: 'razorpay',
-  CAD: 'stripe',
-  USD: 'stripe',
-  EUR: 'stripe',
-  GBP: 'stripe',
-};
-
 export function getGateway(name) {
-  const gateway = GATEWAYS[name];
+  const gateway = gatewayRegistry.get(name);
   if (!gateway) throw { statusCode: 400, message: `Unknown payment gateway: ${name}` };
   return gateway;
 }
@@ -53,7 +41,7 @@ export async function selectGateway({
       .orderBy(asc(paymentProviderRoutes.priority));
 
     for (const route of routes) {
-      const gw = GATEWAYS[route.gateway];
+      const gw = gatewayRegistry.get(route.gateway);
       if (gw && gw.isConfigured) {
         // Check circuit state
         const [health] = await db.select().from(providerHealth)
@@ -69,10 +57,8 @@ export async function selectGateway({
     // Database query fallback if table is empty or initializing
   }
 
-  // Fallback to static mapping
-  const fallbackName = DEFAULT_CURRENCY_GATEWAY[currencyCode] || 'razorpay';
-  const fallbackGateway = GATEWAYS[fallbackName];
-
+  // Fallback to registry mapping
+  const fallbackGateway = gatewayRegistry.getForCurrency(currencyCode);
   if (fallbackGateway && fallbackGateway.isConfigured) {
     return fallbackGateway;
   }
@@ -83,7 +69,6 @@ export async function selectGateway({
 
 /** Returns null (not a throw) when the mapped gateway has no keys configured yet. */
 export function gatewayForCurrency(currencyCode) {
-  const name = DEFAULT_CURRENCY_GATEWAY[currencyCode];
-  const gateway = GATEWAYS[name];
+  const gateway = gatewayRegistry.getForCurrency(currencyCode);
   return (gateway && gateway.isConfigured) ? gateway : null;
 }

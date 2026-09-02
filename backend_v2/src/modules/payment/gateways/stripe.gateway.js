@@ -13,6 +13,57 @@ export const stripeGateway = {
   name: 'stripe',
   isConfigured: isStripeConfigured,
   supportsPayouts: true,
+  onboardingType: 'hosted_redirect',
+
+  getSetupFormSchema(context = {}) {
+    return {
+      gateway: 'stripe',
+      type: 'hosted_redirect',
+      title: 'Stripe Express Payouts',
+      description: 'Stripe securely verifies your identity and bank transit/account numbers in your country.',
+      supportedCurrencies: ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'SGD', 'JPY'],
+      requiresRedirect: true,
+    };
+  },
+
+  async setupPayoutAccount(driver, data = {}, options = {}) {
+    if (!this.isConfigured) throw { statusCode: 503, message: 'Stripe is not configured' };
+    if (!driver.email) throw { statusCode: 422, message: 'Driver must have an email on file before starting Stripe onboarding' };
+
+    let stripeAccountId = options.existingAccountId || null;
+    if (!stripeAccountId) {
+      const countryCode = options.countryCode || 'CA';
+      const created = await this.createConnectedAccount({ email: driver.email, countryCode });
+      stripeAccountId = created.stripeAccountId;
+    }
+
+    const baseUrl = env.APP_BASE_URL || `http://localhost:${env.PORT}`;
+    const prefix = `${baseUrl}/api/${env.API_VERSION}/payout-accounts/stripe`;
+    const { url } = await this.createOnboardingLink({
+      stripeAccountId,
+      refreshUrl: env.DRIVER_APP_ONBOARDING_REFRESH_URL || `${prefix}/onboarding-refresh`,
+      returnUrl: env.DRIVER_APP_ONBOARDING_RETURN_URL || `${prefix}/onboarding-return`,
+    });
+
+    return {
+      gateway: 'stripe',
+      type: 'hosted_redirect',
+      onboardingUrl: url,
+      externalAccountId: stripeAccountId,
+      stripeAccountId,
+      status: 'pending',
+      requiresRedirect: true,
+    };
+  },
+
+  async executePayout({ destinationId, amountMinor, currencyCode, idempotencyKey }) {
+    return this.payout({
+      stripeAccountId: destinationId,
+      amountMinor,
+      currencyCode,
+      idempotencyKey,
+    });
+  },
 
   async createPlan({ name, priceMinor, currencyCode, period, interval, metadata }) {
     const product = await client.products.create({ name, metadata: stringifyMetadata(metadata) });

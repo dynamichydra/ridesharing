@@ -85,6 +85,7 @@ export async function calculateDynamicRadius({
 export async function discoverCandidatesInRadius(pickupLat, pickupLng, radiusKm, excludedDriverIds = []) {
   // 1. Fetch H3 cell driver pool (bounded spatial index)
   let candidateIds = await getH3CandidateDriverIds(pickupLat, pickupLng, radiusKm);
+  console.log({ candidateIds });
 
   // 2. Fallback to Redis GEO if H3 pool is empty or not yet warmed
   if (candidateIds.length === 0) {
@@ -144,7 +145,7 @@ export async function discoverCandidatesInRadius(pickupLat, pickupLng, radiusKm,
       d.current_lat::float   AS "currentLat",
       d.current_lng::float   AS "currentLng",
       d.updated_at           AS "updatedAt",
-      d.last_seen_at         AS "lastSeenAt",
+      d.last_location_at     AS "lastSeenAt",
       sp.priority_matching   AS "priorityMatching",
       ROUND(
         (6371 * acos(
@@ -174,5 +175,44 @@ export async function discoverCandidatesInRadius(pickupLat, pickupLng, radiusKm,
     LIMIT 50
   `);
 
-  return rows.rows;
+  // Enrich Postgres records with live Redis location / timestamp if available
+  const enrichedCandidates = await Promise.all(
+    rows.rows.map(async (driver) => {
+      try {
+        const [locRaw, hexRaw] = await Promise.all([
+          redis.get(REDIS_KEYS.driverLocation(driver.id)),
+          redis.get(REDIS_KEYS.driverHexCurrent(driver.id)),
+        ]);
+
+        let liveUpdatedAt = null;
+        if (locRaw) {
+          const parsed = JSON.parse(locRaw);
+          if (parsed?.lat != null && parsed?.lng != null) {
+            driver.currentLat = parseFloat(parsed.lat);
+            driver.currentLng = parseFloat(parsed.lng);
+          }
+          if (parsed?.updatedAt) {
+            liveUpdatedAt = new Date(parsed.updatedAt).toISOString();
+          }
+        }
+        if (!liveUpdatedAt && hexRaw) {
+          const parsedHex = JSON.parse(hexRaw);
+          if (parsedHex?.updatedAt) {
+            liveUpdatedAt = new Date(parsedHex.updatedAt).toISOString();
+          }
+        }
+
+        if (liveUpdatedAt) {
+          driver.lastSeenAt = liveUpdatedAt;
+          driver.lastLocationAt = liveUpdatedAt;
+        }
+      } catch (err) {
+        // non-fatal
+      }
+      return driver;
+    })
+  );
+
+  console.log(`[CandidateDiscovery] Discovered ${enrichedCandidates.length} candidate(s) within ${radiusKm}km.`);
+  return enrichedCandidates;
 }

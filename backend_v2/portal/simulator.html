@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RideShare Unified 4-Driver & 1-Rider Dispatch Simulator</title>
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <style>
+    :root {
+      --bg: #070a12;
+      --card: #0f172a;
+      --card-alt: #1e293b;
+      --border: #334155;
+      --primary: #3b82f6;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --purple: #8b5cf6;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 16px; line-height: 1.4; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+    h1 { font-size: 20px; font-weight: 700; color: #fff; }
+    .layout { display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px; }
+    @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+    .drivers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 700px) { .drivers-grid { grid-template-columns: 1fr; } }
+    .driver-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; position: relative; }
+    .driver-card.highlight { border-color: var(--warning); box-shadow: 0 0 10px rgba(245, 158, 11, 0.4); }
+    .driver-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: 700; font-size: 13px; }
+    .badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
+    .badge-off { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+    .badge-on { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+    .badge-offer { background: rgba(245, 158, 11, 0.3); color: var(--warning); border: 1px solid var(--warning); animation: blink 1s infinite; }
+    @keyframes blink { 50% { opacity: 0.5; } }
+    .btn { background: var(--primary); color: #fff; border: none; padding: 6px 10px; border-radius: 6px; font-weight: 600; font-size: 11px; cursor: pointer; transition: 0.1s; }
+    .btn:hover { opacity: 0.9; }
+    .btn-success { background: #059669; }
+    .btn-danger { background: #dc2626; }
+    .btn-warning { background: #d97706; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .rider-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+    .offer-box { background: rgba(245, 158, 11, 0.15); border: 1px solid var(--warning); border-radius: 6px; padding: 8px; margin-top: 8px; font-size: 11px; display: none; }
+    .log-box { height: 260px; overflow-y: auto; background: #040711; border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-family: monospace; font-size: 11px; }
+    .log-row { margin-bottom: 4px; padding: 2px 4px; border-radius: 3px; }
+    .log-d1 { color: #60a5fa; }
+    .log-d2 { color: #34d399; }
+    .log-d3 { color: #fbbf24; }
+    .log-d4 { color: #f472b6; }
+    .log-rider { color: #a78bfa; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🚗 RideShare Multi-Driver & Rider Simulator</h1>
+    <div style="font-size:12px;color:var(--text-muted);">Simulate 4 Drivers + 1 Rider simultaneously in real-time.</div>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button class="btn btn-success" onclick="connectAll()">⚡ 1-Click Connect All (4 Drivers + Rider)</button>
+    <button class="btn btn-warning" onclick="goOnlineAll()">🟢 Go Online All</button>
+    <button class="btn btn-danger" onclick="disconnectAll()">Disconnect All</button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- Left: 4 Drivers Grid -->
+  <div>
+    <div style="font-size:14px;font-weight:700;margin-bottom:8px;color:#fff;">4 Candidate Drivers (/driver namespace)</div>
+    <div class="drivers-grid">
+      <!-- Driver 1 -->
+      <div class="driver-card" id="card_d1">
+        <div class="driver-header">
+          <span>🚗 Driver 1 (Subrata)</span>
+          <span id="badge_d1" class="badge badge-off">Disconnected</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">
+          Pos: <span id="pos_d1">22.5726, 88.3638</span>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-success" onclick="driverAction(1, 'online')">Online</button>
+          <button class="btn btn-danger" onclick="driverAction(1, 'offline')">Offline</button>
+          <button class="btn btn-outline" onclick="driverAction(1, 'ping')">Ping GPS</button>
+          <button class="btn btn-warning" id="sim_d1" onclick="toggleDriverSim(1)">Drive GPS</button>
+        </div>
+        <!-- Inbound Offer Box -->
+        <div class="offer-box" id="offer_d1">
+          <div style="font-weight:700;color:var(--warning);">⚡ RIDE OFFER!</div>
+          <div id="offer_info_d1">Fare: ₹250 | Dist: 4.2 km</div>
+          <div class="btn-group" style="margin-top:6px;">
+            <button class="btn btn-success" onclick="acceptOffer(1)">✅ Accept</button>
+            <button class="btn btn-danger" onclick="declineOffer(1)">❌ Decline</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Driver 2 -->
+      <div class="driver-card" id="card_d2">
+        <div class="driver-header">
+          <span>🚗 Driver 2</span>
+          <span id="badge_d2" class="badge badge-off">Disconnected</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">
+          Pos: <span id="pos_d2">22.5780, 88.3680</span>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-success" onclick="driverAction(2, 'online')">Online</button>
+          <button class="btn btn-danger" onclick="driverAction(2, 'offline')">Offline</button>
+          <button class="btn btn-outline" onclick="driverAction(2, 'ping')">Ping GPS</button>
+          <button class="btn btn-warning" id="sim_d2" onclick="toggleDriverSim(2)">Drive GPS</button>
+        </div>
+        <div class="offer-box" id="offer_d2">
+          <div style="font-weight:700;color:var(--warning);">⚡ RIDE OFFER!</div>
+          <div id="offer_info_d2">Fare: ₹250 | Dist: 4.2 km</div>
+          <div class="btn-group" style="margin-top:6px;">
+            <button class="btn btn-success" onclick="acceptOffer(2)">✅ Accept</button>
+            <button class="btn btn-danger" onclick="declineOffer(2)">❌ Decline</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Driver 3 -->
+      <div class="driver-card" id="card_d3">
+        <div class="driver-header">
+          <span>🚗 Driver 3</span>
+          <span id="badge_d3" class="badge badge-off">Disconnected</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">
+          Pos: <span id="pos_d3">22.5650, 88.3550</span>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-success" onclick="driverAction(3, 'online')">Online</button>
+          <button class="btn btn-danger" onclick="driverAction(3, 'offline')">Offline</button>
+          <button class="btn btn-outline" onclick="driverAction(3, 'ping')">Ping GPS</button>
+          <button class="btn btn-warning" id="sim_d3" onclick="toggleDriverSim(3)">Drive GPS</button>
+        </div>
+        <div class="offer-box" id="offer_d3">
+          <div style="font-weight:700;color:var(--warning);">⚡ RIDE OFFER!</div>
+          <div id="offer_info_d3">Fare: ₹250 | Dist: 4.2 km</div>
+          <div class="btn-group" style="margin-top:6px;">
+            <button class="btn btn-success" onclick="acceptOffer(3)">✅ Accept</button>
+            <button class="btn btn-danger" onclick="declineOffer(3)">❌ Decline</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Driver 4 -->
+      <div class="driver-card" id="card_d4">
+        <div class="driver-header">
+          <span>🚗 Driver 4</span>
+          <span id="badge_d4" class="badge badge-off">Disconnected</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">
+          Pos: <span id="pos_d4">22.5850, 88.3700</span>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-success" onclick="driverAction(4, 'online')">Online</button>
+          <button class="btn btn-danger" onclick="driverAction(4, 'offline')">Offline</button>
+          <button class="btn btn-outline" onclick="driverAction(4, 'ping')">Ping GPS</button>
+          <button class="btn btn-warning" id="sim_d4" onclick="toggleDriverSim(4)">Drive GPS</button>
+        </div>
+        <div class="offer-box" id="offer_d4">
+          <div style="font-weight:700;color:var(--warning);">⚡ RIDE OFFER!</div>
+          <div id="offer_info_d4">Fare: ₹250 | Dist: 4.2 km</div>
+          <div class="btn-group" style="margin-top:6px;">
+            <button class="btn btn-success" onclick="acceptOffer(4)">✅ Accept</button>
+            <button class="btn btn-danger" onclick="declineOffer(4)">❌ Decline</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Rider Controls & Live Log -->
+  <div>
+    <!-- Rider Card -->
+    <div class="rider-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <span style="font-weight:700;font-size:14px;color:#a78bfa;">👤 Rider (/rider namespace)</span>
+        <span id="badge_rider" class="badge badge-off">Disconnected</span>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <button class="btn btn-success" style="flex:1;padding:8px;" onclick="requestRideAsRider()">🚕 1-Click Request Ride & Trigger Matching</button>
+      </div>
+
+      <div id="riderTracking" style="background:#1e293b;padding:10px;border-radius:6px;font-size:12px;display:none;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span>Ride: <strong id="r_rideId">--</strong></span>
+          <span id="r_status" style="color:var(--warning);font-weight:700;">SEARCHING</span>
+        </div>
+        <div id="r_driverDetails" style="color:var(--text-muted);">Waiting for driver acceptance...</div>
+        <div id="r_liveGps" style="margin-top:4px;color:#60a5fa;"></div>
+      </div>
+
+      <!-- In-trip Chat -->
+      <div style="display:flex;gap:6px;">
+        <input type="text" id="simChatInput" placeholder="Send chat message between driver & rider..." style="flex:1;background:#1e293b;border:1px solid var(--border);color:#fff;padding:6px 10px;border-radius:6px;font-size:12px;" />
+        <button class="btn btn-outline" onclick="sendRiderChat()">Send Rider Chat</button>
+      </div>
+    </div>
+
+    <!-- Live Unified Log Stream -->
+    <div class="rider-card" style="margin-bottom:0;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-weight:700;font-size:13px;">Live Dispatch & Socket Events</span>
+        <button class="btn btn-outline" style="padding:2px 6px;font-size:10px;" onclick="document.getElementById('logStream').innerHTML=''">Clear</button>
+      </div>
+      <div id="logStream" class="log-box"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const BASE_URL = window.location.origin.includes('http') ? window.location.origin : 'http://localhost:3000';
+  const drivers = {
+    1: { name: 'Driver 1', lat: 22.572646, lng: 88.363895, socket: null, token: null, offer: null, sim: null },
+    2: { name: 'Driver 2', lat: 22.578000, lng: 88.368000, socket: null, token: null, offer: null, sim: null },
+    3: { name: 'Driver 3', lat: 22.565000, lng: 88.355000, socket: null, token: null, offer: null, sim: null },
+    4: { name: 'Driver 4', lat: 22.585000, lng: 88.370000, socket: null, token: null, offer: null, sim: null },
+  };
+  let rider = { socket: null, token: null, rideId: null };
+
+  function log(tag, cls, msg) {
+    const box = document.getElementById('logStream');
+    const row = document.createElement('div');
+    row.className = `log-row ${cls}`;
+    const t = new Date().toLocaleTimeString();
+    row.innerHTML = `<span style="color:#64748b;">${t}</span> [<strong>${tag}</strong>] ${msg}`;
+    box.appendChild(row);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function connectAll() {
+    log('SYS', '', 'Connecting all 4 Drivers + 1 Rider...');
+    for (let i = 1; i <= 4; i++) connectDriver(i);
+    connectRider();
+  }
+
+  function disconnectAll() {
+    for (let i = 1; i <= 4; i++) {
+      if (drivers[i].socket) drivers[i].socket.disconnect();
+      if (drivers[i].sim) clearInterval(drivers[i].sim);
+    }
+    if (rider.socket) rider.socket.disconnect();
+    log('SYS', '', 'Disconnected all clients.');
+  }
+
+  async function connectDriver(index) {
+    try {
+      const res = await fetch(`${BASE_URL}/socket-test/quick-auth?role=driver&index=${index}`);
+      const json = await res.json();
+      const token = json.DATA?.token;
+      if (!token) return log(`D${index}`, 'log-d' + index, 'Could not fetch token');
+      drivers[index].token = token;
+
+      const s = io(`${BASE_URL}/driver`, {
+        auth: { token }, query: { token }, transports: ['websocket', 'polling']
+      });
+
+      s.on('connect', () => {
+        document.getElementById(`badge_d${index}`).className = 'badge badge-on';
+        document.getElementById(`badge_d${index}`).innerText = 'Online';
+        log(`D${index}`, `log-d${index}`, `Connected to /driver (Socket: ${s.id})`);
+        driverAction(index, 'online');
+      });
+
+      s.on('disconnect', () => {
+        document.getElementById(`badge_d${index}`).className = 'badge badge-off';
+        document.getElementById(`badge_d${index}`).innerText = 'Offline';
+      });
+
+      s.on('ride:new_request', (offer) => {
+        drivers[index].offer = offer;
+        document.getElementById(`card_d${index}`).classList.add('highlight');
+        document.getElementById(`offer_d${index}`).style.display = 'block';
+        document.getElementById(`offer_info_d${index}`).innerText = `Fare: ₹${offer.estimatedFare} | Dist: ${offer.distanceKm}km`;
+        log(`D${index}`, `log-d${index}`, `⚡ NEW RIDE OFFER for Ride ${offer.rideId.slice(0, 8)} (Fare: ₹${offer.estimatedFare})`);
+      });
+
+      s.on('ride:accept_ok', (data) => {
+        document.getElementById(`offer_d${index}`).style.display = 'none';
+        document.getElementById(`card_d${index}`).classList.remove('highlight');
+        log(`D${index}`, `log-d${index}`, `🎉 RIDE ACCEPTED! Starting trip.`);
+      });
+
+      s.on('ride:taken', (data) => {
+        document.getElementById(`offer_d${index}`).style.display = 'none';
+        document.getElementById(`card_d${index}`).classList.remove('highlight');
+        log(`D${index}`, `log-d${index}`, `⚠️ Ride ${data.rideId.slice(0, 8)} taken by another driver.`);
+      });
+
+      s.on('chat:message', (msg) => {
+        log(`D${index}`, `log-d${index}`, `💬 Chat from Rider: "${msg.content}"`);
+      });
+
+      drivers[index].socket = s;
+    } catch (e) {
+      log(`D${index}`, `log-d${index}`, `Connection error: ${e.message}`);
+    }
+  }
+
+  async function connectRider() {
+    try {
+      const res = await fetch(`${BASE_URL}/socket-test/quick-auth?role=rider`);
+      const json = await res.json();
+      rider.token = json.DATA?.token;
+
+      const s = io(`${BASE_URL}/rider`, {
+        auth: { token: rider.token }, query: { token: rider.token }, transports: ['websocket', 'polling']
+      });
+
+      s.on('connect', () => {
+        document.getElementById('badge_rider').className = 'badge badge-on';
+        document.getElementById('badge_rider').innerText = 'Connected';
+        log('RIDER', 'log-rider', `Connected to /rider (Socket: ${s.id})`);
+      });
+
+      s.on('disconnect', () => {
+        document.getElementById('badge_rider').className = 'badge badge-off';
+        document.getElementById('badge_rider').innerText = 'Disconnected';
+      });
+
+      s.on('ride:driver_assigned', (data) => {
+        document.getElementById('r_status').innerText = 'DRIVER ASSIGNED';
+        document.getElementById('r_status').style.color = '#10b981';
+        document.getElementById('r_driverDetails').innerHTML = `<strong>Driver:</strong> ${data.driver?.name} (${data.driver?.vehicleModel || ''}) | <strong>OTP:</strong> <span style="background:#059669;color:#fff;padding:2px 6px;border-radius:4px;">${data.startOtp}</span>`;
+        log('RIDER', 'log-rider', `🎉 Driver Assigned: ${data.driver?.name} | Start OTP: ${data.startOtp}`);
+      });
+
+      s.on('driver:location', (loc) => {
+        document.getElementById('r_liveGps').innerText = `📍 Live Driver Location: (${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}) | Phase: ${loc.phase}`;
+        log('RIDER', 'log-rider', `📍 Driver location ping: (${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)})`);
+      });
+
+      s.on('ride:started', () => {
+        document.getElementById('r_status').innerText = 'ON TRIP (STARTED)';
+        document.getElementById('r_status').style.color = '#8b5cf6';
+        log('RIDER', 'log-rider', `🚗 Ride Started!`);
+      });
+
+      s.on('ride:completed', (data) => {
+        document.getElementById('r_status').innerText = 'COMPLETED';
+        document.getElementById('r_status').style.color = '#059669';
+        log('RIDER', 'log-rider', `🏁 Ride Completed! Total Fare: ${data.currency} ${data.finalFare}`);
+      });
+
+      s.on('chat:message', (msg) => {
+        log('RIDER', 'log-rider', `💬 Chat from Driver: "${msg.content}"`);
+      });
+
+      rider.socket = s;
+    } catch (e) {
+      log('RIDER', 'log-rider', `Connection error: ${e.message}`);
+    }
+  }
+
+  function driverAction(index, action) {
+    const d = drivers[index];
+    if (!d.socket || !d.socket.connected) return log(`D${index}`, '', 'Driver not connected');
+    if (action === 'online') {
+      d.socket.emit('go_online', { lat: d.lat, lng: d.lng });
+      log(`D${index}`, `log-d${index}`, `Emitted go_online (${d.lat}, ${d.lng})`);
+    } else if (action === 'offline') {
+      d.socket.emit('go_offline');
+      log(`D${index}`, `log-d${index}`, `Emitted go_offline`);
+    } else if (action === 'ping') {
+      d.socket.emit('location_update', { lat: d.lat, lng: d.lng, accuracy: 5, speedKmh: 30, recordedAt: new Date().toISOString() });
+      log(`D${index}`, `log-d${index}`, `Emitted location_update ping`);
+    }
+  }
+
+  function goOnlineAll() {
+    for (let i = 1; i <= 4; i++) driverAction(i, 'online');
+  }
+
+  function toggleDriverSim(index) {
+    const d = drivers[index];
+    if (d.sim) {
+      clearInterval(d.sim);
+      d.sim = null;
+      document.getElementById(`sim_d${index}`).innerText = 'Drive GPS';
+      document.getElementById(`sim_d${index}`).className = 'btn btn-warning';
+    } else {
+      document.getElementById(`sim_d${index}`).innerText = 'Stop GPS';
+      document.getElementById(`sim_d${index}`).className = 'btn btn-danger';
+      d.sim = setInterval(() => {
+        d.lat += (Math.random() - 0.48) * 0.0003;
+        d.lng += (Math.random() - 0.48) * 0.0003;
+        document.getElementById(`pos_d${index}`).innerText = `${d.lat.toFixed(4)}, ${d.lng.toFixed(4)}`;
+        if (d.socket && d.socket.connected) {
+          d.socket.emit('location_update', { lat: d.lat, lng: d.lng, accuracy: 5, speedKmh: 35, recordedAt: new Date().toISOString() });
+        }
+      }, 3000);
+    }
+  }
+
+  function acceptOffer(index) {
+    const d = drivers[index];
+    if (!d.offer || !d.socket) return;
+    d.socket.emit('ride:accept', { rideId: d.offer.rideId });
+    log(`D${index}`, `log-d${index}`, `Emitted ride:accept for ride ${d.offer.rideId.slice(0, 8)}`);
+  }
+
+  function declineOffer(index) {
+    const d = drivers[index];
+    if (!d.offer || !d.socket) return;
+    d.socket.emit('ride:decline', { rideId: d.offer.rideId, reason: 'Declined in simulator' });
+    document.getElementById(`offer_d${index}`).style.display = 'none';
+    document.getElementById(`card_d${index}`).classList.remove('highlight');
+  }
+
+  async function requestRideAsRider() {
+    if (!rider.token) return alert('Connect rider first');
+    try {
+      log('RIDER', 'log-rider', 'Sending ride request to backend...');
+      const res = await fetch(`${BASE_URL}/api/v1/ride/request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${rider.token}`,
+        },
+        body: JSON.stringify({
+          pickupLat: 22.572646, pickupLng: 88.363895,
+          pickupAddress: 'Salt Lake City',
+          dropLat: 22.585000, dropLng: 88.375000,
+          dropAddress: 'Airport',
+          passengerCount: 1,
+        }),
+      });
+      const data = await res.json();
+      const ride = data.DATA?.ride || data.ride || data;
+      if (ride?.id) {
+        rider.rideId = ride.id;
+        document.getElementById('riderTracking').style.display = 'block';
+        document.getElementById('r_rideId').innerText = ride.id.slice(0, 8);
+        document.getElementById('r_status').innerText = 'SEARCHING DRIVERS...';
+        document.getElementById('r_status').style.color = '#d97706';
+        if (rider.socket && rider.socket.connected) {
+          rider.socket.emit('ride:subscribe', { rideId: ride.id });
+        }
+        log('RIDER', 'log-rider', `Ride Created (${ride.id.slice(0, 8)}). Matching engine dispatched to drivers!`);
+      } else {
+        log('RIDER', 'log-rider', `Ride request error: ${JSON.stringify(data)}`);
+      }
+    } catch (e) {
+      log('RIDER', 'log-rider', `Error requesting ride: ${e.message}`);
+    }
+  }
+
+  function sendRiderChat() {
+    const text = document.getElementById('simChatInput').value.trim();
+    if (!text || !rider.rideId || !rider.socket) return;
+    rider.socket.emit('chat:send', { rideId: rider.rideId, content: text, messageType: 'text' });
+    log('RIDER', 'log-rider', `Sent chat: "${text}"`);
+    document.getElementById('simChatInput').value = '';
+  }
+
+  window.onload = () => {
+    connectAll();
+  };
+</script>
+</body>
+</html>

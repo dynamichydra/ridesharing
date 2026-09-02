@@ -401,7 +401,7 @@ export async function getDriverDetail(driverId) {
   // Get recent trips for this driver
   let recentRides = [];
   try {
-    recentRides = await db.select({
+    const rawRides = await db.select({
       id: rides.id,
       status: rides.status,
       pickupAddress: rides.pickupAddress,
@@ -415,6 +415,25 @@ export async function getDriverDetail(driverId) {
       .where(eq(rides.driverId, driverId))
       .orderBy(desc(rides.requestedAt))
       .limit(20);
+
+    recentRides = rawRides.map((r) => {
+      let reqDate = r.requestedAt ? new Date(r.requestedAt) : null;
+      let compDate = r.completedAt ? new Date(r.completedAt) : null;
+
+      // Fix legacy skew if requestedAt was saved in local time (+5.5h) while completedAt was saved in UTC
+      if (reqDate && compDate && reqDate.getTime() > compDate.getTime()) {
+        const diffMs = reqDate.getTime() - compDate.getTime();
+        if (diffMs > 0 && diffMs <= 6 * 3600 * 1000) {
+          reqDate = new Date(compDate.getTime() - 10 * 60 * 1000); // 10 mins before completion
+        }
+      }
+
+      return {
+        ...r,
+        requestedAt: reqDate ? reqDate.toISOString() : null,
+        completedAt: compDate ? compDate.toISOString() : null,
+      };
+    });
   } catch {}
 
   // Performance totals

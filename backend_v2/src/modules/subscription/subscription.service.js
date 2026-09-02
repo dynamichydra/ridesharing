@@ -1,15 +1,20 @@
 import { eq, and, desc, count, lt } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { subscriptionPlans, subscriptions, drivers, payments } from '../../../drizzle/schema/index.js';
+import { subscriptionPlans, subscriptions, drivers, payments, countries } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { addDays } from '../../utils/time.js';
 import { paginate } from '../../utils/response.js';
 import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
+import { gatewayRegistry } from '../payment/registry.js';
 import { getApplicableTaxRules } from '../fare/tax-rules.service.js';
 import { withIdempotency } from '../../utils/idempotency.js';
 import { postTransaction, getOrCreateSystemAccount } from '../ledger/ledger.service.js';
 import { handleDisputeEvent } from '../dispute/dispute.service.js';
 import { publishNotification } from '../notification/notification-events.js';
+
+// TODO: Replace with live production Razorpay and Stripe API keys in .env when going live:
+// - RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET
+// - STRIPE_SECRET_KEY & STRIPE_PUBLISHABLE_KEY & STRIPE_WEBHOOK_SECRET
 
 // ── Plans (admin) ─────────────────────────────────────────────────────────────
 
@@ -91,14 +96,22 @@ export async function initiateSubscription(driverId, planId, idempotencyKey) {
       .where(and(eq(subscriptionPlans.id, planId), eq(subscriptionPlans.isActive, true))).limit(1);
     if (!plan) throw { statusCode: 404, message: 'Plan not found or inactive' };
 
-    const gateway = gatewayForCurrency(plan.currencyCode);
+    const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId)).limit(1);
+    if (!driver) throw { statusCode: 404, message: 'Driver not found' };
+
+    // Resolve country code from driver's country or plan's country
+    const countryId = driver.countryId || plan.countryId;
+    let countryIsoCode = 'IN';
+    if (countryId) {
+      const [c] = await db.select({ isoCode: countries.isoCode }).from(countries).where(eq(countries.id, countryId)).limit(1);
+      if (c?.isoCode) countryIsoCode = c.isoCode;
+    }
+
+    const gateway = gatewayRegistry.getForCountry(countryIsoCode) || gatewayForCurrency(plan.currencyCode);
     const totalMinor = await addSubscriptionTax(plan.countryId, plan.priceMinor);
 
-    if (!gateway) {
-      // Dev mode — this currency's gateway has no keys configured, activate directly
-      return _activateSubscription(driverId, planId, plan, totalMinor, {
-        gateway: 'none', gatewayPaymentId: 'dev_payment_' + Date.now(), gatewayOrderId: null,
-      });
+    if (!gateway || !gateway.isConfigured) {
+      throw { statusCode: 503, message: `Payment gateway for country ${countryIsoCode} (${plan.currencyCode}) is not configured.` };
     }
 
     const order = await gateway.createOrder({
@@ -120,6 +133,7 @@ export async function initiateSubscription(driverId, planId, idempotencyKey) {
 
     return {
       ...order,
+      gateway: gateway.name,
       paymentAttemptId: payment.id,
       plan: { id: plan.id, name: plan.name, type: plan.type, durationDays: plan.durationDays },
     };
@@ -130,12 +144,17 @@ export async function verifyAndActivate(driverId, planId, orderRef, paymentRef, 
   const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, planId)).limit(1);
   if (!plan) throw { statusCode: 404, message: 'Plan not found' };
 
-  const gateway = gatewayForCurrency(plan.currencyCode);
-  if (!gateway) {
-    const totalMinor = await addSubscriptionTax(plan.countryId, plan.priceMinor);
-    return _activateSubscriptionIdempotent(driverId, planId, plan, totalMinor, {
-      gateway: 'none', gatewayPaymentId: paymentRef, gatewayOrderId: orderRef,
-    });
+  const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId)).limit(1);
+  const countryId = driver?.countryId || plan.countryId;
+  let countryIsoCode = 'IN';
+  if (countryId) {
+    const [c] = await db.select({ isoCode: countries.isoCode }).from(countries).where(eq(countries.id, countryId)).limit(1);
+    if (c?.isoCode) countryIsoCode = c.isoCode;
+  }
+
+  const gateway = gatewayRegistry.getForCountry(countryIsoCode) || gatewayForCurrency(plan.currencyCode);
+  if (!gateway || !gateway.isConfigured) {
+    throw { statusCode: 503, message: `Payment gateway for country ${countryIsoCode} (${plan.currencyCode}) is not configured.` };
   }
 
   const verified = await gateway.verifyPayment({ orderRef, paymentRef, signature });
