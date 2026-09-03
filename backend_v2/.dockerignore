@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.env
+.env.local
+.git
+.gitignore
+uploads
+*.log
+coverage
+.system_generated
+RideShare-API.postman_collection.json
+new-featurs-docs
+docs

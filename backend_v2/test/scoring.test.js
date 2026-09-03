@@ -38,6 +38,6 @@ test('scoreDrivers guards against a zero/near-zero eta dividing by zero', () => 
 });
 
 test('DEFAULT_WEIGHTS sums to 1 (sane default configuration)', () => {
-  const sum = DEFAULT_WEIGHTS.distanceWeight + DEFAULT_WEIGHTS.ratingWeight + DEFAULT_WEIGHTS.acceptanceRateWeight;
+  const sum = Object.values(DEFAULT_WEIGHTS).reduce((acc, w) => acc + w, 0);
   assert.equal(Math.round(sum * 100) / 100, 1);
 });

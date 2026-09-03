@@ -1,7 +1,7 @@
 import {
   createCorporateAccount, addCorporateUser, generateCorporateInvoice,
   payCorporateInvoice, checkCorporateCreditAvailable, listCorporateAccounts,
-  listCorporateInvoices,
+  listCorporateInvoices, getCorporateInvoice,
 } from './corporate.service.js';
 import { parsePagination, sendList, sendSuccess } from '../../utils/response.js';
 
@@ -39,6 +39,11 @@ export async function corporateRoutes(fastify) {
     const { periodStart, periodEnd } = req.body;
     const invoice = await generateCorporateInvoice(req.params.id, periodStart, periodEnd);
     return sendSuccess(reply, invoice, 201);
+  });
+
+  fastify.get('/invoices/:id', { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const invoice = await getCorporateInvoice(req.params.id);
+    return sendSuccess(reply, invoice);
   });
 
   fastify.post('/invoices/:id/pay', { preHandler: [fastify.authenticate] }, async (req, reply) => {

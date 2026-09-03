@@ -5,6 +5,7 @@ import {
   redis, redisPub,
   redisSub
 } from './config/redis.js';
+import { pool } from './config/db.js';
 import { registerPlugins } from './plugins/index.js';
 import { initSocketIO } from './sockets/index.js';
 import { startAllConsumers } from './kafka/consumers/index.js';
@@ -173,13 +174,21 @@ async function start() {
   const shutdown = async (sig) => {
     console.log(`\n[Server] ${sig} — shutting down gracefully...`);
     await app.close();
-    await redis.quit();
-    await redisPub.quit();
-    await redisSub.quit();
+    await redis.quit().catch(() => {});
+    await redisPub.quit().catch(() => {});
+    await redisSub.quit().catch(() => {});
+    await pool.end().catch(() => {});
     process.exit(0);
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
+
+  process.on('unhandledRejection', (err) => {
+    console.error('❌ Unhandled Rejection:', err);
+  });
+  process.on('uncaughtException', (err) => {
+    console.error('❌ Uncaught Exception:', err);
+  });
 }
 
 start().catch((err) => { console.error('Fatal startup error:', err); process.exit(1); });

@@ -33,7 +33,8 @@ import { calculateDynamicRadius, discoverCandidatesInRadius } from './candidate-
 import { filterCandidates } from './candidate-filter.service.js';
 import { calculateCandidateEtas } from './eta.service.js';
 import { scoreDrivers } from './scoring.service.js';
-import { executeDispatchWave } from './dispatch-wave.service.js';
+import { executeDispatchWave, toOfferPayload } from './dispatch-wave.service.js';
+export { toOfferPayload };
 import { assignDriverToRide, signalRideAccepted, signalRideCancelled } from './assignment.service.js';
 import { getAirportQueueByZone, getNextAirportCandidates } from './airport-queue.service.js';
 import { metrics } from '../../utils/metrics.js';

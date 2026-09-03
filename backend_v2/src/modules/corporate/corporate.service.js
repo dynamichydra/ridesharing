@@ -1,4 +1,4 @@
-import { eq, and, desc, count, sql } from 'drizzle-orm';
+import { eq, and, desc, count, sql, inArray, gte, lte } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import {
   corporateAccounts, corporateUsers, corporateInvoices,
@@ -24,29 +24,30 @@ export async function addCorporateUser(corporateAccountId, { userId, role = 'emp
   return corpUser;
 }
 
-export async function checkCorporateCreditAvailable(corporateAccountId, estimatedFareMinor) {
-  const [account] = await db.select().from(corporateAccounts)
-    .where(eq(corporateAccounts.id, corporateAccountId)).limit(1);
-  if (!account || account.status !== 'active') {
-    return { isAllowed: false, reason: 'Corporate account is inactive or not found' };
-  }
+export async function checkCorporateCreditAvailable(corporateAccountId, amountMinor) {
+  const [account] = await db.select().from(corporateAccounts).where(eq(corporateAccounts.id, corporateAccountId)).limit(1);
+  if (!account) throw { statusCode: 404, message: 'Corporate account not found' };
 
   const available = account.creditLimitMinor - account.currentExposureMinor;
-  if (available < estimatedFareMinor) {
-    return { isAllowed: false, reason: 'Credit limit exceeded', availableMinor: available };
-  }
-
-  return { isAllowed: true, availableMinor: available, account };
+  return {
+    isAvailable: available >= amountMinor,
+    creditLimitMinor: account.creditLimitMinor,
+    currentExposureMinor: account.currentExposureMinor,
+    availableMinor: Math.max(0, available),
+  };
 }
 
-export async function reserveCorporateRideCredit(corporateAccountId, rideId, estimatedFareMinor) {
+/**
+ * Charge ride to corporate account: increases current exposure.
+ */
+export async function chargeRideToCorporate(corporateAccountId, rideId, estimatedFareMinor) {
   return db.transaction(async (tx) => {
     const [account] = await tx.select().from(corporateAccounts)
-      .where(eq(corporateAccounts.id, corporateAccountId)).for('update').limit(1);
+      .where(eq(corporateAccounts.id, corporateAccountId))
+      .for('update')
+      .limit(1);
 
-    if (!account || account.status !== 'active') {
-      throw { statusCode: 400, message: 'Corporate account not active' };
-    }
+    if (!account) throw { statusCode: 404, message: 'Corporate account not found' };
 
     const available = account.creditLimitMinor - account.currentExposureMinor;
     if (available < estimatedFareMinor) {
@@ -72,19 +73,67 @@ export async function generateCorporateInvoice(corporateAccountId, periodStart, 
   const invoiceNumber = `INV-CORP-${Date.now()}`;
   const dueDate = moment().add(30, 'days').toDate(); // Net 30 default
 
+  // Find all employees belonging to this corporate account
+  const corpUsers = await db.select({ userId: corporateUsers.userId })
+    .from(corporateUsers)
+    .where(eq(corporateUsers.corporateAccountId, corporateAccountId));
+  const userIds = corpUsers.map((u) => u.userId).filter(Boolean);
+
+  let eligibleRides = [];
+  if (userIds.length > 0) {
+    eligibleRides = await db.select().from(rides).where(and(
+      inArray(rides.riderId, userIds),
+      eq(rides.status, 'completed'),
+      gte(rides.completedAt, moment(periodStart).toDate()),
+      lte(rides.completedAt, moment(periodEnd).toDate())
+    ));
+  }
+
+  let itemsSubtotalMinor = 0;
+  for (const r of eligibleRides) {
+    itemsSubtotalMinor += (r.finalFareMinor || r.estimatedFareMinor || 0);
+  }
+
+  const invoiceSubtotal = itemsSubtotalMinor > 0 ? itemsSubtotalMinor : account.currentExposureMinor;
+
   const [invoice] = await db.insert(corporateInvoices).values({
     corporateAccountId,
     invoiceNumber,
     periodStart: moment(periodStart).toDate(),
     periodEnd: moment(periodEnd).toDate(),
-    subtotalMinor: account.currentExposureMinor,
-    totalMinor: account.currentExposureMinor,
+    subtotalMinor: invoiceSubtotal,
+    totalMinor: invoiceSubtotal,
     currencyCode: account.currencyCode,
     status: 'issued',
     dueAt: dueDate,
   }).returning();
 
+  // Populate itemized line items
+  if (eligibleRides.length > 0) {
+    const lineItems = eligibleRides.map((r) => {
+      const fare = r.finalFareMinor || r.estimatedFareMinor || 0;
+      return {
+        invoiceId: invoice.id,
+        rideId: r.id,
+        employeeId: r.riderId,
+        amountMinor: fare,
+        taxMinor: 0,
+        totalMinor: fare,
+        currencyCode: r.currencyCode || account.currencyCode,
+      };
+    });
+    await db.insert(corporateInvoiceItems).values(lineItems);
+  }
+
   return invoice;
+}
+
+export async function getCorporateInvoice(invoiceId) {
+  const [invoice] = await db.select().from(corporateInvoices).where(eq(corporateInvoices.id, invoiceId)).limit(1);
+  if (!invoice) throw { statusCode: 404, message: 'Corporate invoice not found' };
+
+  const items = await db.select().from(corporateInvoiceItems).where(eq(corporateInvoiceItems.invoiceId, invoiceId));
+  return { ...invoice, items };
 }
 
 /**

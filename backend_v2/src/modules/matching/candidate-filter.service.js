@@ -1,6 +1,6 @@
 import { db } from '../../config/db.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
-import { sql } from 'drizzle-orm';
+import { sql, and, eq, inArray } from 'drizzle-orm';
 import { driverRiderBlocks, vehicleTypes } from '../../../drizzle/schema/index.js';
 import { isDriverReservedForTime } from './driver-reservation.service.js';
 import { getDestinationMode, isTripOnDriverRoute } from '../driver/destination-mode.service.js';
@@ -115,14 +115,17 @@ export async function filterCandidates(candidates, ride, policy = {}) {
 
   // 1. Fetch blocked drivers for this rider in one batch
   console.log(`[CandidateFilter:Step 1] Checking driver-rider block list for rider ${riderId}...`);
-  const driverIds = candidates.map((c) => c.id);
-  const blockedRows = await db.execute(sql`
-    SELECT driver_id AS "driverId"
-    FROM driver_rider_blocks
-    WHERE rider_id = ${riderId}::uuid
-      AND driver_id IN (${sql.join(driverIds.map((id) => sql`${id}::uuid`), sql`, `)})
-  `);
-  const blockedDriverSet = new Set(blockedRows.rows.map((r) => r.driverId));
+  const driverIds = candidates.map((c) => c.id).filter(Boolean);
+  let blockedDriverSet = new Set();
+  if (riderId && driverIds.length > 0) {
+    const blockedRows = await db.select({ driverId: driverRiderBlocks.driverId })
+      .from(driverRiderBlocks)
+      .where(and(
+        eq(driverRiderBlocks.riderId, riderId),
+        inArray(driverRiderBlocks.driverId, driverIds)
+      ));
+    blockedDriverSet = new Set(blockedRows.map((r) => r.driverId));
+  }
   console.log(`[CandidateFilter:Step 1] Blocked drivers count for rider ${riderId}: ${blockedDriverSet.size}`);
 
   // 2. Fetch vehicle type seat capacity metadata if needed
