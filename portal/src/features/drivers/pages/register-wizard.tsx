@@ -200,33 +200,41 @@ export default function DriverRegisterWizardPage() {
       }
 
       // ── Step 2: Save Vehicle Info ────────────────────────────────────────
-      if (stepToSave === 2 && targetId && formData.registrationNumber.trim()) {
-        try {
-          if (existingActiveVehicle?.id) {
-            await vehiclesApi.update(targetId, existingActiveVehicle.id, {
-              vehicleModelId: formData.vehicleModelId || undefined,
-              year: formData.year,
-              registrationNumber: formData.registrationNumber,
-              color: formData.color || undefined,
-              seats: Number(formData.seats) || 4,
-              fuelType: formData.fuelType,
-              transmission: formData.transmission,
-              isActive: true,
-            });
-          } else {
-            await vehiclesApi.add(targetId, {
-              vehicleModelId: formData.vehicleModelId || undefined,
-              year: formData.year,
-              registrationNumber: formData.registrationNumber,
-              color: formData.color || undefined,
-              seats: Number(formData.seats) || 4,
-              fuelType: formData.fuelType,
-              transmission: formData.transmission,
-              isActive: true,
-            });
-          }
-        } catch (vehErr) {
-          console.warn("Vehicle save warning:", vehErr);
+      if (stepToSave === 2) {
+        if (!targetId) {
+          toast.error("Driver record not found. Please complete Step 1 first.");
+          return null;
+        }
+        if (!formData.vehicleModelId && !existingActiveVehicle?.id) {
+          toast.error("Please select a vehicle model from the catalog");
+          return null;
+        }
+        if (!formData.registrationNumber.trim()) {
+          toast.error("Please enter the vehicle registration plate number");
+          return null;
+        }
+        if (!formData.year.trim()) {
+          toast.error("Please enter the vehicle manufacturing year");
+          return null;
+        }
+
+        const vehiclePayload = {
+          vehicleModelId: formData.vehicleModelId || undefined,
+          year: formData.year.trim(),
+          registrationNumber: formData.registrationNumber.trim().toUpperCase(),
+          color: formData.color?.trim() || undefined,
+          seats: Number(formData.seats) || 4,
+          fuelType: formData.fuelType,
+          transmission: formData.transmission,
+          image: formData.image || undefined,
+          images: formData.images?.length ? formData.images : (formData.image ? [formData.image] : []),
+          isActive: true,
+        };
+
+        if (existingActiveVehicle?.id) {
+          await vehiclesApi.update(targetId, existingActiveVehicle.id, vehiclePayload);
+        } else {
+          await vehiclesApi.add(targetId, vehiclePayload);
         }
       }
 
@@ -240,21 +248,22 @@ export default function DriverRegisterWizardPage() {
 
       // ── Step 4: Save Bank Details ────────────────────────────────────────
       if (stepToSave === 4 && targetId && formData.accountNumber.trim()) {
-        try {
-          await bankDetailsApi.upsert("driver", targetId, {
-            accountHolderName: formData.accountHolderName || formData.name,
-            bankName: formData.bankName || "Primary Bank",
-            accountNumber: formData.accountNumber,
-            routingCode: formData.routingCode || undefined,
-          });
-        } catch (bankErr) {
-          console.warn("Bank details save warning:", bankErr);
-        }
+        await bankDetailsApi.upsert("driver", targetId, {
+          accountHolderName: formData.accountHolderName || formData.name,
+          bankName: formData.bankName || "Primary Bank",
+          accountNumber: formData.accountNumber,
+          routingCode: formData.routingCode || undefined,
+        });
       }
 
       return targetId;
     } catch (err: any) {
-      toast.error(err.message || "Failed to save progress");
+      const errorMsg =
+        err?.response?.data?.MESSAGE ||
+        err?.data?.MESSAGE ||
+        err?.message ||
+        "Failed to save progress";
+      toast.error(typeof errorMsg === "string" ? errorMsg : "Failed to save progress");
       return null;
     } finally {
       setIsSaving(false);
@@ -366,7 +375,13 @@ export default function DriverRegisterWizardPage() {
           return (
             <button
               key={s.id}
-              onClick={() => setCurrentStep(s.id)}
+              onClick={async () => {
+                if (s.id > currentStep) {
+                  const savedId = await saveStepProgress(currentStep);
+                  if (!savedId) return;
+                }
+                setCurrentStep(s.id);
+              }}
               className={`flex flex-col items-center gap-1 text-center group cursor-pointer transition-colors ${
                 isCurrent
                   ? "text-primary font-bold"

@@ -143,3 +143,21 @@ export async function upsertMatchingPolicy(data) {
 
   return result;
 }
+
+/**
+ * Deletes a matching policy by ID.
+ */
+export async function deleteMatchingPolicy(id) {
+  const [deleted] = await db
+    .delete(matchingPolicies)
+    .where(eq(matchingPolicies.id, id))
+    .returning();
+
+  // Invalidate policy cache
+  const keys = await redis.keys('matching:policy:*');
+  if (keys.length > 0) {
+    await redis.del(...keys);
+  }
+
+  return deleted || null;
+}

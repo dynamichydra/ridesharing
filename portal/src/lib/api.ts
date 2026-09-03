@@ -48,8 +48,11 @@ API.interceptors.response.use(
         LogOut();
       }
 
-      // Optional: You can handle other status codes globally
-      // if (status === 500) showGlobalError("Server error occurred.");
+      // Attach backend message to error.response so err.message works everywhere
+      const backendMessage = error.response.data?.MESSAGE || error.response.data?.message || error.message;
+      if (backendMessage) {
+        error.response.message = typeof backendMessage === "string" ? backendMessage : JSON.stringify(backendMessage);
+      }
 
       // Return the error response to the caller
       return Promise.reject(error.response);

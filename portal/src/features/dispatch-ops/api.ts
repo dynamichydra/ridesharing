@@ -16,10 +16,13 @@ export const dispatchOpsApi = {
     apiClient.get<SupplyDemandMetric[]>(`${BASE_URL}/admin/supply-demand`),
 
   getPolicies: () =>
-    apiClient.get<DispatchPolicy>(`${BASE_URL}/admin/policies`),
+    apiClient.get<DispatchPolicy[]>(`${BASE_URL}/admin/policies`),
 
   updatePolicies: (payload: Partial<DispatchPolicy>) =>
     apiClient.put<DispatchPolicy>(`${BASE_URL}/admin/policies`, payload),
+
+  deletePolicy: (id: string) =>
+    apiClient.delete(`${BASE_URL}/admin/policies/${id}`),
 
   getAirportStatus: () =>
     apiClient.get<AirportQueueStatus>(`${BASE_URL}/airport/status`),

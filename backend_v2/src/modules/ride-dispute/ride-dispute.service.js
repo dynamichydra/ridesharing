@@ -1,6 +1,6 @@
 import { eq, and, inArray, desc, count, ne } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { rideDisputes, rides, payments } from '../../../drizzle/schema/index.js';
+import { rideDisputes, rides, payments, cashCollections, cashDisputes } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { publishNotification } from '../notification/notification-events.js';
 import { paginate } from '../../utils/response.js';
@@ -46,6 +46,30 @@ export async function raiseDispute(user, { rideId, reason, description }) {
     entityType: 'ride_dispute', entityId: disputeRow.id,
     meta: { rideId, reason },
   });
+
+  // If this dispute involves a cash ride, sync into cash_disputes and update cash_collections status
+  try {
+    const isCashTrip = ride.paymentMethod === 'cash' || payment?.gateway === 'cash' || reason?.toLowerCase().includes('cash');
+    if (isCashTrip) {
+      const [collection] = await db.select().from(cashCollections).where(eq(cashCollections.rideId, rideId)).limit(1);
+      if (collection) {
+        await db.insert(cashDisputes).values({
+          cashCollectionId: collection.id,
+          rideId,
+          driverId: ride.driverId,
+          riderId: ride.riderId,
+          expectedAmountMinor: collection.expectedAmountMinor,
+          driverReportedMinor: collection.collectedAmountMinor,
+          riderReportedMinor: collection.expectedAmountMinor,
+          currencyCode: collection.currencyCode,
+          status: 'open',
+        });
+        await db.update(cashCollections).set({ status: 'disputed', disputeReason: reason, updatedAt: new Date() }).where(eq(cashCollections.id, collection.id));
+      }
+    }
+  } catch (err) {
+    console.error('Failed to sync dispute to cash_disputes:', err);
+  }
 
   // Notify the *other* party on the ride — they're the one who needs to respond.
   const otherPartyId = side === 'rider' ? ride.driverId : ride.riderId;

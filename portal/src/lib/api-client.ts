@@ -20,11 +20,12 @@ export interface BackendResponse<T> {
  * Transforms an AxiosResponse into a simplified data object or throws an error.
  */
 export const handleResponse = <T>(response: AxiosResponse<BackendResponse<T>>): T => {
-  const { SUCCESS, MESSAGE } = response.data;
-  if (!SUCCESS) {
-    throw new Error(typeof MESSAGE === "string" ? MESSAGE : "API Request Failed");
+  const data = response?.data;
+  if (!data || data.SUCCESS === false) {
+    const errorMsg = typeof data?.MESSAGE === "string" ? data.MESSAGE : "API Request Failed";
+    throw new Error(errorMsg);
   }
-  return MESSAGE;
+  return data.MESSAGE;
 };
 
 /**
@@ -33,6 +34,10 @@ export const handleResponse = <T>(response: AxiosResponse<BackendResponse<T>>): 
 export const apiClient = {
   get: async <T>(url: string, params?: any) => {
     const response = await API.get<BackendResponse<T>>(url, { params });
+    if (response?.data && response.data.SUCCESS === false) {
+      const errorMsg = typeof response.data.MESSAGE === "string" ? response.data.MESSAGE : "API Request Failed";
+      throw new Error(errorMsg);
+    }
     return response.data; // Return full wrapper for list/pagination needs
   },
   post: async <T>(url: string, data: any, config?: any) => {

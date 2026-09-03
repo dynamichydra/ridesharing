@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useCreateCorporateAccount } from "../hooks";
+import { useCreateCorporateAccount, useAddCorporateUser } from "../hooks";
 
 interface CreateCorporateDialogProps {
   open: boolean;
@@ -111,7 +111,7 @@ export function CreateCorporateDialog({ open, onOpenChange }: CreateCorporateDia
             </div>
           </div>
 
-          <DialogFooter className="pt-2">
+            <DialogFooter className="pt-2">
             <Button
               type="button"
               variant="outline"
@@ -121,6 +121,102 @@ export function CreateCorporateDialog({ open, onOpenChange }: CreateCorporateDia
             </Button>
             <Button type="submit" disabled={createMutation.isPending}>
               {createMutation.isPending ? "Creating..." : "Create Account"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface AddCorporateUserDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  account: import("../types").CorporateAccount | null;
+}
+
+export function AddCorporateUserDialog({
+  open,
+  onOpenChange,
+  account,
+}: AddCorporateUserDialogProps) {
+  const [userId, setUserId] = useState("");
+  const [role, setRole] = useState<"admin" | "manager" | "employee">("employee");
+  const [spendingLimit, setSpendingLimit] = useState("");
+
+  const addUserMutation = useAddCorporateUser();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!account?.id || !userId.trim()) return;
+
+    await addUserMutation.mutateAsync({
+      accountId: account.id,
+      payload: {
+        userId: userId.trim(),
+        role,
+        spendingLimitMinor: spendingLimit ? Math.round(parseFloat(spendingLimit) * 100) : null,
+      },
+    });
+
+    setUserId("");
+    setSpendingLimit("");
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[440px]">
+        <DialogHeader>
+          <DialogTitle>Link Employee to {account?.name || "Account"}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="usr-id">User ID (UUID) *</Label>
+            <Input
+              id="usr-id"
+              required
+              placeholder="e.g. b11522dc-2cb4-4380-93dc-a381722db932"
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="usr-role">Role</Label>
+            <select
+              id="usr-role"
+              className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors"
+              value={role}
+              onChange={(e) => setRole(e.target.value as any)}
+            >
+              <option value="employee">Employee</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Account Admin</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="usr-limit">Monthly Spending Limit (₹, optional)</Label>
+            <Input
+              id="usr-limit"
+              type="number"
+              placeholder="Leave blank for full account limit"
+              value={spendingLimit}
+              onChange={(e) => setSpendingLimit(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={addUserMutation.isPending}>
+              {addUserMutation.isPending ? "Linking..." : "Link Employee"}
             </Button>
           </DialogFooter>
         </form>

@@ -64,3 +64,17 @@ export function useTriggerReconciliation() {
     },
   });
 }
+
+export function useDeleteDispatchPolicy() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => dispatchOpsApi.deletePolicy(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEY, "policies"] });
+      toast.success("Dispatch policy deleted successfully");
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.MESSAGE || err?.message || "Failed to delete policy");
+    },
+  });
+}

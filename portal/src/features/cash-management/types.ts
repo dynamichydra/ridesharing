@@ -2,11 +2,16 @@ export interface CashCollection {
   id: string;
   rideId: string;
   driverId: string;
+  driverName?: string | null;
+  driverPhone?: string | null;
   expectedAmountMinor: number;
   collectedAmountMinor: number;
   platformCommissionMinor: number;
   currencyCode: string;
-  status: "reported" | "mismatch" | "settled" | "disputed";
+  status: "expected" | "reported" | "verified" | "settled" | "mismatch" | "disputed";
+  disputeReason?: string | null;
+  reportedAt?: string;
+  verifiedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,6 +35,7 @@ export interface CashDispute {
 export interface CashListParams {
   status?: string;
   driverId?: string;
+  currencyCode?: string;
   page?: number;
   limit?: number;
 }

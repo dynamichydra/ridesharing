@@ -32,3 +32,17 @@ export function useReportCashCollection() {
     },
   });
 }
+
+export function useVerifyCashCollection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => cashApi.verifyCollection(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEY] });
+      toast.success("Cash collection verified & settled");
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.MESSAGE || "Failed to verify collection");
+    },
+  });
+}

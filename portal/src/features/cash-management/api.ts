@@ -14,6 +14,7 @@ function buildQuery(params: CashListParams) {
   query.set("limit", String(params.limit ?? 10));
   if (params.status) query.set("status", params.status);
   if (params.driverId) query.set("driverId", params.driverId);
+  if (params.currencyCode) query.set("currencyCode", params.currencyCode);
   return query.toString();
 }
 
@@ -23,6 +24,9 @@ export const cashApi = {
 
   reportCollection: (payload: ReportCashPayload) =>
     apiClient.post<CashCollection>(`${BASE_URL}/collections/report`, payload),
+
+  verifyCollection: (id: string) =>
+    apiClient.put<CashCollection>(`${BASE_URL}/collections/${id}/verify`, {}),
 
   listDisputes: (params: CashListParams = {}) =>
     apiClient.get<CashDispute[]>(`${BASE_URL}/disputes?${buildQuery(params)}`),

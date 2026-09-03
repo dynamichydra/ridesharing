@@ -20,7 +20,11 @@ import {
   ShieldCheck,
   Star,
   AlertCircle,
+  UploadCloud,
+  Loader2,
+  Trash2,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import DriverActionForm, { RequestDocumentsForm } from "./form";
 import { useCountryOptions, useStateOptions, useCityOptions } from "@/features/geo/hooks";
 import {
@@ -30,6 +34,7 @@ import {
   useAdminAddVehicle,
   useAdminUpdateVehicle,
 } from "../hooks";
+import { vehiclesApi } from "../api";
 import type { Driver, DriverVehicle, UpdateDriverPayload, AdminVehiclePayload } from "../types";
 
 // ── Approve Dialog ─────────────────────────────────────────────────────────────
@@ -786,6 +791,8 @@ export function AddEditVehicleDialog({
   const { data: vehicleModelsData } = useVehicleModelOptions();
   const vehicleModels = vehicleModelsData?.MESSAGE || [];
 
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
   const [form, setForm] = useState<AdminVehiclePayload>({
     vehicleModelId: "",
     registrationNumber: "",
@@ -795,8 +802,30 @@ export function AddEditVehicleDialog({
     fuelType: "petrol",
     transmission: "manual",
     vin: "",
+    image: "",
+    images: [],
     isActive: true,
   });
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploadingImage(true);
+      const res = await vehiclesApi.uploadImage(file);
+      setForm((p) => ({
+        ...p,
+        image: res.url,
+        images: [...(p.images || []), res.url],
+      }));
+      toast.success("Vehicle photo uploaded successfully!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload vehicle photo");
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -809,6 +838,8 @@ export function AddEditVehicleDialog({
           fuelType: vehicle.fuelType || "petrol",
           transmission: vehicle.transmission || "manual",
           vin: vehicle.vin || "",
+          image: vehicle.image || "",
+          images: vehicle.images || (vehicle.image ? [vehicle.image] : []),
           isActive: vehicle.isActive ?? true,
           model: vehicle.model,
           brand: vehicle.brand || "",
@@ -823,6 +854,8 @@ export function AddEditVehicleDialog({
           fuelType: "petrol",
           transmission: "manual",
           vin: "",
+          image: "",
+          images: [],
           isActive: true,
         });
       }
@@ -833,14 +866,20 @@ export function AddEditVehicleDialog({
     e.preventDefault();
     if (!form.registrationNumber.trim() || !form.year.trim()) return;
 
+    const payload: AdminVehiclePayload = {
+      ...form,
+      registrationNumber: form.registrationNumber.trim().toUpperCase(),
+      year: form.year.trim(),
+      seats: Number(form.seats) || 4,
+      image: form.image || undefined,
+      images: form.images?.length ? form.images : (form.image ? [form.image] : []),
+    };
+
     if (vehicle) {
       updateMutation.mutate(
         {
           vehicleId: vehicle.id,
-          payload: {
-            ...form,
-            seats: Number(form.seats) || 4,
-          },
+          payload,
         },
         {
           onSuccess: () => onOpenChange(false),
@@ -848,10 +887,7 @@ export function AddEditVehicleDialog({
       );
     } else {
       addMutation.mutate(
-        {
-          ...form,
-          seats: Number(form.seats) || 4,
-        },
+        payload,
         {
           onSuccess: () => onOpenChange(false),
         }
@@ -981,6 +1017,58 @@ export function AddEditVehicleDialog({
                 onChange={(e) => setForm((p) => ({ ...p, vin: e.target.value }))}
               />
             </div>
+          </div>
+
+          <div className="space-y-2 pt-1 border-t border-border">
+            <Label className="text-xs font-semibold">Vehicle Exterior Photograph</Label>
+            {form.image ? (
+              <div className="relative rounded-lg border border-border overflow-hidden h-36 bg-muted/30 flex items-center justify-center group">
+                <img
+                  src={form.image}
+                  alt="Vehicle Preview"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setForm((p) => ({ ...p, image: "", images: [] }))}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <label className="border-2 border-dashed border-border hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-colors rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer min-h-[100px]">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoUpload}
+                  disabled={isUploadingImage}
+                />
+                {isUploadingImage ? (
+                  <div className="flex flex-col items-center gap-1.5">
+                    <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                    <span className="text-xs text-muted-foreground">Uploading photo...</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-1 text-center">
+                    <div className="p-2 rounded-full bg-primary/10 text-primary">
+                      <UploadCloud className="h-5 w-5" />
+                    </div>
+                    <p className="text-xs font-semibold text-foreground">
+                      Upload vehicle photo
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      PNG, JPG, WEBP up to 5MB
+                    </p>
+                  </div>
+                )}
+              </label>
+            )}
           </div>
 
           <div className="flex items-center gap-2 pt-2">

@@ -80,7 +80,11 @@ export async function ridePaymentRoutes(app) {
 
   // POST /api/v1/ride-payments/:rideId/cash-collect
   app.post('/:rideId/cash-collect', { preHandler: [authenticateDriver] }, async (request, reply) => {
-    const data = await ridePaymentService.recordCashCollection(request.user.id, request.params.rideId);
+    const data = await ridePaymentService.recordCashCollection(
+      request.user.id,
+      request.params.rideId,
+      request.body?.collectedAmountMinor
+    );
     return sendSuccess(reply, data);
   });
 

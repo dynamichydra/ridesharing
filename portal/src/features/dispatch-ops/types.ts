@@ -1,13 +1,41 @@
+export interface PolicyWeights {
+  etaWeight?: number;
+  distanceWeight?: number;
+  idleWeight?: number;
+  ratingWeight?: number;
+  acceptanceRateWeight?: number;
+  cancellationRateWeight?: number;
+  directionWeight?: number;
+  zoneDemandWeight?: number;
+}
+
+export interface PolicyWaveItem {
+  wave: number;
+  topCount: number;
+  timeoutSec: number;
+}
+
 export interface DispatchPolicy {
   id?: string;
   name: string;
-  searchRadiusKm: number;
-  maxDispatchAttempts: number;
+  version?: string;
+  scope: "global" | "country" | "city" | "zone" | "service_type" | string;
+  scopeId?: string | null;
+  serviceType?: string | null;
+  initialRadiusKm: number | string;
+  maxRadiusKm: number | string;
+  radiusStepKm: number | string;
   offerTimeoutSeconds: number;
-  batchSize: number;
-  surgeMultiplierCap: number;
-  airportQueueEnabled: boolean;
+  maxWaves: number;
+  maxCandidatesPerWave: number;
+  cooldownSeconds: number;
+  maxEtaMinutes: number;
+  maxLocationAgeSeconds?: number;
+  weights?: PolicyWeights;
+  waveConfig?: PolicyWaveItem[];
   isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ActiveDispatchJob {

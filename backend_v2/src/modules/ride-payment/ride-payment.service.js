@@ -1,6 +1,6 @@
 import { eq, and, desc, count, isNotNull, inArray } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { rides, payments, users, drivers, rideFareSplits } from '../../../drizzle/schema/index.js';
+import { rides, payments, users, drivers, rideFareSplits, cashCollections } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
 import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
@@ -109,8 +109,10 @@ export async function verifyRidePayment(riderId, rideId, orderRef, paymentRef, s
 
 // ── Driver — record cash collection ────────────────────────────────────────────
 
-export async function recordCashCollection(driverId, rideId) {
+export async function recordCashCollection(driverId, rideId, collectedAmountMinor = null) {
   const ride = await _loadPayableRide(and(eq(rides.id, rideId), eq(rides.driverId, driverId)));
+
+  const finalCollectedMinor = collectedAmountMinor ?? ride.finalFareMinor;
 
   const [payment] = await db.insert(payments).values({
     rideId, subscriptionId: null,
@@ -124,6 +126,33 @@ export async function recordCashCollection(driverId, rideId) {
   }).returning();
 
   const updated = await _markRidePaid(ride, { method: 'cash', gateway: 'cash', paymentAttemptId: payment.id });
+
+  // Calculate platform commission for cash auditing & settlement tracking
+  let commissionMinor = 0;
+  try {
+    const rule = await resolveCommissionRule({ countryId: ride.countryId, cityId: ride.cityId, serviceType: ride.serviceType });
+    const commResult = computeCommission(ride.finalFareMinor, rule);
+    commissionMinor = commResult?.commissionMinor || Math.round(ride.finalFareMinor * 0.2);
+  } catch {
+    commissionMinor = Math.round(ride.finalFareMinor * 0.2);
+  }
+
+  // Insert cash collection record for admin cash management & reconciliation
+  try {
+    const isMismatch = finalCollectedMinor !== ride.finalFareMinor;
+    await db.insert(cashCollections).values({
+      rideId,
+      driverId,
+      expectedAmountMinor: ride.finalFareMinor,
+      collectedAmountMinor: finalCollectedMinor,
+      platformCommissionMinor: commissionMinor,
+      currencyCode: ride.currencyCode || 'INR',
+      status: isMismatch ? 'mismatch' : 'reported',
+      reportedAt: new Date(),
+    });
+  } catch (err) {
+    console.error('Failed to log cash_collections entry:', err);
+  }
 
   // Fire after the state-changing write lands — an audit-log hiccup shouldn't leave the
   // payments row captured while the ride is still stuck showing unpaid.

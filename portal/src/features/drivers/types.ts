@@ -132,6 +132,8 @@ export interface AdminVehiclePayload {
   seats?: number;
   fuelType?: string;
   transmission?: string;
+  image?: string;
+  images?: string[];
   isActive?: boolean;
 }
 

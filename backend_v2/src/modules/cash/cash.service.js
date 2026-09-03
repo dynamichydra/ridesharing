@@ -96,19 +96,47 @@ export async function listCashCollections(page = 1, limit = 10, offset = 0, filt
   const conditions = [];
   if (filters.status) conditions.push(eq(cashCollections.status, filters.status));
   if (filters.driverId) conditions.push(eq(cashCollections.driverId, filters.driverId));
+  if (filters.currencyCode) conditions.push(eq(cashCollections.currencyCode, filters.currencyCode));
 
   const whereClause = conditions.length ? and(...conditions) : undefined;
 
   const [totalRes] = await db.select({ count: count() }).from(cashCollections).where(whereClause);
   const total = Number(totalRes?.count || 0);
 
-  const rows = await db.select().from(cashCollections)
+  const rows = await db
+    .select({
+      id: cashCollections.id,
+      rideId: cashCollections.rideId,
+      driverId: cashCollections.driverId,
+      driverName: drivers.name,
+      driverPhone: drivers.phone,
+      expectedAmountMinor: cashCollections.expectedAmountMinor,
+      collectedAmountMinor: cashCollections.collectedAmountMinor,
+      platformCommissionMinor: cashCollections.platformCommissionMinor,
+      currencyCode: cashCollections.currencyCode,
+      status: cashCollections.status,
+      disputeReason: cashCollections.disputeReason,
+      reportedAt: cashCollections.reportedAt,
+      verifiedAt: cashCollections.verifiedAt,
+      createdAt: cashCollections.createdAt,
+      updatedAt: cashCollections.updatedAt,
+    })
+    .from(cashCollections)
+    .leftJoin(drivers, eq(cashCollections.driverId, drivers.id))
     .where(whereClause)
     .orderBy(desc(cashCollections.createdAt))
     .limit(limit)
     .offset(offset);
 
   return { rows, pagination: { currentPage: page, itemsPerPage: limit, totalItems: total, totalPages: Math.ceil(total / limit) || 1 } };
+}
+
+export async function verifyCashCollection(id) {
+  const [updated] = await db.update(cashCollections)
+    .set({ status: 'settled', verifiedAt: new Date(), updatedAt: new Date() })
+    .where(eq(cashCollections.id, id))
+    .returning();
+  return updated;
 }
 
 export async function listCashDisputes(page = 1, limit = 10, offset = 0, filters = {}) {

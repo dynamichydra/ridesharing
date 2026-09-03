@@ -2,7 +2,7 @@ import { eq, and, desc, count, sql, inArray, gte, lte } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import {
   corporateAccounts, corporateUsers, corporateInvoices,
-  corporateInvoiceItems, corporatePayments, users, rides,
+  corporateInvoiceItems, corporatePayments, users, rides, countries,
 } from '../../../drizzle/schema/index.js';
 import { postTransaction, getOrCreateSystemAccount } from '../ledger/ledger.service.js';
 import { createFinancialTransaction } from '../ledger/financial-transaction.service.js';
@@ -10,8 +10,31 @@ import { paginate } from '../../utils/response.js';
 import { moment } from '../../utils/time.js';
 
 export async function createCorporateAccount(data) {
-  const [account] = await db.insert(corporateAccounts).values(data).returning();
-  return account;
+  const companyName = data.companyName || data.name;
+  const taxNumber = data.taxNumber || data.taxId;
+  let countryId = data.countryId;
+  if (!countryId) {
+    const [c] = await db.select({ id: countries.id }).from(countries).limit(1);
+    countryId = c?.id;
+  }
+  const payload = {
+    companyName,
+    billingEmail: data.billingEmail,
+    billingPhone: data.billingPhone || null,
+    taxNumber: taxNumber || null,
+    address: data.address || null,
+    countryId,
+    currencyCode: data.currencyCode || 'INR',
+    paymentTerms: data.paymentTerms || 'net_30',
+    creditLimitMinor: data.creditLimitMinor || 10000000,
+    currentExposureMinor: data.currentExposureMinor || 0,
+    status: data.status || 'active',
+  };
+  const [account] = await db.insert(corporateAccounts).values(payload).returning();
+  return {
+    ...account,
+    name: account.companyName,
+  };
 }
 
 export async function addCorporateUser(corporateAccountId, { userId, role = 'employee', spendingLimitMinor = null }) {
@@ -217,13 +240,19 @@ export async function listCorporateAccounts(page = 1, limit = 10, offset = 0, fi
   const [totalRes] = await db.select({ count: count() }).from(corporateAccounts).where(whereClause);
   const total = Number(totalRes?.count || 0);
 
-  const rows = await db.select().from(corporateAccounts)
+  const rawRows = await db.select().from(corporateAccounts)
     .where(whereClause)
     .orderBy(desc(corporateAccounts.createdAt))
     .limit(limit)
     .offset(offset);
 
-  return { rows, pagination: paginate(total, page, limit) };
+  const rows = rawRows.map((r) => ({
+    ...r,
+    name: r.companyName || r.name,
+    taxId: r.taxNumber || r.taxId,
+  }));
+
+  return { rows, pagination: paginate(page, limit, total) };
 }
 
 export async function listCorporateInvoices(corporateAccountId = null, page = 1, limit = 10, offset = 0) {
@@ -241,6 +270,6 @@ export async function listCorporateInvoices(corporateAccountId = null, page = 1,
     .limit(limit)
     .offset(offset);
 
-  return { rows, pagination: paginate(total, page, limit) };
+  return { rows, pagination: paginate(page, limit, total) };
 }
 

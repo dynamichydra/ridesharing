@@ -4,7 +4,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { assignDriverToRide } from './assignment.service.js';
 import { rejectOffer, getDriverOffers } from '../ride/ride_offer.service.js';
 import { joinAirportQueue, leaveAirportQueue, getAirportQueueStatus } from './airport-queue.service.js';
-import { listMatchingPolicies, upsertMatchingPolicy } from './matching-policy.service.js';
+import { listMatchingPolicies, upsertMatchingPolicy, deleteMatchingPolicy } from './matching-policy.service.js';
 import { getZoneSupplyDemand, getAllSupplyDemandMetrics } from './supply-demand.service.js';
 import { runMatchingReconciliation } from './matching-reconciliation.service.js';
 import { sendSuccess, sendError } from '../../utils/response.js';
@@ -202,4 +202,11 @@ export async function handleUpsertPolicy(request, reply) {
 export async function handleTriggerReconciliation(request, reply) {
   const report = await runMatchingReconciliation();
   return sendSuccess(reply, report);
+}
+
+export async function handleDeletePolicy(request, reply) {
+  const { id } = request.params;
+  const deleted = await deleteMatchingPolicy(id);
+  if (!deleted) return sendError(reply, 'Policy not found', 404);
+  return sendSuccess(reply, deleted);
 }
