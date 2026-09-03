@@ -28,4 +28,7 @@ export const promosApi = {
 
   update: (id: string, payload: UpdatePromoPayload) =>
     apiClient.patch<Promo>(`${BASE_URL}/${id}`, payload),
+
+  delete: (id: string) =>
+    apiClient.delete(`${BASE_URL}/${id}`),
 };

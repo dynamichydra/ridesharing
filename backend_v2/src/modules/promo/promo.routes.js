@@ -54,4 +54,10 @@ export async function promoRoutes(app) {
     const data = await promoService.updatePromo(request.params.id, request.body || {});
     return sendSuccess(reply, data);
   });
+
+  // DELETE /api/v1/promos/:id
+  app.delete('/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await promoService.deletePromo(request.params.id);
+    return sendSuccess(reply, data);
+  });
 }

@@ -27,6 +27,7 @@ interface PromoDialogProps {
 
 export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProps) {
   const [code, setCode] = useState("");
+  const [description, setDescription] = useState("");
   const [discountType, setDiscountType] = useState<DiscountType>("PERCENTAGE");
   const [discountValue, setDiscountValue] = useState("20");
   const [minFare, setMinFare] = useState("");
@@ -41,12 +42,15 @@ export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProp
   useEffect(() => {
     if (promoToEdit) {
       setCode(promoToEdit.code || "");
-      setDiscountType(promoToEdit.discountType || "PERCENTAGE");
-      setDiscountValue(
-        promoToEdit.discountType === "PERCENTAGE"
-          ? String(promoToEdit.discountValueMinor)
-          : String(promoToEdit.discountValueMinor / 100),
-      );
+      setDescription(promoToEdit.description || "");
+
+      const rawType = String(promoToEdit.discountType || "").toLowerCase();
+      const isPercent = rawType === "percentage" || rawType === "percent";
+      setDiscountType(isPercent ? "PERCENTAGE" : "FLAT");
+
+      const val = promoToEdit.discountValue ?? promoToEdit.discountValueMinor ?? 0;
+      setDiscountValue(isPercent ? String(val) : String(val / 100));
+
       setMinFare(
         promoToEdit.minFareMinor != null ? String(promoToEdit.minFareMinor / 100) : "",
       );
@@ -55,15 +59,16 @@ export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProp
           ? String(promoToEdit.maxDiscountMinor / 100)
           : "",
       );
-      setMaxUses(promoToEdit.maxUses != null ? String(promoToEdit.maxUses) : "");
+      const limit = promoToEdit.maxUses ?? promoToEdit.usageLimit;
+      setMaxUses(limit != null ? String(limit) : "");
       setPerUserLimit(
         promoToEdit.perUserLimit != null ? String(promoToEdit.perUserLimit) : "1",
       );
-      setExpiresAt(
-        promoToEdit.expiresAt ? promoToEdit.expiresAt.split("T")[0] : "",
-      );
+      const exp = promoToEdit.expiresAt || promoToEdit.validUntil;
+      setExpiresAt(exp ? exp.split("T")[0] : "");
     } else {
       setCode("");
+      setDescription("");
       setDiscountType("PERCENTAGE");
       setDiscountValue("20");
       setMinFare("");
@@ -77,24 +82,28 @@ export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProp
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const rawVal = parseFloat(discountValue) || 0;
-    const discountValueMinor =
-      discountType === "PERCENTAGE" ? Math.round(rawVal) : Math.round(rawVal * 100);
+    const isPercent = String(discountType).toLowerCase() === "percentage";
+    const discountVal = isPercent ? Math.round(rawVal) : Math.round(rawVal * 100);
 
     const payload = {
       code: code.trim().toUpperCase(),
-      discountType,
-      discountValueMinor,
-      minFareMinor: minFare ? Math.round(parseFloat(minFare) * 100) : null,
+      description: description.trim() || null,
+      discountType: isPercent ? ("percentage" as const) : ("flat_amount" as const),
+      discountValue: discountVal,
+      discountValueMinor: discountVal,
+      minFareMinor: minFare ? Math.round(parseFloat(minFare) * 100) : 0,
       maxDiscountMinor: maxDiscount ? Math.round(parseFloat(maxDiscount) * 100) : null,
+      usageLimit: maxUses ? parseInt(maxUses, 10) : null,
       maxUses: maxUses ? parseInt(maxUses, 10) : null,
       perUserLimit: perUserLimit ? parseInt(perUserLimit, 10) : 1,
+      validUntil: expiresAt ? new Date(expiresAt).toISOString() : null,
       expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
     };
 
     if (promoToEdit) {
       await updateMutation.mutateAsync({ id: promoToEdit.id, payload });
     } else {
-      await createMutation.mutateAsync(payload);
+      await createMutation.mutateAsync(payload as any);
     }
     onOpenChange(false);
   };
@@ -107,17 +116,28 @@ export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProp
         <DialogHeader>
           <DialogTitle>{promoToEdit ? "Edit Promo Code" : "Create Promo Code"}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="code">Coupon / Promo Code</Label>
-            <Input
-              id="code"
-              required
-              placeholder="e.g. WELCOME50"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              className="font-mono uppercase font-semibold"
-            />
+        <form onSubmit={handleSubmit} className="space-y-3.5 pt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="code">Coupon / Promo Code *</Label>
+              <Input
+                id="code"
+                required
+                placeholder="e.g. WELCOME50"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className="font-mono uppercase font-semibold"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="desc">Campaign / Description</Label>
+              <Input
+                id="desc"
+                placeholder="e.g. 50% off first trip"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -132,13 +152,15 @@ export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProp
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="PERCENTAGE">Percentage (%)</SelectItem>
-                  <SelectItem value="FLAT">Flat Amount (₹)</SelectItem>
+                  <SelectItem value="FLAT">Flat Amount (Minor / Cash)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="val">
-                {discountType === "PERCENTAGE" ? "Discount Percentage (%)" : "Flat Value (₹)"}
+                {String(discountType).toLowerCase() === "percentage"
+                  ? "Discount Percentage (%) *"
+                  : "Flat Amount (Units) *"}
               </Label>
               <Input
                 id="val"
@@ -154,21 +176,21 @@ export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProp
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="minFare">Min Fare Required (₹)</Label>
+              <Label htmlFor="minFare">Min Fare Required</Label>
               <Input
                 id="minFare"
                 type="number"
-                placeholder="None"
+                placeholder="0.00"
                 value={minFare}
                 onChange={(e) => setMinFare(e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="maxDiscount">Max Discount Cap (₹)</Label>
+              <Label htmlFor="maxDiscount">Max Discount Cap</Label>
               <Input
                 id="maxDiscount"
                 type="number"
-                placeholder="None"
+                placeholder="No limit"
                 value={maxDiscount}
                 onChange={(e) => setMaxDiscount(e.target.value)}
               />

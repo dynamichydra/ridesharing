@@ -185,10 +185,21 @@ export async function processReferralRewardOnFirstRide(refereeId, currencyCode =
 
 export async function createPromo(data) {
   if (!data.code) throw { statusCode: 400, message: 'Promo code is required' };
-  if (!['percentage', 'flat_amount'].includes(data.discountType)) {
+
+  const rawType = String(data.discountType || '').toLowerCase();
+  const discountType = (rawType === 'percentage' || rawType === 'percent')
+    ? 'percentage'
+    : (rawType === 'flat' || rawType === 'flat_amount')
+      ? 'flat_amount'
+      : rawType;
+
+  if (!['percentage', 'flat_amount'].includes(discountType)) {
     throw { statusCode: 400, message: 'discountType must be percentage or flat_amount' };
   }
-  if (!Number.isInteger(data.discountValue) || data.discountValue <= 0) {
+
+  const rawVal = data.discountValue != null ? data.discountValue : data.discountValueMinor;
+  const discountValue = parseInt(rawVal, 10);
+  if (isNaN(discountValue) || discountValue <= 0) {
     throw { statusCode: 400, message: 'discountValue must be a positive integer' };
   }
 
@@ -196,33 +207,61 @@ export async function createPromo(data) {
   const [existing] = await db.select().from(promos).where(eq(promos.code, cleanCode)).limit(1);
   if (existing) throw { statusCode: 409, message: 'Promo code already exists' };
 
+  const usageLimit = data.usageLimit != null
+    ? parseInt(data.usageLimit, 10)
+    : (data.maxUses != null ? parseInt(data.maxUses, 10) : null);
+
+  const validUntil = data.validUntil
+    ? new Date(data.validUntil)
+    : (data.expiresAt ? new Date(data.expiresAt) : null);
+
+  const validFrom = data.validFrom
+    ? new Date(data.validFrom)
+    : (data.startsAt ? new Date(data.startsAt) : new Date());
+
   const [promo] = await db.insert(promos).values({
     code: cleanCode,
     description: data.description || null,
-    discountType: data.discountType,
-    discountValue: data.discountValue,
+    discountType,
+    discountValue,
     maxDiscountMinor: data.maxDiscountMinor || null,
     minFareMinor: data.minFareMinor || 0,
-    usageLimit: data.usageLimit || null,
+    usageLimit,
     perUserLimit: data.perUserLimit || 1,
-    validFrom: data.validFrom ? new Date(data.validFrom) : new Date(),
-    validUntil: data.validUntil ? new Date(data.validUntil) : null,
+    validFrom,
+    validUntil,
     countryId: data.countryId || null,
     isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
   }).returning();
 
-  return promo;
+  return {
+    ...promo,
+    discountValueMinor: promo.discountValue,
+    maxUses: promo.usageLimit,
+    expiresAt: promo.validUntil ? promo.validUntil.toISOString() : null,
+    startsAt: promo.validFrom ? promo.validFrom.toISOString() : null,
+  };
 }
 
 export async function listPromos(filters, page, limit, offset) {
   const conditions = [];
-  if (filters.isActive !== undefined) conditions.push(eq(promos.isActive, filters.isActive === 'true'));
+  if (filters.isActive !== undefined && filters.isActive !== '') {
+    conditions.push(eq(promos.isActive, String(filters.isActive) === 'true'));
+  }
   if (filters.countryId) conditions.push(eq(promos.countryId, filters.countryId));
   const where = conditions.length ? and(...conditions) : undefined;
 
   const [{ total }] = await db.select({ total: count() }).from(promos).where(where);
-  const rows = await db.select().from(promos).where(where)
+  const rawRows = await db.select().from(promos).where(where)
     .orderBy(desc(promos.createdAt)).limit(limit).offset(offset);
+
+  const rows = rawRows.map((r) => ({
+    ...r,
+    discountValueMinor: r.discountValue,
+    maxUses: r.usageLimit,
+    expiresAt: r.validUntil ? r.validUntil.toISOString() : null,
+    startsAt: r.validFrom ? r.validFrom.toISOString() : null,
+  }));
 
   return { rows, pagination: paginate(page, limit, total) };
 }
@@ -232,12 +271,45 @@ export async function updatePromo(id, updates) {
   if (!existing) throw { statusCode: 404, message: 'Promo not found' };
 
   const patch = { updatedAt: new Date() };
+
+  if (updates.code) patch.code = String(updates.code).trim().toUpperCase();
   if (updates.description !== undefined) patch.description = updates.description;
   if (updates.isActive !== undefined) patch.isActive = Boolean(updates.isActive);
-  if (updates.usageLimit !== undefined) patch.usageLimit = updates.usageLimit;
-  if (updates.perUserLimit !== undefined) patch.perUserLimit = updates.perUserLimit;
-  if (updates.validUntil !== undefined) patch.validUntil = updates.validUntil ? new Date(updates.validUntil) : null;
+
+  if (updates.discountType) {
+    const rawType = String(updates.discountType).toLowerCase();
+    patch.discountType = (rawType === 'percentage' || rawType === 'percent') ? 'percentage' : 'flat_amount';
+  }
+
+  const rawVal = updates.discountValue != null ? updates.discountValue : updates.discountValueMinor;
+  if (rawVal != null) patch.discountValue = parseInt(rawVal, 10);
+
+  if (updates.minFareMinor !== undefined) patch.minFareMinor = updates.minFareMinor ? parseInt(updates.minFareMinor, 10) : 0;
+  if (updates.maxDiscountMinor !== undefined) patch.maxDiscountMinor = updates.maxDiscountMinor ? parseInt(updates.maxDiscountMinor, 10) : null;
+
+  const usageLimit = updates.usageLimit !== undefined ? updates.usageLimit : updates.maxUses;
+  if (usageLimit !== undefined) patch.usageLimit = usageLimit ? parseInt(usageLimit, 10) : null;
+
+  if (updates.perUserLimit !== undefined) patch.perUserLimit = parseInt(updates.perUserLimit, 10);
+
+  const validUntil = updates.validUntil !== undefined ? updates.validUntil : updates.expiresAt;
+  if (validUntil !== undefined) patch.validUntil = validUntil ? new Date(validUntil) : null;
+
+  const validFrom = updates.validFrom !== undefined ? updates.validFrom : updates.startsAt;
+  if (validFrom !== undefined) patch.validFrom = validFrom ? new Date(validFrom) : null;
 
   const [updated] = await db.update(promos).set(patch).where(eq(promos.id, id)).returning();
-  return updated;
+  return {
+    ...updated,
+    discountValueMinor: updated.discountValue,
+    maxUses: updated.usageLimit,
+    expiresAt: updated.validUntil ? updated.validUntil.toISOString() : null,
+    startsAt: updated.validFrom ? updated.validFrom.toISOString() : null,
+  };
+}
+
+export async function deletePromo(id) {
+  const [deleted] = await db.delete(promos).where(eq(promos.id, id)).returning();
+  if (!deleted) throw { statusCode: 404, message: 'Promo not found' };
+  return deleted;
 }

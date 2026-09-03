@@ -1,26 +1,33 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Power, Edit } from "lucide-react";
+import { Power, Edit, Trash2 } from "lucide-react";
 import type { Promo } from "../types";
 import { formatDate, moment } from "@/lib/utils";
 
 export function getPromoColumns({
   onEdit,
   onToggleStatus,
+  onDelete,
 }: {
   onEdit: (promo: Promo) => void;
   onToggleStatus: (promo: Promo) => void;
+  onDelete?: (promo: Promo) => void;
 }): ColumnDef<Promo>[] {
   return [
     {
       accessorKey: "code",
       header: "Promo Code",
       cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <span className="font-mono font-bold text-foreground tracking-wider bg-accent/60 px-2 py-0.5 rounded border border-border">
+        <div className="flex flex-col gap-0.5">
+          <span className="font-mono font-bold text-foreground tracking-wider bg-accent/60 px-2 py-0.5 rounded border border-border w-fit text-xs">
             {row.original.code}
           </span>
+          {row.original.description && (
+            <span className="text-[11px] text-muted-foreground line-clamp-1 max-w-[200px]">
+              {row.original.description}
+            </span>
+          )}
         </div>
       ),
     },
@@ -28,17 +35,20 @@ export function getPromoColumns({
       accessorKey: "discountType",
       header: "Discount",
       cell: ({ row }) => {
-        const { discountType, discountValueMinor } = row.original;
-        if (discountType === "PERCENTAGE") {
+        const rawType = String(row.original.discountType || "").toLowerCase();
+        const isPercentage = rawType === "percentage" || rawType === "percent";
+        const val = row.original.discountValue ?? row.original.discountValueMinor ?? 0;
+
+        if (isPercentage) {
           return (
             <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 font-semibold">
-              {discountValueMinor}% OFF
+              {val}% OFF
             </Badge>
           );
         }
         return (
           <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-semibold">
-            ₹{(discountValueMinor / 100).toFixed(2)} FLAT
+            ₹{(val / 100).toFixed(2)} FLAT
           </Badge>
         );
       },
@@ -46,32 +56,40 @@ export function getPromoColumns({
     {
       accessorKey: "minFareMinor",
       header: "Min Fare / Max Cap",
-      cell: ({ row }) => (
-        <div className="flex flex-col text-xs text-muted-foreground">
-          <span>Min: {row.original.minFareMinor != null ? `₹${(row.original.minFareMinor / 100).toFixed(0)}` : "None"}</span>
-          <span>Cap: {row.original.maxDiscountMinor != null ? `₹${(row.original.maxDiscountMinor / 100).toFixed(0)}` : "None"}</span>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const minFare = row.original.minFareMinor;
+        const maxCap = row.original.maxDiscountMinor;
+        return (
+          <div className="flex flex-col text-xs text-muted-foreground">
+            <span>Min: {minFare != null ? `₹${(minFare / 100).toFixed(0)}` : "None"}</span>
+            <span>Cap: {maxCap != null ? `₹${(maxCap / 100).toFixed(0)}` : "None"}</span>
+          </div>
+        );
+      },
     },
     {
       accessorKey: "usedCount",
       header: "Redemptions",
-      cell: ({ row }) => (
-        <div className="text-sm font-medium">
-          {row.original.usedCount}
-          {row.original.maxUses ? ` / ${row.original.maxUses}` : " (Unlimited)"}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const limit = row.original.maxUses ?? row.original.usageLimit;
+        return (
+          <div className="text-xs font-medium">
+            <span className="font-bold text-foreground">{row.original.usedCount}</span>
+            {limit ? ` / ${limit}` : " (Unlimited)"}
+          </div>
+        );
+      },
     },
     {
       accessorKey: "expiresAt",
       header: "Expiry",
       cell: ({ row }) => {
-        if (!row.original.expiresAt) return <span className="text-xs text-muted-foreground">Never</span>;
-        const isExpired = moment(row.original.expiresAt).isBefore(moment());
+        const exp = row.original.expiresAt || row.original.validUntil;
+        if (!exp) return <span className="text-xs text-muted-foreground">Never</span>;
+        const isExpired = moment(exp).isBefore(moment());
         return (
           <span className={`text-xs ${isExpired ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-            {formatDate(row.original.expiresAt)}
+            {formatDate(exp)}
             {isExpired && " (Expired)"}
           </span>
         );
@@ -96,29 +114,42 @@ export function getPromoColumns({
       id: "actions",
       header: "Actions",
       cell: ({ row }) => (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
             onClick={() => onEdit(row.original)}
             title="Edit Promo"
           >
-            <Edit className="h-4 w-4" />
+            <Edit className="h-3.5 w-3.5" />
           </Button>
+
           <Button
             variant="ghost"
             size="icon"
-            className={`h-8 w-8 ${
+            className={`h-7 w-7 cursor-pointer ${
               row.original.isActive
-                ? "text-destructive hover:bg-destructive/10"
+                ? "text-amber-600 hover:bg-amber-500/10"
                 : "text-emerald-600 hover:bg-emerald-500/10"
             }`}
             onClick={() => onToggleStatus(row.original)}
             title={row.original.isActive ? "Deactivate" : "Activate"}
           >
-            <Power className="h-4 w-4" />
+            <Power className="h-3.5 w-3.5" />
           </Button>
+
+          {onDelete && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-destructive cursor-pointer"
+              onClick={() => onDelete(row.original)}
+              title="Delete Promo"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       ),
     },

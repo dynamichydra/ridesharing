@@ -18,6 +18,7 @@ import {
   Globe,
   Copy,
   Check,
+  MapPin,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useVehicleModelsLookup, useDriver } from "../hooks";
+import { useCountryOptions, useStateOptions, useCityOptions } from "@/features/geo/hooks";
 import { vehiclesApi, driversApi } from "../api";
 import { bankDetailsApi } from "@/features/bank-details/api";
 import { useDriverPayoutSetup } from "@/features/bank-details/hooks";
@@ -52,6 +54,10 @@ export default function DriverRegisterWizardPage() {
   const { data: vehicleModelsData } = useVehicleModelsLookup();
   const vehicleModels = vehicleModelsData?.MESSAGE ?? [];
 
+  // Cascading Location lookups
+  const { data: countriesData, isLoading: isLoadingCountries } = useCountryOptions();
+  const countries = countriesData?.MESSAGE ?? [];
+
   // If editing an existing driver, fetch their profile
   const { data: existingDriverData } = useDriver(driverId || undefined);
   const existingSummary = existingDriverData?.MESSAGE;
@@ -73,13 +79,16 @@ export default function DriverRegisterWizardPage() {
 
   // Form State
   const [formData, setFormData] = useState({
-    // Step 1: Personal
+    // Step 1: Personal & Location
     name: "",
     phone: "",
     email: "",
     dateOfBirth: "",
     gender: "male",
     referralCode: "",
+    countryId: "",
+    stateId: "",
+    cityId: "",
     // Step 2: Vehicle
     vehicleModelId: "",
     year: new Date().getFullYear().toString(),
@@ -102,6 +111,12 @@ export default function DriverRegisterWizardPage() {
     routingCode: "",
   });
 
+  const { data: statesData, isLoading: isLoadingStates } = useStateOptions(formData.countryId || undefined);
+  const states = statesData?.MESSAGE ?? [];
+
+  const { data: citiesData, isLoading: isLoadingCities } = useCityOptions(formData.stateId || undefined);
+  const cities = citiesData?.MESSAGE ?? [];
+
   // Pre-fill form when editing an existing driver
   useEffect(() => {
     if (existingDriver) {
@@ -113,6 +128,9 @@ export default function DriverRegisterWizardPage() {
         dateOfBirth: existingDriver.dateOfBirth || prev.dateOfBirth,
         gender: existingDriver.gender || prev.gender,
         referralCode: existingDriver.referralCode || prev.referralCode,
+        countryId: existingDriver.countryId || prev.countryId,
+        stateId: existingDriver.stateId || prev.stateId,
+        cityId: existingDriver.cityId || prev.cityId,
         licenseNumber: existingDriver.licenseNumber || prev.licenseNumber,
         aadharNumber: existingDriver.aadharNumber || prev.aadharNumber,
         ...(existingActiveVehicle
@@ -134,6 +152,23 @@ export default function DriverRegisterWizardPage() {
 
   const handleChange = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleCountryChange = (countryId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      countryId,
+      stateId: "",
+      cityId: "",
+    }));
+  };
+
+  const handleStateChange = (stateId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      stateId,
+      cityId: "",
+    }));
   };
 
   // Handle vehicle image upload
@@ -171,6 +206,11 @@ export default function DriverRegisterWizardPage() {
           return null;
         }
 
+        if (!formData.countryId) {
+          toast.error("Please select an operating country (required for vehicle & payout rules in next steps)");
+          return null;
+        }
+
         if (!targetId) {
           // Create initial driver record
           const driverRes: any = await driversApi.create({
@@ -180,6 +220,9 @@ export default function DriverRegisterWizardPage() {
             dateOfBirth: formData.dateOfBirth || undefined,
             gender: formData.gender,
             referralCode: formData.referralCode || undefined,
+            countryId: formData.countryId || undefined,
+            stateId: formData.stateId || undefined,
+            cityId: formData.cityId || undefined,
           });
           targetId = driverRes.id || driverRes.MESSAGE?.id || driverRes.data?.id;
           if (targetId) {
@@ -195,6 +238,9 @@ export default function DriverRegisterWizardPage() {
             dateOfBirth: formData.dateOfBirth || undefined,
             gender: formData.gender,
             referralCode: formData.referralCode || undefined,
+            countryId: formData.countryId || undefined,
+            stateId: formData.stateId || undefined,
+            cityId: formData.cityId || undefined,
           });
         }
       }
@@ -489,6 +535,95 @@ export default function DriverRegisterWizardPage() {
                     value={formData.referralCode}
                     onChange={(e) => handleChange("referralCode", e.target.value)}
                   />
+                </div>
+
+                {/* ── Operating Location & Jurisdiction ── */}
+                <div className="sm:col-span-2 pt-4 mt-2 border-t border-border/80">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="bg-primary/10 p-1.5 rounded-lg text-primary">
+                      <MapPin className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-foreground">Operating Jurisdiction & Location</h4>
+                      <p className="text-[11px] text-muted-foreground">
+                        Required for matching vehicle types, local document compliance, and automatic payout gateway setup in subsequent steps.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="country" className="flex items-center justify-between text-xs">
+                        <span>Operating Country *</span>
+                        {isLoadingCountries && <span className="text-[10px] text-muted-foreground">Loading...</span>}
+                      </Label>
+                      <NativeSelect
+                        id="country"
+                        value={formData.countryId}
+                        onChange={(e) => handleCountryChange(e.target.value)}
+                        required
+                      >
+                        <option value="">-- Select Country --</option>
+                        {countries.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ({c.isoCode})
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="state" className="flex items-center justify-between text-xs">
+                        <span>State / Province</span>
+                        {isLoadingStates && <span className="text-[10px] text-muted-foreground">Loading...</span>}
+                      </Label>
+                      <NativeSelect
+                        id="state"
+                        value={formData.stateId}
+                        onChange={(e) => handleStateChange(e.target.value)}
+                        disabled={!formData.countryId || isLoadingStates}
+                      >
+                        <option value="">
+                          {!formData.countryId
+                            ? "-- Select Country First --"
+                            : isLoadingStates
+                            ? "Loading states..."
+                            : "-- Select State / Province --"}
+                        </option>
+                        {states.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="city" className="flex items-center justify-between text-xs">
+                        <span>City / Operating Hub</span>
+                        {isLoadingCities && <span className="text-[10px] text-muted-foreground">Loading...</span>}
+                      </Label>
+                      <NativeSelect
+                        id="city"
+                        value={formData.cityId}
+                        onChange={(e) => handleChange("cityId", e.target.value)}
+                        disabled={!formData.stateId || isLoadingCities}
+                      >
+                        <option value="">
+                          {!formData.stateId
+                            ? "-- Select State First --"
+                            : isLoadingCities
+                            ? "Loading cities..."
+                            : "-- Select City / Hub --"}
+                        </option>
+                        {cities.map((ct) => (
+                          <option key={ct.id} value={ct.id}>
+                            {ct.name}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -815,6 +950,36 @@ export default function DriverRegisterWizardPage() {
                   <p><span className="text-muted-foreground">Phone:</span> {formData.phone || "N/A"}</p>
                   <p><span className="text-muted-foreground">Email:</span> {formData.email || "N/A"}</p>
                   <p><span className="text-muted-foreground">Gender:</span> {formData.gender}</p>
+                </div>
+
+                {/* Location summary */}
+                <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-2">
+                  <div className="flex justify-between items-center font-semibold text-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5 text-primary" />
+                      Operating Location
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[11px] text-primary cursor-pointer"
+                      onClick={() => setCurrentStep(1)}
+                    >
+                      Edit
+                    </Button>
+                  </div>
+                  <p>
+                    <span className="text-muted-foreground">Country:</span>{" "}
+                    {countries.find((c) => c.id === formData.countryId)?.name || "Not selected"}
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">State:</span>{" "}
+                    {states.find((s) => s.id === formData.stateId)?.name || "N/A"}
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">City / Hub:</span>{" "}
+                    {cities.find((ct) => ct.id === formData.cityId)?.name || "N/A"}
+                  </p>
                 </div>
 
                 {/* Vehicle summary */}

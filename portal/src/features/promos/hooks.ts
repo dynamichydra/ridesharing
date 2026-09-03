@@ -63,3 +63,17 @@ export function useTogglePromoStatus() {
     },
   });
 }
+
+export function useDeletePromo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => promosApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEY] });
+      toast.success("Promo code deleted successfully");
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.MESSAGE || "Failed to delete promo code");
+    },
+  });
+}
