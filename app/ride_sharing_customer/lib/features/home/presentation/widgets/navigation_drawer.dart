@@ -50,12 +50,12 @@ class AppNavigationDrawer extends StatelessWidget {
                   title: 'Wallet',
                   route: '/wallet',
                 ),
-                // _buildDrawerItem(
-                //   context,
-                //   icon: Icons.location_on_outlined,
-                //   title: 'My Addresses',
-                //   route: '/saved-places',
-                // ),
+                _buildDrawerItem(
+                  context,
+                  icon: Icons.location_on_outlined,
+                  title: 'Saved Places',
+                  route: '/saved-places',
+                ),
                 // _buildDrawerItem(
                 //   context,
                 //   icon: Icons.card_giftcard_rounded,

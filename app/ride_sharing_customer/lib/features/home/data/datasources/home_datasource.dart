@@ -45,9 +45,32 @@ class HomeDataSourceImpl implements HomeDataSource {
 
   @override
   Future<List<Map<String, dynamic>>> getSavedPlaces() async {
-    final response = await _dioClient.getMockData(AppMockAssets.users);
-    final user = Map<String, dynamic>.from(response as Map);
-    final saved = user['saved_places'] as List? ?? [];
-    return saved.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    try {
+      final response = await _dioClient.dio.get('/api/v1/saved-places');
+      if (response.data['SUCCESS'] == true && response.data['MESSAGE'] is List) {
+        final List<dynamic> list = response.data['MESSAGE'];
+        return list.map((e) {
+          final item = Map<String, dynamic>.from(e as Map);
+          return {
+            'id': item['id']?.toString() ?? '',
+            'type': item['label']?.toString() ?? 'favorite',
+            'name': item['name']?.toString() ?? (item['label']?.toString() ?? 'Place'),
+            'address': item['address']?.toString() ?? '',
+            'latitude': double.tryParse(item['lat']?.toString() ?? '') ?? 0.0,
+            'longitude': double.tryParse(item['lng']?.toString() ?? '') ?? 0.0,
+            'isDefaultPickup': item['isDefaultPickup'] == true,
+          };
+        }).toList();
+      }
+    } catch (_) {}
+
+    try {
+      final response = await _dioClient.getMockData(AppMockAssets.users);
+      final user = Map<String, dynamic>.from(response as Map);
+      final saved = user['saved_places'] as List? ?? [];
+      return saved.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (_) {
+      return [];
+    }
   }
 }
