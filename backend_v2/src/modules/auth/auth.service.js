@@ -1,7 +1,7 @@
 import { eq, and, or, like, sql } from 'drizzle-orm';
 import bcrypt                                      from 'bcryptjs';
 import { db }                                      from '../../config/db.js';
-import { users, drivers, admins, driverDevices }   from '../../../drizzle/schema/index.js';
+import { users, drivers, admins, driverDevices, countries }   from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS }                      from '../../config/redis.js';
 import { generateOtp, storeOtp, verifyOtp,
          sendOtpSms, assertCanSendOtp, markOtpSent } from '../../utils/otp.js';
@@ -62,6 +62,64 @@ function assertValidPhone(phone) {
     throw { statusCode: 400, code: 'PHONE_INVALID', message: 'Enter a valid phone number in international format, e.g. +919876543210' };
   }
 }
+
+/**
+ * Validates that a driver's phone number matches their registered country.
+ * Prevents Canadian drivers from registering with Indian numbers (+91),
+ * and Indian drivers from registering with Canadian/US numbers (+1).
+ */
+export async function validateDriverPhoneCountryMatch(phone, countryCodeOrId) {
+  if (!phone || !countryCodeOrId) return;
+
+  const normPhone = normalizePhone(phone);
+
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(countryCodeOrId);
+  const condition = isUuid
+    ? eq(countries.id, countryCodeOrId)
+    : eq(countries.isoCode, String(countryCodeOrId).toUpperCase());
+
+  const [country] = await db.select().from(countries).where(condition).limit(1);
+
+  if (!country) return;
+
+  const targetIso = country.isoCode.toUpperCase();
+  const dialDigits = country.dialCode.replace(/\D/g, '');
+  const digitsOnly = normPhone.replace(/\D/g, '');
+
+  const isDialMatch = normPhone.startsWith(`+${dialDigits}`) ||
+    (targetIso === 'IN' && digitsOnly.length === 10) ||
+    (targetIso === 'IN' && digitsOnly.length === 12 && digitsOnly.startsWith('91')) ||
+    (targetIso === 'CA' && digitsOnly.length === 11 && digitsOnly.startsWith('1'));
+
+  if (targetIso === 'CA') {
+    if (normPhone.startsWith('+91') || (digitsOnly.length === 12 && digitsOnly.startsWith('91'))) {
+      throw {
+        statusCode: 400,
+        code: 'PHONE_COUNTRY_MISMATCH',
+        message: 'Canadian drivers cannot register with an Indian phone number (+91)',
+      };
+    }
+  }
+
+  if (targetIso === 'IN') {
+    if (normPhone.startsWith('+1') || (digitsOnly.length === 11 && digitsOnly.startsWith('1'))) {
+      throw {
+        statusCode: 400,
+        code: 'PHONE_COUNTRY_MISMATCH',
+        message: 'Indian drivers cannot register with a Canadian phone number (+1)',
+      };
+    }
+  }
+
+  if (!isDialMatch) {
+    throw {
+      statusCode: 400,
+      code: 'PHONE_COUNTRY_MISMATCH',
+      message: `Drivers in ${country.name} must register with a valid ${country.name} phone number (${country.dialCode})`,
+    };
+  }
+}
+
 function assertValidEmail(email) {
   if (!EMAIL_REGEX.test(email)) throw { statusCode: 400, code: 'EMAIL_INVALID', message: 'Enter a valid email address' };
 }
@@ -104,12 +162,17 @@ export async function verifyRiderOtp(phone, otp, app) {
 
 // ── Driver mobile auth (device-scoped) ─────────────────────────────────────────
 
-export async function driverMobileStart(phone, deviceId) {
+export async function driverMobileStart(phone, deviceId, countryCodeOrId = null) {
   assertValidPhone(phone);
   if (!deviceId) throw { statusCode: 400, message: 'deviceId is required' };
+
+  if (countryCodeOrId) {
+    await validateDriverPhoneCountryMatch(phone, countryCodeOrId);
+  }
+
   await assertCanSendOtp(phone);
 
-  console.log(`[DriverAuth:driverMobileStart] phone="${phone}", deviceId="${deviceId}"`);
+  console.log(`[DriverAuth:driverMobileStart] phone="${phone}", deviceId="${deviceId}", country="${countryCodeOrId || 'unspecified'}"`);
   const existing = await findDriverByPhone(phone);
   console.log(`[DriverAuth:driverMobileStart] existing driver found:`, existing ? `id=${existing.id}, name=${existing.name}, status=${existing.registrationStatus}` : 'NONE');
 

@@ -1,6 +1,6 @@
 import { eq, and, count } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { zones } from '../../../drizzle/schema/index.js';
+import { zones, cities, cityServiceAreas } from '../../../drizzle/schema/index.js';
 import { isPointInPolygon } from '../../utils/geo.js';
 import { paginate } from '../../utils/response.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
@@ -27,6 +27,95 @@ export async function getById(id) {
 export async function detectZone(lat, lng) {
   const allZones = await db.select().from(zones).where(eq(zones.isActive, true));
   return allZones.find(z => isPointInPolygon(lat, lng, z.polygon.coordinates)) || null;
+}
+
+/**
+ * Checks whether a given (lat, lng) coordinate is within our active operational service area.
+ * Supports 2-Tier Enterprise Geofencing:
+ * 1. Macro City Level: Checks whether the city is active (cities.isActive) and within active city service areas.
+ * 2. Micro Zone Level: Checks specific operational zones, surge zones, airport zones, and restricted areas.
+ *
+ * Returns { inServiceArea: boolean, zone: Object|null, reason?: string, message?: string }
+ */
+export async function isLocationInServiceArea(lat, lng) {
+  const parsedLat = parseFloat(lat);
+  const parsedLng = parseFloat(lng);
+
+  if (isNaN(parsedLat) || isNaN(parsedLng)) {
+    return {
+      inServiceArea: false,
+      reason: 'INVALID_COORDINATES',
+      message: 'Invalid coordinates provided',
+    };
+  }
+
+  // 1. Fetch zones joined with parent city status
+  const allZones = await db.select({
+    zone: zones,
+    cityName: cities.name,
+    cityIsActive: cities.isActive,
+  })
+  .from(zones)
+  .leftJoin(cities, eq(zones.cityId, cities.id))
+  .where(eq(zones.isActive, true));
+
+  if (!allZones.length) {
+    // If no zones configured in DB at all (fresh dev/test env), allow fallback
+    return { inServiceArea: true, zone: null, isFallback: true };
+  }
+
+  const match = allZones.find(m => m.zone.polygon?.coordinates && isPointInPolygon(parsedLat, parsedLng, m.zone.polygon.coordinates)) || null;
+
+  if (!match) {
+    return {
+      inServiceArea: false,
+      reason: 'OUT_OF_SERVICE_AREA',
+      message: 'We do not operate in this area yet. Location is outside our operational service area.',
+    };
+  }
+
+  // 2. City-level activation gate (e.g. city not launched yet or temporarily paused)
+  if (match.zone.cityId && match.cityIsActive === false) {
+    return {
+      inServiceArea: false,
+      reason: 'CITY_INACTIVE',
+      message: `Service in ${match.cityName || 'this city'} is currently unavailable or not launched yet.`,
+    };
+  }
+
+  // 3. Zone-level restricted geofence gate (e.g. military/security/restricted zone)
+  if (match.zone.type === 'restricted') {
+    return {
+      inServiceArea: false,
+      reason: 'RESTRICTED_ZONE',
+      message: 'This location is in a restricted geofenced area.',
+    };
+  }
+
+  // 4. Macro City Service Area boundary check (if city_service_areas exist for this city)
+  if (match.zone.cityId) {
+    const serviceAreas = await db.select()
+      .from(cityServiceAreas)
+      .where(and(
+        eq(cityServiceAreas.cityId, match.zone.cityId),
+        eq(cityServiceAreas.isActive, true)
+      ));
+
+    if (serviceAreas.length > 0) {
+      const insideCityBoundary = serviceAreas.some(sa =>
+        sa.status === 'ACTIVE' && sa.polygon?.coordinates && isPointInPolygon(parsedLat, parsedLng, sa.polygon.coordinates)
+      );
+      if (!insideCityBoundary) {
+        return {
+          inServiceArea: false,
+          reason: 'OUTSIDE_CITY_SERVICE_AREA',
+          message: `Location is outside our active service boundary for ${match.cityName || 'this city'}.`,
+        };
+      }
+    }
+  }
+
+  return { inServiceArea: true, zone: match.zone };
 }
 
 export async function create(data) {

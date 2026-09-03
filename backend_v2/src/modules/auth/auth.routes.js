@@ -8,9 +8,9 @@ export async function authRoutes(app) {
 
   // POST /api/v1/auth/driver/mobile/start
   app.post('/driver/mobile/start', async (request, reply) => {
-    const { phone, deviceId } = request.body;
+    const { phone, deviceId, countryCode, countryId } = request.body || {};
     if (!phone || !deviceId) return sendError(reply, 'phone and deviceId are required');
-    const data = await authService.driverMobileStart(phone, deviceId);
+    const data = await authService.driverMobileStart(phone, deviceId, countryCode || countryId);
     return sendSuccess(reply, data);
   });
 

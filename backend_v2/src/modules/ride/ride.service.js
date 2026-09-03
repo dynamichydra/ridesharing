@@ -5,7 +5,7 @@ import { rides, drivers, users, rideFareSplits, ridePassengers, tripShareTokens,
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { calculateFare, validateAndLockQuote } from '../fare/fare.service.js';
-import { detectZone } from '../zone/zone.service.js';
+import { detectZone, isLocationInServiceArea } from '../zone/zone.service.js';
 import { moment } from '../../utils/time.js';
 
 import {
@@ -91,10 +91,15 @@ export async function requestRide({
     isScheduled = true;
   }
 
-  // Geofence restriction check
-  const pickupZone = await detectZone(parseFloat(pickupLat), parseFloat(pickupLng));
+  // Geofence & Service Area check
+  const pickupCheck = await isLocationInServiceArea(pickupLat, pickupLng);
+  if (!pickupCheck.inServiceArea) {
+    throw { statusCode: 400, code: pickupCheck.reason, message: pickupCheck.message };
+  }
+  const pickupZone = pickupCheck.zone;
+
   const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
-  if (pickupZone?.type === 'restricted' || dropZone?.type === 'restricted') {
+  if (dropZone?.type === 'restricted') {
     throw { statusCode: 400, message: 'Pickup or drop-off is in a restricted geofenced area' };
   }
 

@@ -9,6 +9,8 @@ import { createUploadUrl, verifyObjectExists } from '../../utils/storage.js';
 import * as vehicleService from '../vehicle/vehicle.service.js';
 import * as documentsService from '../documents/documents.service.js';
 import * as onboardingService from '../onboarding/onboarding.service.js';
+import { isLocationInServiceArea } from '../zone/zone.service.js';
+import { validateDriverPhoneCountryMatch } from '../auth/auth.service.js';
 
 function getStartOfTodayInTimezone(timeZone = 'UTC') {
   const now = new Date();
@@ -531,6 +533,12 @@ export async function updateDrivingLocation(driverId, { countryId, stateId, city
     throw { statusCode: 400, message: 'City does not belong to the given state/country' };
   }
 
+  // Cross-border phone matching: driver's phone must match operating country
+  const [driver] = await db.select({ phone: drivers.phone }).from(drivers).where(eq(drivers.id, driverId)).limit(1);
+  if (driver?.phone) {
+    await validateDriverPhoneCountryMatch(driver.phone, countryId);
+  }
+
   const [updated] = await db.update(drivers).set({
     countryId, stateId, cityId, updatedAt: new Date(),
   }).where(eq(drivers.id, driverId)).returning();
@@ -634,6 +642,16 @@ export async function goOnline(driverId, lat, lng) {
   if (!driver)                              throw { statusCode: 404, message: 'Driver not found' };
   if (driver.isBlocked)                     throw { statusCode: 403, message: 'Account is blocked' };
   if (driver.approvalStatus !== 'approved') throw { statusCode: 403, message: 'Account not approved yet' };
+
+  // Service area boundary check: driver cannot go online outside operational service area
+  const locationCheck = await isLocationInServiceArea(lat, lng);
+  if (!locationCheck.inServiceArea) {
+    throw {
+      statusCode: 400,
+      code: locationCheck.reason,
+      message: 'You cannot go online outside the operational service area',
+    };
+  }
 
   // A subscription is no longer required to go online (see commission.service.js) — but a
   // driver still needs somewhere for the platform to actually pay them, so an approved payout

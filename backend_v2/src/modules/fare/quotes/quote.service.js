@@ -3,6 +3,7 @@ import { db } from '../../../config/db.js';
 import { fareQuotes } from '../../../../drizzle/schema/index.js';
 import { FareEngine } from '../engine/fare.engine.js';
 import { moment } from '../../../utils/time.js';
+import { isLocationInServiceArea } from '../../zone/zone.service.js';
 
 const QUOTE_VALIDITY_MINUTES = 10;
 
@@ -10,6 +11,13 @@ const QUOTE_VALIDITY_MINUTES = 10;
  * Generates an immutable, locked fare quote snapshot and stores it in fare_quotes table.
  */
 export async function createFareQuote(request) {
+  if (request.pickupLat != null && request.pickupLng != null) {
+    const pickupCheck = await isLocationInServiceArea(request.pickupLat, request.pickupLng);
+    if (!pickupCheck.inServiceArea) {
+      throw { statusCode: 400, code: pickupCheck.reason, message: pickupCheck.message };
+    }
+  }
+
   const fareResult = await FareEngine.calculate({ ...request, skipCache: true });
 
   const expiresAt = moment().add(QUOTE_VALIDITY_MINUTES, 'minutes').toDate();

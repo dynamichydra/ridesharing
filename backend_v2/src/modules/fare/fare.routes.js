@@ -5,6 +5,7 @@ import { listAll } from '../vehicle-type/vehicle-type.service.js';
 import { getAvailableVehicleTypeIds } from '../matching/matching.service.js';
 import * as fareRulesService from './fare-rules.service.js';
 import * as taxRulesService from './tax-rules.service.js';
+import { isLocationInServiceArea, detectZone } from '../zone/zone.service.js';
 
 export async function fareRoutes(app) {
 
@@ -17,9 +18,21 @@ export async function fareRoutes(app) {
     if (!pickupLat || !pickupLng || !dropLat || !dropLng || !vehicleTypeId) {
       return sendError(reply, 'pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId are required');
     }
+    const lat = parseFloat(pickupLat);
+    const lng = parseFloat(pickupLng);
+
+    const pickupCheck = await isLocationInServiceArea(lat, lng);
+    if (!pickupCheck.inServiceArea) {
+      return sendError(reply, pickupCheck.message, 400, pickupCheck.reason);
+    }
+    const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
+    if (dropZone?.type === 'restricted') {
+      return sendError(reply, 'Drop-off is in a restricted geofenced area', 400, 'RESTRICTED_ZONE');
+    }
+
     const data = await calculateFare({
-      pickupLat: parseFloat(pickupLat), pickupLng: parseFloat(pickupLng),
-      dropLat:   parseFloat(dropLat),   dropLng:   parseFloat(dropLng),
+      pickupLat: lat, pickupLng: lng,
+      dropLat:   parseFloat(dropLat), dropLng: parseFloat(dropLng),
       vehicleTypeId,
     });
     return sendSuccess(reply, data);
@@ -32,10 +45,22 @@ export async function fareRoutes(app) {
     if (!pickupLat || !pickupLng || !dropLat || !dropLng) {
       return sendError(reply, 'pickupLat, pickupLng, dropLat, dropLng are required');
     }
+    const lat = parseFloat(pickupLat);
+    const lng = parseFloat(pickupLng);
+
+    const pickupCheck = await isLocationInServiceArea(lat, lng);
+    if (!pickupCheck.inServiceArea) {
+      return sendError(reply, pickupCheck.message, 400, pickupCheck.reason);
+    }
+    const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
+    if (dropZone?.type === 'restricted') {
+      return sendError(reply, 'Drop-off is in a restricted geofenced area', 400, 'RESTRICTED_ZONE');
+    }
+
     const activeTypes = await listAll(true);
     const data = await estimateAllTypes({
-      pickupLat: parseFloat(pickupLat), pickupLng: parseFloat(pickupLng),
-      dropLat:   parseFloat(dropLat),   dropLng:   parseFloat(dropLng),
+      pickupLat: lat, pickupLng: lng,
+      dropLat:   parseFloat(dropLat), dropLng: parseFloat(dropLng),
       activeVehicleTypes: activeTypes,
     });
     return sendSuccess(reply, data);
@@ -53,6 +78,16 @@ export async function fareRoutes(app) {
     }
     const lat = parseFloat(pickupLat);
     const lng = parseFloat(pickupLng);
+
+    // 1. Service area & geofence validation
+    const pickupCheck = await isLocationInServiceArea(lat, lng);
+    if (!pickupCheck.inServiceArea) {
+      return sendError(reply, pickupCheck.message, 400, pickupCheck.reason);
+    }
+    const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
+    if (dropZone?.type === 'restricted') {
+      return sendError(reply, 'Drop-off is in a restricted geofenced area', 400, 'RESTRICTED_ZONE');
+    }
 
     const [activeTypes, availableIds] = await Promise.all([
       listAll(true),
