@@ -1,4 +1,4 @@
-import { validateLocationInServiceArea } from '../../../geo/service-area.service.js';
+import { isLocationInServiceArea } from '../../../zone/zone.service.js';
 
 /**
  * Stage 1: Validate pickup (and optionally dropoff) coordinates against active service boundaries.
@@ -6,8 +6,8 @@ import { validateLocationInServiceArea } from '../../../geo/service-area.service
 export async function executeServiceAreaStage(context) {
   const { pickupLat, pickupLng, dropLat, dropLng } = context.request;
 
-  const pickupAreaCheck = await validateLocationInServiceArea(pickupLat, pickupLng);
-  if (!pickupAreaCheck.isAvailable) {
+  const pickupAreaCheck = await isLocationInServiceArea(pickupLat, pickupLng);
+  if (!pickupAreaCheck.inServiceArea) {
     throw {
       statusCode: 400,
       code: pickupAreaCheck.reason,
@@ -16,9 +16,10 @@ export async function executeServiceAreaStage(context) {
   }
 
   context.serviceArea = pickupAreaCheck.serviceArea;
-  context.cityId = pickupAreaCheck.cityId || context.request.cityId || null;
-  context.countryId = pickupAreaCheck.countryId || context.request.countryId || null;
-  context.timezone = pickupAreaCheck.timezone || null;
+  context.cityId = pickupAreaCheck.city?.id || pickupAreaCheck.serviceArea?.cityId || context.request.cityId || null;
+  context.countryId = pickupAreaCheck.serviceArea?.countryId || context.request.countryId || null;
+  context.timezone = pickupAreaCheck.city?.timezone || null;
+  context.pickupZone = pickupAreaCheck.zone || null;
 
   return context;
 }

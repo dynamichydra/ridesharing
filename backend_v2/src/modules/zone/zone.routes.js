@@ -39,9 +39,9 @@ export async function zoneRoutes(app) {
 
   // Admin only
   app.post('/', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const { name, type, polygon, countryId, resolution } = request.body;
-    if (!name || !type || !polygon || !countryId) {
-      return sendError(reply, 'name, type, polygon and countryId are required');
+    const { name, type, polygon, countryId, cityId, resolution } = request.body;
+    if (!name || !type || !polygon || !countryId || !cityId) {
+      return sendError(reply, 'name, type, polygon, countryId and cityId are required');
     }
     let data = await zoneService.create(request.body);
     if (resolution) data = await generateHexCells(data.id, resolution);

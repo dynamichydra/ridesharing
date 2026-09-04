@@ -32,7 +32,7 @@ export async function fareRoutes(app) {
 
     const data = await calculateFare({
       pickupLat: lat, pickupLng: lng,
-      dropLat:   parseFloat(dropLat), dropLng: parseFloat(dropLng),
+      dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
       vehicleTypeId,
     });
     return sendSuccess(reply, data);
@@ -60,7 +60,7 @@ export async function fareRoutes(app) {
     const activeTypes = await listAll(true);
     const data = await estimateAllTypes({
       pickupLat: lat, pickupLng: lng,
-      dropLat:   parseFloat(dropLat), dropLng: parseFloat(dropLng),
+      dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
       activeVehicleTypes: activeTypes,
     });
     return sendSuccess(reply, data);
@@ -98,7 +98,7 @@ export async function fareRoutes(app) {
 
     const data = await estimateAllTypes({
       pickupLat: lat, pickupLng: lng,
-      dropLat:   parseFloat(dropLat), dropLng: parseFloat(dropLng),
+      dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
       activeVehicleTypes: availableTypes,
     });
     return sendSuccess(reply, data);
@@ -113,7 +113,7 @@ export async function fareRoutes(app) {
     }
     const data = await createFareQuote({
       pickupLat: parseFloat(pickupLat), pickupLng: parseFloat(pickupLng),
-      dropLat:   parseFloat(dropLat),   dropLng:   parseFloat(dropLng),
+      dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
       vehicleTypeId,
       promoCode,
       userId: request.user?.id || null,
@@ -147,8 +147,8 @@ export async function fareRoutes(app) {
   app.get('/rules', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);
     const filters = {
-      ruleType:  request.query.ruleType,
-      isActive:  request.query.isActive !== undefined ? request.query.isActive === 'true' : undefined,
+      ruleType: request.query.ruleType,
+      isActive: request.query.isActive !== undefined ? request.query.isActive === 'true' : undefined,
       countryId: request.query.countryId,
     };
     const { rows, pagination } = await fareRulesService.listRules(page, limit, offset, filters);

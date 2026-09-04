@@ -24,11 +24,17 @@ export async function executeSurgeStage(context) {
     maxMultiplier,
   });
 
-  // Zone multiplier if zone sets a baseline multiplier (e.g. 1.2x)
-  const zoneMultiplier = pickupZone ? parseFloat(pickupZone.multiplier || '1.00') : 1.0;
+  // Baseline multiplier: If special zone matches, use zone.multiplier.
+  // If zone is null, baseline multiplier depends on city type (cityType.costIndex, fallback 1.00)
+  let baselineMultiplier = 1.0;
+  if (pickupZone?.multiplier) {
+    baselineMultiplier = parseFloat(pickupZone.multiplier);
+  } else if (context.cityType?.costIndex) {
+    baselineMultiplier = parseFloat(context.cityType.costIndex);
+  }
 
-  // Combine dynamic surge with dynamic fare rules multiplier
-  const effectiveSurgeMultiplier = parseFloat((surgeInfo.multiplier * rules.ruleMultiplier * zoneMultiplier).toFixed(4));
+  // Combine dynamic surge with dynamic fare rules multiplier and baseline zone/cityType multiplier
+  const effectiveSurgeMultiplier = parseFloat((surgeInfo.multiplier * rules.ruleMultiplier * baselineMultiplier).toFixed(4));
 
   // Calculate Surgeable Amount
   const surgeableBaseMinor = metered.meteredSubtotalMinor;
@@ -41,7 +47,8 @@ export async function executeSurgeStage(context) {
   context.surge = {
     surgeMultiplier: effectiveSurgeMultiplier,
     dynamicSurgeMultiplier: surgeInfo.multiplier,
-    zoneMultiplier,
+    zoneMultiplier: baselineMultiplier,
+    baselineMultiplier,
     ruleMultiplier: rules.ruleMultiplier,
     surgeableBaseMinor,
     surgeAmountMinor,

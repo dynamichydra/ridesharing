@@ -10,8 +10,10 @@ export async function executeZoneResolverStage(context) {
 
   // 1. Resolve pickup zone & dropoff zone
   const [pickupZone, dropZone] = await Promise.all([
-    detectZone(parseFloat(pickupLat), parseFloat(pickupLng)),
-    detectZone(parseFloat(dropLat), parseFloat(dropLng)),
+    context.pickupZone !== undefined
+      ? Promise.resolve(context.pickupZone)
+      : detectZone(parseFloat(pickupLat), parseFloat(pickupLng), context.cityId),
+    detectZone(parseFloat(dropLat), parseFloat(dropLng), context.cityId),
   ]);
 
   if (pickupZone?.type === 'restricted' || dropZone?.type === 'restricted') {
@@ -40,15 +42,15 @@ export async function executeZoneResolverStage(context) {
   const resolvedCityId = context.cityId || pickupZone?.cityId || null;
   let cityTypeId = context.cityTypeId || null;
   let cityDensity = 'medium';
+  let resolvedCityType = null;
 
   if (resolvedCityId) {
     try {
       const cityData = await getCityById(resolvedCityId);
-      if (cityData?.city?.cityTypeId) {
-        cityTypeId = cityData.city.cityTypeId;
-      }
-      if (cityData?.cityType?.densityLevel) {
-        cityDensity = cityData.cityType.densityLevel;
+      cityTypeId = cityData?.cityTypeId || cityData?.city?.cityTypeId || null;
+      resolvedCityType = cityData?.cityType || null;
+      if (resolvedCityType?.densityLevel) {
+        cityDensity = resolvedCityType.densityLevel;
       }
     } catch {
       // Non-blocking fallback
@@ -59,6 +61,7 @@ export async function executeZoneResolverStage(context) {
   context.dropZone = dropZone;
   context.cityId = resolvedCityId;
   context.cityTypeId = cityTypeId;
+  context.cityType = resolvedCityType;
   context.cityDensity = cityDensity;
   context.country = country;
   context.currencyCode = country.currencyCode;
