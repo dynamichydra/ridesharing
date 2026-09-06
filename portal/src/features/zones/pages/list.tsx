@@ -24,14 +24,16 @@ import {
   useResolveHexZones,
   useGenerateHexCells,
 } from "../hooks";
+import { useCities, useServiceAreas } from "@/features/geo/hooks";
 import { parseGeoJSONPolygonInput } from "@/features/geo/utils";
-import type { Zone, Pagination } from "../types";
+import type { Zone, Pagination, City, CityServiceArea } from "../types";
 import type { ZoneFormState, ZoneDetectFormState, GenerateHexFormState } from "../components/form";
 
 const EMPTY_ZONE_FORM: ZoneFormState = {
   countryId: "",
+  cityId: "",
   name: "",
-  type: "",
+  type: "airport",
   multiplier: "1.0",
   airportFee: "0",
   pickupFee: "0",
@@ -81,6 +83,30 @@ export default function ZoneList() {
     countryId,
   });
 
+  // Cities for the selected country (or all)
+  const { data: citiesResponse, isLoading: isLoadingCities } = useCities({
+    countryId: formValues.countryId || undefined,
+    limit: 100,
+  });
+  const cities: City[] = (citiesResponse?.MESSAGE || []) as City[];
+
+  // All cities map for table display
+  const { data: allCitiesResponse } = useCities({ limit: 500 });
+  const allCities: City[] = (allCitiesResponse?.MESSAGE || []) as City[];
+  const citiesMap = useMemo(() => {
+    const map = new Map<string, string>();
+    allCities.forEach((c) => map.set(c.id, c.name));
+    return map;
+  }, [allCities]);
+
+  // Active City Service Areas for the selected city
+  const { data: serviceAreasResponse, isLoading: isLoadingServiceAreas } = useServiceAreas({
+    cityId: formValues.cityId || undefined,
+    status: "ACTIVE",
+    limit: 20,
+  });
+  const serviceAreas: CityServiceArea[] = (serviceAreasResponse?.MESSAGE || []) as CityServiceArea[];
+
   const { data: countryZonesData } = useAllZones(formValues.countryId || undefined);
   const { data: allZonesData } = useAllZones();
   const formContextZones = useMemo(
@@ -120,6 +146,7 @@ export default function ZoneList() {
     setSelectedZone(zone);
     setFormValues({
       countryId: zone.countryId,
+      cityId: zone.cityId || "",
       name: zone.name,
       type: zone.type,
       multiplier: String(zone.multiplier),
@@ -151,6 +178,10 @@ export default function ZoneList() {
 
   const handleCreateSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
+    if (!formValues.cityId) {
+      toast.error("Please select a City. Special zones must reside inside a city's active service area.");
+      return;
+    }
     const { polygon, error } = parseGeoJSONPolygonInput(formValues.polygon);
     if (error || !polygon) {
       toast.error(error || "Please enter a valid GeoJSON polygon");
@@ -159,6 +190,7 @@ export default function ZoneList() {
     const { resolution, priority, airportFee, pickupFee, dropoffFee, polygon: _polygonText, ...rest } = formValues;
     createMutation.mutate({
       ...rest,
+      cityId: formValues.cityId,
       polygon,
       multiplier: parseFloat(formValues.multiplier) || 1.0,
       airportFeeMinor: Math.round((parseFloat(airportFee) || 0) * 100),
@@ -174,6 +206,10 @@ export default function ZoneList() {
   const handleEditSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedZone) return;
+    if (!formValues.cityId) {
+      toast.error("Please select a City. Special zones must reside inside a city's active service area.");
+      return;
+    }
     const { polygon, error } = parseGeoJSONPolygonInput(formValues.polygon);
     if (error || !polygon) {
       toast.error(error || "Please enter a valid GeoJSON polygon");
@@ -184,6 +220,7 @@ export default function ZoneList() {
       id: selectedZone.id,
       payload: {
         ...rest,
+        cityId: formValues.cityId,
         polygon,
         multiplier: parseFloat(formValues.multiplier) || 1.0,
         airportFeeMinor: Math.round((parseFloat(airportFee) || 0) * 100),
@@ -223,12 +260,13 @@ export default function ZoneList() {
     () =>
       getZoneColumns({
         countriesMap,
+        citiesMap,
         onViewHex: handleViewHex,
         onEdit: handleEditClick,
         onToggleActive: handleToggleActive,
         onGenerateHex: handleGenerateHexClick,
       }),
-    [countriesMap, handleViewHex, handleEditClick, handleToggleActive, handleGenerateHexClick]
+    [countriesMap, citiesMap, handleViewHex, handleEditClick, handleToggleActive, handleGenerateHexClick]
   );
 
   return (
@@ -294,6 +332,10 @@ export default function ZoneList() {
         onOpenChange={setIsCreateOpen}
         zone={null}
         countries={countriesData?.MESSAGE || []}
+        cities={cities}
+        serviceAreas={serviceAreas}
+        isLoadingCities={isLoadingCities}
+        isLoadingServiceAreas={isLoadingServiceAreas}
         values={formValues}
         onChange={setFormValues}
         onSubmit={handleCreateSubmit}
@@ -306,6 +348,10 @@ export default function ZoneList() {
         onOpenChange={setIsEditOpen}
         zone={selectedZone}
         countries={countriesData?.MESSAGE || []}
+        cities={cities}
+        serviceAreas={serviceAreas}
+        isLoadingCities={isLoadingCities}
+        isLoadingServiceAreas={isLoadingServiceAreas}
         values={formValues}
         onChange={setFormValues}
         onSubmit={handleEditSubmit}

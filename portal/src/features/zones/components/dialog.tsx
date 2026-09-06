@@ -7,13 +7,17 @@ import {
 } from "@/components/ui/dialog";
 import ZoneForm, { ZoneDetectForm, GenerateHexForm } from "./form";
 import type { ZoneFormState, ZoneDetectFormState, GenerateHexFormState } from "./form";
-import type { Zone, Country } from "../types";
+import type { Zone, Country, City, CityServiceArea } from "../types";
 
 interface ZoneFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   zone: Zone | null;
   countries: Country[];
+  cities?: City[];
+  serviceAreas?: CityServiceArea[];
+  isLoadingCities?: boolean;
+  isLoadingServiceAreas?: boolean;
   values: ZoneFormState;
   onChange: (values: ZoneFormState) => void;
   onSubmit: (e: React.FormEvent) => void;
@@ -26,6 +30,10 @@ export function ZoneFormDialog({
   onOpenChange,
   zone,
   countries,
+  cities = [],
+  serviceAreas = [],
+  isLoadingCities = false,
+  isLoadingServiceAreas = false,
   values,
   onChange,
   onSubmit,
@@ -36,21 +44,25 @@ export function ZoneFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-160 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{zone ? "Edit Zone" : "Add Zone"}</DialogTitle>
+          <DialogTitle>{zone ? "Edit Special Zone" : "Create Special Zone"}</DialogTitle>
           <DialogDescription>
             {zone
-              ? "Update core attributes and geofenced perimeters."
-              : "Register a geofenced area for local operational pricing structures."}
+              ? "Update special zone attributes, fare multiplier, and geofenced perimeters inside the city service area."
+              : "Define a special operational zone (e.g. Airport, College, Station, Tech Park) inside an active City Service Area."}
           </DialogDescription>
         </DialogHeader>
         <ZoneForm
           values={values}
           countries={countries}
+          cities={cities}
+          serviceAreas={serviceAreas}
+          isLoadingCities={isLoadingCities}
+          isLoadingServiceAreas={isLoadingServiceAreas}
           onChange={onChange}
           onSubmit={onSubmit}
           onCancel={() => onOpenChange(false)}
           isPending={isPending}
-          submitLabel={zone ? "Save Modifications" : "Generate Zone"}
+          submitLabel={zone ? "Save Modifications" : "Create Special Zone"}
           contextZones={contextZones}
           hexCells={zone?.hexCells}
         />

@@ -139,7 +139,7 @@ export function ServiceAreaHexModal({
   onOpenChange,
   area,
 }: ServiceAreaHexModalProps) {
-  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
   const hexPolygonsRef = useRef<any[]>([]);
   const boundaryPolygonRef = useRef<any>(null);
@@ -239,7 +239,7 @@ export function ServiceAreaHexModal({
       }
 
       if (hexCells.length > 0) {
-        const sampleLimit = Math.min(hexCells.length, 150);
+        const sampleLimit = Math.min(hexCells.length, 100);
         for (let i = 0; i < sampleLimit; i++) {
           try {
             const boundary = cellToBoundary(hexCells[i]);
@@ -256,7 +256,15 @@ export function ServiceAreaHexModal({
       }
 
       if (pointCount > 0) {
-        map.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
+        const div = map.getDiv?.();
+        const width = div?.clientWidth || 0;
+        const height = div?.clientHeight || 0;
+        const padding = width > 200 && height > 200 ? 50 : 10;
+        try {
+          map.fitBounds(bounds, padding);
+        } catch {
+          map.fitBounds(bounds);
+        }
       }
     },
     [boundaryCoords, hexCells]
@@ -270,7 +278,7 @@ export function ServiceAreaHexModal({
 
       const isDarkMode = document.documentElement.classList.contains("dark");
 
-      // 1. Boundary Polygon
+      // 1. Boundary Polygon (Outer Outline)
       if (showBoundary && boundaryCoords.length >= 3) {
         const boundaryPoly = new window.google.maps.Polygon({
           paths: boundaryCoords,
@@ -286,7 +294,7 @@ export function ServiceAreaHexModal({
         boundaryPolygonRef.current = boundaryPoly;
       }
 
-      // 2. H3 Hexagons
+      // 2. H3 Hexagons with prominent visual contrast
       if (showHexCells && hexCells.length > 0) {
         const hexStrokeColor = isDarkMode ? "#38bdf8" : "#0284c7";
         const hexFillColor = isDarkMode ? "#0284c7" : "#0ea5e9";
@@ -343,6 +351,7 @@ export function ServiceAreaHexModal({
               });
             });
 
+            // Click triggers detailed info and React state
             hexPoly.addListener("click", (event: any) => {
               try {
                 const center = cellToLatLng(cellId);
@@ -377,68 +386,106 @@ export function ServiceAreaHexModal({
     [clearMapObjects, showBoundary, boundaryCoords, showHexCells, hexCells, resolution]
   );
 
+  // Clean up map objects when modal closes
   useEffect(() => {
     if (!open) {
       clearMapObjects();
       mapInstanceRef.current = null;
+      infoWindowRef.current = null;
+    }
+  }, [open, clearMapObjects]);
+
+  // Initialize or re-fit Map when container element is ready and has non-zero size
+  useEffect(() => {
+    if (!open || !mapLoaded || !containerEl || !window.google?.maps?.Map) {
       return;
     }
 
-    if (!mapLoaded || !mapContainerRef.current || !window.google?.maps?.Map) return;
+    let isDestroyed = false;
 
-    const isDarkMode = document.documentElement.classList.contains("dark");
-    const initialCenter = boundaryCoords[0] || { lat: 22.5726, lng: 88.3639 };
+    const setupOrResizeMap = (width: number, height: number) => {
+      if (isDestroyed || width <= 0 || height <= 0) return;
 
-    const map = new window.google.maps.Map(mapContainerRef.current, {
-      center: initialCenter,
-      zoom: 13,
-      disableDefaultUI: false,
-      zoomControl: true,
-      mapTypeControl: true,
-      mapTypeControlOptions: {
-        style: window.google.maps.MapTypeControlStyle.DROPDOWN_MENU,
-        position: window.google.maps.ControlPosition.TOP_RIGHT,
-      },
-      streetViewControl: false,
-      fullscreenControl: true,
-      styles: isDarkMode ? darkMapStyles : lightMapStyles,
+      const isDarkMode = document.documentElement.classList.contains("dark");
+
+      if (!mapInstanceRef.current) {
+        const initialCenter = boundaryCoords[0] || { lat: 22.5726, lng: 88.3639 };
+        const map = new window.google.maps.Map(containerEl, {
+          center: initialCenter,
+          zoom: 13,
+          disableDefaultUI: false,
+          zoomControl: true,
+          mapTypeControl: true,
+          mapTypeControlOptions: {
+            style: window.google.maps.MapTypeControlStyle.DROPDOWN_MENU,
+            position: window.google.maps.ControlPosition.TOP_RIGHT,
+          },
+          streetViewControl: false,
+          fullscreenControl: true,
+          styles: isDarkMode ? darkMapStyles : lightMapStyles,
+        });
+
+        mapInstanceRef.current = map;
+        infoWindowRef.current = new window.google.maps.InfoWindow();
+
+        renderOverlays(map, infoWindowRef.current);
+        fitBoundsToArea(map);
+      } else {
+        window.google.maps.event.trigger(mapInstanceRef.current, "resize");
+        fitBoundsToArea(mapInstanceRef.current);
+      }
+    };
+
+    // Immediate check if element already has non-zero size
+    const rect = containerEl.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setupOrResizeMap(rect.width, rect.height);
+    }
+
+    // ResizeObserver watches for modal animation completion and layout changes
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setupOrResizeMap(width, height);
+        }
+      }
     });
 
-    mapInstanceRef.current = map;
-    infoWindowRef.current = new window.google.maps.InfoWindow();
+    resizeObserver.observe(containerEl);
 
-    renderOverlays(map, infoWindowRef.current);
+    // Fallback animation frame & timeouts during Radix Dialog entrance transition
+    const raf = requestAnimationFrame(() => {
+      const r = containerEl.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        setupOrResizeMap(r.width, r.height);
+      }
+    });
 
     const t1 = setTimeout(() => {
-      if (mapInstanceRef.current) {
-        window.google.maps.event.trigger(mapInstanceRef.current, "resize");
-        fitBoundsToArea(mapInstanceRef.current);
+      const r = containerEl.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        setupOrResizeMap(r.width, r.height);
       }
-    }, 100);
+    }, 150);
 
     const t2 = setTimeout(() => {
-      if (mapInstanceRef.current) {
-        window.google.maps.event.trigger(mapInstanceRef.current, "resize");
-        fitBoundsToArea(mapInstanceRef.current);
+      const r = containerEl.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        setupOrResizeMap(r.width, r.height);
       }
-    }, 300);
-
-    const t3 = setTimeout(() => {
-      if (mapInstanceRef.current) {
-        window.google.maps.event.trigger(mapInstanceRef.current, "resize");
-        fitBoundsToArea(mapInstanceRef.current);
-      }
-    }, 600);
+    }, 350);
 
     return () => {
+      isDestroyed = true;
+      resizeObserver.disconnect();
+      cancelAnimationFrame(raf);
       clearTimeout(t1);
       clearTimeout(t2);
-      clearTimeout(t3);
-      clearMapObjects();
-      mapInstanceRef.current = null;
     };
-  }, [open, mapLoaded, area, renderOverlays, fitBoundsToArea, boundaryCoords, clearMapObjects]);
+  }, [open, mapLoaded, containerEl, area?.id, boundaryCoords, fitBoundsToArea, renderOverlays]);
 
+  // Re-render overlays when visibility toggles change
   useEffect(() => {
     if (open && mapInstanceRef.current && infoWindowRef.current) {
       renderOverlays(mapInstanceRef.current, infoWindowRef.current);
@@ -536,7 +583,7 @@ export function ServiceAreaHexModal({
         </DialogHeader>
 
         {/* Map Container Area */}
-        <div className="relative flex-1 min-h-0 w-full bg-muted/30 overflow-hidden">
+        <div className="relative flex-1 min-h-[420px] w-full bg-muted/30 overflow-hidden">
           {!mapLoaded && !loadError && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-xs z-20 gap-3">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -575,9 +622,9 @@ export function ServiceAreaHexModal({
 
           {/* Absolute Positioned Google Maps DOM Container */}
           <div
-            ref={mapContainerRef}
+            ref={setContainerEl}
             className="absolute inset-0 w-full h-full"
-            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, width: "100%", height: "100%" }}
           />
 
           {/* Floating Info Overlay (Bottom Left) */}

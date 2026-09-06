@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const zoneSchema = z.object({
   countryId: z.string().min(1, "Country is required"),
-  cityId: z.string().optional(),
+  cityId: z.string().min(1, "City is required. Special zones must be inside an active City Service Area"),
   name: z.string().min(1, "Zone name is required"),
   type: z.string().min(1, "Zone type is required"),
   multiplier: z

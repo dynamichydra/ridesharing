@@ -1,17 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DialogFooter } from "@/components/ui/dialog";
-import { CheckCircle2, AlertCircle, Wand2, MapPin, Sparkles } from "lucide-react";
+import { CheckCircle2, AlertCircle, Wand2, MapPin, Sparkles, ShieldAlert, Info } from "lucide-react";
 import { parseGeoJSONPolygonInput } from "@/features/geo/utils";
-import type { Country, Zone } from "../types";
+import type { Country, City, CityServiceArea, Zone } from "../types";
 
 export interface ZoneFormState {
   countryId: string;
-  cityId?: string;
+  cityId: string;
   name: string;
   type: string;
   multiplier: string;
@@ -27,6 +27,10 @@ export interface ZoneFormState {
 interface ZoneFormProps {
   values: ZoneFormState;
   countries: Country[];
+  cities?: City[];
+  serviceAreas?: CityServiceArea[];
+  isLoadingCities?: boolean;
+  isLoadingServiceAreas?: boolean;
   onChange: (values: ZoneFormState) => void;
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
@@ -36,9 +40,23 @@ interface ZoneFormProps {
   hexCells?: string[] | null;
 }
 
+const SPECIAL_ZONE_PRESETS = [
+  { value: "airport", label: "✈️ Airport Hub (Flight arrival/departure surcharges & surge)" },
+  { value: "college", label: "🎓 College / University Campus (Student transit area)" },
+  { value: "station", label: "🚆 Transit Station (Railway / Metro / Central bus terminal)" },
+  { value: "tech_park", label: "🏢 Tech Park / Business District (Peak office commute corridor)" },
+  { value: "surge", label: "⚡ High-Demand Surge Hub (Localized surge pricing)" },
+  { value: "restricted", label: "🚫 Restricted Geofence (Prohibited zone — blocks rides entirely)" },
+  { value: "custom", label: "🏷️ Custom Special Area" },
+];
+
 export default function ZoneForm({
   values,
   countries,
+  cities = [],
+  serviceAreas = [],
+  isLoadingCities = false,
+  isLoadingServiceAreas = false,
   onChange,
   onSubmit,
   onCancel,
@@ -51,6 +69,19 @@ export default function ZoneForm({
     pointsCount?: number;
     sourceType?: string;
   } | null>(null);
+
+  const [isCustomType, setIsCustomType] = useState(
+    Boolean(values.type && !SPECIAL_ZONE_PRESETS.some((p) => p.value === values.type))
+  );
+
+  const filteredCities = useMemo(() => {
+    if (!values.countryId) return cities;
+    return cities.filter((c) => c.countryId === values.countryId);
+  }, [cities, values.countryId]);
+
+  const activeServiceArea = useMemo(() => {
+    return serviceAreas.find((sa) => sa.status === "ACTIVE" || sa.isActive) || serviceAreas[0] || null;
+  }, [serviceAreas]);
 
   useEffect(() => {
     if (!values.polygon || !values.polygon.trim()) {
@@ -94,8 +125,32 @@ export default function ZoneForm({
     onChange({ ...values, polygon: JSON.stringify(sample, null, 2) });
   };
 
+  const handleUseServiceAreaTemplate = () => {
+    if (!activeServiceArea?.polygon) return;
+    onChange({
+      ...values,
+      polygon: JSON.stringify(activeServiceArea.polygon, null, 2),
+    });
+  };
+
+  const isRestricted = values.type === "restricted";
+
   return (
-    <form onSubmit={onSubmit} className="space-y-4 py-3 text-foreground">
+    <form onSubmit={onSubmit} className="space-y-4 py-2 text-foreground">
+      {/* 2-Tier Spatial Hierarchy Guide */}
+      <div className="rounded-lg border border-border/80 bg-muted/40 p-3 space-y-1.5 text-xs">
+        <div className="flex items-center gap-1.5 font-semibold text-foreground">
+          <Info className="h-4 w-4 text-primary shrink-0" />
+          <span>Special Zone Architecture (2-Tier Spatial Model)</span>
+        </div>
+        <p className="text-muted-foreground leading-relaxed">
+          <strong>1. City Service Area</strong> defines the macro operational perimeter where riders request rides and drivers go online (configured in <em>Geo &gt; Service Areas</em>).
+          <br />
+          <strong>2. Special Zones</strong> (Airport, College, Station, Tech Park) sit <em>inside</em> the City Service Area for localized <strong>Fare Multipliers &amp; Surcharges</strong>. If a city has no special zones, standard baseline fares apply automatically based on city economic tier.
+        </p>
+      </div>
+
+      {/* Country & City Selection */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="z-country">
@@ -105,7 +160,9 @@ export default function ZoneForm({
             id="z-country"
             className="w-full flex h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             value={values.countryId}
-            onChange={(e) => onChange({ ...values, countryId: e.target.value })}
+            onChange={(e) => {
+              onChange({ ...values, countryId: e.target.value, cityId: "" });
+            }}
             required
           >
             <option value="" disabled>
@@ -113,90 +170,215 @@ export default function ZoneForm({
             </option>
             {countries.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {c.name} ({c.currencyCode})
               </option>
             ))}
           </select>
         </div>
 
         <div className="space-y-2">
+          <Label htmlFor="z-city">
+            City <span className="text-red-500">*</span>
+          </Label>
+          <select
+            id="z-city"
+            className="w-full flex h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            value={values.cityId}
+            onChange={(e) => onChange({ ...values, cityId: e.target.value })}
+            disabled={!values.countryId || isLoadingCities}
+            required
+          >
+            <option value="">
+              {!values.countryId
+                ? "Select Country first"
+                : isLoadingCities
+                ? "Loading cities..."
+                : "Select City"}
+            </option>
+            {filteredCities.map((city) => (
+              <option key={city.id} value={city.id}>
+                {city.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* City Service Area Status for the Selected City */}
+      {values.cityId && (
+        <div>
+          {isLoadingServiceAreas ? (
+            <p className="text-xs text-muted-foreground italic">Checking active City Service Area...</p>
+          ) : activeServiceArea ? (
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 flex items-center justify-between gap-2 text-xs">
+              <span className="font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                Active City Service Area: <strong>{activeServiceArea.name}</strong> ({activeServiceArea.status})
+              </span>
+              {activeServiceArea.polygon && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUseServiceAreaTemplate}
+                  className="h-7 text-[11px] bg-background hover:bg-muted font-normal cursor-pointer gap-1 shrink-0"
+                >
+                  <Sparkles className="h-3 w-3 text-primary" />
+                  Use Boundary as Template
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 flex items-start gap-2 text-xs">
+              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-semibold text-amber-800 dark:text-amber-300">
+                  No Active City Service Area Found
+                </span>
+                <p className="text-muted-foreground text-[11px]">
+                  Special zones must be located inside an active City Service Area. Please create an operational service area in <strong>Geo &gt; Service Areas</strong> before saving this zone.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Zone Name & Preset Type */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
           <Label htmlFor="z-name">
-            Zone Name <span className="text-red-500">*</span>
+            Special Zone Name <span className="text-red-500">*</span>
           </Label>
           <Input
             id="z-name"
-            placeholder="e.g. Bengaluru Central Core"
+            placeholder="e.g. Kempegowda Intl Airport / IIT Campus"
             value={values.name}
             onChange={(e) => onChange({ ...values, name: e.target.value })}
             required
           />
         </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="z-type-select">
+            Special Zone Category <span className="text-red-500">*</span>
+          </Label>
+          <select
+            id="z-type-select"
+            className="w-full flex h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            value={isCustomType ? "custom" : values.type || "airport"}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === "custom") {
+                setIsCustomType(true);
+                onChange({ ...values, type: "" });
+              } else {
+                setIsCustomType(false);
+                onChange({ ...values, type: val });
+              }
+            }}
+            required
+          >
+            {SPECIAL_ZONE_PRESETS.map((preset) => (
+              <option key={preset.value} value={preset.value}>
+                {preset.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      {isCustomType && (
         <div className="space-y-2">
-          <Label htmlFor="z-type">
-            Zone Type <span className="text-red-500">*</span>
+          <Label htmlFor="z-custom-type">
+            Custom Zone Type Identifier <span className="text-red-500">*</span>
           </Label>
           <Input
-            id="z-type"
-            placeholder="e.g. city, airport, suburb, surge"
+            id="z-custom-type"
+            placeholder="e.g. stadium, hospital_district, tourist_precinct"
             value={values.type}
-            onChange={(e) => onChange({ ...values, type: e.target.value })}
+            onChange={(e) => onChange({ ...values, type: e.target.value.toLowerCase().replace(/\s+/g, "_") })}
             required
           />
         </div>
+      )}
 
-        <div className="space-y-2">
-          <Label htmlFor="z-multiplier">
-            Pricing Multiplier <span className="text-red-500">*</span>
-          </Label>
-          <Input
-            id="z-multiplier"
-            placeholder="e.g. 1.2"
-            value={values.multiplier}
-            onChange={(e) => onChange({ ...values, multiplier: e.target.value })}
-            required
-          />
+      {/* Restricted Geofence Notice */}
+      {isRestricted ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 flex items-center gap-2 text-xs text-destructive">
+          <ShieldAlert className="h-4 w-4 shrink-0" />
+          <span>
+            <strong>Restricted Zone Selected:</strong> Pickup and drop-off requests inside this perimeter are strictly rejected. Pricing multipliers and fees do not apply.
+          </span>
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Pricing Multiplier */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="z-multiplier">
+                Zone Pricing Multiplier <span className="text-red-500">*</span>
+              </Label>
+              <span className="text-[11px] text-muted-foreground">
+                Base fare factor (e.g. 1.25 = +25% surge)
+              </span>
+            </div>
+            <Input
+              id="z-multiplier"
+              placeholder="1.0"
+              value={values.multiplier}
+              onChange={(e) => onChange({ ...values, multiplier: e.target.value })}
+              required
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Applied to metered ride fare inside this zone. If no special zone exists at a location, the multiplier automatically falls back to the city type economic index.
+            </p>
+          </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="z-airportFee">Airport Fee (₹)</Label>
-          <Input
-            id="z-airportFee"
-            placeholder="0"
-            value={values.airportFee}
-            onChange={(e) => onChange({ ...values, airportFee: e.target.value })}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="z-pickupFee">Pickup Fee (₹)</Label>
-          <Input
-            id="z-pickupFee"
-            placeholder="0"
-            value={values.pickupFee}
-            onChange={(e) => onChange({ ...values, pickupFee: e.target.value })}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="z-dropoffFee">Dropoff Fee (₹)</Label>
-          <Input
-            id="z-dropoffFee"
-            placeholder="0"
-            value={values.dropoffFee}
-            onChange={(e) => onChange({ ...values, dropoffFee: e.target.value })}
-          />
-        </div>
-      </div>
+          {/* Surcharges */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className={`space-y-2 ${values.type === "airport" ? "rounded-md p-2 bg-primary/5 border border-primary/20" : ""}`}>
+              <Label htmlFor="z-airportFee" className="text-xs">
+                Airport Fee (₹ / $)
+              </Label>
+              <Input
+                id="z-airportFee"
+                placeholder="0"
+                value={values.airportFee}
+                onChange={(e) => onChange({ ...values, airportFee: e.target.value })}
+              />
+              {values.type === "airport" && (
+                <span className="text-[10px] text-primary block">Fixed airport access charge</span>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="z-pickupFee" className="text-xs">Pickup Surcharge</Label>
+              <Input
+                id="z-pickupFee"
+                placeholder="0"
+                value={values.pickupFee}
+                onChange={(e) => onChange({ ...values, pickupFee: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="z-dropoffFee" className="text-xs">Dropoff Surcharge</Label>
+              <Input
+                id="z-dropoffFee"
+                placeholder="0"
+                value={values.dropoffFee}
+                onChange={(e) => onChange({ ...values, dropoffFee: e.target.value })}
+              />
+            </div>
+          </div>
+        </>
+      )}
 
       {/* GeoJSON Polygon Coordinates Section */}
       <div className="space-y-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <Label htmlFor="z-polygon">
-              GeoJSON Polygon Coordinates <span className="text-red-500">*</span>
+              Special Zone Polygon Coordinates <span className="text-red-500">*</span>
             </Label>
             {geoJsonInfo && (
               geoJsonInfo.valid ? (
@@ -227,7 +409,7 @@ export default function ZoneForm({
                 onClick={handleNormalize}
                 className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1 font-medium"
               >
-                <Wand2 className="h-3 w-3" /> Extract & Clean Polygon
+                <Wand2 className="h-3 w-3" /> Extract &amp; Clean Polygon
               </button>
             )}
             <button
@@ -242,8 +424,8 @@ export default function ZoneForm({
 
         <Textarea
           id="z-polygon"
-          rows={6}
-          className="font-mono text-xs max-h-48 resize-y border-border bg-background"
+          rows={5}
+          className="font-mono text-xs max-h-40 resize-y border-border bg-background"
           placeholder='Paste Polygon, Feature, or FeatureCollection GeoJSON here...'
           value={values.polygon}
           onChange={(e) => onChange({ ...values, polygon: e.target.value })}
@@ -258,7 +440,7 @@ export default function ZoneForm({
         )}
 
         <p className="text-[11px] text-muted-foreground">
-          Supports direct <code>Polygon</code>, <code>Feature</code>, or <code>FeatureCollection</code> exported from geojson.io, QGIS, or OSM.
+          Must be enclosed entirely within the selected city's active City Service Area. Supports direct <code>Polygon</code>, <code>Feature</code>, or <code>FeatureCollection</code>.
         </p>
       </div>
 

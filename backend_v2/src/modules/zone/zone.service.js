@@ -8,20 +8,48 @@ import { publishEvent, TOPICS } from '../../config/kafka.js';
 export async function listAll(countryId) {
   const conditions = [eq(zones.isActive, true)];
   if (countryId) conditions.push(eq(zones.countryId, countryId));
-  return db.select().from(zones).where(and(...conditions));
+  const rows = await db
+    .select({
+      zone: zones,
+      cityName: cities.name,
+    })
+    .from(zones)
+    .leftJoin(cities, eq(zones.cityId, cities.id))
+    .where(and(...conditions));
+  return rows.map(r => ({ ...r.zone, cityName: r.cityName }));
 }
 
 export async function listPaginated(page, limit, offset, countryId) {
   const where = countryId ? eq(zones.countryId, countryId) : undefined;
   const [{ total }] = await db.select({ total: count() }).from(zones).where(where);
-  const rows = await db.select().from(zones).where(where).limit(limit).offset(offset);
-  return { rows, pagination: paginate(page, limit, total) };
+  const rows = await db
+    .select({
+      zone: zones,
+      cityName: cities.name,
+    })
+    .from(zones)
+    .leftJoin(cities, eq(zones.cityId, cities.id))
+    .where(where)
+    .limit(limit)
+    .offset(offset);
+  return {
+    rows: rows.map(r => ({ ...r.zone, cityName: r.cityName })),
+    pagination: paginate(page, limit, total),
+  };
 }
 
 export async function getById(id) {
-  const [zone] = await db.select().from(zones).where(eq(zones.id, id)).limit(1);
-  if (!zone) throw { statusCode: 404, message: 'Zone not found' };
-  return zone;
+  const [row] = await db
+    .select({
+      zone: zones,
+      cityName: cities.name,
+    })
+    .from(zones)
+    .leftJoin(cities, eq(zones.cityId, cities.id))
+    .where(eq(zones.id, id))
+    .limit(1);
+  if (!row) throw { statusCode: 404, message: 'Zone not found' };
+  return { ...row.zone, cityName: row.cityName };
 }
 
 export async function detectZone(lat, lng, cityId = null) {

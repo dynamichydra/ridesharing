@@ -5,6 +5,7 @@ import type { Zone } from "../types";
 
 interface Props {
   countriesMap: Map<string, string>;
+  citiesMap?: Map<string, string>;
   onViewHex: (zone: Zone) => void;
   onEdit: (zone: Zone) => void;
   onToggleActive: (zone: Zone) => void;
@@ -13,6 +14,7 @@ interface Props {
 
 export function getZoneColumns({
   countriesMap,
+  citiesMap,
   onViewHex,
   onEdit,
   onToggleActive,
@@ -21,13 +23,18 @@ export function getZoneColumns({
   return [
     {
       accessorKey: "name",
-      header: "Zone Name",
+      header: "Special Zone Name",
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-md bg-primary/10 flex items-center justify-center text-primary shrink-0">
             <Map className="h-4 w-4" />
           </div>
-          <div className="font-medium text-foreground">{row.original.name}</div>
+          <div>
+            <div className="font-medium text-foreground">{row.original.name}</div>
+            {row.original.description && (
+              <div className="text-[11px] text-muted-foreground truncate max-w-xs">{row.original.description}</div>
+            )}
+          </div>
         </div>
       ),
     },
@@ -37,13 +44,43 @@ export function getZoneColumns({
       cell: ({ row }) => countriesMap.get(row.original.countryId) || row.original.countryId,
     },
     {
-      accessorKey: "type",
-      header: "Type",
+      accessorKey: "cityId",
+      header: "City",
       cell: ({ row }) => (
-        <span className="capitalize px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground border border-border">
-          {row.original.type}
+        <span className="font-medium text-foreground">
+          {row.original.cityName || (citiesMap ? citiesMap.get(row.original.cityId) : null) || row.original.cityId || "—"}
         </span>
       ),
+    },
+    {
+      accessorKey: "type",
+      header: "Category",
+      cell: ({ row }) => {
+        const type = row.original.type;
+        if (type === "airport") {
+          return <span className="px-2 py-0.5 rounded text-xs font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">✈️ Airport</span>;
+        }
+        if (type === "college") {
+          return <span className="px-2 py-0.5 rounded text-xs font-medium bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">🎓 College</span>;
+        }
+        if (type === "station") {
+          return <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">🚆 Station</span>;
+        }
+        if (type === "tech_park") {
+          return <span className="px-2 py-0.5 rounded text-xs font-medium bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20">🏢 Tech Park</span>;
+        }
+        if (type === "surge") {
+          return <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">⚡ Surge</span>;
+        }
+        if (type === "restricted") {
+          return <span className="px-2 py-0.5 rounded text-xs font-medium bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">🚫 Restricted</span>;
+        }
+        return (
+          <span className="capitalize px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground border border-border">
+            {type}
+          </span>
+        );
+      },
     },
     {
       accessorKey: "multiplier",

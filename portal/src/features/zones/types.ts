@@ -10,7 +10,8 @@ export interface GeoJSONPolygon {
 export interface Zone {
   id: string;
   countryId: string;
-  cityId?: string | null;
+  cityId: string;
+  cityName?: string | null;
   name: string;
   type: string;
   polygon: GeoJSONPolygon;
@@ -31,6 +32,7 @@ export interface ZoneListParams {
   page?: number;
   limit?: number;
   countryId?: string;
+  cityId?: string;
 }
 
 export interface Pagination {
@@ -43,7 +45,7 @@ export interface Pagination {
 export interface ZonePayload {
   name: string;
   countryId: string;
-  cityId?: string | null;
+  cityId: string;
   type: string;
   polygon: GeoJSONPolygon;
   multiplier?: number;
@@ -73,3 +75,5 @@ export interface Country {
   isoCode: string;
   currencyCode: string;
 }
+
+export type { City, CityServiceArea } from "@/features/geo/types";

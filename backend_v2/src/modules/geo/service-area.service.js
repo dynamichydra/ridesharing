@@ -1,4 +1,4 @@
-import { eq, and, count, desc } from 'drizzle-orm';
+import { eq, and, count, desc, sql } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { cityServiceAreas, cities } from '../../../drizzle/schema/index.js';
 import { isPointInPolygon } from '../../utils/geo.js';
@@ -69,7 +69,23 @@ export async function validateLocationInServiceArea(lat, lng) {
 export async function listServiceAreas(cityId = null) {
   const conditions = [eq(cityServiceAreas.isActive, true)];
   if (cityId) conditions.push(eq(cityServiceAreas.cityId, cityId));
-  return db.select().from(cityServiceAreas).where(and(...conditions));
+  return db
+    .select({
+      id: cityServiceAreas.id,
+      cityId: cityServiceAreas.cityId,
+      countryId: cityServiceAreas.countryId,
+      name: cityServiceAreas.name,
+      status: cityServiceAreas.status,
+      polygon: cityServiceAreas.polygon,
+      resolution: cityServiceAreas.resolution,
+      isActive: cityServiceAreas.isActive,
+      createdAt: cityServiceAreas.createdAt,
+      updatedAt: cityServiceAreas.updatedAt,
+      hexCount: sql`COALESCE(array_length(${cityServiceAreas.hexCells}, 1), 0)`.mapWith(Number),
+      hexCells: cityServiceAreas.hexCells,
+    })
+    .from(cityServiceAreas)
+    .where(and(...conditions));
 }
 
 export async function listServiceAreasPaginated(page, limit, offset, filters = {}) {
@@ -83,7 +99,20 @@ export async function listServiceAreasPaginated(page, limit, offset, filters = {
   const [{ total }] = await db.select({ total: count() }).from(cityServiceAreas).where(where);
   const rows = await db
     .select({
-      serviceArea: cityServiceAreas,
+      serviceArea: {
+        id: cityServiceAreas.id,
+        cityId: cityServiceAreas.cityId,
+        countryId: cityServiceAreas.countryId,
+        name: cityServiceAreas.name,
+        status: cityServiceAreas.status,
+        polygon: cityServiceAreas.polygon,
+        resolution: cityServiceAreas.resolution,
+        isActive: cityServiceAreas.isActive,
+        createdAt: cityServiceAreas.createdAt,
+        updatedAt: cityServiceAreas.updatedAt,
+        hexCount: sql`COALESCE(array_length(${cityServiceAreas.hexCells}, 1), 0)`.mapWith(Number),
+        hexCells: cityServiceAreas.hexCells,
+      },
       city: cities,
     })
     .from(cityServiceAreas)
@@ -99,7 +128,20 @@ export async function listServiceAreasPaginated(page, limit, offset, filters = {
 export async function getServiceAreaById(id) {
   const [area] = await db
     .select({
-      serviceArea: cityServiceAreas,
+      serviceArea: {
+        id: cityServiceAreas.id,
+        cityId: cityServiceAreas.cityId,
+        countryId: cityServiceAreas.countryId,
+        name: cityServiceAreas.name,
+        status: cityServiceAreas.status,
+        polygon: cityServiceAreas.polygon,
+        resolution: cityServiceAreas.resolution,
+        isActive: cityServiceAreas.isActive,
+        createdAt: cityServiceAreas.createdAt,
+        updatedAt: cityServiceAreas.updatedAt,
+        hexCount: sql`COALESCE(array_length(${cityServiceAreas.hexCells}, 1), 0)`.mapWith(Number),
+        hexCells: cityServiceAreas.hexCells,
+      },
       city: cities,
     })
     .from(cityServiceAreas)
@@ -136,7 +178,14 @@ export async function createServiceArea(data) {
   let resolution = data.resolution || DEFAULT_RESOLUTION;
   let polygon = data.polygon ? normalizeGeoJsonPolygon(data.polygon) : null;
   if (polygon) {
-    hexCells = polygonToHexCells(polygon, resolution);
+    try {
+      hexCells = polygonToHexCells(polygon, resolution);
+      if (Array.isArray(hexCells) && hexCells.length > 10000) {
+        hexCells = hexCells.slice(0, 10000);
+      }
+    } catch (err) {
+      console.warn('H3 hex generation warning:', err?.message);
+    }
   }
 
   const [area] = await db.insert(cityServiceAreas).values({
@@ -155,7 +204,12 @@ export async function updateServiceArea(id, data) {
     const resolution = data.resolution || DEFAULT_RESOLUTION;
     const polygon = normalizeGeoJsonPolygon(data.polygon);
     data.polygon = polygon;
-    data.hexCells = polygonToHexCells(polygon, resolution);
+    try {
+      const hexCells = polygonToHexCells(polygon, resolution);
+      data.hexCells = Array.isArray(hexCells) && hexCells.length > 10000 ? hexCells.slice(0, 10000) : hexCells;
+    } catch (err) {
+      console.warn('H3 hex generation warning:', err?.message);
+    }
     data.resolution = resolution;
   }
 
