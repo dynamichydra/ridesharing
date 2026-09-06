@@ -64,7 +64,6 @@ class BookingRepositoryImpl implements BookingRepository {
   }
 
   @override
-
   Future<Map<String, dynamic>> requestRide({
     required String vehicleTypeId,
     required double pickupLat,
@@ -74,6 +73,7 @@ class BookingRepositoryImpl implements BookingRepository {
     required double dropLng,
     required String dropAddress,
     String paymentMethod = 'cash',
+    String? promoCode,
   }) async {
     return await _dataSource.requestRide(
       vehicleTypeId: vehicleTypeId,
@@ -84,7 +84,12 @@ class BookingRepositoryImpl implements BookingRepository {
       dropLng: dropLng,
       dropAddress: dropAddress,
       paymentMethod: paymentMethod,
+      promoCode: promoCode,
     );
   }
-}
 
+  @override
+  Future<Map<String, dynamic>> validatePromo(String code, double fare) async {
+    return await _dataSource.validatePromo(code, fare);
+  }
+}

@@ -7,6 +7,7 @@ import '../../../../core/models/route_model.dart';
 import '../../../../core/services/google_routes_service.dart';
 import '../../../../core/widgets/app_map_view.dart';
 import '../../../location/location.dart';
+import '../../../home/presentation/bloc/home_bloc.dart';
 import '../../../profile/presentation/bloc/profile_bloc.dart';
 import '../bloc/booking_bloc.dart';
 
@@ -27,7 +28,8 @@ enum SelectionStep {
 // ---------------------------------------------------------------------------
 
 class SelectLocationPage extends StatefulWidget {
-  const SelectLocationPage({super.key});
+  final Map<String, dynamic>? initialLocation;
+  const SelectLocationPage({super.key, this.initialLocation});
 
   @override
   State<SelectLocationPage> createState() => _SelectLocationPageState();
@@ -59,11 +61,10 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
   // ---- Location state ----
   LatLng _pickupLatLng = const LatLng(22.5726, 88.3639); // Kolkata fallback
   LatLng? _destLatLng;
-  String _pickupName = 'Fetching current location...';
+  String _pickupName = 'Current Location';
   String _pickupAddress = 'Loading address details...';
   String _destName = '';
   String _destAddress = '';
-  bool _isLoadingLocation = true;
 
   // ---- Autocomplete state ----
   bool _isSearching = false;
@@ -73,10 +74,6 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
   // ---- Route state ----
   RouteModel? _currentRoute;
   bool _isLoadingRoute = false;
-
-
-
-
 
   // ---------------------------------------------------------------------------
   // Lifecycle
@@ -90,8 +87,25 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
       duration: const Duration(milliseconds: 300),
     );
     _placesService.initialize(AppConstants.googleMapsApiKey);
-    _initCurrentLocation();
 
+    if (widget.initialLocation != null) {
+      final init = widget.initialLocation!;
+      final dName = (init['destinationName'] ?? init['name'] ?? '').toString();
+      final dAddress = (init['destinationAddress'] ?? init['address'] ?? dName).toString();
+      final dLat = double.tryParse((init['destinationLat'] ?? init['latitude'] ?? '').toString());
+      final dLng = double.tryParse((init['destinationLng'] ?? init['longitude'] ?? '').toString());
+
+      if (dLat != null && dLng != null && dName.isNotEmpty) {
+        _destLatLng = LatLng(dLat, dLng);
+        _destName = dName;
+        _destAddress = dAddress;
+        _destinationController.text = dName;
+        _currentStep = SelectionStep.destSelected;
+      }
+    }
+
+    _pickupController.text = _pickupName;
+    _initCurrentLocation();
 
     _pickupFocusNode.addListener(() {
       if (_pickupFocusNode.hasFocus) {
@@ -135,34 +149,38 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
   Future<void> _initCurrentLocation() async {
     try {
       final locationService = LocationService();
-      final currentLoc = await locationService.getCurrentLocation();
+      final currentLoc = await locationService.getCurrentLocation().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => null,
+      );
       if (currentLoc != null && mounted) {
+        setState(() {
+          _pickupLatLng = currentLoc;
+        });
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLng(currentLoc),
+        );
         final place = await _geocodingService.reverseGeocode(currentLoc);
         final placeName = _extractPlaceName(place, fallback: 'Current Location');
         final placeAddress = place?.formattedAddress ?? '';
-        setState(() {
-          _pickupLatLng = currentLoc;
-          _pickupName = placeName;
-          _pickupAddress = placeAddress;
-          _pickupController.text = placeName;
-          _isLoadingLocation = false;
-        });
+        if (mounted) {
+          setState(() {
+            _pickupName = placeName;
+            _pickupAddress = placeAddress;
+            _pickupController.text = placeName;
+          });
+        }
+        if (_destLatLng != null && _destName.isNotEmpty) {
+          await _fetchRoute();
+        }
       } else if (mounted) {
-        setState(() {
-          _pickupName = 'Current Location';
-          _pickupAddress = 'Resolved location';
-          _pickupController.text = 'Current Location';
-          _isLoadingLocation = false;
-        });
+        if (_destLatLng != null && _destName.isNotEmpty) {
+          await _fetchRoute();
+        }
       }
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _pickupName = 'Current Location';
-          _pickupAddress = 'Resolved location';
-          _pickupController.text = 'Current Location';
-          _isLoadingLocation = false;
-        });
+      if (mounted && _destLatLng != null && _destName.isNotEmpty) {
+        await _fetchRoute();
       }
     }
   }
@@ -311,61 +329,43 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
     });
 
     try {
-      final predictions = await _placesService.fetchPredictions(query);
-      if (predictions.isNotEmpty) {
-        final mapped = predictions.map((pred) => {
-          'name': pred.primaryText,
-          'address': pred.fullText,
-          'placeId': pred.placeId,
-          'type': 'place',
-        }).toList();
+      final results = await _placesService.searchPlacesMulti(query);
+      if (results.isNotEmpty && mounted) {
+        setState(() {
+          _searchResults = results;
+          _isSearching = false;
+        });
+        return;
+      }
+
+      // Final fallback: forward geocoding (single result)
+      final coord = await _geocodingService.forwardGeocode(query);
+      if (coord != null && mounted) {
+        String displayAddress = query;
+        try {
+          final reversedPlace =
+              await _geocodingService.reverseGeocode(coord);
+          final resolved =
+              _extractPlaceName(reversedPlace, fallback: query);
+          if (resolved.isNotEmpty) displayAddress = resolved;
+        } catch (_) {}
 
         if (mounted) {
           setState(() {
-            _searchResults = mapped;
+            _searchResults = [
+              {
+                'name': query,
+                'address': displayAddress,
+                'latitude': coord.latitude,
+                'longitude': coord.longitude,
+                'type': 'geocode',
+              }
+            ];
             _isSearching = false;
           });
         }
-      } else {
-        // Try REST API fallback for multiple autocomplete results
-        final httpResults = await _placesService.fetchPredictionsHttp(
-            query, AppConstants.googleMapsApiKey);
-        if (httpResults.isNotEmpty && mounted) {
-          setState(() {
-            _searchResults = httpResults;
-            _isSearching = false;
-          });
-        } else {
-          // Final fallback: geocoding (single result)
-          final coord = await _geocodingService.forwardGeocode(query);
-          if (coord != null && mounted) {
-            String displayAddress = query;
-            try {
-              final reversedPlace =
-                  await _geocodingService.reverseGeocode(coord);
-              final resolved =
-                  _extractPlaceName(reversedPlace, fallback: query);
-              if (resolved.isNotEmpty) displayAddress = resolved;
-            } catch (_) {}
-
-            if (mounted) {
-              setState(() {
-                _searchResults = [
-                  {
-                    'name': query,
-                    'address': displayAddress,
-                    'latitude': coord.latitude,
-                    'longitude': coord.longitude,
-                    'type': 'geocode',
-                  }
-                ];
-                _isSearching = false;
-              });
-            }
-          } else if (mounted) {
-            setState(() => _isSearching = false);
-          }
-        }
+      } else if (mounted) {
+        setState(() => _isSearching = false);
       }
     } catch (_) {
       if (mounted) setState(() => _isSearching = false);
@@ -380,7 +380,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
     if (place['latitude'] != null && place['longitude'] != null) {
       coords = LatLng(place['latitude'] as double, place['longitude'] as double);
     } else if (place['placeId'] != null) {
-      coords = (await _placesService.getLatLngFromPlaceId(place['placeId'] as String)) ??
+      coords = (await _placesService.getLatLngFromPlaceId(place['placeId'] as String, apiKey: AppConstants.googleMapsApiKey)) ??
           LatLng(_pickupLatLng.latitude + 0.015, _pickupLatLng.longitude + 0.015);
     } else {
       coords = (await _geocodingService.forwardGeocode('$name $address')) ??
@@ -754,16 +754,14 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
         children: [
           // ── 1. Full-screen Map ─────────────────────────────────────────────
           Positioned.fill(
-            child: _isLoadingLocation
-                ? const _MapLoadingPlaceholder()
-                : AppMapView(
-                    key: const ValueKey('main_map'),
-                    onMapCreated: _onMapControllerCreated,
-                    onTap: _onMapTapped,
-                    pickup: _pickupLatLng,
-                    destination: _destLatLng,
-                    routePoints: routePoints,
-                  ),
+            child: AppMapView(
+              key: const ValueKey('main_map'),
+              onMapCreated: _onMapControllerCreated,
+              onTap: _onMapTapped,
+              pickup: _pickupLatLng,
+              destination: _destLatLng,
+              routePoints: routePoints,
+            ),
           ),
 
           // ── 2. Route loading chip ──────────────────────────────────────────
@@ -786,22 +784,12 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
                 // Back button
                 GestureDetector(
                   onTap: () {
-                    if (_showAutocomplete) {
-                      _pickupFocusNode.unfocus();
-                      _destinationFocusNode.unfocus();
-                      setState(() {
-                        _showAutocomplete = false;
-                        _searchResults = [];
-                      });
-                    } else if (_currentStep == SelectionStep.destSelected) {
-                      setState(() {
-                        _currentStep = SelectionStep.pickupSelected;
-                        _currentRoute = null;
-                      });
-                    } else if (_currentStep == SelectionStep.pickupSelected) {
-                      setState(() => _currentStep = SelectionStep.initialSearch);
-                    } else {
+                    _pickupFocusNode.unfocus();
+                    _destinationFocusNode.unfocus();
+                    if (Navigator.of(context).canPop()) {
                       context.pop();
+                    } else {
+                      context.go('/home');
                     }
                   },
                   child: Container(
@@ -906,19 +894,6 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
                                   fontWeight: FontWeight.w400,
                                   color: Color(0xFF94A3B8),
                                 ),
-                                suffixIcon: _isLoadingLocation
-                                    ? const Padding(
-                                        padding: EdgeInsets.all(10),
-                                        child: SizedBox(
-                                          width: 14,
-                                          height: 14,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Color(0xFF009048),
-                                          ),
-                                        ),
-                                      )
-                                    : null,
                                 isDense: true,
                                 contentPadding: const EdgeInsets.only(top: 4),
                                 border: InputBorder.none,
@@ -1034,8 +1009,17 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
         savedPlaces = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
 
+      final homeState = context.read<HomeBloc>().state;
+      List<Map<String, dynamic>> recentCompletedRides = [];
+      if (homeState is HomeLoaded) {
+        recentCompletedRides = homeState.recentRides
+            .where((r) => (r['status'] ?? '').toString().toLowerCase() == 'completed')
+            .take(5)
+            .toList();
+      }
+
       return Container(
-        constraints: const BoxConstraints(maxHeight: 280),
+        constraints: const BoxConstraints(maxHeight: 340),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -1118,6 +1102,100 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
                                   const SizedBox(height: 2),
                                   Text(
                                     sp['address'].toString(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Color(0xFFCBD5E1)),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                Divider(height: 1, color: Colors.grey.shade100),
+              ],
+              if (recentCompletedRides.isNotEmpty) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text(
+                    'RECENT DESTINATIONS',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                ),
+                ...recentCompletedRides.map((ride) {
+                  String title = '';
+                  String subtitle = '';
+
+                  if (ride.containsKey('dropAddress') && (ride['dropAddress'] ?? '').toString().isNotEmpty) {
+                    final address = (ride['dropAddress'] ?? '').toString().trim();
+                    final parts = address.split(',').map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
+                    if (parts.length <= 2) {
+                      title = parts.join(', ');
+                      subtitle = (ride['pickupAddress'] ?? 'Recent Ride').toString();
+                    } else {
+                      title = parts.take(2).join(', ');
+                      subtitle = parts.sublist(2).join(', ');
+                    }
+                  } else {
+                    title = (ride['title'] ?? 'Destination').toString();
+                    subtitle = (ride['subtitle'] ?? '').toString();
+                  }
+
+                  final lat = double.tryParse((ride['dropLat'] ?? ride['drop_lat'] ?? '').toString());
+                  final lng = double.tryParse((ride['dropLng'] ?? ride['drop_lng'] ?? '').toString());
+
+                  return InkWell(
+                    onTap: () => _onSelectLocationItem({
+                      'name': title,
+                      'address': (ride['dropAddress'] ?? ride['drop_address'] ?? title).toString(),
+                      'latitude': lat,
+                      'longitude': lng,
+                      'type': 'popular',
+                    }),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFF1F5F9),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.access_time_rounded, size: 18, color: Color(0xFF334155)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                ),
+                                if (subtitle.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    subtitle,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
@@ -1330,37 +1408,6 @@ class _RouteLoadingChip extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF0F172A))),
         ],
-      ),
-    );
-  }
-}
-
-
-
-class _MapLoadingPlaceholder extends StatelessWidget {
-  const _MapLoadingPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFFE8EAF0),
-      child: const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 32, height: 32,
-              child: CircularProgressIndicator(
-                  strokeWidth: 3, color: Color(0xFF009048)),
-            ),
-            SizedBox(height: 14),
-            Text('Finding your location...',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF64748B))),
-          ],
-        ),
       ),
     );
   }

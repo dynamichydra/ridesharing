@@ -97,17 +97,17 @@ class _TransactionsPageState extends State<TransactionsPage> {
             }
 
             List<WalletTransactionItem> filtered = allTxs.where((tx) {
-              if (_selectedTab == 'Cash Out') {
-                return !tx.isCredit ||
-                    tx.reason.contains('payout') ||
-                    tx.reason.contains('withdrawal') ||
-                    tx.description.toLowerCase().contains('cash out');
+              if (_selectedTab == 'Ride Earnings') {
+                return tx.isCredit;
               }
-              if (_selectedTab == 'Ride Fare Received') {
-                return tx.isCredit ||
-                    tx.reason.contains('fare') ||
-                    tx.reason.contains('earnings') ||
-                    tx.description.toLowerCase().contains('fare');
+              if (_selectedTab == 'Commission Due') {
+                return !tx.isCredit && (tx.reason.contains('commission') || tx.description.toLowerCase().contains('commission'));
+              }
+              if (_selectedTab == 'Cash Out') {
+                return !tx.isCredit &&
+                    (tx.reason.contains('payout') ||
+                    tx.reason.contains('withdrawal') ||
+                    tx.description.toLowerCase().contains('cash out'));
               }
               return true;
             }).toList();
@@ -116,14 +116,14 @@ class _TransactionsPageState extends State<TransactionsPage> {
 
             return Column(
               children: [
-                // Tabs: All, Cash Out, Ride Fare Received
+                // Tabs: All, Ride Earnings, Commission Due, Cash Out
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     physics: const BouncingScrollPhysics(),
                     child: Row(
-                      children: ['All', 'Cash Out', 'Ride Fare Received'].map((tab) {
+                      children: ['All', 'Ride Earnings', 'Commission Due', 'Cash Out'].map((tab) {
                         final isSelected = _selectedTab == tab;
                         return Padding(
                           padding: const EdgeInsets.only(right: 10),

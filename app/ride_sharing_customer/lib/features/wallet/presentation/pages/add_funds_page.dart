@@ -19,7 +19,7 @@ class AddFundsPage extends StatefulWidget {
 class _AddFundsPageState extends State<AddFundsPage> {
   late final TextEditingController _amountController;
   late double _selectedAmount;
-  String _selectedMethodType = 'gateway'; // 'gateway' or 'demo'
+  String _selectedMethodType = 'gateway';
   String _countryCode = 'IN'; // Strict based on logged in user's profile: 'IN' or 'CA'
 
   List<double> get _presets => _countryCode == 'CA'
@@ -87,14 +87,6 @@ class _AddFundsPageState extends State<AddFundsPage> {
           'subtitle': 'Visa, Mastercard, American Express, Apple Pay',
           'iconData': Icons.credit_card_rounded,
         },
-        {
-          'id': 'demo',
-          'gateway': 'demo',
-          'title': '⚡ Demo Money (Sandbox)',
-          'subtitle': 'Add simulated CAD funds instantly for testing',
-          'iconData': Icons.bolt_rounded,
-          'badge': 'Test Mode',
-        },
       ];
     } else {
       return [
@@ -104,14 +96,6 @@ class _AddFundsPageState extends State<AddFundsPage> {
           'title': 'Instant UPI / Cards / NetBanking',
           'subtitle': 'GPay, PhonePe, Paytm, Cards & NetBanking',
           'iconData': Icons.account_balance_wallet_rounded,
-        },
-        {
-          'id': 'demo',
-          'gateway': 'demo',
-          'title': '⚡ Demo Money (Sandbox)',
-          'subtitle': 'Add simulated INR money instantly for testing',
-          'iconData': Icons.bolt_rounded,
-          'badge': 'Test Mode',
         },
       ];
     }
@@ -181,18 +165,9 @@ class _AddFundsPageState extends State<AddFundsPage> {
       return;
     }
 
-    if (_selectedMethodType == 'demo') {
-      context.read<WalletBloc>().add(
-            AddWalletFunds(
-              amount: amount,
-              paymentMethodId: 'demo',
-            ),
-          );
-    } else {
-      context.read<WalletBloc>().add(
-            InitiateWalletTopup(amount: amount),
-          );
-    }
+    context.read<WalletBloc>().add(
+          InitiateWalletTopup(amount: amount),
+        );
   }
 
   @override

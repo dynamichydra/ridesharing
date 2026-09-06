@@ -44,6 +44,33 @@ class ProfileRepositoryImpl implements ProfileRepository {
   }
 
   @override
+  Future<Map<String, dynamic>> addSavedPlace(Map<String, dynamic> place) async {
+    try {
+      return await _profileDataSource.addSavedPlace(place);
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateSavedPlace(String id, Map<String, dynamic> place) async {
+    try {
+      return await _profileDataSource.updateSavedPlace(id, place);
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<void> deleteSavedPlace(String id) async {
+    try {
+      await _profileDataSource.deleteSavedPlace(id);
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
   Future<void> updatePaymentMethods(List<Map<String, dynamic>> methods) async {
     try {
       await _profileDataSource.updatePaymentMethods(methods);

@@ -75,7 +75,13 @@ class RideCompleted extends RideTrackingEvent {
   List<Object?> get props => [finalFare];
 }
 
-class CancelRide extends RideTrackingEvent {}
+class CancelRide extends RideTrackingEvent {
+  final String? message;
+  final String? cancelledBy;
+  const CancelRide({this.message, this.cancelledBy});
+  @override
+  List<Object?> get props => [message, cancelledBy];
+}
 
 class RestoreActiveRide extends RideTrackingEvent {}
 
@@ -217,7 +223,18 @@ class RideTrackingActive extends RideTrackingState {
       ];
 }
 
-class RideTrackingCancelled extends RideTrackingState {}
+class RideTrackingCancelled extends RideTrackingState {
+  final String message;
+  final String? cancelledBy;
+
+  const RideTrackingCancelled({
+    this.message = 'Your ride was cancelled.',
+    this.cancelledBy,
+  });
+
+  @override
+  List<Object?> get props => [message, cancelledBy];
+}
 
 // ==========================================
 // Ride Tracking BLoC
@@ -281,7 +298,20 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     });
 
     _rideCancelledSub = _rideTrackingRepository.onRideCancelled.listen((data) {
-      add(CancelRide());
+      final cancelledBy = data['cancelledBy']?.toString();
+      final reason = data['reason']?.toString();
+      final customMessage = data['message']?.toString();
+      String msg = customMessage ?? 'Your ride was cancelled.';
+      if (cancelledBy == 'driver') {
+        msg = reason != null && reason.isNotEmpty && reason != 'driver_cancelled'
+            ? 'Driver cancelled the ride: $reason'
+            : 'Driver cancelled the ride.';
+      } else if (cancelledBy == 'rider') {
+        msg = 'Ride cancelled.';
+      } else if (cancelledBy == 'system' || reason?.contains('no_driver') == true || reason?.contains('expired') == true) {
+        msg = 'No rides found nearby';
+      }
+      add(CancelRide(message: msg, cancelledBy: cancelledBy));
     });
   }
 
@@ -817,8 +847,10 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
             ? (state as RideTrackingActive).rideId
             : null;
 
-    if (rideId != null && rideId.isNotEmpty) {
-      await _rideTrackingRepository.cancelRide(rideId);
+    if (event.cancelledBy != 'driver' && event.cancelledBy != 'system') {
+      if (rideId != null && rideId.isNotEmpty) {
+        await _rideTrackingRepository.cancelRide(rideId);
+      }
     }
 
     try {
@@ -827,7 +859,10 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     } catch (_) {}
 
     _cleanup();
-    emit(RideTrackingCancelled());
+    emit(RideTrackingCancelled(
+      message: event.message ?? 'Your ride was cancelled.',
+      cancelledBy: event.cancelledBy,
+    ));
   }
 
   void _cleanup() {

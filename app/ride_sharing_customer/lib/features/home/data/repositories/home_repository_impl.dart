@@ -34,4 +34,13 @@ class HomeRepositoryImpl implements HomeRepository {
       throw ServerFailure(e.toString());
     }
   }
+
+  @override
+  Future<List<Map<String, dynamic>>> getRecentRides() async {
+    try {
+      return await _homeDataSource.getRecentRides();
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
 }

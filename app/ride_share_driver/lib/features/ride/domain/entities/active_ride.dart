@@ -27,6 +27,8 @@ class ActiveRide {
   final int? durationMin;
   final String? polyline;
   final String? paymentMethod;
+  final int? driverEarningsMinor;
+  final int? commissionMinor;
 
   const ActiveRide({
     required this.id,
@@ -45,6 +47,8 @@ class ActiveRide {
     this.durationMin,
     this.polyline,
     this.paymentMethod,
+    this.driverEarningsMinor,
+    this.commissionMinor,
   });
 
   factory ActiveRide.fromJson(Map<String, dynamic> json) {
@@ -78,6 +82,20 @@ class ActiveRide {
       durationMin: parseInt(json['durationMin'] ?? json['duration_min']),
       polyline: json['polyline']?.toString(),
       paymentMethod: json['paymentMethod']?.toString() ?? json['payment_method']?.toString(),
+      driverEarningsMinor: parseInt(
+        json['driverEarningsMinor'] ??
+            json['driver_earnings_minor'] ??
+            (json['fareSnapshot'] is Map && json['fareSnapshot']['commission'] is Map
+                ? json['fareSnapshot']['commission']['driverEarningsMinor']
+                : null),
+      ),
+      commissionMinor: parseInt(
+        json['commissionMinor'] ??
+            json['commission_minor'] ??
+            (json['fareSnapshot'] is Map && json['fareSnapshot']['commission'] is Map
+                ? json['fareSnapshot']['commission']['commissionMinor']
+                : null),
+      ),
     );
   }
 

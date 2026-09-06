@@ -1,13 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../../../../core/widgets/custom_toast.dart';
 import '../../../location/services/places_service.dart';
+import '../../../location/services/geocoding_service.dart';
 import '../bloc/profile_bloc.dart';
 
-class SavedPlacesPage extends StatelessWidget {
+class SavedPlacesPage extends StatefulWidget {
   const SavedPlacesPage({super.key});
+
+  @override
+  State<SavedPlacesPage> createState() => _SavedPlacesPageState();
+}
+
+class _SavedPlacesPageState extends State<SavedPlacesPage> {
+  @override
+  void initState() {
+    super.initState();
+    context.read<ProfileBloc>().add(LoadProfile());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +51,36 @@ class SavedPlacesPage extends StatelessWidget {
             return const LoadingView();
           }
 
+          if (state is ProfileError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline_rounded, size: 48, color: Color(0xFFEF4444)),
+                    const SizedBox(height: 16),
+                    Text(
+                      state.message.isNotEmpty ? state.message : 'Unable to load saved places',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 15, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF009048),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () => context.read<ProfileBloc>().add(LoadProfile()),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
           if (state is ProfileLoaded) {
             final rawPlaces = state.userProfile['saved_places'] as List? ?? [];
             final places = rawPlaces.map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -49,52 +92,6 @@ class SavedPlacesPage extends StatelessWidget {
             return ListView(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE6F6ED),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFF009048).withOpacity(0.2)),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF009048).withOpacity(0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.stars_rounded, color: Color(0xFF009048), size: 22),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Quick Booking Access',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF006C36),
-                              ),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Saved places show up instantly when searching rides & destinations.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF006C36),
-                                height: 1.3,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
                 const Text(
                   'YOUR PLACES',
                   style: TextStyle(
@@ -115,7 +112,18 @@ class SavedPlacesPage extends StatelessWidget {
             );
           }
 
-          return const Center(child: CircularProgressIndicator(color: Color(0xFF009048)));
+          // Initial fallback state (not stuck in indefinite spinner)
+          return Center(
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF009048),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () => context.read<ProfileBloc>().add(LoadProfile()),
+              child: const Text('Load Places'),
+            ),
+          );
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -192,25 +200,25 @@ class SavedPlacesPage extends StatelessWidget {
     int index,
     List<Map<String, dynamic>> allPlaces,
   ) {
-    final type = (place['type'] ?? 'favorite').toString().toLowerCase();
+    final type = (place['type'] ?? place['label'] ?? 'favorite').toString().toLowerCase();
     IconData typeIcon = Icons.star_rounded;
     Color iconColor = const Color(0xFFEAB308);
     Color bgColor = const Color(0xFFFEFCE8);
-    String typeLabel = 'Favorite';
+    String defaultName = 'Other';
 
     if (type == 'home') {
       typeIcon = Icons.home_rounded;
       iconColor = const Color(0xFF0165B7);
       bgColor = const Color(0xFFEFF6FF);
-      typeLabel = 'Home';
+      defaultName = 'Home';
     } else if (type == 'work') {
       typeIcon = Icons.work_rounded;
       iconColor = const Color(0xFF009048);
       bgColor = const Color(0xFFE6F6ED);
-      typeLabel = 'Work';
+      defaultName = 'Work';
     }
 
-    final name = (place['name'] ?? typeLabel).toString();
+    final name = (place['name'] ?? defaultName).toString();
     final address = (place['address'] ?? '').toString();
 
     return Container(
@@ -228,7 +236,7 @@ class SavedPlacesPage extends StatelessWidget {
         ],
       ),
       child: InkWell(
-        onTap: () => _showSavePlaceDialog(context, placeToEdit: place, editIndex: index),
+        onTap: () => _showSavePlaceDialog(context, placeToEdit: place, editIndex: index, allPlaces: allPlaces),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -247,42 +255,20 @@ class SavedPlacesPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0F172A),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: bgColor,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            typeLabel,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: iconColor,
-                            ),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A),
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       address.isNotEmpty ? address : 'No address specified',
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 13,
@@ -293,12 +279,51 @@ class SavedPlacesPage extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(width: 10),
+              // Pill Go Button matching reference screenshot
+              InkWell(
+                onTap: () {
+                  final lat = double.tryParse((place['latitude'] ?? place['lat'] ?? 22.5726).toString()) ?? 22.5726;
+                  final lng = double.tryParse((place['longitude'] ?? place['lng'] ?? 88.3639).toString()) ?? 88.3639;
+                  context.push('/select-location', extra: {
+                    'destinationName': name,
+                    'destinationAddress': address,
+                    'destinationLat': lat,
+                    'destinationLng': lng,
+                  });
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE6F6ED),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.near_me_rounded, color: Color(0xFF009048), size: 15),
+                      SizedBox(width: 5),
+                      Text(
+                        'Go',
+                        style: TextStyle(
+                          color: Color(0xFF009048),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF94A3B8)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 onSelected: (action) {
                   if (action == 'edit') {
-                    _showSavePlaceDialog(context, placeToEdit: place, editIndex: index);
+                    _showSavePlaceDialog(context, placeToEdit: place, editIndex: index, allPlaces: allPlaces);
                   } else if (action == 'delete') {
                     _confirmDelete(context, place, index, allPlaces);
                   }
@@ -359,8 +384,13 @@ class SavedPlacesPage extends StatelessWidget {
             ),
             onPressed: () {
               Navigator.pop(dialogCtx);
-              final updated = allPlaces.map((e) => Map<String, dynamic>.from(e)).toList()..removeAt(index);
-              context.read<ProfileBloc>().add(UpdatePlaces(updated));
+              final placeId = place['id']?.toString();
+              if (placeId != null && placeId.isNotEmpty && !placeId.startsWith('place_')) {
+                context.read<ProfileBloc>().add(DeleteSavedPlaceEvent(placeId));
+              } else {
+                final updated = allPlaces.map((e) => Map<String, dynamic>.from(e)).toList()..removeAt(index);
+                context.read<ProfileBloc>().add(UpdatePlaces(updated));
+              }
               CustomToast.show(context, 'Place removed successfully');
             },
             child: const Text('Delete'),
@@ -370,7 +400,16 @@ class SavedPlacesPage extends StatelessWidget {
     );
   }
 
-  void _showSavePlaceDialog(BuildContext context, {Map<String, dynamic>? placeToEdit, int? editIndex}) {
+  void _showSavePlaceDialog(BuildContext context, {Map<String, dynamic>? placeToEdit, int? editIndex, List<Map<String, dynamic>>? allPlaces}) {
+    List<Map<String, dynamic>> placesList = allPlaces ?? [];
+    if (placesList.isEmpty) {
+      final state = context.read<ProfileBloc>().state;
+      if (state is ProfileLoaded) {
+        final raw = state.userProfile['saved_places'] as List? ?? [];
+        placesList = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -379,6 +418,7 @@ class SavedPlacesPage extends StatelessWidget {
         profileBloc: context.read<ProfileBloc>(),
         placeToEdit: placeToEdit,
         editIndex: editIndex,
+        allPlaces: placesList,
       ),
     );
   }
@@ -388,11 +428,13 @@ class _SavePlaceBottomSheet extends StatefulWidget {
   final ProfileBloc profileBloc;
   final Map<String, dynamic>? placeToEdit;
   final int? editIndex;
+  final List<Map<String, dynamic>>? allPlaces;
 
   const _SavePlaceBottomSheet({
     required this.profileBloc,
     this.placeToEdit,
     this.editIndex,
+    this.allPlaces,
   });
 
   @override
@@ -407,14 +449,29 @@ class _SavePlaceBottomSheetState extends State<_SavePlaceBottomSheet> {
   double _lng = 88.3639;
   bool _isSearchingPredictions = false;
   List<Map<String, dynamic>> _predictions = [];
+  bool _hasExistingHome = false;
+  bool _hasExistingWork = false;
 
   final PlacesService _placesService = PlacesService();
+  final GeocodingService _geocodingService = GeocodingService();
 
   @override
   void initState() {
     super.initState();
-    _selectedType = (widget.placeToEdit?['type'] ?? widget.placeToEdit?['label'] ?? 'home').toString().toLowerCase();
-    if (!['home', 'work', 'favorite'].contains(_selectedType)) {
+
+    _placesService.initialize(AppConstants.googleMapsApiKey);
+
+    final placesList = widget.allPlaces ?? [];
+    for (int i = 0; i < placesList.length; i++) {
+      if (widget.editIndex != null && i == widget.editIndex) continue;
+      final t = (placesList[i]['type'] ?? placesList[i]['label'] ?? '').toString().toLowerCase();
+      if (t == 'home') _hasExistingHome = true;
+      if (t == 'work') _hasExistingWork = true;
+    }
+
+    _selectedType = (widget.placeToEdit?['type'] ?? widget.placeToEdit?['label'] ?? '').toString().toLowerCase();
+    if (!['home', 'work', 'favorite'].contains(_selectedType) || _selectedType.isEmpty) {
+      // Default to Other (favorite)
       _selectedType = 'favorite';
     }
 
@@ -424,9 +481,14 @@ class _SavePlaceBottomSheetState extends State<_SavePlaceBottomSheet> {
 
     if (widget.placeToEdit?['latitude'] != null) {
       _lat = double.tryParse(widget.placeToEdit!['latitude'].toString()) ?? 22.5726;
+    } else if (widget.placeToEdit?['lat'] != null) {
+      _lat = double.tryParse(widget.placeToEdit!['lat'].toString()) ?? 22.5726;
     }
+
     if (widget.placeToEdit?['longitude'] != null) {
       _lng = double.tryParse(widget.placeToEdit!['longitude'].toString()) ?? 88.3639;
+    } else if (widget.placeToEdit?['lng'] != null) {
+      _lng = double.tryParse(widget.placeToEdit!['lng'].toString()) ?? 88.3639;
     }
   }
 
@@ -438,7 +500,8 @@ class _SavePlaceBottomSheetState extends State<_SavePlaceBottomSheet> {
   }
 
   void _onAddressChanged(String query) async {
-    if (query.trim().length < 2) {
+    final cleanQuery = query.trim();
+    if (cleanQuery.isEmpty) {
       setState(() {
         _predictions = [];
         _isSearchingPredictions = false;
@@ -448,17 +511,55 @@ class _SavePlaceBottomSheetState extends State<_SavePlaceBottomSheet> {
 
     setState(() => _isSearchingPredictions = true);
     try {
-      final results = await _placesService.fetchPredictions(query);
-      if (mounted) {
+      final results = await _placesService.searchPlacesMulti(cleanQuery);
+      if (results.isNotEmpty && mounted) {
         setState(() {
           _predictions = results.map((p) => {
-            'placeId': p.placeId,
-            'primaryText': p.primaryText,
-            'secondaryText': p.secondaryText,
-            'fullText': p.fullText,
+            'placeId': p['placeId'] ?? '',
+            'primaryText': p['name'] ?? '',
+            'secondaryText': p['address'] ?? '',
+            'fullText': p['address'] ?? p['name'] ?? '',
+            'latitude': p['latitude'],
+            'longitude': p['longitude'],
           }).toList();
           _isSearchingPredictions = false;
         });
+        return;
+      }
+
+      // Geocoding fallback if no results
+      if (cleanQuery.length >= 3) {
+        final coord = await _geocodingService.forwardGeocode(cleanQuery);
+        if (coord != null && mounted) {
+          String displayAddress = cleanQuery;
+          try {
+            final reversedPlace = await _geocodingService.reverseGeocode(coord);
+            if (reversedPlace?.formattedAddress != null && reversedPlace!.formattedAddress.isNotEmpty) {
+              displayAddress = reversedPlace.formattedAddress;
+            }
+          } catch (_) {}
+
+          if (mounted) {
+            setState(() {
+              _predictions = [
+                {
+                  'placeId': '',
+                  'primaryText': cleanQuery,
+                  'secondaryText': displayAddress,
+                  'fullText': displayAddress,
+                  'latitude': coord.latitude,
+                  'longitude': coord.longitude,
+                }
+              ];
+              _isSearchingPredictions = false;
+            });
+            return;
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() => _isSearchingPredictions = false);
       }
     } catch (_) {
       if (mounted) setState(() => _isSearchingPredictions = false);
@@ -466,18 +567,31 @@ class _SavePlaceBottomSheetState extends State<_SavePlaceBottomSheet> {
   }
 
   void _selectPrediction(Map<String, dynamic> pred) async {
-    final fullText = pred['fullText']?.toString() ?? pred['primaryText']?.toString() ?? '';
+    final fullText = pred['fullText']?.toString() ?? pred['secondaryText']?.toString() ?? pred['primaryText']?.toString() ?? '';
+    final primary = pred['primaryText']?.toString() ?? '';
+    
     _addressController.text = fullText;
-    if (_nameController.text.trim().isEmpty) {
-      _nameController.text = pred['primaryText']?.toString() ?? '';
+    if (_nameController.text.trim().isEmpty && primary.isNotEmpty) {
+      _nameController.text = primary;
     }
 
-    final placeId = pred['placeId']?.toString();
-    if (placeId != null && placeId.isNotEmpty) {
-      final coords = await _placesService.getLatLngFromPlaceId(placeId);
-      if (coords != null) {
-        _lat = coords.latitude;
-        _lng = coords.longitude;
+    if (pred['latitude'] != null && pred['longitude'] != null) {
+      _lat = (pred['latitude'] as num).toDouble();
+      _lng = (pred['longitude'] as num).toDouble();
+    } else {
+      final placeId = pred['placeId']?.toString();
+      if (placeId != null && placeId.isNotEmpty) {
+        final coords = await _placesService.getLatLngFromPlaceId(placeId, apiKey: AppConstants.googleMapsApiKey);
+        if (coords != null) {
+          _lat = coords.latitude;
+          _lng = coords.longitude;
+        }
+      } else {
+        final coords = await _geocodingService.forwardGeocode(fullText);
+        if (coords != null) {
+          _lat = coords.latitude;
+          _lng = coords.longitude;
+        }
       }
     }
 
@@ -494,34 +608,29 @@ class _SavePlaceBottomSheetState extends State<_SavePlaceBottomSheet> {
 
     final finalName = name.isNotEmpty
         ? name
-        : (_selectedType == 'home' ? 'Home' : (_selectedType == 'work' ? 'Work' : 'Saved Place'));
+        : (_selectedType == 'home' ? 'Home' : (_selectedType == 'work' ? 'Work' : 'Other'));
 
-    final currentState = widget.profileBloc.state;
-    if (currentState is ProfileLoaded) {
-      final rawList = currentState.userProfile['saved_places'] as List? ?? [];
-      final currentList = rawList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    final placeData = {
+      'type': _selectedType,
+      'label': _selectedType,
+      'name': finalName,
+      'address': address,
+      'latitude': _lat,
+      'longitude': _lng,
+      'lat': _lat.toString(),
+      'lng': _lng.toString(),
+      'isDefaultPickup': widget.placeToEdit?['isDefaultPickup'] ?? false,
+    };
 
-      final placeData = {
-        'id': widget.placeToEdit?['id'] ?? 'place_${DateTime.now().millisecondsSinceEpoch}',
-        'type': _selectedType,
-        'label': _selectedType,
-        'name': finalName,
-        'address': address,
-        'latitude': _lat,
-        'longitude': _lng,
-        'isDefaultPickup': widget.placeToEdit?['isDefaultPickup'] ?? false,
-      };
-
-      if (widget.editIndex != null) {
-        currentList[widget.editIndex!] = placeData;
-      } else {
-        currentList.add(placeData);
-      }
-
-      widget.profileBloc.add(UpdatePlaces(currentList));
-      Navigator.pop(context);
-      CustomToast.show(context, widget.placeToEdit != null ? 'Place updated successfully' : 'Place saved successfully');
+    final placeId = widget.placeToEdit?['id']?.toString();
+    if (widget.placeToEdit != null && placeId != null && placeId.isNotEmpty && !placeId.startsWith('place_')) {
+      widget.profileBloc.add(UpdateSavedPlaceEvent(placeId, placeData));
+    } else {
+      widget.profileBloc.add(AddSavedPlaceEvent(placeData));
     }
+
+    Navigator.pop(context);
+    CustomToast.show(context, widget.placeToEdit != null ? 'Place updated successfully' : 'Place saved successfully');
   }
 
   @override
@@ -529,7 +638,13 @@ class _SavePlaceBottomSheetState extends State<_SavePlaceBottomSheet> {
     final isEdit = widget.placeToEdit != null;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
+    final isHomeDisabled = !isEdit && _hasExistingHome;
+    final isWorkDisabled = !isEdit && _hasExistingWork;
+
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
+      ),
       padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + bottomInset),
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -565,15 +680,30 @@ class _SavePlaceBottomSheetState extends State<_SavePlaceBottomSheet> {
               ],
             ),
             const SizedBox(height: 16),
-            const Text('Place Category', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A))),
+            const Text('Category', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A))),
             const SizedBox(height: 10),
             Row(
               children: [
-                _buildCategoryTab('home', Icons.home_rounded, 'Home'),
-                const SizedBox(width: 10),
-                _buildCategoryTab('work', Icons.work_rounded, 'Work'),
-                const SizedBox(width: 10),
-                _buildCategoryTab('favorite', Icons.star_rounded, 'Other'),
+                _buildCategoryTab(
+                  'home',
+                  Icons.home_rounded,
+                  'Home',
+                  isDisabled: isHomeDisabled,
+                ),
+                const SizedBox(width: 8),
+                _buildCategoryTab(
+                  'work',
+                  Icons.work_rounded,
+                  'Work',
+                  isDisabled: isWorkDisabled,
+                ),
+                const SizedBox(width: 8),
+                _buildCategoryTab(
+                  'favorite',
+                  Icons.star_rounded,
+                  'Other',
+                  isDisabled: false,
+                ),
               ],
             ),
             const SizedBox(height: 18),
@@ -597,15 +727,29 @@ class _SavePlaceBottomSheetState extends State<_SavePlaceBottomSheet> {
             TextField(
               controller: _addressController,
               onChanged: _onAddressChanged,
+              minLines: 2,
+              maxLines: 4,
+              keyboardType: TextInputType.multiline,
               decoration: InputDecoration(
-                hintText: 'Search street, area or landmark',
-                prefixIcon: const Icon(Icons.location_on_outlined, color: Color(0xFF009048)),
+                hintText: 'Search street, area, building or landmark...',
+                prefixIcon: const Padding(
+                  padding: EdgeInsets.only(bottom: 24),
+                  child: Icon(Icons.location_on_outlined, color: Color(0xFF009048)),
+                ),
                 suffixIcon: _isSearchingPredictions
                     ? const Padding(
                         padding: EdgeInsets.all(12),
                         child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF009048))),
                       )
-                    : null,
+                    : (_addressController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 20, color: Color(0xFF94A3B8)),
+                            onPressed: () {
+                              _addressController.clear();
+                              setState(() => _predictions = []);
+                            },
+                          )
+                        : null),
                 filled: true,
                 fillColor: const Color(0xFFF8FAFC),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
@@ -614,34 +758,87 @@ class _SavePlaceBottomSheetState extends State<_SavePlaceBottomSheet> {
               ),
             ),
             if (_predictions.isNotEmpty) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               Container(
-                constraints: const BoxConstraints(maxHeight: 180),
+                constraints: const BoxConstraints(maxHeight: 220),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFF009048).withValues(alpha: 0.3)),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 4)),
                   ],
                 ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: _predictions.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (ctx, i) {
-                    final pred = _predictions[i];
-                    return ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.place_rounded, color: Color(0xFF009048), size: 18),
-                      title: Text(pred['primaryText'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                      subtitle: Text(pred['secondaryText'] ?? '', style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
-                      onTap: () => _selectPrediction(pred),
-                    );
-                  },
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: _predictions.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                    itemBuilder: (ctx, i) {
+                      final pred = _predictions[i];
+                      return Material(
+                        color: Colors.transparent,
+                        child: ListTile(
+                          dense: true,
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF009048).withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.place_rounded, color: Color(0xFF009048), size: 18),
+                          ),
+                          title: Text(
+                            pred['primaryText'] ?? '',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A)),
+                          ),
+                          subtitle: Text(
+                            pred['secondaryText'] ?? pred['fullText'] ?? '',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), height: 1.2),
+                          ),
+                          trailing: const Icon(
+                            Icons.north_west_rounded,
+                            size: 14,
+                            color: Color(0xFF94A3B8),
+                          ),
+                          onTap: () => _selectPrediction(pred),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
             ],
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.map_rounded),
+                label: const Text('Choose on map', style: TextStyle(fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF009048),
+                  side: const BorderSide(color: Color(0xFF009048)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () async {
+                  final result = await context.push('/pick-location-map');
+                  if (result != null && result is Map<String, dynamic>) {
+                    setState(() {
+                      _lat = result['latitude'] as double;
+                      _lng = result['longitude'] as double;
+                      _addressController.text = result['address'] as String;
+                    });
+                  }
+                },
+              ),
+            ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -666,49 +863,69 @@ class _SavePlaceBottomSheetState extends State<_SavePlaceBottomSheet> {
     );
   }
 
-  Widget _buildCategoryTab(String type, IconData icon, String label) {
+  Widget _buildCategoryTab(String type, IconData icon, String label, {bool isDisabled = false}) {
     final isSelected = _selectedType == type;
     return Expanded(
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _selectedType = type;
-            if (_nameController.text.trim().isEmpty || _nameController.text == 'Home' || _nameController.text == 'Work') {
-              if (type == 'home') _nameController.text = 'Home';
-              if (type == 'work') _nameController.text = 'Work';
-              if (type == 'favorite') _nameController.text = '';
-            }
-          });
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF009048).withOpacity(0.12) : const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected ? const Color(0xFF009048) : const Color(0xFFE2E8F0),
-              width: isSelected ? 1.5 : 1,
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: isSelected ? const Color(0xFF009048) : const Color(0xFF64748B), size: 22),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isSelected ? const Color(0xFF009048) : const Color(0xFF64748B),
-                ),
+      child: GestureDetector(
+        onTap: isDisabled
+            ? null
+            : () {
+                setState(() {
+                  _selectedType = type;
+                  if (_nameController.text.trim().isEmpty || _nameController.text == 'Home' || _nameController.text == 'Work' || _nameController.text == 'Other') {
+                    if (type == 'home') _nameController.text = 'Home';
+                    if (type == 'work') _nameController.text = 'Work';
+                    if (type == 'favorite') _nameController.text = '';
+                  }
+                });
+              },
+        child: Opacity(
+          opacity: isDisabled ? 0.35 : 1.0,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? const Color(0xFFE6F6ED)
+                  : (isDisabled ? const Color(0xFFF1F5F9) : const Color(0xFFF8FAFC)),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected ? const Color(0xFF009048) : const Color(0xFFE2E8F0),
+                width: isSelected ? 1.5 : 1,
               ),
-            ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  color: isSelected
+                      ? const Color(0xFF009048)
+                      : (isDisabled ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                  size: 18,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      color: isSelected
+                          ? const Color(0xFF009048)
+                          : (isDisabled ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 }
+
 

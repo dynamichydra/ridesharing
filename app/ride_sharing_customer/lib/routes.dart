@@ -15,6 +15,8 @@ import 'features/auth/presentation/pages/forgot_password_page.dart';
 import 'features/home/presentation/pages/home_page.dart';
 import 'features/booking/presentation/pages/select_location_page.dart';
 import 'features/booking/presentation/pages/ride_options_page.dart';
+import 'features/location/presentation/pages/pick_location_map_page.dart';
+import 'features/booking/presentation/pages/promo_codes_page.dart';
 import 'features/ride_tracking/presentation/pages/ride_tracking_page.dart';
 import 'features/wallet/presentation/pages/wallet_page.dart';
 import 'features/wallet/presentation/pages/add_funds_page.dart';
@@ -41,11 +43,13 @@ class AppRoutes {
   static const String home = '/home';
   static const String selectLocation = '/select-location';
   static const String rideOptions = '/ride-options';
+  static const String promoCodes = '/promo-codes';
   static const String rideTracking = '/ride-tracking';
   static const String wallet = '/wallet';
   static const String addFunds = '/add-funds';
   static const String notifications = '/notifications';
   static const String profile = '/profile';
+  static const String pickLocationMap = '/pick-location-map';
   static const String editProfile = '/edit-profile';
   static const String savedPlaces = '/saved-places';
   static const String paymentMethods = '/payment-methods';
@@ -59,6 +63,7 @@ class AppRoutes {
   // Root navigator key — sub-pages use this to push on top of the shell
   static final GlobalKey<NavigatorState> _rootNavigatorKey =
       GlobalKey<NavigatorState>(debugLabel: 'root');
+  static GlobalKey<NavigatorState> get navigatorKey => _rootNavigatorKey;
 
   static final GoRouter router = GoRouter(
     navigatorKey: _rootNavigatorKey,
@@ -204,6 +209,11 @@ class AppRoutes {
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
+        path: pickLocationMap,
+        builder: (context, state) => const PickLocationMapPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
         path: help,
         builder: (context, state) => const HelpPage(),
       ),
@@ -220,12 +230,20 @@ class AppRoutes {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: selectLocation,
-        builder: (context, state) => const SelectLocationPage(),
+        builder: (context, state) {
+          final extra = state.extra is Map ? Map<String, dynamic>.from(state.extra as Map) : null;
+          return SelectLocationPage(initialLocation: extra);
+        },
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: rideOptions,
         builder: (context, state) => const RideOptionsPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: promoCodes,
+        builder: (context, state) => const PromoCodesPage(),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,

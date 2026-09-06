@@ -36,6 +36,28 @@ class UpdatePlaces extends ProfileEvent {
   List<Object?> get props => [places];
 }
 
+class AddSavedPlaceEvent extends ProfileEvent {
+  final Map<String, dynamic> place;
+  const AddSavedPlaceEvent(this.place);
+  @override
+  List<Object?> get props => [place];
+}
+
+class UpdateSavedPlaceEvent extends ProfileEvent {
+  final String id;
+  final Map<String, dynamic> place;
+  const UpdateSavedPlaceEvent(this.id, this.place);
+  @override
+  List<Object?> get props => [id, place];
+}
+
+class DeleteSavedPlaceEvent extends ProfileEvent {
+  final String id;
+  const DeleteSavedPlaceEvent(this.id);
+  @override
+  List<Object?> get props => [id];
+}
+
 class UpdatePaymentMethods extends ProfileEvent {
   final List<Map<String, dynamic>> methods;
 
@@ -101,6 +123,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     on<UpdateProfileDetails>(_onUpdateProfileDetails);
     on<LoadRideHistoryEvent>(_onLoadRideHistory);
     on<UpdatePlaces>(_onUpdatePlaces);
+    on<AddSavedPlaceEvent>(_onAddSavedPlace);
+    on<UpdateSavedPlaceEvent>(_onUpdateSavedPlace);
+    on<DeleteSavedPlaceEvent>(_onDeleteSavedPlace);
     on<UpdatePaymentMethods>(_onUpdatePaymentMethods);
   }
 
@@ -174,6 +199,71 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       } catch (e) {
         emit(ProfileError(e.toString()));
       }
+    }
+  }
+
+  Future<void> _onAddSavedPlace(AddSavedPlaceEvent event, Emitter<ProfileState> emit) async {
+    final currentState = state;
+    if (currentState is ProfileLoaded) {
+      final existingPlaces = List<Map<String, dynamic>>.from(currentState.userProfile['saved_places'] as List? ?? []);
+      final rawLabel = (event.place['label'] ?? event.place['type'] ?? 'favorite').toString().toLowerCase();
+      
+      // If home or work, replace if existing
+      if (['home', 'work'].contains(rawLabel)) {
+        existingPlaces.removeWhere((p) => (p['label'] ?? p['type'] ?? '').toString().toLowerCase() == rawLabel);
+      }
+      existingPlaces.add(event.place);
+
+      final updatedProfile = Map<String, dynamic>.from(currentState.userProfile);
+      updatedProfile['saved_places'] = existingPlaces;
+      emit(currentState.copyWith(userProfile: updatedProfile));
+
+      try {
+        await _profileRepository.addSavedPlace(event.place);
+        final profile = await _profileRepository.getUserProfile();
+        emit(currentState.copyWith(userProfile: profile));
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _onUpdateSavedPlace(UpdateSavedPlaceEvent event, Emitter<ProfileState> emit) async {
+    final currentState = state;
+    if (currentState is ProfileLoaded) {
+      final existingPlaces = List<Map<String, dynamic>>.from(currentState.userProfile['saved_places'] as List? ?? []);
+      final index = existingPlaces.indexWhere((p) => p['id']?.toString() == event.id);
+      if (index != -1) {
+        existingPlaces[index] = {...existingPlaces[index], ...event.place};
+      } else {
+        existingPlaces.add(event.place);
+      }
+
+      final updatedProfile = Map<String, dynamic>.from(currentState.userProfile);
+      updatedProfile['saved_places'] = existingPlaces;
+      emit(currentState.copyWith(userProfile: updatedProfile));
+
+      try {
+        await _profileRepository.updateSavedPlace(event.id, event.place);
+        final profile = await _profileRepository.getUserProfile();
+        emit(currentState.copyWith(userProfile: profile));
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _onDeleteSavedPlace(DeleteSavedPlaceEvent event, Emitter<ProfileState> emit) async {
+    final currentState = state;
+    if (currentState is ProfileLoaded) {
+      final existingPlaces = List<Map<String, dynamic>>.from(currentState.userProfile['saved_places'] as List? ?? [])
+        ..removeWhere((p) => p['id']?.toString() == event.id);
+
+      final updatedProfile = Map<String, dynamic>.from(currentState.userProfile);
+      updatedProfile['saved_places'] = existingPlaces;
+      emit(currentState.copyWith(userProfile: updatedProfile));
+
+      try {
+        await _profileRepository.deleteSavedPlace(event.id);
+        final profile = await _profileRepository.getUserProfile();
+        emit(currentState.copyWith(userProfile: profile));
+      } catch (_) {}
     }
   }
 

@@ -102,7 +102,14 @@ class RideTrackingSocketDataSource {
       }
     });
 
-    // ── Driver arriving at pickup ───────────────────────────────────────
+    // ── Driver arriving / arrived at pickup ─────────────────────────────
+    socket.on('driver:arrived', (data) {
+      AppLogger.d('[RideTrackingSocket] event: driver:arrived -> $data');
+      if (data is Map) {
+        _driverArrivingController.add(Map<String, dynamic>.from(data));
+      }
+    });
+
     socket.on('ride:arriving', (data) {
       AppLogger.d('[RideTrackingSocket] event: ride:arriving -> $data');
       if (data is Map) {

@@ -8,6 +8,7 @@ abstract class HomeDataSource {
   Future<LatLng> getCurrentLocation();
   Future<List<Map<String, dynamic>>> searchPlaces(String query);
   Future<List<Map<String, dynamic>>> getSavedPlaces();
+  Future<List<Map<String, dynamic>>> getRecentRides();
 }
 
 class HomeDataSourceImpl implements HomeDataSource {
@@ -72,5 +73,22 @@ class HomeDataSourceImpl implements HomeDataSource {
     } catch (_) {
       return [];
     }
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getRecentRides() async {
+    try {
+      final response = await _dioClient.dio.get(
+        '/api/v1/riders/rides',
+        queryParameters: {'status': 'completed', 'limit': 10},
+      );
+      if (response.data['SUCCESS'] == true) {
+        final List<dynamic> list = response.data['MESSAGE'] ?? response.data['DATA'] ?? [];
+        final mappedList = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        // Ensure only completed rides with valid drop coordinates/addresses are returned
+        return mappedList.where((r) => (r['status'] ?? '').toString().toLowerCase() == 'completed').toList();
+      }
+    } catch (_) {}
+    return [];
   }
 }

@@ -41,28 +41,32 @@ class HomeLoading extends HomeState {}
 class HomeLoaded extends HomeState {
   final LatLng currentPosition;
   final List<Map<String, dynamic>> savedPlaces;
+  final List<Map<String, dynamic>> recentRides;
   final List<Map<String, dynamic>> searchResults;
 
   const HomeLoaded({
     required this.currentPosition,
     required this.savedPlaces,
+    this.recentRides = const [],
     this.searchResults = const [],
   });
 
   HomeLoaded copyWith({
     LatLng? currentPosition,
     List<Map<String, dynamic>>? savedPlaces,
+    List<Map<String, dynamic>>? recentRides,
     List<Map<String, dynamic>>? searchResults,
   }) {
     return HomeLoaded(
       currentPosition: currentPosition ?? this.currentPosition,
       savedPlaces: savedPlaces ?? this.savedPlaces,
+      recentRides: recentRides ?? this.recentRides,
       searchResults: searchResults ?? this.searchResults,
     );
   }
 
   @override
-  List<Object?> get props => [currentPosition, savedPlaces, searchResults];
+  List<Object?> get props => [currentPosition, savedPlaces, recentRides, searchResults];
 }
 
 class HomeError extends HomeState {
@@ -92,7 +96,8 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     try {
       final position = await _homeRepository.getCurrentLocation();
       final saved = await _homeRepository.getSavedPlaces();
-      emit(HomeLoaded(currentPosition: position, savedPlaces: saved));
+      final recent = await _homeRepository.getRecentRides();
+      emit(HomeLoaded(currentPosition: position, savedPlaces: saved, recentRides: recent));
     } catch (e) {
       if (state is! HomeLoaded) {
         emit(HomeError(e.toString()));

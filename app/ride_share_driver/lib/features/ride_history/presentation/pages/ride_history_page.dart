@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../injection_container.dart' as di;
 import '../../../../presentation/screens/dashboard/driver_main_layout.dart';
@@ -874,21 +875,35 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
       } catch (_) {}
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+    return InkWell(
+      onTap: () {
+        context.push('/ride-details', extra: {
+          ...ride,
+          'pickup': pickupRaw,
+          'drop': dropRaw,
+          'fare': fare,
+          'date': pickupTimeStr,
+          'vehicle': ride['vehicle'] ?? 'Ryva Cab',
+          'distance': ride['distance'] ?? '${ride['actualDistanceKm'] ?? ride['distanceKm'] ?? '0.0'} km',
+          'time': ride['time'] ?? '$durationMin min',
+        });
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFF1F5F9)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
       child: Column(
         children: [
           // Top Section: Route, Locations, Fare, and Status Badge
@@ -1214,6 +1229,7 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }

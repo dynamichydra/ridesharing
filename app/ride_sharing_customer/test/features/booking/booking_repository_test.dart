@@ -6,6 +6,11 @@ import 'package:ride_sharing_customer/features/booking/domain/entities/vehicle.d
 
 class MockBookingDataSource implements BookingDataSource {
   @override
+  Future<Map<String, dynamic>> validatePromo(String promoCode, double fare) async {
+    return {};
+  }
+
+  @override
   Future<List<VehicleModel>> getVehicles() async {
     return [
       const VehicleModel(
@@ -34,6 +39,7 @@ class MockBookingDataSource implements BookingDataSource {
     required double pickupLng,
     required double dropLat,
     required double dropLng,
+    String? promoCode,
   }) async {
     return [
       {
@@ -56,6 +62,7 @@ class MockBookingDataSource implements BookingDataSource {
     required double dropLng,
     required String dropAddress,
     String paymentMethod = 'cash',
+    String? promoCode,
   }) async {
     return {'id': 'ride_mock_id', 'status': 'searching'};
   }

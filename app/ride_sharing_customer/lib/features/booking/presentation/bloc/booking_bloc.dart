@@ -60,6 +60,14 @@ class ConfirmRideBooking extends BookingEvent {
   List<Object?> get props => [paymentMethod];
 }
 
+class ApplyPromoCode extends BookingEvent {
+  final String promoCode;
+  const ApplyPromoCode(this.promoCode);
+
+  @override
+  List<Object?> get props => [promoCode];
+}
+
 class ClearBooking extends BookingEvent {}
 
 // ==========================================
@@ -86,7 +94,10 @@ class BookingVehicleOptionsLoaded extends BookingState {
   final double distanceMiles;
   final List<Vehicle> vehicles;
   final Map<String, double> calculatedFares;
+  final Map<String, double>? originalFares;
   final Vehicle selectedVehicle;
+  final String? appliedPromoCode;
+  final double? discountAmount;
 
   const BookingVehicleOptionsLoaded({
     required this.pickup,
@@ -99,10 +110,17 @@ class BookingVehicleOptionsLoaded extends BookingState {
     required this.vehicles,
     required this.calculatedFares,
     required this.selectedVehicle,
+    this.originalFares,
+    this.appliedPromoCode,
+    this.discountAmount,
   });
 
   BookingVehicleOptionsLoaded copyWith({
     Vehicle? selectedVehicle,
+    Map<String, double>? calculatedFares,
+    Map<String, double>? originalFares,
+    String? appliedPromoCode,
+    double? discountAmount,
   }) {
     return BookingVehicleOptionsLoaded(
       pickup: pickup,
@@ -113,8 +131,11 @@ class BookingVehicleOptionsLoaded extends BookingState {
       destinationAddress: destinationAddress,
       distanceMiles: distanceMiles,
       vehicles: vehicles,
-      calculatedFares: calculatedFares,
+      calculatedFares: calculatedFares ?? this.calculatedFares,
+      originalFares: originalFares ?? this.originalFares,
       selectedVehicle: selectedVehicle ?? this.selectedVehicle,
+      appliedPromoCode: appliedPromoCode ?? this.appliedPromoCode,
+      discountAmount: discountAmount ?? this.discountAmount,
     );
   }
 
@@ -129,7 +150,10 @@ class BookingVehicleOptionsLoaded extends BookingState {
         distanceMiles,
         vehicles,
         calculatedFares,
+        originalFares,
         selectedVehicle,
+        appliedPromoCode,
+        discountAmount,
       ];
 }
 
@@ -178,7 +202,37 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     on<SetRideLocations>(_onSetRideLocations);
     on<SelectVehicle>(_onSelectVehicle);
     on<ConfirmRideBooking>(_onConfirmRideBooking);
+    on<ApplyPromoCode>(_onApplyPromoCode);
     on<ClearBooking>(_onClearBooking);
+  }
+
+  Future<void> _onApplyPromoCode(ApplyPromoCode event, Emitter<BookingState> emit) async {
+    final currentState = state;
+    if (currentState is BookingVehicleOptionsLoaded) {
+      try {
+        final selectedFare = (currentState.originalFares ?? currentState.calculatedFares)[currentState.selectedVehicle.id] ?? 10.0;
+        final result = await _bookingRepository.validatePromo(event.promoCode, selectedFare);
+        
+        final double finalFare = (result['finalFareMinor'] as int) / 100.0;
+        final double discountAmount = (result['discountAmountMinor'] as int) / 100.0;
+        
+        final newFares = Map<String, double>.from(currentState.calculatedFares);
+        newFares[currentState.selectedVehicle.id] = finalFare;
+        
+        final originalFares = currentState.originalFares ?? currentState.calculatedFares;
+
+        emit(currentState.copyWith(
+          calculatedFares: newFares,
+          originalFares: originalFares,
+          appliedPromoCode: event.promoCode,
+          discountAmount: discountAmount,
+        ));
+      } catch (e) {
+        emit(BookingError(e.toString().replaceAll('Exception: ', '')));
+        // We revert state back so error isn't permanent, allowing retry
+        emit(currentState);
+      }
+    }
   }
 
   Future<void> _onSetRideLocations(SetRideLocations event, Emitter<BookingState> emit) async {
@@ -278,6 +332,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
           dropLng: currentState.destination.longitude,
           dropAddress: currentState.destinationAddress,
           paymentMethod: event.paymentMethod,
+          promoCode: currentState.appliedPromoCode,
         );
         print('[BookingBloc] requestRide successful: $result');
         

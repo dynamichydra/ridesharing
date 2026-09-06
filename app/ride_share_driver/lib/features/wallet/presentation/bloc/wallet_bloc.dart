@@ -100,23 +100,25 @@ class WalletTransactionItem {
     final lowerReason = reason.toLowerCase();
     final lowerDesc = (rawDesc ?? '').toLowerCase();
 
-    if (lowerReason.contains('payout') ||
+    if (lowerReason.contains('commission') || lowerDesc.contains('commission')) {
+      displayDesc = 'Platform Commission (Cash Ride)';
+    } else if (lowerReason.contains('payout') ||
         lowerReason.contains('withdrawal') ||
         lowerDesc.contains('payout') ||
         lowerDesc.contains('withdrawal') ||
         lowerDesc.contains('cash out') ||
         lowerDesc.contains('cashout')) {
       displayDesc = 'Cash Out';
-    } else if (lowerReason.contains('fare') ||
+    } else if (lowerReason.contains('topup') || lowerReason.contains('top_up') || lowerDesc.contains('top-up') || lowerDesc.contains('topup')) {
+      displayDesc = 'Wallet Top Up';
+    } else if (lowerReason.contains('wallet') || lowerReason.contains('fare') ||
         lowerReason.contains('earnings') ||
         lowerReason.contains('ride_fare') ||
         lowerReason.contains('ride') ||
         lowerDesc.contains('fare') ||
         lowerDesc.contains('earnings') ||
         lowerDesc.contains('ride')) {
-      displayDesc = 'Ride Fare Received';
-    } else if (lowerReason.contains('commission') || lowerDesc.contains('commission')) {
-      displayDesc = 'Cash Commission Fee';
+      displayDesc = type == 'credit' ? 'Ride Earnings (Wallet)' : 'Ride Payment';
     } else if (lowerReason.contains('incentive') ||
         lowerReason.contains('bonus') ||
         lowerDesc.contains('incentive') ||
@@ -125,7 +127,7 @@ class WalletTransactionItem {
     } else if (lowerReason.contains('refund') || lowerDesc.contains('refund')) {
       displayDesc = 'Ride Refund Deduction';
     } else if (displayDesc.isEmpty) {
-      displayDesc = type == 'credit' ? 'Ride Fare Received' : 'Cash Out';
+      displayDesc = type == 'credit' ? 'Ride Earnings (Wallet)' : 'Platform Commission';
     }
 
     final dateStr = json['createdAt'] as String?;

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/utils/location_helper.dart';
 import '../../../../core/widgets/app_map_view.dart';
+import '../../../../core/widgets/custom_toast.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../bloc/ride_tracking_bloc.dart';
 import '../../../booking/presentation/bloc/booking_bloc.dart';
@@ -54,6 +55,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
       body: BlocConsumer<RideTrackingBloc, RideTrackingState>(
         listener: (context, state) {
           if (state is RideTrackingCancelled) {
+            CustomToast.show(context, state.message);
             context.read<BookingBloc>().add(ClearBooking());
             context.go('/home');
           } else if (state is RideTrackingActive && state.trackingState == 'rideCompleted') {

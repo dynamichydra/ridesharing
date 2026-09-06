@@ -584,15 +584,17 @@ class _DriverDashboardState extends State<DriverDashboard>
             } else if (state is RideCompleted) {
               _profileBloc.add(LoadProfile());
               _walletBloc.add(LoadWalletData());
-              final fareMinor = state.ride.finalFareMinor ?? state.ride.estimatedFareMinor ?? 0;
-              final fareNum = fareMinor / 100.0;
-              final fare = fareNum.toStringAsFixed(2);
-              _showMoneyAddedAnimation(fareNum);
+              final totalMinor = state.ride.finalFareMinor ?? state.ride.estimatedFareMinor ?? 0;
+              final driverNetMinor = state.ride.driverEarningsMinor ?? (totalMinor * 0.8).round();
+              final driverNetNum = driverNetMinor / 100.0;
+              final totalFareNum = totalMinor / 100.0;
+              
+              _showMoneyAddedAnimation(driverNetNum);
               final isWallet = state.ride.paymentMethod?.toLowerCase() == 'wallet';
               if (isWallet) {
-                CustomToast.show(context, 'Ride Completed! ₹$fare credited to your Ryva Wallet');
+                CustomToast.show(context, 'Ride Completed! ₹${driverNetNum.toStringAsFixed(2)} credited to your Ryva Wallet');
               } else {
-                CustomToast.show(context, 'Ride Completed! Collect ₹$fare cash from rider');
+                CustomToast.show(context, 'Ride Completed! Collect ₹${totalFareNum.toStringAsFixed(2)} cash from rider');
               }
             }
           },

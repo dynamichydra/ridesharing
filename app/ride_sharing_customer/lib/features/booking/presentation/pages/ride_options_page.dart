@@ -750,6 +750,14 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                 _buildFareRow('Distance (6.2 km)', '₹${distanceFare.toStringAsFixed(0)}'),
                 const SizedBox(height: 8),
                 _buildFareRow('Time (18 min)', '₹${timeFare.toStringAsFixed(0)}'),
+                if (state.discountAmount != null && state.discountAmount! > 0) ...[
+                  const SizedBox(height: 8),
+                  _buildFareRow(
+                    'Promo Discount',
+                    '-₹${state.discountAmount!.toStringAsFixed(0)}',
+                    color: const Color(0xFF009048),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 const Divider(),
                 const SizedBox(height: 8),
@@ -761,6 +769,49 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                   ],
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Promo Code Row
+          InkWell(
+            onTap: () {
+              context.push('/promo-codes');
+            },
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE2E7E9)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.local_offer_rounded, color: Color(0xFF009048), size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Promo Code',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                        ),
+                        Text(
+                          state.appliedPromoCode != null ? 'Applied: ${state.appliedPromoCode}' : 'Apply a promo code',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: state.appliedPromoCode != null ? const Color(0xFF009048) : const Color(0xFF8A94A6),
+                            fontWeight: state.appliedPromoCode != null ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF8A94A6), size: 16),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -881,12 +932,12 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
     );
   }
 
-  Widget _buildFareRow(String title, String amount) {
+  Widget _buildFareRow(String title, String amount, {Color color = const Color(0xFF021B47)}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(title, style: const TextStyle(fontSize: 13, color: Color(0xFF8A94A6))),
-        Text(amount, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF021B47))),
+        Text(amount, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color)),
       ],
     );
   }

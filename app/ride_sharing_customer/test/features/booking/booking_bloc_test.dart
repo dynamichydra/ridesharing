@@ -7,6 +7,11 @@ import 'package:ride_sharing_customer/features/booking/presentation/bloc/booking
 
 class MockBookingRepository implements BookingRepository {
   @override
+  Future<Map<String, dynamic>> validatePromo(String promoCode, double fare) async {
+    return <String, dynamic>{};
+  }
+
+  @override
   Future<List<Vehicle>> getVehicles() async {
     return [
       const Vehicle(
@@ -40,6 +45,7 @@ class MockBookingRepository implements BookingRepository {
     required double pickupLng,
     required double dropLat,
     required double dropLng,
+    String? promoCode,
   }) async {
     return [
       {
@@ -62,6 +68,7 @@ class MockBookingRepository implements BookingRepository {
     required double dropLng,
     required String dropAddress,
     String paymentMethod = 'cash',
+    String? promoCode,
   }) async {
     return {'id': 'ride_mock_id', 'status': 'searching'};
   }

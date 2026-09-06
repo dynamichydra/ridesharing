@@ -120,11 +120,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     onTap: () => context.push('/edit-profile'),
                   ),
                   _buildProfileMenuItem(
-                    icon: Icons.payment_rounded,
-                    title: 'Payment Methods',
-                    onTap: () => context.push('/payment-methods'),
-                  ),
-                  _buildProfileMenuItem(
                     icon: Icons.location_on_outlined,
                     title: 'Saved Places',
                     onTap: () => context.push('/saved-places'),

@@ -508,6 +508,16 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
   }
 
   Widget _buildCompletionSheet(BuildContext sheetCtx, ActiveRide ride, String fare, bool isWallet) {
+    final totalFareMinor = ride.finalFareMinor ?? ride.estimatedFareMinor ?? 0;
+    final totalFareNum = totalFareMinor / 100.0;
+    
+    // Driver earnings and Commission breakdown
+    final driverEarningsMinor = ride.driverEarningsMinor ?? (totalFareMinor * 0.8).round();
+    final commissionMinor = ride.commissionMinor ?? (totalFareMinor - driverEarningsMinor);
+
+    final driverEarningsNum = driverEarningsMinor / 100.0;
+    final commissionNum = commissionMinor / 100.0;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
       decoration: const BoxDecoration(
@@ -536,8 +546,8 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
 
           // Animated Cash / Success Icon
           Container(
-            width: 76,
-            height: 76,
+            width: 72,
+            height: 72,
             decoration: BoxDecoration(
               color: const Color(0xFFDCFCE7),
               shape: BoxShape.circle,
@@ -554,11 +564,11 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
               child: Icon(
                 Icons.check_circle_rounded,
                 color: Color(0xFF009048),
-                size: 44,
+                size: 42,
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
           const Text(
             'Ride Completed!',
@@ -572,8 +582,8 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
           const SizedBox(height: 6),
           Text(
             isWallet
-                ? 'Trip payment was automatically credited to your Ryva Wallet.'
-                : 'Please collect cash from the rider before finishing.',
+                ? 'Your net earnings have been credited to your Ryva Wallet.'
+                : 'Please collect the full cash fare from the rider.',
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 14,
@@ -583,10 +593,10 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
           ),
           const SizedBox(height: 20),
 
-          // Big Cash Collection Card
+          // Main Action Card (Collect Cash or Wallet Credited)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: isWallet
@@ -615,7 +625,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      isWallet ? 'WALLET PAYMENT' : 'COLLECT CASH',
+                      isWallet ? 'YOUR NET EARNINGS (WALLET)' : 'COLLECT CASH FROM RIDER',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
@@ -627,9 +637,11 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '₹$fare',
+                  isWallet
+                      ? '₹${driverEarningsNum.toStringAsFixed(2)}'
+                      : '₹${totalFareNum.toStringAsFixed(2)}',
                   style: TextStyle(
-                    fontSize: 38,
+                    fontSize: 36,
                     fontWeight: FontWeight.w900,
                     color: isWallet ? const Color(0xFF009048) : const Color(0xFF92400E),
                     letterSpacing: -1,
@@ -638,12 +650,98 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+
+          // Itemized Payment Breakdown Card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Payment Breakdown',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF021B47),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildBreakdownRow(
+                  label: 'Total Fare Paid by Rider',
+                  amount: '₹${totalFareNum.toStringAsFixed(2)}',
+                  isBold: true,
+                ),
+                const SizedBox(height: 8),
+                _buildBreakdownRow(
+                  label: 'Ryva Platform Commission',
+                  amount: '- ₹${commissionNum.toStringAsFixed(2)}',
+                  amountColor: const Color(0xFFDC2626),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Divider(height: 1, color: Color(0xFFE2E8F0)),
+                ),
+                _buildBreakdownRow(
+                  label: 'Your Net Earnings',
+                  amount: '₹${driverEarningsNum.toStringAsFixed(2)}',
+                  isBold: true,
+                  amountColor: const Color(0xFF009048),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Settlement Note
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isWallet ? const Color(0xFFF0FDF4) : const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isWallet ? const Color(0xFFBBF7D0) : const Color(0xFFFDE68A),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  isWallet ? Icons.check_circle_outline_rounded : Icons.info_outline_rounded,
+                  size: 16,
+                  color: isWallet ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isWallet
+                        ? '₹${driverEarningsNum.toStringAsFixed(2)} (fare minus commission) has been automatically added to your wallet.'
+                        : 'Platform commission of ₹${commissionNum.toStringAsFixed(2)} has been debited against your wallet.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isWallet ? const Color(0xFF15803D) : const Color(0xFFB45309),
+                      height: 1.3,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
 
           // Confirm Button
           SizedBox(
             width: double.infinity,
-            height: 54,
+            height: 52,
             child: ElevatedButton(
               onPressed: () {
                 Navigator.of(sheetCtx).pop();
@@ -672,6 +770,35 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildBreakdownRow({
+    required String label,
+    required String amount,
+    bool isBold = false,
+    Color? amountColor,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: isBold ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+            fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+        Text(
+          amount,
+          style: TextStyle(
+            fontSize: 13,
+            color: amountColor ?? (isBold ? const Color(0xFF0F172A) : const Color(0xFF334155)),
+            fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }

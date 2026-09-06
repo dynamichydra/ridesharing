@@ -12,22 +12,37 @@ class RideDetailsPage extends StatefulWidget {
 }
 
 class _RideDetailsPageState extends State<RideDetailsPage> {
-  final LatLng _pickup = const LatLng(12.9352, 77.6245); // Koramangala
-  final LatLng _drop = const LatLng(12.8452, 77.6602); // Electronic City
+  late LatLng _pickup;
+  late LatLng _drop;
+
+  @override
+  void initState() {
+    super.initState();
+    final data = widget.rideData ?? {};
+    final pLat = double.tryParse(data['pickupLat']?.toString() ?? '') ?? 12.9352;
+    final pLng = double.tryParse(data['pickupLng']?.toString() ?? '') ?? 77.6245;
+    final dLat = double.tryParse(data['dropLat']?.toString() ?? '') ?? 12.8452;
+    final dLng = double.tryParse(data['dropLng']?.toString() ?? '') ?? 77.6602;
+    _pickup = LatLng(pLat, pLng);
+    _drop = LatLng(dLat, dLng);
+  }
 
   @override
   Widget build(BuildContext context) {
     final data = widget.rideData ?? {};
     final String dateStr = data['date']?.toString() ?? '18 May 2025, 07:45 AM';
-    final String vehicleName = data['vehicle']?.toString() ?? 'Ryva Cab';
-    final String pickup = data['pickup']?.toString() ?? 'Koramangala, Bengaluru';
-    final String drop = data['drop']?.toString() ?? 'Electronic City, Bengaluru';
-    final String distance = data['distance']?.toString() ?? '6.2 km';
-    final String time = data['time']?.toString() ?? '18 min';
-    final double fare = (data['fare'] as num?)?.toDouble() ?? 125.0;
+    final String vehicleName = data['vehicle']?.toString() ?? data['vehicleTypeName']?.toString() ?? 'Ryva Cab';
+    final String pickup = data['pickup']?.toString() ?? data['pickupAddress']?.toString() ?? 'Pickup location';
+    final String drop = data['drop']?.toString() ?? data['dropAddress']?.toString() ?? 'Drop location';
+    final String distance = data['distance']?.toString() ?? '${data['actualDistanceKm'] ?? data['distanceKm'] ?? '0.0'} km';
+    final String time = data['time']?.toString() ?? '${data['actualDurationMin'] ?? data['durationMin'] ?? 20} min';
+    final double fare = (data['fare'] as num?)?.toDouble() ??
+        ((data['finalFareMinor'] ?? data['estimatedFareMinor'] as num?)?.toDouble() ?? 0) / 100.0;
+    final String statusStr = (data['status']?.toString() ?? 'Completed').toUpperCase();
+    final bool isCancelled = statusStr == 'CANCELLED';
 
-    final double baseFare = (fare * 0.40).clamp(20.0, fare);
-    final double distanceFare = (fare * 0.48).clamp(10.0, fare);
+    final double baseFare = (fare * 0.40).clamp(0.0, fare);
+    final double distanceFare = (fare * 0.48).clamp(0.0, fare);
     final double timeFare = (fare - baseFare - distanceFare).clamp(0.0, fare);
 
     final Set<Marker> markers = {
@@ -109,12 +124,16 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE6F4EA),
+                          color: isCancelled ? const Color(0xFFFEE2E2) : const Color(0xFFE6F4EA),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Text(
-                          'Completed',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF009048)),
+                        child: Text(
+                          isCancelled ? 'Cancelled' : 'Completed',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isCancelled ? const Color(0xFFEF4444) : const Color(0xFF009048),
+                          ),
                         ),
                       ),
                     ],

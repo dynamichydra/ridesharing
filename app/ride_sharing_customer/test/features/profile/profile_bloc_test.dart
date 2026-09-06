@@ -47,6 +47,22 @@ class MockProfileRepository implements ProfileRepository {
   }
 
   @override
+  Future<Map<String, dynamic>> addSavedPlace(Map<String, dynamic> place) async {
+    final newPlace = {...place, 'id': 'new_id'};
+    (mockProfile['saved_places'] as List).add(newPlace);
+    return newPlace;
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateSavedPlace(String id, Map<String, dynamic> place) async {
+    return place;
+  }
+
+  @override
+  Future<void> deleteSavedPlace(String id) async {
+  }
+
+  @override
   Future<void> updatePaymentMethods(List<Map<String, dynamic>> methods) async {
     mockProfile['payment_methods'] = methods;
   }
