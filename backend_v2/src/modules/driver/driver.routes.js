@@ -1,10 +1,29 @@
 import { sendSuccess, sendError, sendList, parsePagination } from '../../utils/response.js';
 import { authenticateDriver, authenticateAdmin } from '../../middleware/authenticate.js';
 import * as driverService from './driver.service.js';
+import * as rideService from '../ride/ride.service.js';
 
 export async function driverRoutes(app) {
 
   // ── Driver self ──────────────────────────────────────────────────────────────
+
+  app.get('/rides', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const { rows, pagination } = await rideService.getDriverRideHistory(
+      request.user.id,
+      {
+        page,
+        limit,
+        offset,
+        status: request.query.status,
+        fromDate: request.query.fromDate,
+        toDate: request.query.toDate,
+        minEarnings: request.query.minEarnings ? parseFloat(request.query.minEarnings) : undefined,
+        maxEarnings: request.query.maxEarnings ? parseFloat(request.query.maxEarnings) : undefined,
+      }
+    );
+    return sendList(reply, rows, pagination);
+  });
 
   app.get('/dashboard-summary', { preHandler: [authenticateDriver] }, async (request, reply) => {
     const data = await driverService.getDashboardSummary(request.user.id);

@@ -344,15 +344,41 @@ async function _expireRide(rideId, dispatchJobId, explainableAudit) {
     rideId,
     riderId: ride.riderId,
     cancelledBy: 'system',
-    reason: 'no_driver',
+    reason: 'no_driver_available',
   });
+
+  // Direct socket emit to rider so customer UI updates immediately with toaster
+  try {
+    const { getSocketIO } = await import('../../kafka/consumers/index.js');
+    const io = getSocketIO();
+    if (io) {
+      io.of('/rider').to(`rider:${ride.riderId}`).emit('ride:cancelled', {
+        rideId,
+        cancelledBy: 'system',
+        reason: 'no_driver_available',
+        message: 'No rides found nearby',
+      });
+      io.of('/rider').to(`ride:${rideId}`).emit('ride:cancelled', {
+        rideId,
+        cancelledBy: 'system',
+        reason: 'no_driver_available',
+        message: 'No rides found nearby',
+      });
+      io.of('/driver').to(`ride:candidates:${rideId}`).emit('ride:taken', {
+        rideId,
+        reason: 'expired',
+      });
+    }
+  } catch (err) {
+    console.error('[Matching] Direct socket emit on ride expire failed:', err.message);
+  }
 
   await publishEvent(TOPICS.NOTIF_PUSH, {
     userType: 'rider',
     userId: ride.riderId,
     type: 'RIDE_EXPIRED',
-    title: 'No driver found',
-    body: 'Sorry, no drivers are available nearby at this moment. Please try again shortly.',
+    title: 'No rides found nearby',
+    body: 'No rides found nearby. Please try again shortly.',
   });
 
   console.log(`[Matching] Ride ${rideId} expired — all waves completed without match`);

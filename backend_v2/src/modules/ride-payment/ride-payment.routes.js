@@ -28,6 +28,15 @@ export async function ridePaymentRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  // POST /api/v1/ride-payments/:rideId/pay-wallet
+  app.post('/:rideId/pay-wallet', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const idempotencyKey = request.headers['idempotency-key'];
+    const data = await ridePaymentService.payRideWithWallet(
+      request.user.id, request.params.rideId, idempotencyKey,
+    );
+    return sendSuccess(reply, data);
+  });
+
   // GET /api/v1/ride-payments/mine
   app.get('/mine', { preHandler: [authenticateRider] }, async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);

@@ -125,19 +125,29 @@ export async function getAcceptanceRate(driverId) {
 }
 
 /**
- * Bulk-expires every still-pending offer for a ring once its timeout window
- * passes without any driver accepting. Called by the matching engine right
- * before it moves to the next ring (or expires the ride entirely).
+ * Bulk-expires every still-pending offer for a ring (or all rings if ring is omitted)
+ * once its timeout window passes or on ride cancellation.
  */
-export async function expirePendingOffers(rideId, ring) {
-    return db.update(rideOffers).set({
+export async function expirePendingOffers(rideId, ring = null) {
+    const conditions = [
+        eq(rideOffers.rideId, rideId),
+        eq(rideOffers.status, 'pending'),
+    ];
+    if (ring != null) {
+        conditions.push(eq(rideOffers.ring, ring));
+    }
+
+    const expired = await db.update(rideOffers).set({
         status: 'expired',
         respondedAt: new Date(),
-    }).where(and(
-        eq(rideOffers.rideId, rideId),
-        eq(rideOffers.ring, ring),
-        eq(rideOffers.status, 'pending'),
-    )).returning();
+    }).where(and(...conditions)).returning();
+
+    if (expired.length > 0) {
+        const driverIds = expired.map((o) => o.driverId);
+        await releaseLocks(driverIds, rideId).catch(() => {});
+    }
+
+    return expired;
 }
 
 /**

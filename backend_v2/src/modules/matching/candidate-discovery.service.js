@@ -119,11 +119,35 @@ export async function discoverCandidatesInRadius(pickupLat, pickupLng, radiusKm,
     candidateIds = candidateIds.filter((id) => !excludeSet.has(id));
   }
 
-  if (candidateIds.length === 0) {
-    return [];
-  }
-
   // 3. Fetch driver details with spatial distance calculation from Postgres
+  // If candidateIds has matches, prioritize them; otherwise query all online active drivers directly within the radius
+  const whereClause = candidateIds.length > 0
+    ? sql`
+        d.id IN (${sql.join(candidateIds.map((id) => sql`${id}::uuid`), sql`, `)})
+        AND d.current_lat IS NOT NULL
+        AND (6371 * acos(
+          LEAST(1.0,
+            cos(radians(${pickupLat})) * cos(radians(d.current_lat::float))
+            * cos(radians(d.current_lng::float) - radians(${pickupLng}))
+            + sin(radians(${pickupLat})) * sin(radians(d.current_lat::float))
+          )
+        )) <= ${radiusKm}
+      `
+    : sql`
+        d.is_online = true
+        AND d.status != 'suspended'
+        AND d.is_blocked = false
+        AND d.current_lat IS NOT NULL
+        ${excludedDriverIds.length > 0 ? sql`AND d.id NOT IN (${sql.join(excludedDriverIds.map((id) => sql`${id}::uuid`), sql`, `)})` : sql``}
+        AND (6371 * acos(
+          LEAST(1.0,
+            cos(radians(${pickupLat})) * cos(radians(d.current_lat::float))
+            * cos(radians(d.current_lng::float) - radians(${pickupLng}))
+            + sin(radians(${pickupLat})) * sin(radians(d.current_lat::float))
+          )
+        )) <= ${radiusKm}
+      `;
+
   const rows = await db.execute(sql`
     SELECT
       d.id,
@@ -161,16 +185,7 @@ export async function discoverCandidatesInRadius(pickupLat, pickupLng, radiusKm,
       AND s.status = 'active'
       AND (s.end_date IS NULL OR s.end_date > NOW())
     LEFT JOIN subscription_plans sp ON sp.id = s.plan_id
-    WHERE
-      d.id IN (${sql.join(candidateIds.map((id) => sql`${id}::uuid`), sql`, `)})
-      AND d.current_lat IS NOT NULL
-      AND (6371 * acos(
-        LEAST(1.0,
-          cos(radians(${pickupLat})) * cos(radians(d.current_lat::float))
-          * cos(radians(d.current_lng::float) - radians(${pickupLng}))
-          + sin(radians(${pickupLat})) * sin(radians(d.current_lat::float))
-        )
-      )) <= ${radiusKm}
+    WHERE ${whereClause}
     ORDER BY distance_km ASC
     LIMIT 50
   `);

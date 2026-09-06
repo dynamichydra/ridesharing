@@ -152,6 +152,7 @@ export async function executeDispatchWave(ride, candidates, waveParams) {
         currency: ride.currencyCode,
         distanceKm: ride.distanceKm,
         polyline: ride.polyline,
+        paymentMethod: ride.paymentMethod || 'cash',
         expiresAt: Date.now() + timeoutMs,
       },
       ride.id

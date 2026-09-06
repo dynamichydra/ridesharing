@@ -39,8 +39,33 @@ export async function rideRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  // GET /api/v1/rides/rider/active
+  app.get('/rider/active', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const data = await rideService.getRiderActiveRide(request.user.id);
+    return sendSuccess(reply, data);
+  });
+
+  // GET /api/v1/rides/driver/history (Driver trip history)
+  app.get('/driver/history', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const { rows, pagination } = await rideService.getDriverRideHistory(
+      request.user.id,
+      {
+        page,
+        limit,
+        offset,
+        status: request.query.status,
+        fromDate: request.query.fromDate,
+        toDate: request.query.toDate,
+        minEarnings: request.query.minEarnings ? parseFloat(request.query.minEarnings) : undefined,
+        maxEarnings: request.query.maxEarnings ? parseFloat(request.query.maxEarnings) : undefined,
+      }
+    );
+    return sendList(reply, rows, pagination);
+  });
+
   // GET /api/v1/rides/:id
-  app.get('/:id', { preHandler: [authenticateRider] }, async (request, reply) => {
+  app.get('/:id', { preHandler: [authenticateAny] }, async (request, reply) => {
     const data = await rideService.getRideById(request.params.id);
     return sendSuccess(reply, data);
   });

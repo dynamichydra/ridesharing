@@ -171,7 +171,7 @@ async function _applyWalletSideEffects(tx, insertedEntries, sourceEntries, refer
 
     const delta = entry.direction === 'credit' ? entry.amountMinor : -entry.amountMinor;
     const newBalance = wallet.balanceMinor + delta;
-    if (newBalance < 0 && !allowNegative) {
+    if (delta < 0 && newBalance < 0 && !allowNegative) {
       throw { statusCode: 422, message: 'Ledger posting would drive a wallet balance negative' };
     }
 

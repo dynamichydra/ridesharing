@@ -49,6 +49,10 @@ export function validateLocationFreshness(driver, maxAgeSec = 900) {
   const ageSec = Math.max(0, Math.floor((now - updatedAtMs) / 1000));
 
   if (ageSec > maxAgeSec) {
+    if (driver.isOnline) {
+      console.log(`[CandidateFilter:LocationFreshness] Driver ${driver.id} (${driver.name || 'Unknown'}): Location is ${ageSec}s old but driver is online -> accepted as stationary`);
+      return { valid: true, ageSec, quality: 'acceptable' };
+    }
     const reason = `Location is ${ageSec}s old (exceeds limit of ${maxAgeSec}s)`;
     console.log(`[CandidateFilter:LocationFreshness] Driver ${driver.id} (${driver.name || 'Unknown'}): STALE (${reason})`);
     return {

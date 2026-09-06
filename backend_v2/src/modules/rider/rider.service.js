@@ -100,9 +100,15 @@ export async function updateProfile(riderId, data) {
   return updated;
 }
 
-export async function getRideHistory(riderId, page, limit, offset) {
-  const [{ total }] = await db.select({ total: count() }).from(rides).where(eq(rides.riderId, riderId));
-  const rows = await db.select().from(rides).where(eq(rides.riderId, riderId))
+export async function getRideHistory(riderId, page, limit, offset, status = null) {
+  const conditions = [eq(rides.riderId, riderId)];
+  if (status) {
+    conditions.push(eq(rides.status, status));
+  }
+  const whereClause = and(...conditions);
+
+  const [{ total }] = await db.select({ total: count() }).from(rides).where(whereClause);
+  const rows = await db.select().from(rides).where(whereClause)
     .orderBy(desc(rides.requestedAt)).limit(limit).offset(offset);
   return { rows, pagination: paginate(page, limit, total) };
 }

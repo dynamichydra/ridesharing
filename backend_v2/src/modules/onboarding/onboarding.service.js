@@ -114,8 +114,8 @@ export async function getActiveQuestionnaire(countryId, languageCode = 'en') {
   const questionIds = questions.map((q) => q.id);
   const options = questionIds.length
     ? await db.select().from(onboardingQuestionOptions)
-        .where(and(inArray(onboardingQuestionOptions.questionId, questionIds), eq(onboardingQuestionOptions.isActive, true)))
-        .orderBy(asc(onboardingQuestionOptions.sortOrder))
+      .where(and(inArray(onboardingQuestionOptions.questionId, questionIds), eq(onboardingQuestionOptions.isActive, true)))
+      .orderBy(asc(onboardingQuestionOptions.sortOrder))
     : [];
 
   const qLabels = await getTranslationsFor('onboarding_question', questionIds, languageCode);

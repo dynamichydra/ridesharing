@@ -1,6 +1,6 @@
 import { eq, desc, count, and, or, ilike, ne, sql, gte } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { drivers, subscriptions, subscriptionPlans, cities, states, driverPayoutAccounts, vehicleModels, vehicleTypes, rides, countries, wallets, walletTransactions, driverDocuments } from '../../../drizzle/schema/index.js';
+import { drivers, subscriptions, subscriptionPlans, cities, states, driverPayoutAccounts, vehicleModels, vehicleTypes, rides, countries, wallets, walletTransactions, driverDocuments, driverEarnings } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
@@ -69,24 +69,31 @@ export async function getDashboardSummary(driverId) {
     id: rides.id,
     finalFareMinor: rides.finalFareMinor,
     estimatedFareMinor: rides.estimatedFareMinor,
+    fareSnapshot: rides.fareSnapshot,
     actualDurationMin: rides.actualDurationMin,
     durationMin: rides.durationMin,
     completedAt: rides.completedAt,
     startedAt: rides.startedAt,
-  }).from(rides).where(
-    and(
-      eq(rides.driverId, driverId),
-      eq(rides.status, 'completed'),
-      gte(rides.completedAt, startOfToday),
-    ),
-  );
+    netFareMinor: driverEarnings.netFareMinor,
+  }).from(rides)
+    .leftJoin(driverEarnings, eq(rides.id, driverEarnings.rideId))
+    .where(
+      and(
+        eq(rides.driverId, driverId),
+        eq(rides.status, 'completed'),
+        gte(rides.completedAt, startOfToday),
+      ),
+    );
 
   const totalRidesToday = todayCompletedRides.length;
   let totalEarningsMinor = 0;
   let totalMinutes = 0;
 
   for (const r of todayCompletedRides) {
-    totalEarningsMinor += (r.finalFareMinor || r.estimatedFareMinor || 0);
+    const commission = r.fareSnapshot?.commission;
+    const finalFare = r.finalFareMinor || r.estimatedFareMinor || 0;
+    const net = r.netFareMinor ?? commission?.driverEarningsMinor ?? (commission?.commissionMinor ? (finalFare - commission.commissionMinor) : Math.round(finalFare * 0.8));
+    totalEarningsMinor += net;
     if (r.actualDurationMin) {
       totalMinutes += r.actualDurationMin;
     } else if (r.startedAt && r.completedAt) {
@@ -177,31 +184,39 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
     id: rides.id,
     finalFareMinor: rides.finalFareMinor,
     estimatedFareMinor: rides.estimatedFareMinor,
+    fareSnapshot: rides.fareSnapshot,
     paymentMethod: rides.paymentMethod,
     completedAt: rides.completedAt,
     startedAt: rides.startedAt,
     actualDurationMin: rides.actualDurationMin,
     durationMin: rides.durationMin,
-  }).from(rides).where(
-    and(
-      eq(rides.driverId, driverId),
-      eq(rides.status, 'completed'),
-      gte(rides.completedAt, currentStart),
-      sql`${rides.completedAt} <= ${currentEnd}`
-    )
-  );
+    netFareMinor: driverEarnings.netFareMinor,
+    platformCommissionMinor: driverEarnings.platformCommissionMinor,
+  }).from(rides)
+    .leftJoin(driverEarnings, eq(rides.id, driverEarnings.rideId))
+    .where(
+      and(
+        eq(rides.driverId, driverId),
+        eq(rides.status, 'completed'),
+        gte(rides.completedAt, currentStart),
+        sql`${rides.completedAt} <= ${currentEnd}`
+      )
+    );
 
   const prevRides = await db.select({
     finalFareMinor: rides.finalFareMinor,
     estimatedFareMinor: rides.estimatedFareMinor,
-  }).from(rides).where(
-    and(
-      eq(rides.driverId, driverId),
-      eq(rides.status, 'completed'),
-      gte(rides.completedAt, prevStart),
-      sql`${rides.completedAt} <= ${prevEnd}`
-    )
-  );
+    netFareMinor: driverEarnings.netFareMinor,
+  }).from(rides)
+    .leftJoin(driverEarnings, eq(rides.id, driverEarnings.rideId))
+    .where(
+      and(
+        eq(rides.driverId, driverId),
+        eq(rides.status, 'completed'),
+        gte(rides.completedAt, prevStart),
+        sql`${rides.completedAt} <= ${prevEnd}`
+      )
+    );
 
   let incentivesMinor = 0;
   const [driverWallet] = await db.select({ id: wallets.id }).from(wallets).where(eq(wallets.driverId, driverId)).limit(1);
@@ -231,10 +246,14 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
   let cashCollectedMinor = 0;
   let walletPaymentsMinor = 0;
   let totalMinutes = 0;
+  let deductionsMinor = 0;
 
   for (const r of currentRides) {
     const fare = r.finalFareMinor || r.estimatedFareMinor || 0;
     fareAmountMinor += fare;
+    const comm = r.platformCommissionMinor ?? r.fareSnapshot?.commission?.commissionMinor ?? Math.round(fare * 0.2);
+    deductionsMinor += comm;
+
     if (r.paymentMethod === 'cash') {
       cashCollectedMinor += fare;
     } else {
@@ -252,16 +271,15 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
   }
 
   const tripsCount = currentRides.length;
-  const deductionsMinor = Math.round(fareAmountMinor * 0.15);
   const otherEarningsMinor = 0;
   const grossEarningsMinor = fareAmountMinor + incentivesMinor + otherEarningsMinor;
   const netEarningsMinor = grossEarningsMinor - deductionsMinor;
 
-  let prevFareMinor = 0;
+  let prevNetMinor = 0;
   for (const r of prevRides) {
-    prevFareMinor += (r.finalFareMinor || r.estimatedFareMinor || 0);
+    const prevFare = r.finalFareMinor || r.estimatedFareMinor || 0;
+    prevNetMinor += (r.netFareMinor ?? Math.round(prevFare * 0.8));
   }
-  const prevNetMinor = Math.round(prevFareMinor * 0.85);
   let growthPercentNum = 0;
   if (prevNetMinor > 0) {
     growthPercentNum = ((netEarningsMinor - prevNetMinor) / prevNetMinor) * 100;

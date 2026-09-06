@@ -606,21 +606,38 @@ async function _loadPayableRideForUser(rideId, userId) {
 // stamps the breakdown onto ride.fareSnapshot so getRideInvoice/getRidePaymentStatus can show
 // it without a schema change to `rides`. Returns null (no commission applied) if there's no
 // driver to charge one against.
-async function _resolveRideCommission(ride) {
+export async function resolveRideCommission(ride) {
   if (!ride.driverId) return null;
   const [driver] = await db.select({ subscriptionStatus: drivers.subscriptionStatus })
     .from(drivers).where(eq(drivers.id, ride.driverId)).limit(1);
 
-  const rule = await resolveCommissionRule(ride.vehicleTypeId, ride.countryId);
-  const breakdown = computeCommission({
-    finalFareMinor: ride.finalFareMinor,
-    rule,
-    isSubscriber: driver?.subscriptionStatus === 'active',
-  });
+  let rule = null;
+  try {
+    rule = await resolveCommissionRule(ride.vehicleTypeId, ride.countryId);
+  } catch (err) {
+    console.warn('[RidePayment] No commission rule found, using default 20% platform cut:', err.message);
+  }
 
-  await db.update(rides).set({
-    fareSnapshot: { ...(ride.fareSnapshot || {}), commission: { ruleId: rule.id, ...breakdown } },
-  }).where(eq(rides.id, ride.id));
+  const breakdown = rule
+    ? computeCommission({
+        finalFareMinor: ride.finalFareMinor,
+        rule,
+        isSubscriber: driver?.subscriptionStatus === 'active',
+      })
+    : {
+        bookingFeeMinor: 0,
+        rate: 0.2,
+        commissionMinor: Math.round((ride.finalFareMinor || 0) * 0.2),
+        driverEarningsMinor: (ride.finalFareMinor || 0) - Math.round((ride.finalFareMinor || 0) * 0.2),
+      };
+
+  try {
+    await db.update(rides).set({
+      fareSnapshot: { ...(ride.fareSnapshot || {}), commission: { ruleId: rule?.id || null, ...breakdown } },
+    }).where(eq(rides.id, ride.id));
+  } catch (err) {
+    console.error('[RidePayment] Failed to update ride fareSnapshot commission:', err.message);
+  }
 
   return breakdown;
 }
@@ -638,7 +655,15 @@ async function _resolveRideCommission(ride) {
 // once, not twice.
 async function _postRideFareLedger(ride, paymentInfo) {
   const currencyCode = ride.currencyCode;
-  const commission = await _resolveRideCommission(ride);
+  let commission = null;
+  try {
+    commission = await resolveRideCommission(ride);
+  } catch (e) {
+    console.warn('[RidePayment] resolveRideCommission failed in _postRideFareLedger:', e.message);
+  }
+
+  const driverEarningsMinor = commission?.driverEarningsMinor ?? Math.round((ride.finalFareMinor || 0) * 0.8);
+  const commissionMinor = commission?.commissionMinor ?? ((ride.finalFareMinor || 0) - driverEarningsMinor);
 
   const acceptedSplits = await db.select()
     .from(rideFareSplits)
@@ -663,7 +688,7 @@ async function _postRideFareLedger(ride, paymentInfo) {
     if (!ride.driverId) return;
     const driverWallet = await getOrCreateWallet('driver', ride.driverId);
     const [driverWalletAccount, commissionAccount] = await Promise.all([
-      getOrCreateWalletAccount(driverWallet.id, currencyCode),
+      getOrCreateWalletAccount(driverWallet.id, currencyCode, { ownerType: 'driver', ownerId: ride.driverId }),
       getOrCreateSystemAccount('platform_commission_revenue', currencyCode),
     ]);
 
@@ -683,17 +708,47 @@ async function _postRideFareLedger(ride, paymentInfo) {
     }
 
     entries.push({
-      accountId: driverWalletAccount.id, direction: 'credit', amountMinor: commission.driverEarningsMinor, currencyCode,
+      accountId: driverWalletAccount.id, direction: 'credit', amountMinor: driverEarningsMinor, currencyCode,
       reason: 'ride_fare_online', description: `Fare for ride ${ride.id}`,
+      allowNegative: true,
     });
 
-    if (commission.commissionMinor > 0) {
-      entries.push({ accountId: commissionAccount.id, direction: 'credit', amountMinor: commission.commissionMinor, currencyCode });
+    if (commissionMinor > 0) {
+      entries.push({ accountId: commissionAccount.id, direction: 'credit', amountMinor: commissionMinor, currencyCode });
     }
 
     await postTransaction({
       businessType: 'ride_fare_online',
       idempotencyKey: `ride_fare_online:${ride.id}`,
+      referenceType: 'ride',
+      referenceId: ride.id,
+      entries,
+    });
+  } else if (paymentInfo.method === 'wallet') {
+    if (!ride.driverId) return;
+    const driverWallet = await getOrCreateWallet('driver', ride.driverId);
+    const [driverWalletAccount, commissionAccount, clearingAccount] = await Promise.all([
+      getOrCreateWalletAccount(driverWallet.id, currencyCode, { ownerType: 'driver', ownerId: ride.driverId }),
+      getOrCreateSystemAccount('platform_commission_revenue', currencyCode),
+      getOrCreateSystemAccount('processor_clearing:wallet', currencyCode),
+    ]);
+
+    const entries = [
+      { accountId: clearingAccount.id, direction: 'debit', amountMinor: ride.finalFareMinor, currencyCode },
+      {
+        accountId: driverWalletAccount.id, direction: 'credit', amountMinor: driverEarningsMinor, currencyCode,
+        reason: 'ride_fare_wallet', description: `Fare earnings for ride ${ride.id}`,
+        allowNegative: true,
+      },
+    ];
+
+    if (commissionMinor > 0) {
+      entries.push({ accountId: commissionAccount.id, direction: 'credit', amountMinor: commissionMinor, currencyCode });
+    }
+
+    await postTransaction({
+      businessType: 'ride_fare_wallet',
+      idempotencyKey: `ride_fare_wallet:${ride.id}`,
       referenceType: 'ride',
       referenceId: ride.id,
       entries,
@@ -714,7 +769,7 @@ async function _postRideFareLedger(ride, paymentInfo) {
       ],
     });
 
-    if (ride.driverId && commission?.commissionMinor > 0) {
+    if (ride.driverId && commissionMinor > 0) {
       const driverWallet = await getOrCreateWallet('driver', ride.driverId);
       const [driverWalletAccount, commissionAccount] = await Promise.all([
         getOrCreateWalletAccount(driverWallet.id, currencyCode),
@@ -727,14 +782,73 @@ async function _postRideFareLedger(ride, paymentInfo) {
         referenceId: ride.id,
         entries: [
           {
-            accountId: driverWalletAccount.id, direction: 'debit', amountMinor: commission.commissionMinor, currencyCode,
+            accountId: driverWalletAccount.id, direction: 'debit', amountMinor: commissionMinor, currencyCode,
             reason: 'ride_commission_cash', description: `Commission owed for cash ride ${ride.id}`, allowNegative: true,
           },
-          { accountId: commissionAccount.id, direction: 'credit', amountMinor: commission.commissionMinor, currencyCode },
+          { accountId: commissionAccount.id, direction: 'credit', amountMinor: commissionMinor, currencyCode },
         ],
       });
     }
   }
+}
+
+export async function payRideWithWallet(riderId, rideId, idempotencyKey) {
+  const key = idempotencyKey || `ride_pay_${rideId}_${Date.now()}`;
+  return withIdempotency('ride_wallet_pay', key, riderId, async () => {
+    const { ride, isPrimary } = await _loadPayableRideForUser(rideId, riderId);
+
+    const acceptedSplits = await db.select()
+      .from(rideFareSplits)
+      .where(and(eq(rideFareSplits.rideId, rideId), eq(rideFareSplits.status, 'accepted')));
+
+    let payAmountMinor = ride.finalFareMinor;
+    if (acceptedSplits.length > 0) {
+      const totalParticipants = acceptedSplits.length + 1;
+      const baseShare = Math.floor(ride.finalFareMinor / totalParticipants);
+      if (isPrimary) {
+        payAmountMinor = ride.finalFareMinor - (baseShare * acceptedSplits.length);
+      } else {
+        payAmountMinor = baseShare;
+      }
+    }
+
+    const wallet = await getOrCreateWallet('rider', riderId);
+    if (wallet.balanceMinor < payAmountMinor) {
+      throw { statusCode: 422, message: `Insufficient wallet balance (${wallet.balanceMinor} < ${payAmountMinor})` };
+    }
+
+    const currencyCode = ride.currencyCode;
+    const [walletAccount, clearingAccount] = await Promise.all([
+      getOrCreateWalletAccount(wallet.id, currencyCode),
+      getOrCreateSystemAccount('processor_clearing:wallet', currencyCode),
+    ]);
+
+    await postTransaction({
+      businessType: 'ride_fare_wallet',
+      idempotencyKey: `ride_fare_wallet_rider:${rideId}:${riderId}`,
+      referenceType: 'ride',
+      referenceId: rideId,
+      entries: [
+        {
+          accountId: walletAccount.id, direction: 'debit', amountMinor: payAmountMinor, currencyCode,
+          reason: 'ride_fare_wallet', description: `Wallet payment for ride ${rideId}`,
+        },
+        { accountId: clearingAccount.id, direction: 'credit', amountMinor: payAmountMinor, currencyCode },
+      ],
+    });
+
+    if (!isPrimary) {
+      await db.update(rideFareSplits)
+        .set({ paymentStatus: 'paid', paymentMethod: 'wallet', updatedAt: new Date() })
+        .where(and(eq(rideFareSplits.rideId, rideId), eq(rideFareSplits.inviteeId, riderId)));
+    }
+
+    const gatewayPaymentId = `wallet_pay_${rideId}_${riderId}`;
+    return _markRidePaid(ride, {
+      method: 'wallet', gateway: 'wallet', gatewayPaymentId,
+      amountMinor: payAmountMinor, payerId: riderId,
+    });
+  });
 }
 
 async function _markRidePaid(ride, paymentInfo) {
@@ -746,17 +860,21 @@ async function _markRidePaid(ride, paymentInfo) {
       .set({ status: 'captured', gatewayPaymentId: paymentInfo.gatewayPaymentId, updatedAt: new Date() })
       .where(eq(payments.id, paymentInfo.paymentAttemptId));
   } else {
-    await db.insert(payments).values({
-      rideId: ride.id, subscriptionId: null,
-      countryId: _requireCountryId(ride),
-      gateway: paymentInfo.gateway,
-      currencyCode: ride.currencyCode,
-      amountMinor: payAmountMinor || ride.finalFareMinor,
-      status: 'captured',
-      gatewayOrderId: paymentInfo.gatewayOrderId,
-      gatewayPaymentId: paymentInfo.gatewayPaymentId,
-      metadata: payerId ? { payerId } : null,
-    });
+    const [existing] = await db.select().from(payments)
+      .where(and(eq(payments.rideId, ride.id), eq(payments.gatewayPaymentId, paymentInfo.gatewayPaymentId))).limit(1);
+    if (!existing) {
+      await db.insert(payments).values({
+        rideId: ride.id, subscriptionId: null,
+        countryId: _requireCountryId(ride),
+        gateway: paymentInfo.gateway,
+        currencyCode: ride.currencyCode,
+        amountMinor: payAmountMinor || ride.finalFareMinor,
+        status: 'captured',
+        gatewayOrderId: paymentInfo.gatewayOrderId,
+        gatewayPaymentId: paymentInfo.gatewayPaymentId,
+        metadata: payerId ? { payerId } : null,
+      });
+    }
   }
 
   const allCaptured = await db.select({ amountMinor: payments.amountMinor })

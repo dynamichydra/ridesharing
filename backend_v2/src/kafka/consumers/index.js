@@ -198,6 +198,7 @@ async function startRideConsumer() {
             dropLat: payload.dropLat,
             dropLng: payload.dropLng,
             myDistanceKm: c.distanceKm,
+            paymentMethod: payload.paymentMethod || 'cash',
             expiresAt: payload.expiresAt,
           });
 

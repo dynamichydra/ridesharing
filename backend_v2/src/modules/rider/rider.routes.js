@@ -23,7 +23,8 @@ export async function riderRoutes(app) {
 
   app.get('/rides', { preHandler: [authenticateRider] }, async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);
-    const { rows, pagination } = await riderService.getRideHistory(request.user.id, page, limit, offset);
+    const { status } = request.query;
+    const { rows, pagination } = await riderService.getRideHistory(request.user.id, page, limit, offset, status);
     return sendList(reply, rows, pagination);
   });
 

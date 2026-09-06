@@ -1,7 +1,7 @@
-import { eq, desc, count, and, or, sql } from 'drizzle-orm';
+import { eq, desc, count, and, or, sql, gte, lte } from 'drizzle-orm';
 import crypto from 'crypto';
 import { db } from '../../config/db.js';
-import { rides, drivers, users, rideFareSplits, ridePassengers, tripShareTokens, driverEarnings } from '../../../drizzle/schema/index.js';
+import { rides, drivers, users, vehicleTypes, rideFareSplits, ridePassengers, tripShareTokens, driverEarnings } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { calculateFare, validateAndLockQuote } from '../fare/fare.service.js';
@@ -10,7 +10,8 @@ import { moment } from '../../utils/time.js';
 
 import {
   startMatchingProcess,
-  validateDriverCanAccept
+  validateDriverCanAccept,
+  signalRideCancelled
 } from '../matching/matching.service.js';
 import {
   computeApproachRoute,
@@ -22,7 +23,8 @@ import {
 import {
   acceptOffer, rejectOffer,
   getOffersForRide,
-  getDriverOffers
+  getDriverOffers,
+  expirePendingOffers
 } from './ride_offer.service.js';
 import {
   recordStatusChange,
@@ -32,7 +34,7 @@ import { paginate } from '../../utils/response.js';
 import { fromMinor, formatMoney } from '../../utils/money.js';
 import { removeDriverFromIndex, upsertDriverCell } from '../matching/driver-geo-index.service.js';
 import { bufferGpsPing } from '../trip-gps/gps-ping.service.js';
-import { expirePendingFareSplits } from '../ride-payment/ride-payment.service.js';
+import { expirePendingFareSplits, resolveRideCommission } from '../ride-payment/ride-payment.service.js';
 
 import { finalizeTripDistance } from '../trip-gps/finalize-trip.job.js';
 
@@ -51,7 +53,11 @@ async function reAddToGeoIndexIfOnline(driverId) {
     isOnline: drivers.isOnline, currentLat: drivers.currentLat, currentLng: drivers.currentLng,
   }).from(drivers).where(eq(drivers.id, driverId)).limit(1);
   if (driver?.isOnline && driver.currentLat != null && driver.currentLng != null) {
-    await upsertDriverCell(driverId, parseFloat(driver.currentLat), parseFloat(driver.currentLng));
+    const lat = parseFloat(driver.currentLat);
+    const lng = parseFloat(driver.currentLng);
+    const nowMs = Date.now();
+    await redis.setex(REDIS_KEYS.driverLocation(driverId), 300, JSON.stringify({ lat, lng, updatedAt: nowMs }));
+    await upsertDriverCell(driverId, lat, lng, undefined, nowMs);
   }
 }
 
@@ -61,23 +67,34 @@ export async function requestRide({
   riderId, vehicleTypeId,
   pickupLat, pickupLng, pickupAddress,
   dropLat, dropLng, dropAddress,
+  paymentMethod = 'cash',
   promoCode = null,
   scheduledAt = null,
   quoteId = null,
   passenger = null,
 }) {
-  // Guard: rider cannot have two active rides
-  const [active] = await db.select({ id: rides.id }).from(rides).where(and(
+  // Clean up any stale searching rides for this rider (older than 3 minutes, or any previous searching ride when re-booking)
+  await db.update(rides).set({
+    status: 'expired',
+    cancelledAt: new Date(),
+    cancelledBy: 'system',
+    cancelReason: 'Auto-expired due to new ride booking',
+  }).where(and(
+    eq(rides.riderId, riderId),
+    eq(rides.status, 'searching'),
+  ));
+
+  // Guard: rider cannot have an ongoing active ride (accepted, arriving, arrived, started)
+  const [active] = await db.select({ id: rides.id, status: rides.status }).from(rides).where(and(
     eq(rides.riderId, riderId),
     or(
-      eq(rides.status, 'searching'),
       eq(rides.status, 'accepted'),
       eq(rides.status, 'arriving'),
       eq(rides.status, 'arrived'),
       eq(rides.status, 'started'),
     ),
   )).limit(1);
-  if (active) throw { statusCode: 409, message: 'You already have an active ride' };
+  if (active) throw { statusCode: 409, message: 'You already have an active ride in progress' };
 
   let isScheduled = false;
   let scheduledDate = null;
@@ -130,6 +147,7 @@ export async function requestRide({
   }
 
   const initialStatus = isScheduled ? 'scheduled' : 'searching';
+  const resolvedPaymentMethod = (paymentMethod || 'cash').toLowerCase();
 
   const [ride] = await db.insert(rides).values({
     riderId, vehicleTypeId,
@@ -143,6 +161,7 @@ export async function requestRide({
     polyline: fareData.polyline,
     fareSnapshot: fareData,
     appliedFareRuleIds: fareData.appliedFareRuleIds,
+    paymentMethod: resolvedPaymentMethod,
     status: initialStatus,
     isScheduled,
     scheduledAt: scheduledDate,
@@ -257,6 +276,8 @@ export async function cancelRideByRider(rideId, riderId, reason) {
 
   await redis.del(REDIS_KEYS.rideRequest(rideId));
   await cleanupRideTracking(rideId);
+  await signalRideCancelled(rideId).catch(() => {});
+  await expirePendingOffers(rideId).catch(() => {});
 
   if (ride.driverId) {
     await db.update(drivers).set({ isOnline: true }).where(eq(drivers.id, ride.driverId));
@@ -270,6 +291,37 @@ export async function cancelRideByRider(rideId, riderId, reason) {
       title: 'Ride Cancelled',
       body: `Rider cancelled. Reason: ${reason || 'Not specified'}`,
     });
+  }
+
+  // Real-time socket broadcast immediately to candidate drivers and rider rooms
+  try {
+    const { getSocketIO } = await import('../../kafka/consumers/index.js');
+    const io = getSocketIO();
+    if (io) {
+      io.of('/rider').to(`rider:${ride.riderId}`).emit('ride:cancelled', {
+        rideId,
+        cancelledBy: 'rider',
+        reason,
+      });
+      io.of('/rider').to(`ride:${rideId}`).emit('ride:cancelled', {
+        rideId,
+        cancelledBy: 'rider',
+        reason,
+      });
+      if (ride.driverId) {
+        io.of('/driver').to(`driver:${ride.driverId}`).emit('ride:cancelled_by_rider', {
+          rideId,
+          reason,
+        });
+      }
+      // Notify all candidate drivers who had this offer open to dismiss it
+      io.of('/driver').to(`ride:candidates:${rideId}`).emit('ride:taken', {
+        rideId,
+        reason: 'cancelled_by_rider',
+      });
+    }
+  } catch (err) {
+    console.error('[Ride] Direct socket emit on rider cancel failed:', err.message);
   }
 
   await publishEvent(TOPICS.RIDE_CANCELLED, {
@@ -796,17 +848,50 @@ export async function completeRide(rideId, driverId) {
   const rawFinalFareMinor = (baseFareMinor + distanceFareMinor + actualTimeFareMinor) * zoneMultiplier * surgeMultiplier;
   const finalFareMinor = Math.ceil(Math.max(rawFinalFareMinor, minFareMinor));
 
+  // Resolve commission and driver earnings breakdown
+  let commission = null;
+  try {
+    commission = await resolveRideCommission({ ...ride, finalFareMinor });
+  } catch (err) {
+    console.error('[Ride] resolveRideCommission failed:', err.message);
+  }
+
+  const driverEarningsMinor = commission?.driverEarningsMinor ?? Math.round(finalFareMinor * 0.8);
+  const platformCommissionMinor = commission?.commissionMinor ?? (finalFareMinor - driverEarningsMinor);
+
+  // Insert or update driver_earnings row
+  try {
+    await db.insert(driverEarnings).values({
+      driverId,
+      rideId,
+      grossFareMinor: finalFareMinor,
+      platformCommissionMinor,
+      netFareMinor: driverEarningsMinor,
+      currencyCode: ride.currencyCode || 'INR',
+      status: 'available',
+    });
+  } catch (err) {
+    console.error('[Ride] driverEarnings insert failed:', err.message);
+  }
+
   const [updated] = await db.update(rides).set({
     status: 'completed',
     finalFareMinor,
     durationMin: actualDurationMin,
     completedAt: new Date(),
+    fareSnapshot: {
+      ...(snapshot || {}),
+      commission: commission ? { ruleId: commission.ruleId, ...commission } : {
+        commissionMinor: platformCommissionMinor,
+        driverEarningsMinor,
+      },
+    },
   }).where(eq(rides.id, rideId)).returning();
 
   await recordStatusChange({
     rideId, fromStatus: 'started', toStatus: 'completed',
     changedBy: 'driver', changedById: driverId,
-    meta: { finalFareMinor, actualDurationMin },
+    meta: { finalFareMinor, actualDurationMin, driverEarningsMinor, platformCommissionMinor },
   });
 
   // Release driver
@@ -851,6 +936,26 @@ export async function completeRide(rideId, driverId) {
   await processReferralRewardOnFirstRide(ride.riderId, ride.currencyCode)
     .catch((err) => console.error('[Referral] reward error:', err.message));
 
+  // Automatically settle ride payments on completion:
+  if (ride.paymentMethod?.toLowerCase() === 'wallet') {
+    if (updated.paymentStatus !== 'paid') {
+      try {
+        const { payRideWithWallet } = await import('../ride-payment/ride-payment.service.js');
+        await payRideWithWallet(ride.riderId, rideId, `auto_complete_wallet:${rideId}`);
+      } catch (err) {
+        console.error('[Ride] auto wallet settlement on completion error:', err.message);
+      }
+    }
+  } else {
+    // For cash payment, automatically record cash collection so the commission is debited against driver's wallet (negative balance)
+    try {
+      const { recordCashCollection } = await import('../ride-payment/ride-payment.service.js');
+      await recordCashCollection(driverId, rideId, finalFareMinor);
+    } catch (err) {
+      console.error('[Ride] auto cash commission settlement on completion error:', err.message);
+    }
+  }
+
   await expirePendingFareSplits(rideId).catch((err) => console.error('[FareSplit] expire error:', err.message));
   return updated;
 }
@@ -880,15 +985,31 @@ export async function cancelRideByDriver(rideId, driverId, reason) {
   await reAddToGeoIndexIfOnline(driverId)
     .catch((err) => console.error('[Ride] reAddToGeoIndexIfOnline failed:', err.message));
 
-  // Re-trigger matching from scratch (new ring sweep)
-  const [freshRide] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
-  startMatchingProcess(freshRide);
+  // Direct real-time socket emit to rider so customer UI updates immediately
+  try {
+    const { getSocketIO } = await import('../../kafka/consumers/index.js');
+    const io = getSocketIO();
+    if (io) {
+      io.of('/rider').to(`rider:${ride.riderId}`).emit('ride:driver_cancelled', {
+        rideId,
+        cancelledBy: 'driver',
+        reason: reason || 'Driver cancelled the ride',
+      });
+      io.of('/rider').to(`ride:${rideId}`).emit('ride:driver_cancelled', {
+        rideId,
+        cancelledBy: 'driver',
+        reason: reason || 'Driver cancelled the ride',
+      });
+    }
+  } catch (err) {
+    console.error('[Ride] Direct socket emit on driver cancel failed:', err.message);
+  }
 
   await publishEvent(TOPICS.NOTIF_PUSH, {
     userType: 'rider', userId: ride.riderId,
     type: 'DRIVER_CANCELLED',
     title: 'Driver cancelled',
-    body: 'Finding another driver for you...',
+    body: 'Your driver cancelled the ride. We are finding another driver for you.',
   });
   return { rematching: true };
 }
@@ -973,10 +1094,227 @@ export async function getDriverActiveRide(driverId) {
   return stripOtp(ride) || null;
 }
 
+export async function getRiderActiveRide(riderId) {
+  const [ride] = await db.select().from(rides).where(and(
+    eq(rides.riderId, riderId),
+    or(
+      eq(rides.status, 'searching'),
+      eq(rides.status, 'accepted'),
+      eq(rides.status, 'arriving'),
+      eq(rides.status, 'arrived'),
+      eq(rides.status, 'started'),
+    ),
+  )).orderBy(desc(rides.requestedAt)).limit(1);
+
+  if (!ride) return null;
+
+  let driver = null;
+  if (ride.driverId) {
+    const [d] = await db.select({
+      id: drivers.id,
+      name: drivers.name,
+      phone: drivers.phone,
+      vehicleNumber: drivers.vehicleNumber,
+      vehicleModel: drivers.vehicleModel,
+      rating: drivers.rating,
+      profilePhoto: drivers.profilePhoto,
+      currentLat: drivers.currentLat,
+      currentLng: drivers.currentLng,
+    }).from(drivers).where(eq(drivers.id, ride.driverId)).limit(1);
+    driver = d || null;
+  }
+
+  return {
+    ...ride,
+    driver,
+  };
+}
+
 export async function getRideById(rideId) {
-  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  const [ride] = await db.select({
+    id: rides.id,
+    riderId: rides.riderId,
+    driverId: rides.driverId,
+    vehicleTypeId: rides.vehicleTypeId,
+    countryId: rides.countryId,
+    currencyCode: rides.currencyCode,
+    pickupLat: rides.pickupLat,
+    pickupLng: rides.pickupLng,
+    pickupAddress: rides.pickupAddress,
+    dropLat: rides.dropLat,
+    dropLng: rides.dropLng,
+    dropAddress: rides.dropAddress,
+    fareSnapshot: rides.fareSnapshot,
+    appliedFareRuleIds: rides.appliedFareRuleIds,
+    estimatedFareMinor: rides.estimatedFareMinor,
+    finalFareMinor: rides.finalFareMinor,
+    distanceKm: rides.distanceKm,
+    durationMin: rides.durationMin,
+    actualDistanceKm: rides.actualDistanceKm,
+    actualDurationMin: rides.actualDurationMin,
+    status: rides.status,
+    isScheduled: rides.isScheduled,
+    scheduledAt: rides.scheduledAt,
+    driverArrivedAt: rides.driverArrivedAt,
+    paymentMethod: rides.paymentMethod,
+    paymentStatus: rides.paymentStatus,
+    cancelledBy: rides.cancelledBy,
+    cancelReason: rides.cancelReason,
+    riderRating: rides.riderRating,
+    driverRating: rides.driverRating,
+    riderReview: rides.riderReview,
+    driverReview: rides.driverReview,
+    requestedAt: rides.requestedAt,
+    acceptedAt: rides.acceptedAt,
+    startedAt: rides.startedAt,
+    completedAt: rides.completedAt,
+    cancelledAt: rides.cancelledAt,
+    riderName: users.name,
+    riderPhone: users.phone,
+    riderAvatar: users.avatar,
+    riderRatingAverage: users.rating,
+    vehicleTypeName: vehicleTypes.name,
+    vehicleTypeIcon: vehicleTypes.icon,
+  })
+    .from(rides)
+    .leftJoin(users, eq(rides.riderId, users.id))
+    .leftJoin(vehicleTypes, eq(rides.vehicleTypeId, vehicleTypes.id))
+    .where(eq(rides.id, rideId))
+    .limit(1);
+
   if (!ride) throw { statusCode: 404, message: 'Ride not found' };
   return ride;
+}
+
+export async function getDriverRideHistory(driverId, { page = 1, limit = 20, offset = 0, status, fromDate, toDate, minEarnings, maxEarnings } = {}) {
+  const conditions = [eq(rides.driverId, driverId)];
+
+  if (status && status !== 'all') {
+    if (status === 'completed') {
+      conditions.push(eq(rides.status, 'completed'));
+    } else if (status === 'cancelled') {
+      conditions.push(eq(rides.status, 'cancelled'));
+    } else {
+      conditions.push(eq(rides.status, status));
+    }
+  }
+
+  if (fromDate) {
+    const from = new Date(fromDate);
+    if (!isNaN(from.getTime())) {
+      conditions.push(gte(rides.requestedAt, from));
+    }
+  }
+
+  if (toDate) {
+    const to = new Date(toDate);
+    if (!isNaN(to.getTime())) {
+      conditions.push(lte(rides.requestedAt, to));
+    }
+  }
+
+  if (minEarnings != null) {
+    const minMinor = Math.round(Number(minEarnings) * 100);
+    conditions.push(
+      or(
+        and(sql`${rides.finalFareMinor} IS NOT NULL`, gte(rides.finalFareMinor, minMinor)),
+        and(sql`${rides.finalFareMinor} IS NULL`, gte(rides.estimatedFareMinor, minMinor))
+      )
+    );
+  }
+
+  if (maxEarnings != null) {
+    const maxMinor = Math.round(Number(maxEarnings) * 100);
+    conditions.push(
+      or(
+        and(sql`${rides.finalFareMinor} IS NOT NULL`, lte(rides.finalFareMinor, maxMinor)),
+        and(sql`${rides.finalFareMinor} IS NULL`, lte(rides.estimatedFareMinor, maxMinor))
+      )
+    );
+  }
+
+  const where = and(...conditions);
+
+  const [{ total }] = await db.select({ total: count() }).from(rides).where(where);
+  const rawRows = await db.select({
+    id: rides.id,
+    riderId: rides.riderId,
+    driverId: rides.driverId,
+    vehicleTypeId: rides.vehicleTypeId,
+    countryId: rides.countryId,
+    currencyCode: rides.currencyCode,
+    pickupLat: rides.pickupLat,
+    pickupLng: rides.pickupLng,
+    pickupAddress: rides.pickupAddress,
+    dropLat: rides.dropLat,
+    dropLng: rides.dropLng,
+    dropAddress: rides.dropAddress,
+    fareSnapshot: rides.fareSnapshot,
+    estimatedFareMinor: rides.estimatedFareMinor,
+    finalFareMinor: rides.finalFareMinor,
+    distanceKm: rides.distanceKm,
+    durationMin: rides.durationMin,
+    actualDistanceKm: rides.actualDistanceKm,
+    actualDurationMin: rides.actualDurationMin,
+    polyline: rides.polyline,
+    status: rides.status,
+    isScheduled: rides.isScheduled,
+    scheduledAt: rides.scheduledAt,
+    driverArrivedAt: rides.driverArrivedAt,
+    paymentMethod: rides.paymentMethod,
+    paymentStatus: rides.paymentStatus,
+    cancelledBy: rides.cancelledBy,
+    cancelReason: rides.cancelReason,
+    riderRating: rides.riderRating,
+    driverRating: rides.driverRating,
+    riderReview: rides.riderReview,
+    driverReview: rides.driverReview,
+    requestedAt: rides.requestedAt,
+    acceptedAt: rides.acceptedAt,
+    startedAt: rides.startedAt,
+    completedAt: rides.completedAt,
+    cancelledAt: rides.cancelledAt,
+    riderName: users.name,
+    riderPhone: users.phone,
+    riderAvatar: users.avatar,
+    riderRatingAverage: users.rating,
+    vehicleTypeName: vehicleTypes.name,
+    vehicleTypeIcon: vehicleTypes.icon,
+  })
+    .from(rides)
+    .leftJoin(users, eq(rides.riderId, users.id))
+    .leftJoin(vehicleTypes, eq(rides.vehicleTypeId, vehicleTypes.id))
+    .where(where)
+    .orderBy(desc(rides.requestedAt))
+    .limit(limit)
+    .offset(offset);
+
+  const rows = rawRows.map((r) => {
+    const fareMinor = r.finalFareMinor ?? r.estimatedFareMinor ?? 0;
+    const fareMajor = fareMinor / 100;
+    const distKm = r.actualDistanceKm ?? r.distanceKm ?? '0.0';
+    const durMin = r.actualDurationMin ?? r.durationMin ?? 0;
+
+    return {
+      ...r,
+      fare: fareMajor,
+      fareMinor,
+      pickup: r.pickupAddress,
+      drop: r.dropAddress,
+      distance: `${distKm} km`,
+      time: `${durMin} min`,
+      vehicle: r.vehicleTypeName || 'Ryva Cab',
+      rider: {
+        id: r.riderId,
+        name: r.riderName || 'Rider',
+        phone: r.riderPhone || '',
+        avatar: r.riderAvatar || null,
+        rating: r.riderRatingAverage || '5.0',
+      },
+    };
+  });
+
+  return { rows, pagination: paginate(page, limit, total) };
 }
 
 export async function listAllRides(filters, page, limit, offset) {
