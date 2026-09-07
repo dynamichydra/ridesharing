@@ -1,7 +1,7 @@
 import { eq, desc, count, and, or, sql, gte, lte } from 'drizzle-orm';
 import crypto from 'crypto';
 import { db } from '../../config/db.js';
-import { rides, drivers, users, vehicleTypes, rideFareSplits, ridePassengers, tripShareTokens, driverEarnings } from '../../../drizzle/schema/index.js';
+import { rides, drivers, users, vehicleTypes, ridePassengers, tripShareTokens, driverEarnings } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { calculateFare, validateAndLockQuote } from '../fare/fare.service.js';
@@ -34,7 +34,7 @@ import { paginate } from '../../utils/response.js';
 import { fromMinor, formatMoney } from '../../utils/money.js';
 import { removeDriverFromIndex, upsertDriverCell } from '../matching/driver-geo-index.service.js';
 import { bufferGpsPing } from '../trip-gps/gps-ping.service.js';
-import { expirePendingFareSplits, resolveRideCommission } from '../ride-payment/ride-payment.service.js';
+import { resolveRideCommission } from '../ride-payment/ride-payment.service.js';
 
 import { finalizeTripDistance } from '../trip-gps/finalize-trip.job.js';
 
@@ -328,7 +328,6 @@ export async function cancelRideByRider(rideId, riderId, reason) {
     id: rideId, rideId, riderId: ride.riderId, driverId: ride.driverId,
     cancelledBy: 'rider', reason,
   });
-  await expirePendingFareSplits(rideId, true).catch((err) => console.error('[FareSplit] expire error:', err.message));
   return updated;
 }
 
@@ -427,12 +426,7 @@ export async function getRideReceipt(rideId, requesterId) {
     driverInfo = driver;
   }
 
-  const splits = await db.select().from(rideFareSplits).where(eq(rideFareSplits.rideId, rideId));
-  const acceptedSplits = splits.filter((s) => s.status === 'accepted');
-
   const totalFareMinor = ride.finalFareMinor || ride.estimatedFareMinor || 0;
-  const splitParticipants = acceptedSplits.length + 1;
-  const sharePerRiderMinor = Math.floor(totalFareMinor / splitParticipants);
 
   return {
     receiptId: `REC-${ride.id.slice(0, 8).toUpperCase()}`,
@@ -453,8 +447,6 @@ export async function getRideReceipt(rideId, requesterId) {
       surgeMultiplier: ride.fareSnapshot?.surgeMultiplier || '1.00',
       promoDiscountMinor: ride.fareSnapshot?.promoDiscountMinor || 0,
       finalFareMinor: totalFareMinor,
-      fareSplitCount: acceptedSplits.length,
-      yourShareMinor: acceptedSplits.length > 0 ? sharePerRiderMinor : totalFareMinor,
     },
     paymentMethod: ride.paymentMethod || 'online',
     paymentStatus: ride.paymentStatus || 'paid',
@@ -956,7 +948,6 @@ export async function completeRide(rideId, driverId) {
     }
   }
 
-  await expirePendingFareSplits(rideId).catch((err) => console.error('[FareSplit] expire error:', err.message));
   return updated;
 }
 
@@ -1387,6 +1378,5 @@ export async function cancelRideByAdmin(rideId, adminId, reason) {
     action: 'RIDE_CANCELLED_BY_ADMIN', entityType: 'ride', entityId: rideId,
     meta: { reason },
   });
-  await expirePendingFareSplits(rideId, true).catch((err) => console.error('[FareSplit] expire error:', err.message));
   return updated;
 }

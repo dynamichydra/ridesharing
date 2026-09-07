@@ -9,7 +9,7 @@ import { createFinancialTransaction, updateFinancialTransactionStatus } from '..
 import { withIdempotency } from '../../utils/idempotency.js';
 
 /**
- * Universal Payment Orchestrator supporting split-tender multi-source payments (Wallet + Promo + PSP + Corporate).
+ * Universal Payment Orchestrator supporting split-tender multi-source payments (Wallet + Promo + PSP + Cash).
  */
 export async function createPaymentIntentWithSources({
   payerId,
@@ -19,7 +19,7 @@ export async function createPaymentIntentWithSources({
   referenceType,
   referenceId,
   countryId = null,
-  sources = [], // Array of { sourceType: 'wallet'|'promo'|'psp'|'corporate'|'cash', amountMinor, sourceId }
+  sources = [], // Array of { sourceType: 'wallet'|'promo'|'psp'|'cash', amountMinor, sourceId }
   idempotencyKey,
   metadata = {},
 }) {
@@ -149,17 +149,6 @@ export async function capturePaymentIntent({
       });
       entries.push({
         accountId: promoAccount.id,
-        direction: 'debit',
-        amountMinor: s.amountMinor,
-        currencyCode: curr,
-      });
-    } else if (s.sourceType === 'corporate') {
-      const corpAccount = await getOrCreateSystemAccount('receivable:corporate', curr, {
-        accountCategory: 'ASSET',
-        subType: 'CORPORATE_RECEIVABLE',
-      });
-      entries.push({
-        accountId: corpAccount.id,
         direction: 'debit',
         amountMinor: s.amountMinor,
         currencyCode: curr,

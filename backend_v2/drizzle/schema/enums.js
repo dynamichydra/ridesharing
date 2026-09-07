@@ -22,14 +22,6 @@ export const driverApprovalStatusEnum = pgEnum('driver_approval_status', [
   'pending', 'approved', 'rejected',
 ]);
 
-export const fareSplitStatusEnum = pgEnum('fare_split_status', [
-  'pending', 'accepted', 'declined', 'cancelled', 'expired',
-]);
-
-export const fareSplitPaymentStatusEnum = pgEnum('fare_split_payment_status', [
-  'pending', 'paid', 'failed',
-]);
-
 export const referralStatusEnum = pgEnum('referral_status', [
   'pending', 'completed', 'expired',
 ]);

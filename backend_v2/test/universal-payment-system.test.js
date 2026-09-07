@@ -48,28 +48,6 @@ test('Universal Payment System — Split-Tender Ledger Balancing (Wallet + Promo
   assert.equal(validation.balanced, true);
 });
 
-test('Universal Payment System — Corporate Ride Ledger Balancing', () => {
-  // Corporate employee takes a 500 INR ride
-  // Debit: Corporate Receivable (500 INR)
-  // Credit: Driver Payable (400 INR), Platform Revenue (80 INR), Tax Payable (20 INR)
-  const rideEntries = [
-    { accountId: 'corp_receivable_acct', direction: 'debit', amountMinor: 50000, currencyCode: 'INR' },
-    { accountId: 'driver_payable_acct', direction: 'credit', amountMinor: 40000, currencyCode: 'INR' },
-    { accountId: 'platform_revenue_acct', direction: 'credit', amountMinor: 8000, currencyCode: 'INR' },
-    { accountId: 'tax_payable_acct', direction: 'credit', amountMinor: 2000, currencyCode: 'INR' },
-  ];
-  assert.equal(validateBalancedEntries(rideEntries).balanced, true);
-
-  // Corporate pays invoice at month-end: 500 INR
-  // Debit: Bank Clearing (500 INR)
-  // Credit: Corporate Receivable (500 INR)
-  const invoiceEntries = [
-    { accountId: 'bank_clearing_acct', direction: 'debit', amountMinor: 50000, currencyCode: 'INR' },
-    { accountId: 'corp_receivable_acct', direction: 'credit', amountMinor: 50000, currencyCode: 'INR' },
-  ];
-  assert.equal(validateBalancedEntries(invoiceEntries).balanced, true);
-});
-
 test('Universal Payment System — Driver Incentive Ledger Balancing', () => {
   // Driver completes 20 rides bonus: 500 INR
   // Debit: Driver Incentive Expense (500 INR)

@@ -48,7 +48,6 @@ import { emergencyRoutes } from './modules/emergency/emergency.routes.js';
 import { savedPlaceRoutes } from './modules/saved-place/saved-place.routes.js';
 import { moderationRoutes } from './modules/moderation/moderation.routes.js';
 import { socketTestRoutes } from './modules/socket-test/socket-test.routes.js';
-import { corporateRoutes } from './modules/corporate/corporate.routes.js';
 import { cashRoutes } from './modules/cash/cash.routes.js';
 import { financialAuditRoutes } from './modules/ledger/financial-audit.routes.js';
 import { publicTripRoutes } from './modules/tracking/public-trip.routes.js';
@@ -118,7 +117,6 @@ async function build() {
   await app.register(moderationRoutes, { prefix: `${PREFIX}/admin/moderation` });
   await app.register(socketTestRoutes, { prefix: `${PREFIX}` });
   await app.register(socketTestRoutes); // also accessible at /socket-test and /socket-test/ui
-  await app.register(corporateRoutes, { prefix: `${PREFIX}/corporate` });
   await app.register(cashRoutes, { prefix: `${PREFIX}/cash` });
   await app.register(financialAuditRoutes, { prefix: `${PREFIX}/financial-audit` });
   await app.register(publicTripRoutes, { prefix: `${PREFIX}/public` });

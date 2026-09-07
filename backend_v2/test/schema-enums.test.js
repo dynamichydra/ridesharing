@@ -6,8 +6,6 @@ test('exports all expected schema enums', () => {
   assert.ok(enums.rideStatusEnum);
   assert.ok(enums.userStatusEnum);
   assert.ok(enums.driverStatusEnum);
-  assert.ok(enums.fareSplitStatusEnum);
-  assert.ok(enums.fareSplitPaymentStatusEnum);
   assert.ok(enums.referralStatusEnum);
   assert.ok(enums.sosAlertStatusEnum);
   assert.ok(enums.contentFlagStatusEnum);

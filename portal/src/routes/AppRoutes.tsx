@@ -37,7 +37,6 @@ const NotificationTemplateList = lazy(() => import("@/features/notification-temp
 const CommissionRuleList = lazy(() => import("@/features/commission-rules/pages"));
 const PromoList = lazy(() => import("@/features/promos/pages"));
 const SosAlertList = lazy(() => import("@/features/sos-alerts/pages"));
-const CorporateList = lazy(() => import("@/features/corporate/pages"));
 const ModerationList = lazy(() => import("@/features/moderation/pages"));
 const DispatchOpsPage = lazy(() => import("@/features/dispatch-ops/pages"));
 const CashManagementList = lazy(() => import("@/features/cash-management/pages"));
@@ -240,16 +239,6 @@ const router = createBrowserRouter([
           <ProtectedRoute allowedRoles={["super_admin"]}>
             <Suspense fallback={<Loader />}>
               <CashManagementList />
-            </Suspense>
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "corporate",
-        element: (
-          <ProtectedRoute allowedRoles={["super_admin"]}>
-            <Suspense fallback={<Loader />}>
-              <CorporateList />
             </Suspense>
           </ProtectedRoute>
         ),
