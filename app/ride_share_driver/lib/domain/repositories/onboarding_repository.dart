@@ -40,6 +40,7 @@ class RegistrationSummary {
   final List<DriverAnswer> answers;
   final bool isComplete;
   final List<String> missing;
+  final Map<String, dynamic>? bankAccount;
 
   RegistrationSummary({
     required this.driver,
@@ -48,6 +49,7 @@ class RegistrationSummary {
     required this.answers,
     required this.isComplete,
     required this.missing,
+    this.bankAccount,
   });
 }
 
@@ -100,10 +102,11 @@ abstract class OnboardingRepository {
   Future<List<DriverAnswer>> getMyAnswers();
   Future<bool> submitAnswers(List<Map<String, dynamic>> answers);
   Future<bool> submitBankDetails({
-    required String holder,
-    required String bankName,
-    required String accountNumber,
-    required String ifscCode,
+    String? holder,
+    String? bankName,
+    String? accountNumber,
+    String? ifscCode,
+    String? upiId,
   });
   Future<Map<String, dynamic>?> getMyBankDetails();
   Future<RegistrationSummary> getRegistrationSummary();

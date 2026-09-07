@@ -86,15 +86,17 @@ class UploadProfilePhotoEvent extends OnboardingEvent {
 }
 
 class SaveBankDetailsEvent extends OnboardingEvent {
-  final String holder;
-  final String bankName;
-  final String accountNumber;
-  final String ifscCode;
+  final String? holder;
+  final String? bankName;
+  final String? accountNumber;
+  final String? ifscCode;
+  final String? upiId;
   SaveBankDetailsEvent({
-    required this.holder,
-    required this.bankName,
-    required this.accountNumber,
-    required this.ifscCode,
+    this.holder,
+    this.bankName,
+    this.accountNumber,
+    this.ifscCode,
+    this.upiId,
   });
 }
 
@@ -295,6 +297,7 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
           bankName: event.bankName,
           accountNumber: event.accountNumber,
           ifscCode: event.ifscCode,
+          upiId: event.upiId,
         );
         emit(OnboardingSuccess());
       } catch (e) {

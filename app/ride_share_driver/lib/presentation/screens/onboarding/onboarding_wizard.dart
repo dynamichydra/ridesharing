@@ -66,6 +66,7 @@ class _OnboardingWizardState extends State<OnboardingWizard>
   String? _bankName;
   String? _bankAccount;
   String? _bankIfsc;
+  String? _upiId;
   String? _emergencyName;
   String? _emergencyPhone;
   String? _emergencyRelationship;
@@ -197,6 +198,15 @@ class _OnboardingWizardState extends State<OnboardingWizard>
               }
             } else if (state is RegistrationSummaryLoaded) {
               setState(() {
+                if (state.summary.bankAccount != null) {
+                  final ba = state.summary.bankAccount!;
+                  _bankHolder ??= ba['accountHolderName']?.toString();
+                  _bankName ??= ba['bankName']?.toString();
+                  _bankAccount ??= ba['accountNumberLast4']?.toString();
+                  _bankIfsc ??= ba['routingCode']?.toString();
+                  _upiId ??= ba['upiId']?.toString();
+                }
+
                 // Merge simulated checklist status values
                 final missing = List<String>.from(state.summary.missing);
                 for (final sim in _simulatedCompletedItems) {
@@ -210,6 +220,7 @@ class _OnboardingWizardState extends State<OnboardingWizard>
                   answers: state.summary.answers,
                   isComplete: missing.isEmpty,
                   missing: missing,
+                  bankAccount: state.summary.bankAccount,
                 );
 
                 if (_summary!.driver.isApproved) {
@@ -802,51 +813,10 @@ class _OnboardingWizardState extends State<OnboardingWizard>
             });
           },
           onNeedVehicle: () {
-            if (_config != null) {
-              if (_config!.vehicleTypes.isNotEmpty) {
-                final firstType = _config!.vehicleTypes.first;
-                context.read<OnboardingBloc>().add(
-                  AddVehicleDetails(
-                    vehicleTypeId: firstType.id,
-                    model: 'Rental (Requested)',
-                    year: DateTime.now().year.toString(),
-                    registrationNumber:
-                        'RENTAL-${_summary?.driver.id.substring(0, 8).toUpperCase() ?? "VEHICLE"}',
-                    color: 'Virtual',
-                  ),
-                );
-              }
-              // Submit dummy documents for VEHICLE_REGISTRATION and INSURANCE_CERTIFICATE
-              for (final docType in _config!.documentRequirements) {
-                if (docType.code == 'VEHICLE_REGISTRATION' ||
-                    docType.code == 'INSURANCE_CERTIFICATE') {
-                  context.read<OnboardingBloc>().add(
-                    UploadDocumentFileEvent(
-                      documentTypeId: docType.id,
-                      side: 'front',
-                      docNumber: 'RENTAL-PLACEHOLDER',
-                      bytes: [137, 80, 78, 71, 13, 10, 26, 10],
-                      contentType: 'image/png',
-                    ),
-                  );
-                  if (docType.requiresBack) {
-                    context.read<OnboardingBloc>().add(
-                      UploadDocumentFileEvent(
-                        documentTypeId: docType.id,
-                        side: 'back',
-                        docNumber: 'RENTAL-PLACEHOLDER',
-                        bytes: [137, 80, 78, 71, 13, 10, 26, 10],
-                        contentType: 'image/png',
-                      ),
-                    );
-                  }
-                }
-              }
-            }
-            setState(() {
-              _needsVehicleRental = true;
-              _currentStep = 9;
-            });
+            CustomToast.show(
+              context,
+              'Rental services are not available right now. Please register with your own vehicle.',
+            );
           },
         );
       case 8:
@@ -887,12 +857,21 @@ class _OnboardingWizardState extends State<OnboardingWizard>
         if (_summary == null || _config == null) {
           return const Center(child: CircularProgressIndicator());
         }
+        final hasSavedBank = _summary!.bankAccount != null &&
+            ((_summary!.bankAccount!['accountNumberLast4'] != null &&
+                _summary!.bankAccount!['accountNumberLast4'].toString().isNotEmpty) ||
+             (_summary!.bankAccount!['upiId'] != null &&
+                _summary!.bankAccount!['upiId'].toString().isNotEmpty));
+        final isBankComplete = hasSavedBank ||
+            (_bankAccount != null && _bankAccount!.isNotEmpty) ||
+            (_upiId != null && _upiId!.isNotEmpty);
+
         return ChecklistScreen(
           summary: _summary!,
-          needsVehicleRental: _needsVehicleRental,
+          needsVehicleRental: false,
           documentRequirements: _config!.documentRequirements,
-          isBankDetailsCompleted: _bankAccount != null && _bankAccount!.isNotEmpty,
-          isEmergencyContactCompleted: _emergencyPhone != null && _emergencyPhone!.isNotEmpty,
+          isBankDetailsCompleted: isBankComplete,
+          isEmergencyContactCompleted: true,
           isLoading: isOnboardingLoading,
           onItemTap: (code) {
             setState(() {
@@ -909,13 +888,11 @@ class _OnboardingWizardState extends State<OnboardingWizard>
               } else if (code == 'questionnaire') {
                 _currentStep = 6;
               } else if (code == 'vehicle') {
-                _currentStep = _needsVehicleRental ? 7 : 8;
+                _currentStep = 8;
               } else if (code == 'profile_photo') {
                 _currentStep = 12;
               } else if (code == 'bank_details') {
                 _currentStep = 13;
-              } else if (code == 'emergency_contact') {
-                _currentStep = 14;
               }
             });
           },
@@ -924,9 +901,6 @@ class _OnboardingWizardState extends State<OnboardingWizard>
             String? missingDocName;
             for (final docReq in _config!.documentRequirements) {
               if (docReq.isRequired) {
-                if (_needsVehicleRental && (docReq.code == 'VEHICLE_REGISTRATION' || docReq.code == 'INSURANCE_CERTIFICATE')) {
-                  continue;
-                }
 
                 DriverDocument? doc;
                 for (final d in _summary!.documents) {
@@ -1018,10 +992,11 @@ class _OnboardingWizardState extends State<OnboardingWizard>
         );
       case 13:
         return BankDetailsScreen(
-          initialHolder: _bankHolder,
-          initialBankName: _bankName,
-          initialAccount: _bankAccount,
-          initialIfsc: _bankIfsc,
+          initialHolder: _bankHolder ?? _summary?.bankAccount?['accountHolderName']?.toString(),
+          initialBankName: _bankName ?? _summary?.bankAccount?['bankName']?.toString(),
+          initialAccount: _bankAccount ?? _summary?.bankAccount?['accountNumberLast4']?.toString(),
+          initialIfsc: _bankIfsc ?? _summary?.bankAccount?['routingCode']?.toString(),
+          initialUpiId: _upiId ?? _summary?.bankAccount?['upiId']?.toString(),
           isLoading: isOnboardingLoading,
           onSkip: () {
             setState(() {
@@ -1029,54 +1004,42 @@ class _OnboardingWizardState extends State<OnboardingWizard>
               _enteredFromChecklist = false;
             });
           },
-          onSave:
-              ({
-                required accountNumber,
-                required bankName,
-                required holder,
-                required ifscCode,
-              }) {
-                setState(() {
-                  _bankHolder = holder;
-                  _bankName = bankName;
-                  _bankAccount = accountNumber;
-                  _bankIfsc = ifscCode;
-                  _simulatedCompletedItems.add('bank_details');
-                });
-                context.read<OnboardingBloc>().add(
-                  SaveBankDetailsEvent(
-                    holder: holder,
-                    bankName: bankName,
-                    accountNumber: accountNumber,
-                    ifscCode: ifscCode,
-                  ),
-                );
-              },
+          onSave: ({
+            accountNumber,
+            bankName,
+            holder,
+            ifscCode,
+            upiId,
+          }) {
+            setState(() {
+              if (holder != null) _bankHolder = holder;
+              if (bankName != null) _bankName = bankName;
+              if (accountNumber != null) _bankAccount = accountNumber;
+              if (ifscCode != null) _bankIfsc = ifscCode;
+              if (upiId != null) _upiId = upiId;
+              _simulatedCompletedItems.add('bank_details');
+            });
+            context.read<OnboardingBloc>().add(
+              SaveBankDetailsEvent(
+                holder: holder,
+                bankName: bankName,
+                accountNumber: accountNumber,
+                ifscCode: ifscCode,
+                upiId: upiId,
+              ),
+            );
+          },
         );
       case 14:
-        return EmergencyContactScreen(
-          initialName: _emergencyName,
-          initialPhone: _emergencyPhone,
-          initialRelationship: _emergencyRelationship,
-          isLoading: isOnboardingLoading,
-          onSkip: () {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
             setState(() {
               _currentStep = 9;
               _enteredFromChecklist = false;
             });
-          },
-          onSave: ({required name, required phone, required relationship}) {
-            setState(() {
-              _emergencyName = name;
-              _emergencyPhone = phone;
-              _emergencyRelationship = relationship;
-              _simulatedCompletedItems.add('emergency_contact');
-              _currentStep = 9;
-              _enteredFromChecklist = false;
-            });
-            context.read<OnboardingBloc>().add(LoadRegistrationSummary());
-          },
-        );
+          }
+        });
+        return const Center(child: CircularProgressIndicator());
       default:
         return WelcomeScreen(
           isLoading: isAuthLoading,

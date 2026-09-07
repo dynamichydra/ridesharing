@@ -89,7 +89,29 @@ class BookingRepositoryImpl implements BookingRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> validatePromo(String code, double fare) async {
-    return await _dataSource.validatePromo(code, fare);
+  Future<Map<String, dynamic>> validatePromo(
+    String code,
+    double fare, {
+    String? vehicleTypeId,
+    String? cityId,
+    String? countryId,
+  }) async {
+    return await _dataSource.validatePromo(
+      code,
+      fare,
+      vehicleTypeId: vehicleTypeId,
+      cityId: cityId,
+      countryId: countryId,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> getMyReferralInfo() async {
+    return await _dataSource.getMyReferralInfo();
+  }
+
+  @override
+  Future<Map<String, dynamic>> applyReferralCode(String referralCode) async {
+    return await _dataSource.applyReferralCode(referralCode);
   }
 }

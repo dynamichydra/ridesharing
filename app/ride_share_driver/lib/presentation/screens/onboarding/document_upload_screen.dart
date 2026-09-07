@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../config/api_config.dart';
 import '../../../style/appcolors.dart';
 import '../../../domain/entities/document.dart';
 import '../../../common/widgets/custom_toast.dart';
@@ -94,7 +95,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
 
   String _getDownloadUrl(String key) {
     if (key.startsWith('http')) return key;
-    return 'http://localhost:3000/api/v1/dev-storage/$key';
+    return '${ApiConfig.baseUrl}/dev-storage/$key';
   }
 
   Future<void> _selectDate(BuildContext context) async {

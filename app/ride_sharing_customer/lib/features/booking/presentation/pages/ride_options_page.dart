@@ -292,6 +292,8 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                   children: state.vehicles.map((vehicle) {
                     final isSelected = state.selectedVehicle.id == vehicle.id;
                     final price = state.calculatedFares[vehicle.id] ?? vehicle.baseFare;
+                    final origPrice = (state.originalFares ?? state.calculatedFares)[vehicle.id] ?? vehicle.baseFare;
+                    final bool hasDiscount = state.appliedPromoCode != null && origPrice > price;
                     final assetPath = _getVehicleAsset(vehicle.name);
 
                     return InkWell(
@@ -344,13 +346,35 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    vehicle.name,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 15,
-                                      color: Color(0xFF021B47),
-                                    ),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        vehicle.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                          color: Color(0xFF021B47),
+                                        ),
+                                      ),
+                                      if (hasDiscount) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFE8F5E9),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            'Save ₹${(origPrice - price).toStringAsFixed(0)}',
+                                            style: const TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF009048),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
@@ -369,13 +393,27 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                             // Price and Radio
                             Row(
                               children: [
-                                Text(
-                                  '${AppConstants.currencySymbol}${price.toStringAsFixed(0)}',
-                                  style: const TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF021B47),
-                                  ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    if (hasDiscount)
+                                      Text(
+                                        '${AppConstants.currencySymbol}${origPrice.toStringAsFixed(0)}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF8A94A6),
+                                          decoration: TextDecoration.lineThrough,
+                                        ),
+                                      ),
+                                    Text(
+                                      '${AppConstants.currencySymbol}${price.toStringAsFixed(0)}',
+                                      style: TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.bold,
+                                        color: hasDiscount ? const Color(0xFF009048) : const Color(0xFF021B47),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                                 const SizedBox(width: 8),
                                 Icon(
@@ -391,7 +429,152 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                     );
                   }).toList(),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 12),
+
+                // Promo / Coupon Banner on Choose Ride Step
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: state.appliedPromoCode != null
+                          ? const Color(0xFF009048).withValues(alpha: 0.4)
+                          : const Color(0xFFE2E7E9),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.02),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: state.appliedPromoCode != null
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(7),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE8F5E9),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.check_circle_rounded, color: Color(0xFF009048), size: 18),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          state.appliedPromoCode!,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF009048),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF009048),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text(
+                                            'APPLIED',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 1),
+                                    Text(
+                                      state.discountAmount != null && state.discountAmount! > 0
+                                          ? 'Discount of ₹${state.discountAmount!.toStringAsFixed(0)} applied'
+                                          : (state.promoDescription ?? 'Coupon applied'),
+                                      style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  context.read<BookingBloc>().add(RemovePromoCode());
+                                  CustomToast.show(context, 'Promo code removed');
+                                },
+                                style: TextButton.styleFrom(
+                                  foregroundColor: const Color(0xFFE53935),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: const Text('Remove', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        )
+                      : InkWell(
+                          onTap: () {
+                            context.push('/promo-codes');
+                          },
+                          borderRadius: BorderRadius.circular(16),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(7),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF009048).withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(Icons.local_offer_rounded, color: Color(0xFF009048), size: 18),
+                                ),
+                                const SizedBox(width: 12),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Have a promo code?',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF021B47),
+                                        ),
+                                      ),
+                                      Text(
+                                        'Apply coupon to get an instant discount',
+                                        style: TextStyle(fontSize: 11, color: Color(0xFF8A94A6)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Text(
+                                  'Apply',
+                                  style: TextStyle(
+                                    color: Color(0xFF009048),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF009048), size: 12),
+                              ],
+                            ),
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 14),
 
                 // Payment Method Section
                 const Text(
@@ -551,18 +734,46 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    '${AppConstants.currencySymbol}${selectedPrice.toStringAsFixed(0)}',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF021B47),
-                    ),
-                  ),
-                  const Text(
-                    'Total',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF8A94A6)),
-                  ),
+                  Builder(builder: (context) {
+                    final origPrice = (state.originalFares ?? state.calculatedFares)[state.selectedVehicle.id] ?? state.selectedVehicle.baseFare;
+                    final bool hasDiscount = state.appliedPromoCode != null && origPrice > selectedPrice;
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (hasDiscount) ...[
+                          Text(
+                            '${AppConstants.currencySymbol}${origPrice.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF8A94A6),
+                              decoration: TextDecoration.lineThrough,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(
+                          '${AppConstants.currencySymbol}${selectedPrice.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: hasDiscount ? const Color(0xFF009048) : const Color(0xFF021B47),
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
+                  Builder(builder: (context) {
+                    final origPrice = (state.originalFares ?? state.calculatedFares)[state.selectedVehicle.id] ?? state.selectedVehicle.baseFare;
+                    final bool hasDiscount = state.appliedPromoCode != null && origPrice > selectedPrice;
+                    return Text(
+                      hasDiscount ? 'Total (Saved ₹${(origPrice - selectedPrice).toStringAsFixed(0)})' : 'Total',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: hasDiscount ? const Color(0xFF009048) : const Color(0xFF8A94A6),
+                        fontWeight: hasDiscount ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    );
+                  }),
                 ],
               ),
             ],
@@ -631,10 +842,32 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                     ],
                   ),
                 ),
-                Text(
-                  '${AppConstants.currencySymbol}${price.toStringAsFixed(0)}',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
-                ),
+                Builder(builder: (context) {
+                  final origPrice = (state.originalFares ?? state.calculatedFares)[state.selectedVehicle.id] ?? state.selectedVehicle.baseFare;
+                  final bool hasDiscount = state.appliedPromoCode != null && origPrice > price;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (hasDiscount)
+                        Text(
+                          '${AppConstants.currencySymbol}${origPrice.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF8A94A6),
+                            decoration: TextDecoration.lineThrough,
+                          ),
+                        ),
+                      Text(
+                        '${AppConstants.currencySymbol}${price.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: hasDiscount ? const Color(0xFF009048) : const Color(0xFF021B47),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
               ],
             ),
           ),
@@ -773,45 +1006,102 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
           ),
           const SizedBox(height: 16),
           
-          // Promo Code Row
-          InkWell(
-            onTap: () {
-              context.push('/promo-codes');
-            },
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE2E7E9)),
+          // Promo Code Row on Confirm Ride Screen
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: state.appliedPromoCode != null
+                    ? const Color(0xFF009048).withValues(alpha: 0.4)
+                    : const Color(0xFFE2E7E9),
               ),
-              child: Row(
-                children: [
-                  const Icon(Icons.local_offer_rounded, color: Color(0xFF009048), size: 22),
-                  const SizedBox(width: 12),
-                  Expanded(
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  state.appliedPromoCode != null ? Icons.check_circle_rounded : Icons.local_offer_rounded,
+                  color: const Color(0xFF009048),
+                  size: 22,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                      context.push('/promo-codes');
+                    },
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Promo Code',
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                        Row(
+                          children: [
+                            Text(
+                              state.appliedPromoCode != null ? state.appliedPromoCode! : 'Promo Code',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: state.appliedPromoCode != null ? const Color(0xFF009048) : const Color(0xFF021B47),
+                              ),
+                            ),
+                            if (state.appliedPromoCode != null) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF009048),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'APPLIED',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
+                        const SizedBox(height: 2),
                         Text(
-                          state.appliedPromoCode != null ? 'Applied: ${state.appliedPromoCode}' : 'Apply a promo code',
+                          state.appliedPromoCode != null
+                              ? (state.discountAmount != null && state.discountAmount! > 0
+                                  ? 'Saved ₹${state.discountAmount!.toStringAsFixed(0)} on this ride'
+                                  : (state.promoDescription ?? 'Promo applied'))
+                              : 'Apply a promo code for discount',
                           style: TextStyle(
                             fontSize: 11,
-                            color: state.appliedPromoCode != null ? const Color(0xFF009048) : const Color(0xFF8A94A6),
-                            fontWeight: state.appliedPromoCode != null ? FontWeight.bold : FontWeight.normal,
+                            color: state.appliedPromoCode != null ? const Color(0xFF64748B) : const Color(0xFF8A94A6),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF8A94A6), size: 16),
-                ],
-              ),
+                ),
+                if (state.appliedPromoCode != null)
+                  TextButton(
+                    onPressed: () {
+                      context.read<BookingBloc>().add(RemovePromoCode());
+                      CustomToast.show(context, 'Promo code removed');
+                    },
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFFE53935),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Remove', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  )
+                else
+                  IconButton(
+                    onPressed: () {
+                      context.push('/promo-codes');
+                    },
+                    icon: const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF8A94A6), size: 16),
+                  ),
+              ],
             ),
           ),
           const SizedBox(height: 16),

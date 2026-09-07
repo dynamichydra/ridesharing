@@ -239,7 +239,12 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
 
   @override
   Future<RegistrationSummary> getRegistrationSummary() async {
-    final data = await remoteDataSource.getRegistrationSummary();
+    final results = await Future.wait([
+      remoteDataSource.getRegistrationSummary(),
+      remoteDataSource.getMyBankDetails().catchError((_) => null),
+    ]);
+    final data = results[0] as Map<String, dynamic>;
+    final bankAccount = results[1] as Map<String, dynamic>?;
 
     final driver = DriverProfile.fromJson(
       data['driver'] as Map<String, dynamic>? ?? {},
@@ -268,6 +273,7 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
       isComplete: data['isComplete'] as bool? ?? false,
       missing:
           (data['missing'] as List?)?.map((m) => m.toString()).toList() ?? [],
+      bankAccount: bankAccount,
     );
   }
 
@@ -286,17 +292,29 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
 
   @override
   Future<bool> submitBankDetails({
-    required String holder,
-    required String bankName,
-    required String accountNumber,
-    required String ifscCode,
+    String? holder,
+    String? bankName,
+    String? accountNumber,
+    String? ifscCode,
+    String? upiId,
   }) async {
-    final res = await remoteDataSource.submitBankDetails({
-      'accountHolderName': holder,
-      'bankName': bankName,
-      'accountNumber': accountNumber,
-      'routingCode': ifscCode,
-    });
+    final Map<String, dynamic> payload = {};
+    if (upiId != null && upiId.trim().isNotEmpty) {
+      payload['upiId'] = upiId.trim();
+    }
+    if (accountNumber != null && accountNumber.trim().isNotEmpty) {
+      payload['accountNumber'] = accountNumber.trim();
+      if (ifscCode != null && ifscCode.trim().isNotEmpty) {
+        payload['routingCode'] = ifscCode.trim();
+      }
+      if (holder != null && holder.trim().isNotEmpty) {
+        payload['accountHolderName'] = holder.trim();
+      }
+      if (bankName != null && bankName.trim().isNotEmpty) {
+        payload['bankName'] = bankName.trim();
+      }
+    }
+    final res = await remoteDataSource.submitBankDetails(payload);
     return res.isNotEmpty;
   }
 

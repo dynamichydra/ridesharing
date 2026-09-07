@@ -21,6 +21,14 @@ abstract class BookingRepository {
     String paymentMethod = 'cash',
     String? promoCode,
   });
-  Future<Map<String, dynamic>> validatePromo(String code, double fare);
+  Future<Map<String, dynamic>> validatePromo(
+    String code,
+    double fare, {
+    String? vehicleTypeId,
+    String? cityId,
+    String? countryId,
+  });
+  Future<Map<String, dynamic>> getMyReferralInfo();
+  Future<Map<String, dynamic>> applyReferralCode(String referralCode);
 }
 

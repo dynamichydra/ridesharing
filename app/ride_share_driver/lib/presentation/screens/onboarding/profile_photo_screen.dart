@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../config/api_config.dart';
 import '../../../common/widgets/custom_toast.dart';
 import '../../../style/appcolors.dart';
 import 'widgets/three_dots_loader.dart';
@@ -242,6 +243,24 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
     );
   }
 
+  String _resolvePhotoUrl(String url) {
+    if (url.startsWith('http://localhost:3000') || url.startsWith('http://127.0.0.1:3000')) {
+      final baseUri = Uri.tryParse(ApiConfig.baseUrl);
+      final photoUri = Uri.tryParse(url);
+      if (baseUri != null && photoUri != null && baseUri.host != 'localhost' && baseUri.host != '127.0.0.1') {
+        return photoUri.replace(
+          scheme: baseUri.scheme,
+          host: baseUri.host,
+          port: baseUri.hasPort ? baseUri.port : null,
+        ).toString();
+      }
+    }
+    if (!url.startsWith('http')) {
+      return '${ApiConfig.baseUrl}/dev-storage/$url';
+    }
+    return url;
+  }
+
   Widget _buildAvatarImage() {
     if (_localPhotoBytes != null) {
       return Image.memory(_localPhotoBytes!, fit: BoxFit.cover);
@@ -249,7 +268,7 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
 
     if (widget.currentPhotoUrl != null && widget.currentPhotoUrl!.isNotEmpty) {
       return Image.network(
-        widget.currentPhotoUrl!,
+        _resolvePhotoUrl(widget.currentPhotoUrl!),
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
           return const Icon(

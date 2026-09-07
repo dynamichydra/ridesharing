@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import '../../core/network/api_client.dart';
 import '../../core/error/app_exception.dart';
+import '../../config/api_config.dart';
 
 class OnboardingRemoteDataSource {
   final ApiClient apiClient;
@@ -124,9 +125,24 @@ class OnboardingRemoteDataSource {
 
   Future<bool> uploadDocumentFile(String uploadUrl, List<int> bytes, String contentType) async {
     try {
+      String targetUrl = uploadUrl;
+      final baseUri = Uri.tryParse(ApiConfig.baseUrl);
+      final uploadUri = Uri.tryParse(uploadUrl);
+      if (baseUri != null && uploadUri != null) {
+        if ((uploadUri.host == 'localhost' || uploadUri.host == '127.0.0.1') &&
+            baseUri.host != 'localhost' &&
+            baseUri.host != '127.0.0.1') {
+          targetUrl = uploadUri.replace(
+            scheme: baseUri.scheme,
+            host: baseUri.host,
+            port: baseUri.hasPort ? baseUri.port : null,
+          ).toString();
+        }
+      }
+
       final dio = Dio();
       final response = await dio.put(
-        uploadUrl,
+        targetUrl,
         data: Stream.fromIterable([bytes]),
         options: Options(
           headers: {

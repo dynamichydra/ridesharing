@@ -22,7 +22,15 @@ abstract class BookingDataSource {
     String paymentMethod = 'cash',
     String? promoCode,
   });
-  Future<Map<String, dynamic>> validatePromo(String code, double fare);
+  Future<Map<String, dynamic>> validatePromo(
+    String code,
+    double fare, {
+    String? vehicleTypeId,
+    String? cityId,
+    String? countryId,
+  });
+  Future<Map<String, dynamic>> getMyReferralInfo();
+  Future<Map<String, dynamic>> applyReferralCode(String referralCode);
 }
 
 class BookingDataSourceImpl implements BookingDataSource {
@@ -180,14 +188,25 @@ class BookingDataSourceImpl implements BookingDataSource {
   }
 
   @override
-  Future<Map<String, dynamic>> validatePromo(String code, double fare) async {
+  Future<Map<String, dynamic>> validatePromo(
+    String code,
+    double fare, {
+    String? vehicleTypeId,
+    String? cityId,
+    String? countryId,
+  }) async {
     try {
+      final Map<String, dynamic> data = {
+        'code': code.trim().toUpperCase(),
+        'fareMinor': (fare * 100).round(),
+      };
+      if (countryId != null) data['countryId'] = countryId;
+      if (cityId != null) data['cityId'] = cityId;
+      if (vehicleTypeId != null) data['vehicleTypeId'] = vehicleTypeId;
+
       final response = await _dioClient.dio.post(
         '/api/v1/promos/validate',
-        data: {
-          'code': code,
-          'fareMinor': (fare * 100).toInt(),
-        },
+        data: data,
       );
       if (response.data['SUCCESS'] == true) {
         return Map<String, dynamic>.from(response.data['MESSAGE'] as Map);
@@ -199,6 +218,39 @@ class BookingDataSourceImpl implements BookingDataSource {
           e.response?.data?['MESSAGE'] ?? 'Failed to validate promo code');
     } catch (e) {
       throw Exception('Failed to validate promo code: $e');
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> getMyReferralInfo() async {
+    try {
+      final response = await _dioClient.dio.get('/api/v1/promos/referrals/my-code');
+      if (response.data['SUCCESS'] == true) {
+        return Map<String, dynamic>.from(response.data['MESSAGE'] as Map);
+      }
+      throw Exception(response.data['MESSAGE'] ?? 'Failed to get referral info');
+    } on DioException catch (e) {
+      throw Exception(e.response?.data?['MESSAGE'] ?? 'Failed to get referral info');
+    } catch (e) {
+      throw Exception('Failed to get referral info: $e');
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> applyReferralCode(String referralCode) async {
+    try {
+      final response = await _dioClient.dio.post(
+        '/api/v1/promos/referrals/apply',
+        data: {'referralCode': referralCode.trim().toUpperCase()},
+      );
+      if (response.data['SUCCESS'] == true) {
+        return Map<String, dynamic>.from(response.data['MESSAGE'] as Map);
+      }
+      throw Exception(response.data['MESSAGE'] ?? 'Failed to apply referral code');
+    } on DioException catch (e) {
+      throw Exception(e.response?.data?['MESSAGE'] ?? 'Failed to apply referral code');
+    } catch (e) {
+      throw Exception('Failed to apply referral code: $e');
     }
   }
 }

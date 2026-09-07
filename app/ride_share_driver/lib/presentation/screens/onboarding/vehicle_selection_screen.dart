@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../style/appcolors.dart';
+import '../../../common/widgets/custom_toast.dart';
 import 'widgets/three_dots_loader.dart';
 
 class VehicleSelectionScreen extends StatefulWidget {
@@ -19,19 +20,24 @@ class VehicleSelectionScreen extends StatefulWidget {
 }
 
 class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
-  int? _selectedOptionIndex; // null = none, 0 = own vehicle, 1 = rental
+  int? _selectedOptionIndex; // 0 = own vehicle
 
   void _handleContinue() {
     if (_selectedOptionIndex == 0) {
       widget.onHasVehicle();
-    } else if (_selectedOptionIndex == 1) {
-      widget.onNeedVehicle();
     }
+  }
+
+  void _onRentalOptionTapped() {
+    CustomToast.show(
+      context,
+      'Rental services are not available right now. Please register with your own vehicle.',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasSelection = _selectedOptionIndex != null;
+    final hasSelection = _selectedOptionIndex == 0;
 
     return Padding(
       padding: const EdgeInsets.all(24.0),
@@ -69,15 +75,18 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
                       'Register your personal cab, auto-rickshaw or motor bike. Minimum requirement: 2019 model or newer.',
                   icon: Icons.directions_car_rounded,
                   color: AppColors.primary,
+                  isAvailable: true,
                 ),
                 const SizedBox(height: 20),
                 _buildSelectableCard(
                   index: 1,
                   title: 'I need a vehicle rental',
                   subtitle:
-                      'Request a customized lease vehicle. Ryva Ride Express Rent option with maintenance and insurance is coming soon.',
+                      'Rental services are currently unavailable in your region. Please register your own vehicle.',
                   icon: Icons.car_rental_rounded,
-                  color: AppColors.secondary,
+                  color: AppColors.textSecondary,
+                  isAvailable: false,
+                  onDisabledTap: _onRentalOptionTapped,
                 ),
               ],
             ),
@@ -152,103 +161,168 @@ class _VehicleSelectionScreenState extends State<VehicleSelectionScreen> {
     required String subtitle,
     required IconData icon,
     required Color color,
+    bool isAvailable = true,
+    VoidCallback? onDisabledTap,
   }) {
-    final isSelected = _selectedOptionIndex == index;
+    final isSelected = isAvailable && _selectedOptionIndex == index;
 
     return GestureDetector(
       onTap: () {
+        if (!isAvailable) {
+          onDisabledTap?.call();
+          return;
+        }
         debugPrint('[VehicleSelectionScreen] Option $index clicked');
         setState(() {
           _selectedOptionIndex = index;
         });
       },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? color : AppColors.border,
-            width: isSelected ? 2.5 : 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 200),
+        opacity: isAvailable ? 1.0 : 0.65,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isAvailable ? Colors.white : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
               color: isSelected
-                  ? color.withOpacity(0.08)
-                  : Colors.black.withOpacity(0.02),
-              blurRadius: isSelected ? 20 : 12,
-              offset: isSelected ? const Offset(0, 8) : const Offset(0, 4),
+                  ? color
+                  : (isAvailable ? AppColors.border : const Color(0xFFE2E8F0)),
+              width: isSelected ? 2.5 : 1.5,
             ),
-          ],
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isSelected ? color.withOpacity(0.12) : AppColors.surface,
-                borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: isSelected
+                    ? color.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.02),
+                blurRadius: isSelected ? 20 : 12,
+                offset: isSelected ? const Offset(0, 8) : const Offset(0, 4),
               ),
-              child: Icon(
-                icon,
-                size: 28,
-                color: isSelected ? color : AppColors.textSecondary,
+            ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? color.withValues(alpha: 0.12)
+                      : (isAvailable
+                          ? AppColors.surface
+                          : const Color(0xFFEDF2F7)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  icon,
+                  size: 28,
+                  color: isSelected
+                      ? color
+                      : (isAvailable
+                          ? AppColors.textSecondary
+                          : const Color(0xFF94A3B8)),
+                ),
               ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected ? color : AppColors.textPrimary,
-                        ),
-                      ),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 22,
-                        height: 22,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isSelected ? color : Colors.transparent,
-                          border: Border.all(
-                            color: isSelected ? color : AppColors.border,
-                            width: 2,
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  title,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected
+                                        ? color
+                                        : (isAvailable
+                                            ? AppColors.textPrimary
+                                            : const Color(0xFF64748B)),
+                                  ),
+                                ),
+                              ),
+                              if (!isAvailable) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEE2E2),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Text(
+                                    'Unavailable',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFFDC2626),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
-                        child: isSelected
-                            ? const Icon(
-                                Icons.check,
-                                size: 14,
-                                color: Colors.white,
-                              )
-                            : null,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                      height: 1.4,
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isSelected ? color : Colors.transparent,
+                            border: Border.all(
+                              color: isSelected
+                                  ? color
+                                  : (isAvailable
+                                      ? AppColors.border
+                                      : const Color(0xFFCBD5E1)),
+                              width: 2,
+                            ),
+                          ),
+                          child: isSelected
+                              ? const Icon(
+                                  Icons.check,
+                                  size: 14,
+                                  color: Colors.white,
+                                )
+                              : (!isAvailable
+                                  ? const Icon(
+                                      Icons.lock_outline_rounded,
+                                      size: 12,
+                                      color: Color(0xFF94A3B8),
+                                    )
+                                  : null),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 6),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isAvailable
+                            ? AppColors.textSecondary
+                            : const Color(0xFF94A3B8),
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

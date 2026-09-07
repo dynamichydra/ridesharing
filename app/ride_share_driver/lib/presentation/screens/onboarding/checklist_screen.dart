@@ -144,6 +144,24 @@ class ChecklistScreen extends StatelessWidget {
     }
 
     // Add remaining items
+    final hasSavedBank = summary.bankAccount != null &&
+        ((summary.bankAccount!['accountNumberLast4'] != null &&
+            summary.bankAccount!['accountNumberLast4'].toString().isNotEmpty) ||
+            (summary.bankAccount!['upiId'] != null &&
+                summary.bankAccount!['upiId'].toString().isNotEmpty));
+    final bankComplete = isBankDetailsCompleted || hasSavedBank;
+
+    String bankDesc = 'Payout details (account number, IFSC or UPI ID)';
+    if (hasSavedBank) {
+      final upi = summary.bankAccount!['upiId']?.toString();
+      final last4 = summary.bankAccount!['accountNumberLast4']?.toString();
+      if (upi != null && upi.isNotEmpty) {
+        bankDesc = 'Linked UPI: $upi';
+      } else if (last4 != null && last4.isNotEmpty) {
+        bankDesc = 'Account ending in $last4';
+      }
+    }
+
     todoItems.addAll([
       _ChecklistItem(
         code: 'profile_photo',
@@ -157,24 +175,17 @@ class ChecklistScreen extends StatelessWidget {
       _ChecklistItem(
         code: 'bank_details',
         title: 'Direct deposit info',
-        description: 'Payout details (account number, IFSC code)',
+        description: bankDesc,
         icon: Icons.account_balance_rounded,
-        isCompleted: isBankDetailsCompleted,
-      ),
-      _ChecklistItem(
-        code: 'emergency_contact',
-        title: 'Emergency contact',
-        description: 'Relative/companion safety phone details',
-        icon: Icons.contact_phone_rounded,
-        isCompleted: isEmergencyContactCompleted,
+        isCompleted: bankComplete,
       ),
     ]);
 
     final completedCount = todoItems.where((i) => i.isCompleted).length;
     final totalCount = todoItems.length;
-    // We allow skipping Bank Details and Emergency Contact (they are optional)
+    // We allow skipping Bank Details (it is optional during registration, required before going online)
     final isButtonEnabled = todoItems
-        .where((i) => i.code != 'bank_details' && i.code != 'emergency_contact')
+        .where((i) => i.code != 'bank_details')
         .every((i) => i.isCompleted);
 
     return Column(

@@ -68,6 +68,8 @@ class ApplyPromoCode extends BookingEvent {
   List<Object?> get props => [promoCode];
 }
 
+class RemovePromoCode extends BookingEvent {}
+
 class ClearBooking extends BookingEvent {}
 
 // ==========================================
@@ -98,6 +100,7 @@ class BookingVehicleOptionsLoaded extends BookingState {
   final Vehicle selectedVehicle;
   final String? appliedPromoCode;
   final double? discountAmount;
+  final String? promoDescription;
 
   const BookingVehicleOptionsLoaded({
     required this.pickup,
@@ -113,6 +116,7 @@ class BookingVehicleOptionsLoaded extends BookingState {
     this.originalFares,
     this.appliedPromoCode,
     this.discountAmount,
+    this.promoDescription,
   });
 
   BookingVehicleOptionsLoaded copyWith({
@@ -121,6 +125,8 @@ class BookingVehicleOptionsLoaded extends BookingState {
     Map<String, double>? originalFares,
     String? appliedPromoCode,
     double? discountAmount,
+    String? promoDescription,
+    bool clearPromo = false,
   }) {
     return BookingVehicleOptionsLoaded(
       pickup: pickup,
@@ -134,8 +140,9 @@ class BookingVehicleOptionsLoaded extends BookingState {
       calculatedFares: calculatedFares ?? this.calculatedFares,
       originalFares: originalFares ?? this.originalFares,
       selectedVehicle: selectedVehicle ?? this.selectedVehicle,
-      appliedPromoCode: appliedPromoCode ?? this.appliedPromoCode,
-      discountAmount: discountAmount ?? this.discountAmount,
+      appliedPromoCode: clearPromo ? null : (appliedPromoCode ?? this.appliedPromoCode),
+      discountAmount: clearPromo ? null : (discountAmount ?? this.discountAmount),
+      promoDescription: clearPromo ? null : (promoDescription ?? this.promoDescription),
     );
   }
 
@@ -154,6 +161,7 @@ class BookingVehicleOptionsLoaded extends BookingState {
         selectedVehicle,
         appliedPromoCode,
         discountAmount,
+        promoDescription,
       ];
 }
 
@@ -203,6 +211,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     on<SelectVehicle>(_onSelectVehicle);
     on<ConfirmRideBooking>(_onConfirmRideBooking);
     on<ApplyPromoCode>(_onApplyPromoCode);
+    on<RemovePromoCode>(_onRemovePromoCode);
     on<ClearBooking>(_onClearBooking);
   }
 
@@ -210,28 +219,48 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     final currentState = state;
     if (currentState is BookingVehicleOptionsLoaded) {
       try {
-        final selectedFare = (currentState.originalFares ?? currentState.calculatedFares)[currentState.selectedVehicle.id] ?? 10.0;
-        final result = await _bookingRepository.validatePromo(event.promoCode, selectedFare);
-        
+        final originalFares = currentState.originalFares ?? Map<String, double>.from(currentState.calculatedFares);
+        final selectedFare = originalFares[currentState.selectedVehicle.id] ?? currentState.selectedVehicle.baseFare;
+
+        final result = await _bookingRepository.validatePromo(
+          event.promoCode,
+          selectedFare,
+          vehicleTypeId: currentState.selectedVehicle.id,
+        );
+
         final double finalFare = (result['finalFareMinor'] as int) / 100.0;
         final double discountAmount = (result['discountAmountMinor'] as int) / 100.0;
-        
-        final newFares = Map<String, double>.from(currentState.calculatedFares);
+        final String? description = result['description'] as String?;
+
+        final newFares = Map<String, double>.from(originalFares);
         newFares[currentState.selectedVehicle.id] = finalFare;
-        
-        final originalFares = currentState.originalFares ?? currentState.calculatedFares;
 
         emit(currentState.copyWith(
           calculatedFares: newFares,
           originalFares: originalFares,
-          appliedPromoCode: event.promoCode,
+          appliedPromoCode: result['code']?.toString() ?? event.promoCode.trim().toUpperCase(),
           discountAmount: discountAmount,
+          promoDescription: description,
         ));
       } catch (e) {
         emit(BookingError(e.toString().replaceAll('Exception: ', '')));
-        // We revert state back so error isn't permanent, allowing retry
+        // Revert state back so error isn't permanent, allowing retry
         emit(currentState);
       }
+    }
+  }
+
+  void _onRemovePromoCode(RemovePromoCode event, Emitter<BookingState> emit) {
+    final currentState = state;
+    if (currentState is BookingVehicleOptionsLoaded) {
+      final restoredFares = currentState.originalFares != null
+          ? Map<String, double>.from(currentState.originalFares!)
+          : Map<String, double>.from(currentState.calculatedFares);
+
+      emit(currentState.copyWith(
+        calculatedFares: restoredFares,
+        clearPromo: true,
+      ));
     }
   }
 
@@ -298,6 +327,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
         distanceMiles: distance,
         vehicles: vehiclesList,
         calculatedFares: fares,
+        originalFares: Map<String, double>.from(fares),
         selectedVehicle: vehiclesList.isNotEmpty ? vehiclesList.first : vehiclesList.first, // fallback safe
       ));
 
@@ -308,9 +338,40 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
 
   }
 
-  void _onSelectVehicle(SelectVehicle event, Emitter<BookingState> emit) {
+  Future<void> _onSelectVehicle(SelectVehicle event, Emitter<BookingState> emit) async {
     final currentState = state;
     if (currentState is BookingVehicleOptionsLoaded) {
+      if (currentState.appliedPromoCode != null) {
+        final origFares = currentState.originalFares ?? currentState.calculatedFares;
+        final origFare = origFares[event.vehicle.id] ?? event.vehicle.baseFare;
+        try {
+          final result = await _bookingRepository.validatePromo(
+            currentState.appliedPromoCode!,
+            origFare,
+            vehicleTypeId: event.vehicle.id,
+          );
+          final double finalFare = (result['finalFareMinor'] as int) / 100.0;
+          final double discount = (result['discountAmountMinor'] as int) / 100.0;
+          final newFares = Map<String, double>.from(origFares);
+          newFares[event.vehicle.id] = finalFare;
+
+          emit(currentState.copyWith(
+            selectedVehicle: event.vehicle,
+            calculatedFares: newFares,
+            discountAmount: discount,
+          ));
+          return;
+        } catch (_) {
+          // If promo doesn't apply to this vehicle (e.g. min fare threshold),
+          // preserve original fare for this vehicle
+          final newFares = Map<String, double>.from(origFares);
+          emit(currentState.copyWith(
+            selectedVehicle: event.vehicle,
+            calculatedFares: newFares,
+          ));
+          return;
+        }
+      }
       emit(currentState.copyWith(selectedVehicle: event.vehicle));
     }
   }

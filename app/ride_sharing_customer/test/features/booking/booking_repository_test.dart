@@ -6,8 +6,28 @@ import 'package:ride_sharing_customer/features/booking/domain/entities/vehicle.d
 
 class MockBookingDataSource implements BookingDataSource {
   @override
-  Future<Map<String, dynamic>> validatePromo(String promoCode, double fare) async {
+  Future<Map<String, dynamic>> validatePromo(
+    String promoCode,
+    double fare, {
+    String? vehicleTypeId,
+    String? cityId,
+    String? countryId,
+  }) async {
     return {};
+  }
+
+  @override
+  Future<Map<String, dynamic>> getMyReferralInfo() async {
+    return {
+      'referralCode': 'REF-TEST01',
+      'totalReferrals': 1,
+      'totalEarnedMinor': 5000,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> applyReferralCode(String referralCode) async {
+    return {'status': 'pending'};
   }
 
   @override
