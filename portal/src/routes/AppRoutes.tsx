@@ -22,6 +22,7 @@ const ZoneList = lazy(() => import("@/features/zones/pages"));
 const GeoList = lazy(() => import("@/features/geo/pages"));
 const FareRuleList = lazy(() => import("@/features/fare-rules/pages"));
 const SubscriptionPlanList = lazy(() => import("@/features/subscriptions/pages"));
+const DriverGroupList = lazy(() => import("@/features/driver-groups/pages"));
 const RiderPlanList = lazy(() => import("@/features/rider-plans/pages"));
 const WalletList = lazy(() => import("@/features/wallets/pages"));
 const RidePaymentList = lazy(() => import("@/features/ride-payments/pages"));
@@ -209,6 +210,16 @@ const router = createBrowserRouter([
           <ProtectedRoute allowedRoles={["super_admin"]}>
             <Suspense fallback={<Loader />}>
               <SubscriptionPlanList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "driver-groups",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <DriverGroupList />
             </Suspense>
           </ProtectedRoute>
         ),

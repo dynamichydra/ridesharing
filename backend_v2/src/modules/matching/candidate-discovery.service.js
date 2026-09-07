@@ -171,6 +171,7 @@ export async function discoverCandidatesInRadius(pickupLat, pickupLng, radiusKm,
       d.updated_at           AS "updatedAt",
       d.last_location_at     AS "lastSeenAt",
       sp.priority_matching   AS "priorityMatching",
+      sp.entitlements        AS "entitlements",
       ROUND(
         (6371 * acos(
           LEAST(1.0,

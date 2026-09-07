@@ -95,3 +95,5 @@ export * from './ride-driver-assignments.js';
 export * from './matching-policies.js';
 export * from './airport-queues.js';
 export * from './driver-reservations.js';
+export * from './driver-groups.js';
+export * from './plan-group-pricing.js';

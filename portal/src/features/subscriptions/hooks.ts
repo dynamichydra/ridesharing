@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { subscriptionPlansApi, lookupsApi } from "./api";
+import { subscriptionPlansApi, lookupsApi, planGroupPricingApi } from "./api";
 import type {
   SubscriptionPlanListParams,
   CreateSubscriptionPlanPayload,
   UpdateSubscriptionPlanPayload,
+  SetPlanGroupPricingPayload,
 } from "./types";
 
 const SUBSCRIPTION_PLANS_KEY = "subscription-plans";
@@ -108,3 +109,53 @@ export function useVerifyDriverSubscription() {
     },
   });
 }
+
+export function useDriverGroupOptions() {
+  return useQuery({
+    queryKey: ["lookup-driver-groups"],
+    queryFn: async () => {
+      const res = await lookupsApi.listDriverGroups();
+      const rows = res?.MESSAGE?.rows ?? res?.MESSAGE ?? [];
+      return rows.map((g: any) => ({ id: g.id, name: `${g.name} (${g.code})` }));
+    },
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
+export function usePlanGroupPricing(planId: string) {
+  return useQuery({
+    queryKey: ["plan-group-pricing", planId],
+    queryFn: () => planGroupPricingApi.list(planId),
+    enabled: Boolean(planId),
+  });
+}
+
+export function useSetPlanGroupPricing(planId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: SetPlanGroupPricingPayload) =>
+      planGroupPricingApi.set(planId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["plan-group-pricing", planId] });
+      toast.success("Group pricing offer saved!");
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.MESSAGE ?? err?.message ?? "Failed to save group pricing");
+    },
+  });
+}
+
+export function useDeletePlanGroupPricing(planId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (pricingId: string) => planGroupPricingApi.delete(planId, pricingId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["plan-group-pricing", planId] });
+      toast.success("Group pricing offer removed");
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.MESSAGE ?? err?.message ?? "Failed to remove group pricing");
+    },
+  });
+}
+

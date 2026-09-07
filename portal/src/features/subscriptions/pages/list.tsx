@@ -9,10 +9,12 @@ import { useFilterController } from "@/components/filters/useFilterController";
 import { getSubscriptionPlanColumns } from "../components/column";
 import { SubscriptionPlanFormDialog } from "../components/dialog";
 import { SubscriptionPlanDetailsDialog } from "../components/details-dialog";
+import { GroupPricingDialog } from "../components/group-pricing-dialog";
 import {
   useSubscriptionPlans,
   useCountryOptions,
   useVehicleTypeOptions,
+  useDriverGroupOptions,
   useCreateSubscriptionPlan,
   useUpdateSubscriptionPlan,
   useSetSubscriptionPlanActive,
@@ -38,8 +40,20 @@ function planToFormValues(plan: SubscriptionPlan): SubscriptionPlanFormValues {
     trialDays: plan.trialDays,
     features: plan.features ?? [],
     vehicleTypeIds: plan.vehicleTypeIds ?? [],
+    allowedGroupIds: plan.allowedGroupIds ?? [],
     maxRidesPerDay: plan.maxRidesPerDay?.toString() ?? "",
     priorityMatching: plan.priorityMatching ?? false,
+    entitlements: {
+      commissionRatePercent:
+        plan.entitlements?.commissionRate != null
+          ? String(Number(plan.entitlements.commissionRate) * 100)
+          : "",
+      priorityScoreBonus:
+        plan.entitlements?.priorityScoreBonus != null
+          ? String(plan.entitlements.priorityScoreBonus)
+          : "",
+      freeInstantPayouts: Boolean(plan.entitlements?.freeInstantPayouts),
+    },
     sortOrder: plan.sortOrder,
   };
 }
@@ -47,6 +61,22 @@ function planToFormValues(plan: SubscriptionPlan): SubscriptionPlanFormValues {
 function buildPayload(
   values: SubscriptionPlanFormValues
 ): CreateSubscriptionPlanPayload | UpdateSubscriptionPlanPayload {
+  const entitlements: any = {};
+  if (values.entitlements?.commissionRatePercent) {
+    const rate = Number(values.entitlements.commissionRatePercent) / 100;
+    if (!isNaN(rate)) entitlements.commissionRate = rate;
+  }
+  if (values.entitlements?.priorityScoreBonus) {
+    const bonus = Number(values.entitlements.priorityScoreBonus);
+    if (!isNaN(bonus)) entitlements.priorityScoreBonus = bonus;
+  }
+  if (values.entitlements?.freeInstantPayouts) {
+    entitlements.freeInstantPayouts = true;
+  }
+  if (values.maxRidesPerDay) {
+    entitlements.maxRidesPerDay = Number(values.maxRidesPerDay);
+  }
+
   return {
     name: values.name,
     countryId: values.countryId,
@@ -57,8 +87,10 @@ function buildPayload(
     trialDays: Number(values.trialDays) || 0,
     features: values.features,
     vehicleTypeIds: values.vehicleTypeIds.length ? values.vehicleTypeIds : null,
+    allowedGroupIds: values.allowedGroupIds && values.allowedGroupIds.length ? values.allowedGroupIds : null,
     maxRidesPerDay: values.maxRidesPerDay ? Number(values.maxRidesPerDay) : null,
     priorityMatching: values.priorityMatching,
+    entitlements: Object.keys(entitlements).length > 0 ? entitlements : null,
     sortOrder: Number(values.sortOrder),
   };
 }
@@ -79,12 +111,15 @@ export default function SubscriptionPlanList() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [viewingPlan, setViewingPlan] = useState<SubscriptionPlan | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [pricingPlan, setPricingPlan] = useState<SubscriptionPlan | null>(null);
 
   const { data: countriesData } = useCountryOptions();
   const countries = countriesData?.MESSAGE || [];
 
   const { data: vehicleTypesData } = useVehicleTypeOptions();
   const vehicleTypes = vehicleTypesData?.MESSAGE || [];
+
+  const { data: driverGroups = [] } = useDriverGroupOptions();
 
   const { data, isLoading, isFetching } = useSubscriptionPlans({
     page,
@@ -160,6 +195,7 @@ export default function SubscriptionPlanList() {
         onEdit: handleOpenEdit,
         onViewDetails: handleOpenDetails,
         onToggleActive: handleToggleActive,
+        onManageGroupPricing: (plan) => setPricingPlan(plan),
         countries,
       }),
     [countries]
@@ -251,6 +287,7 @@ export default function SubscriptionPlanList() {
         defaultValues={defaultValues}
         countries={countries}
         vehicleTypes={vehicleTypes}
+        driverGroups={driverGroups}
         isSaving={createMutation.isPending || updateMutation.isPending}
         onSubmit={handleSubmit}
       />
@@ -264,6 +301,14 @@ export default function SubscriptionPlanList() {
         plan={viewingPlan}
         countries={countries}
         vehicleTypes={vehicleTypes}
+      />
+
+      <GroupPricingDialog
+        open={Boolean(pricingPlan)}
+        onOpenChange={(open) => {
+          if (!open) setPricingPlan(null);
+        }}
+        plan={pricingPlan}
       />
     </div>
   );

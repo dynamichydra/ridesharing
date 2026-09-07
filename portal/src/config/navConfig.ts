@@ -26,6 +26,7 @@ import {
   Coins,
   PackageSearch,
   MessageSquareWarning,
+  UserCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -169,6 +170,14 @@ export const navItem: NavType[] = [
     title: "Driver Subscription Plans",
     url: "/subscription-plans",
     icon: CreditCard,
+    isActive: true,
+    type: "regular",
+    roles: ["super_admin"],
+  },
+  {
+    title: "Driver Groups & Cohorts",
+    url: "/driver-groups",
+    icon: UserCheck,
     isActive: true,
     type: "regular",
     roles: ["super_admin"],

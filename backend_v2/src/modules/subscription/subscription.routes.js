@@ -8,9 +8,23 @@ export async function subscriptionRoutes(app) {
 
   // ── Public / Drivers ──────────────────────────────────────────────────────
 
-  // GET /api/v1/subscriptions/plans?countryId=
+  // GET /api/v1/subscriptions/plans?countryId=&driverId=
   app.get('/plans', async (request, reply) => {
-    const data = await subService.listPlans(true, request.query.countryId);
+    let driverId = null;
+    if (request.headers.authorization) {
+      try {
+        const decoded = await request.jwtVerify();
+        if (decoded?.role === 'driver' || decoded?.userType === 'driver') {
+          driverId = decoded.id;
+        }
+      } catch {
+        // Unauthenticated or invalid token - fallback to query param or public
+      }
+    }
+    if (!driverId && request.query.driverId) {
+      driverId = request.query.driverId;
+    }
+    const data = await subService.listPlans(true, request.query.countryId, driverId);
     return sendSuccess(reply, data);
   });
 
@@ -152,4 +166,25 @@ export async function subscriptionRoutes(app) {
     );
     return sendSuccess(reply, data);
   });
+
+  // ── Admin — Plan Group Pricing / Special Offers ─────────────────────────────
+
+  // GET /api/v1/subscriptions/plans/:id/group-pricing
+  app.get('/plans/:id/group-pricing', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await subService.listPlanGroupPricing(request.params.id);
+    return sendSuccess(reply, data);
+  });
+
+  // POST /api/v1/subscriptions/plans/:id/group-pricing
+  app.post('/plans/:id/group-pricing', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await subService.setPlanGroupPricing(request.params.id, request.body || {});
+    return sendSuccess(reply, data, 201);
+  });
+
+  // DELETE /api/v1/subscriptions/plans/:id/group-pricing/:pricingId
+  app.delete('/plans/:id/group-pricing/:pricingId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await subService.deletePlanGroupPricing(request.params.pricingId);
+    return sendSuccess(reply, data);
+  });
 }
+

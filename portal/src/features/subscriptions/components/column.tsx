@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { CheckCircle, Pencil, CreditCard, Ban, XCircle, Info } from "lucide-react";
+import { CheckCircle, Pencil, CreditCard, Ban, XCircle, Info, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SubscriptionPlan, LookupOption } from "../types";
 import { formatDate } from "@/lib/utils";
@@ -8,6 +8,7 @@ interface Props {
   onEdit: (plan: SubscriptionPlan) => void;
   onViewDetails: (plan: SubscriptionPlan) => void;
   onToggleActive: (plan: SubscriptionPlan) => void;
+  onManageGroupPricing?: (plan: SubscriptionPlan) => void;
   countries: LookupOption[];
 }
 
@@ -23,6 +24,7 @@ export function getSubscriptionPlanColumns({
   onEdit,
   onViewDetails,
   onToggleActive,
+  onManageGroupPricing,
   countries,
 }: Props): ColumnDef<SubscriptionPlan>[] {
   return [
@@ -112,11 +114,26 @@ export function getSubscriptionPlanColumns({
               e.stopPropagation();
               onViewDetails(row.original);
             }}
-            className="h-8 w-8"
+            className="h-8 w-8 cursor-pointer"
             title="View Details"
           >
             <Info className="h-3.5 w-3.5" />
           </Button>
+
+          {onManageGroupPricing && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                onManageGroupPricing(row.original);
+              }}
+              className="h-8 w-8 text-primary hover:text-primary cursor-pointer"
+              title="Manage Group Offers & Pricing"
+            >
+              <Tag className="h-3.5 w-3.5" />
+            </Button>
+          )}
 
           <Button
             variant="outline"
@@ -125,7 +142,7 @@ export function getSubscriptionPlanColumns({
               e.stopPropagation();
               onEdit(row.original);
             }}
-            className="h-8 w-8"
+            className="h-8 w-8 cursor-pointer"
             title="Edit"
           >
             <Pencil className="h-3.5 w-3.5" />

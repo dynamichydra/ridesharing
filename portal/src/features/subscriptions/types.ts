@@ -1,5 +1,36 @@
 export type SubscriptionPlanType = "monthly" | "quarterly" | "yearly" | "lifetime";
 
+export interface PlanEntitlements {
+  commissionRate?: number | null;        // e.g. 0.05 for 5%
+  priorityScoreBonus?: number | null;    // e.g. 0.25 for +0.25 dispatch score
+  maxRidesPerDay?: number | null;
+  freeInstantPayouts?: boolean;
+  [key: string]: any;
+}
+
+export interface PlanGroupPricing {
+  id: string;
+  planId: string;
+  groupId: string;
+  groupName: string;
+  groupCode: string;
+  specialPriceMinor?: number | null;
+  discountPercent?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SetPlanGroupPricingPayload {
+  groupId: string;
+  specialPriceMinor?: number | null;
+  discountPercent?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  isActive?: boolean;
+}
 
 export interface SubscriptionPlan {
   id: string;
@@ -13,6 +44,8 @@ export interface SubscriptionPlan {
   features: string[] | null;
   maxRidesPerDay: number | null;
   priorityMatching: boolean;
+  entitlements?: PlanEntitlements | null;
+  allowedGroupIds?: string[] | null;
   sortOrder: number;
   isActive: boolean;
   createdAt: string;
@@ -28,7 +61,6 @@ export interface SubscriptionPlanListParams {
   countryId?: string;
   isActive?: boolean;
 }
-
 
 export interface Pagination {
   currentPage: number;
@@ -47,8 +79,10 @@ export interface CreateSubscriptionPlanPayload {
   trialDays: number;
   features: string[];
   vehicleTypeIds: string[] | null;
+  allowedGroupIds?: string[] | null;
   maxRidesPerDay: number | null;
   priorityMatching: boolean;
+  entitlements?: PlanEntitlements | null;
   sortOrder: number;
 }
 
@@ -58,3 +92,4 @@ export interface LookupOption {
   id: string;
   name: string;
 }
+

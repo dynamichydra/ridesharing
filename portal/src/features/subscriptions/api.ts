@@ -47,6 +47,16 @@ export const subscriptionPlansApi = {
     apiClient.post<any>(`/subscriptions/admin/drivers/${driverId}/verify`, payload),
 };
 
+export const planGroupPricingApi = {
+  list: (planId: string) =>
+    apiClient.get<any>(`${BASE_URL}/${planId}/group-pricing`),
+
+  set: (planId: string, payload: any) =>
+    apiClient.post<any>(`${BASE_URL}/${planId}/group-pricing`, payload),
+
+  delete: (planId: string, pricingId: string) =>
+    apiClient.delete<any>(`${BASE_URL}/${planId}/group-pricing/${pricingId}`),
+};
 
 export const lookupsApi = {
   // GET /geo/countries  (Public)
@@ -54,4 +64,8 @@ export const lookupsApi = {
 
   // GET /vehicle-types  (Public)
   listVehicleTypes: () => apiClient.get<LookupOption[]>("/vehicle-types"),
+
+  // GET /driver-groups  (Admin)
+  listDriverGroups: () => apiClient.get<any>("/driver-groups?limit=100&isActive=true"),
 };
+

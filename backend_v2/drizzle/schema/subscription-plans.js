@@ -15,6 +15,8 @@ export const subscriptionPlans = pgTable('subscription_plans', {
   vehicleTypeIds:  jsonb('vehicle_type_ids'),     // uuid[] — which vehicle types this plan allows
   maxRidesPerDay:  integer('max_rides_per_day'),  // null = unlimited
   priorityMatching: boolean('priority_matching').default(false), // boosts scoring for drivers on this plan — see scoring.service.js
+  entitlements:    jsonb('entitlements'),         // dynamic key-value capabilities: { commissionRate, priorityScoreBonus, maxRidesPerDay, ... }
+  allowedGroupIds: jsonb('allowed_group_ids'),     // uuid[] of driver_groups — null/omitted = available to all drivers
   sortOrder:       integer('sort_order').default(0),
   isActive:        boolean('is_active').default(true),
   gateway:         varchar('gateway', { length: 20 }),        // razorpay | stripe — which provider bills this plan

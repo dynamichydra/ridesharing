@@ -49,6 +49,7 @@ import { promoRoutes } from "./modules/promo/promo.routes.js";
 import { emergencyRoutes } from "./modules/emergency/emergency.routes.js";
 import { savedPlaceRoutes } from "./modules/saved-place/saved-place.routes.js";
 import { moderationRoutes } from "./modules/moderation/moderation.routes.js";
+import { driverGroupRoutes } from "./modules/driver-group/driver-group.routes.js";
 
 const PORT = parseInt(process.env.PORT || env.PORT || "3000", 10);
 const PREFIX = `/api/${env.API_VERSION || "v1"}`;
@@ -104,6 +105,7 @@ async function start() {
     await app.register(ridePaymentRoutes, { prefix: `${PREFIX}/ride-payments` });
     await app.register(trackingRoutes, { prefix: `${PREFIX}/tracking` });
     await app.register(subscriptionRoutes, { prefix: `${PREFIX}/subscriptions` });
+    await app.register(driverGroupRoutes, { prefix: `${PREFIX}/driver-groups` });
     await app.register(riderSubscriptionRoutes, {
         prefix: `${PREFIX}/rider-plans`,
     });

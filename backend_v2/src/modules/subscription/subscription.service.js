@@ -1,6 +1,6 @@
-import { eq, and, desc, count, lt } from 'drizzle-orm';
+import { eq, and, desc, count, lt, inArray, sql } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { subscriptionPlans, subscriptions, drivers, payments, countries } from '../../../drizzle/schema/index.js';
+import { subscriptionPlans, subscriptions, drivers, payments, countries, planGroupPricing, driverGroups } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { addDays } from '../../utils/time.js';
 import { paginate } from '../../utils/response.js';
@@ -11,19 +11,109 @@ import { withIdempotency } from '../../utils/idempotency.js';
 import { postTransaction, getOrCreateSystemAccount } from '../ledger/ledger.service.js';
 import { handleDisputeEvent } from '../dispute/dispute.service.js';
 import { publishNotification } from '../notification/notification-events.js';
+import { getDriverActiveGroupIds } from '../driver-group/driver-group.service.js';
 
 // TODO: Replace with live production Razorpay and Stripe API keys in .env when going live:
 // - RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET
 // - STRIPE_SECRET_KEY & STRIPE_PUBLISHABLE_KEY & STRIPE_WEBHOOK_SECRET
 
-// ── Plans (admin) ─────────────────────────────────────────────────────────────
+// ── Plans (admin & driver) ───────────────────────────────────────────────────
 
-export async function listPlans(onlyActive = true, countryId) {
+export async function resolvePlanPricingForDriver(plan, driverId) {
+  const driverGroupIds = driverId ? await getDriverActiveGroupIds(driverId) : [];
+
+  // Check group exclusivity
+  if (Array.isArray(plan.allowedGroupIds) && plan.allowedGroupIds.length > 0) {
+    const hasAccess = plan.allowedGroupIds.some((gid) => driverGroupIds.includes(gid));
+    if (!hasAccess) {
+      return null; // Plan not accessible to this driver
+    }
+  }
+
+  // Check group pricing overrides
+  if (driverGroupIds.length > 0) {
+    const now = new Date();
+    const pricingRules = await db.select({
+      id: planGroupPricing.id,
+      groupId: planGroupPricing.groupId,
+      groupName: driverGroups.name,
+      specialPriceMinor: planGroupPricing.specialPriceMinor,
+      discountPercent: planGroupPricing.discountPercent,
+    })
+      .from(planGroupPricing)
+      .innerJoin(driverGroups, eq(planGroupPricing.groupId, driverGroups.id))
+      .where(
+        and(
+          eq(planGroupPricing.planId, plan.id),
+          eq(planGroupPricing.isActive, true),
+          inArray(planGroupPricing.groupId, driverGroupIds),
+          sql`(${planGroupPricing.startDate} IS NULL OR ${planGroupPricing.startDate} <= ${now})`,
+          sql`(${planGroupPricing.endDate} IS NULL OR ${planGroupPricing.endDate} >= ${now})`
+        )
+      );
+
+    if (pricingRules.length > 0) {
+      let bestRule = null;
+      let lowestPrice = plan.priceMinor;
+
+      for (const rule of pricingRules) {
+        let price = plan.priceMinor;
+        if (rule.specialPriceMinor !== null && rule.specialPriceMinor !== undefined) {
+          price = rule.specialPriceMinor;
+        } else if (rule.discountPercent !== null && rule.discountPercent !== undefined) {
+          price = Math.round(plan.priceMinor * (1 - rule.discountPercent / 100));
+        }
+
+        if (price < lowestPrice) {
+          lowestPrice = price;
+          bestRule = rule;
+        }
+      }
+
+      if (bestRule) {
+        return {
+          ...plan,
+          originalPriceMinor: plan.priceMinor,
+          priceMinor: lowestPrice,
+          specialOffer: {
+            groupId: bestRule.groupId,
+            groupName: bestRule.groupName,
+            specialPriceMinor: bestRule.specialPriceMinor,
+            discountPercent: bestRule.discountPercent,
+            discountAmountMinor: plan.priceMinor - lowestPrice,
+          },
+        };
+      }
+    }
+  }
+
+  return {
+    ...plan,
+    originalPriceMinor: plan.priceMinor,
+    specialOffer: null,
+  };
+}
+
+export async function listPlans(onlyActive = true, countryId, driverId = null) {
   const conditions = [];
   if (onlyActive) conditions.push(eq(subscriptionPlans.isActive, true));
   if (countryId)  conditions.push(eq(subscriptionPlans.countryId, countryId));
   const where = conditions.length ? and(...conditions) : undefined;
-  return db.select().from(subscriptionPlans).where(where).orderBy(subscriptionPlans.sortOrder);
+  const rawPlans = await db.select().from(subscriptionPlans).where(where).orderBy(subscriptionPlans.sortOrder);
+
+  if (!driverId) {
+    // Return plans visible publicly (allowedGroupIds is null or empty)
+    return rawPlans
+      .filter((p) => !Array.isArray(p.allowedGroupIds) || p.allowedGroupIds.length === 0)
+      .map((p) => ({ ...p, originalPriceMinor: p.priceMinor, specialOffer: null }));
+  }
+
+  const resolved = [];
+  for (const p of rawPlans) {
+    const r = await resolvePlanPricingForDriver(p, driverId);
+    if (r !== null) resolved.push(r);
+  }
+  return resolved;
 }
 
 export async function listPlansPaginated(page, limit, offset, countryId, isActive) {
@@ -85,6 +175,73 @@ export async function setPlanActive(id, isActive, adminId) {
   return plan;
 }
 
+export async function setPlanGroupPricing(planId, data) {
+  const { groupId, specialPriceMinor, discountPercent, startDate, endDate, isActive = true } = data;
+  if (!groupId) throw { statusCode: 400, message: 'groupId is required' };
+  if (specialPriceMinor == null && discountPercent == null) {
+    throw { statusCode: 400, message: 'Either specialPriceMinor or discountPercent must be provided' };
+  }
+
+  const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, planId)).limit(1);
+  if (!plan) throw { statusCode: 404, message: 'Plan not found' };
+
+  const [group] = await db.select().from(driverGroups).where(eq(driverGroups.id, groupId)).limit(1);
+  if (!group) throw { statusCode: 404, message: 'Driver group not found' };
+
+  const [existing] = await db.select().from(planGroupPricing)
+    .where(and(eq(planGroupPricing.planId, planId), eq(planGroupPricing.groupId, groupId))).limit(1);
+
+  if (existing) {
+    const [updated] = await db.update(planGroupPricing).set({
+      specialPriceMinor: specialPriceMinor !== undefined ? specialPriceMinor : existing.specialPriceMinor,
+      discountPercent: discountPercent !== undefined ? discountPercent : existing.discountPercent,
+      startDate: startDate ? new Date(startDate) : null,
+      endDate: endDate ? new Date(endDate) : null,
+      isActive: Boolean(isActive),
+      updatedAt: new Date(),
+    }).where(eq(planGroupPricing.id, existing.id)).returning();
+    return updated;
+  }
+
+  const [created] = await db.insert(planGroupPricing).values({
+    planId,
+    groupId,
+    specialPriceMinor: specialPriceMinor != null ? Number(specialPriceMinor) : null,
+    discountPercent: discountPercent != null ? Number(discountPercent) : null,
+    startDate: startDate ? new Date(startDate) : null,
+    endDate: endDate ? new Date(endDate) : null,
+    isActive: Boolean(isActive),
+  }).returning();
+
+  return created;
+}
+
+export async function listPlanGroupPricing(planId) {
+  return db.select({
+    id: planGroupPricing.id,
+    planId: planGroupPricing.planId,
+    groupId: planGroupPricing.groupId,
+    groupName: driverGroups.name,
+    groupCode: driverGroups.code,
+    specialPriceMinor: planGroupPricing.specialPriceMinor,
+    discountPercent: planGroupPricing.discountPercent,
+    startDate: planGroupPricing.startDate,
+    endDate: planGroupPricing.endDate,
+    isActive: planGroupPricing.isActive,
+    createdAt: planGroupPricing.createdAt,
+    updatedAt: planGroupPricing.updatedAt,
+  })
+    .from(planGroupPricing)
+    .innerJoin(driverGroups, eq(planGroupPricing.groupId, driverGroups.id))
+    .where(eq(planGroupPricing.planId, planId));
+}
+
+export async function deletePlanGroupPricing(id) {
+  const [deleted] = await db.delete(planGroupPricing).where(eq(planGroupPricing.id, id)).returning();
+  if (!deleted) throw { statusCode: 404, message: 'Group pricing rule not found' };
+  return { success: true, id };
+}
+
 // ── Driver subscription flow ───────────────────────────────────────────────────
 
 // idempotencyKey comes from the client's Idempotency-Key header (required — see
@@ -92,9 +249,14 @@ export async function setPlanActive(id, isActive, adminId) {
 // original gateway order instead of creating a second charge attempt.
 export async function initiateSubscription(driverId, planId, idempotencyKey) {
   return withIdempotency('driver_subscription_initiate', idempotencyKey, driverId, async () => {
-    const [plan] = await db.select().from(subscriptionPlans)
+    const [rawPlan] = await db.select().from(subscriptionPlans)
       .where(and(eq(subscriptionPlans.id, planId), eq(subscriptionPlans.isActive, true))).limit(1);
-    if (!plan) throw { statusCode: 404, message: 'Plan not found or inactive' };
+    if (!rawPlan) throw { statusCode: 404, message: 'Plan not found or inactive' };
+
+    const plan = await resolvePlanPricingForDriver(rawPlan, driverId);
+    if (!plan) {
+      throw { statusCode: 403, message: 'You are not eligible for this exclusive subscription plan' };
+    }
 
     const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId)).limit(1);
     if (!driver) throw { statusCode: 404, message: 'Driver not found' };

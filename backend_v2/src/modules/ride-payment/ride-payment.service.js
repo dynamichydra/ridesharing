@@ -1,6 +1,6 @@
 import { eq, and, desc, count, isNotNull, inArray } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { rides, payments, users, drivers, cashCollections } from '../../../drizzle/schema/index.js';
+import { rides, payments, users, drivers, cashCollections, subscriptions, subscriptionPlans } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
 import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
@@ -301,6 +301,30 @@ export async function resolveRideCommission(ride) {
   const [driver] = await db.select({ subscriptionStatus: drivers.subscriptionStatus })
     .from(drivers).where(eq(drivers.id, ride.driverId)).limit(1);
 
+  const isSubscriber = driver?.subscriptionStatus === 'active';
+
+  // Check if driver has an active plan with custom commissionRate entitlement
+  let customRate = null;
+  if (isSubscriber) {
+    const [activeSub] = await db.select({
+      entitlements: subscriptionPlans.entitlements,
+    })
+      .from(subscriptions)
+      .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+      .where(
+        and(
+          eq(subscriptions.driverId, ride.driverId),
+          eq(subscriptions.status, 'active')
+        )
+      )
+      .orderBy(desc(subscriptions.createdAt))
+      .limit(1);
+
+    if (activeSub?.entitlements?.commissionRate !== undefined && activeSub?.entitlements?.commissionRate !== null) {
+      customRate = Number(activeSub.entitlements.commissionRate);
+    }
+  }
+
   let rule = null;
   try {
     rule = await resolveCommissionRule(ride.vehicleTypeId, ride.countryId);
@@ -308,18 +332,32 @@ export async function resolveRideCommission(ride) {
     console.warn('[RidePayment] No commission rule found, using default 20% platform cut:', err.message);
   }
 
-  const breakdown = rule
-    ? computeCommission({
-        finalFareMinor: ride.finalFareMinor,
-        rule,
-        isSubscriber: driver?.subscriptionStatus === 'active',
-      })
-    : {
-        bookingFeeMinor: 0,
-        rate: 0.2,
-        commissionMinor: Math.round((ride.finalFareMinor || 0) * 0.2),
-        driverEarningsMinor: (ride.finalFareMinor || 0) - Math.round((ride.finalFareMinor || 0) * 0.2),
-      };
+  let breakdown;
+  if (customRate !== null && !isNaN(customRate)) {
+    const bookingFee = rule ? rule.bookingFeeMinor || 0 : 0;
+    const remainingFare = Math.max(0, (ride.finalFareMinor || 0) - bookingFee);
+    const variableCut = Math.round(remainingFare * customRate);
+    const commissionMinor = bookingFee + variableCut;
+    breakdown = {
+      bookingFeeMinor: bookingFee,
+      rate: customRate,
+      commissionMinor,
+      driverEarningsMinor: Math.max(0, (ride.finalFareMinor || 0) - commissionMinor),
+    };
+  } else if (rule) {
+    breakdown = computeCommission({
+      finalFareMinor: ride.finalFareMinor,
+      rule,
+      isSubscriber,
+    });
+  } else {
+    breakdown = {
+      bookingFeeMinor: 0,
+      rate: 0.2,
+      commissionMinor: Math.round((ride.finalFareMinor || 0) * 0.2),
+      driverEarningsMinor: (ride.finalFareMinor || 0) - Math.round((ride.finalFareMinor || 0) * 0.2),
+    };
+  }
 
   try {
     await db.update(rides).set({

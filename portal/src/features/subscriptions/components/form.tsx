@@ -75,6 +75,7 @@ interface SubscriptionPlanFormProps {
   defaultValues: SubscriptionPlanFormValues;
   countries: LookupOption[];
   vehicleTypes: LookupOption[];
+  driverGroups?: LookupOption[];
   onSubmit: (values: SubscriptionPlanFormValues) => void;
 }
 
@@ -83,6 +84,7 @@ export function SubscriptionPlanForm({
   defaultValues,
   countries,
   vehicleTypes,
+  driverGroups = [],
   onSubmit,
 }: SubscriptionPlanFormProps) {
   const {
@@ -93,7 +95,7 @@ export function SubscriptionPlanForm({
     reset,
     formState: { errors },
   } = useForm<SubscriptionPlanFormValues>({
-    resolver: zodResolver(subscriptionPlanSchema),
+    resolver: zodResolver(subscriptionPlanSchema) as any,
     defaultValues,
   });
 
@@ -105,7 +107,7 @@ export function SubscriptionPlanForm({
   const isLifetime = planType === "lifetime";
 
   const submit = handleSubmit((values) => {
-    onSubmit(values);
+    onSubmit(values as SubscriptionPlanFormValues);
   });
 
   return (
@@ -200,8 +202,8 @@ export function SubscriptionPlanForm({
 
       <div className="space-y-2">
         <Label>Features (marketing copy — not enforced)</Label>
-        <Controller<SubscriptionPlanFormValues, "features">
-          control={control}
+        <Controller
+          control={control as any}
           name="features"
           render={({ field }) => (
             <FeatureChipsInput value={field.value} onChange={field.onChange} />
@@ -214,8 +216,8 @@ export function SubscriptionPlanForm({
 
       <div className="space-y-2">
         <Label>Allowed Vehicle Types (empty = all types)</Label>
-        <Controller<SubscriptionPlanFormValues, "vehicleTypeIds">
-          control={control}
+        <Controller
+          control={control as any}
           name="vehicleTypeIds"
           render={({ field }) => (
             <MultiSelect
@@ -226,6 +228,80 @@ export function SubscriptionPlanForm({
             />
           )}
         />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Target Driver Groups (empty = public to all drivers in country)</Label>
+        <Controller
+          control={control as any}
+          name="allowedGroupIds"
+          render={({ field }) => (
+            <MultiSelect
+              options={driverGroups.map((g) => ({ label: g.name, value: g.id }))}
+              value={field.value || []}
+              onChange={field.onChange}
+              placeholder="Public / Open to all drivers"
+            />
+          )}
+        />
+        <p className="text-[11px] text-muted-foreground">
+          If selected, only drivers assigned to these groups will see or qualify for this plan.
+        </p>
+      </div>
+
+      {/* Dynamic Entitlements & Platform Perks */}
+      <div className="border border-border rounded-lg p-3.5 bg-muted/20 space-y-3">
+        <div className="font-semibold text-xs text-foreground uppercase tracking-wider">
+          Plan Entitlements & Perks (Enforced System Capabilities)
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="entitlement-commission" className="text-xs">
+              Platform Commission Cut (%)
+            </Label>
+            <Input
+              id="entitlement-commission"
+              type="number"
+              step="0.1"
+              min="0"
+              max="100"
+              placeholder="e.g. 5 (5% cut)"
+              className="h-9 text-xs"
+              {...register("entitlements.commissionRatePercent")}
+            />
+            <p className="text-[10px] text-muted-foreground">Overrides standard rule at settlement</p>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="entitlement-priority" className="text-xs">
+              Dispatch Priority Score Bonus
+            </Label>
+            <Input
+              id="entitlement-priority"
+              type="number"
+              step="0.05"
+              min="0"
+              max="1.0"
+              placeholder="e.g. 0.25"
+              className="h-9 text-xs"
+              {...register("entitlements.priorityScoreBonus")}
+            />
+            <p className="text-[10px] text-muted-foreground">Custom weight in dispatch scoring</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 pt-1">
+          <input
+            id="entitlement-instant-payout"
+            type="checkbox"
+            className="h-4 w-4 rounded border-border cursor-pointer text-primary"
+            {...register("entitlements.freeInstantPayouts")}
+          />
+          <Label htmlFor="entitlement-instant-payout" className="cursor-pointer text-xs font-normal">
+            Free Instant Wallet-to-Bank Payouts (0% cashout fee)
+          </Label>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

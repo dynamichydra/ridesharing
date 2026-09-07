@@ -20,8 +20,16 @@ export const subscriptionPlanSchema = z
       message: "At most 20 feature entries are allowed",
     }),
     vehicleTypeIds: z.array(z.string()),
+    allowedGroupIds: z.array(z.string()).default([]),
     maxRidesPerDay: z.string(),
     priorityMatching: z.boolean(),
+    entitlements: z
+      .object({
+        commissionRatePercent: z.string().optional(),
+        priorityScoreBonus: z.string().optional(),
+        freeInstantPayouts: z.boolean().optional(),
+      })
+      .optional(),
     sortOrder: z.number({ message: "Sort order is required" }),
   })
   .superRefine((values, ctx) => {
@@ -56,7 +64,14 @@ export const emptySubscriptionPlanFormValues: SubscriptionPlanFormValues = {
   trialDays: 0,
   features: [],
   vehicleTypeIds: [],
+  allowedGroupIds: [],
   maxRidesPerDay: "",
   priorityMatching: false,
+  entitlements: {
+    commissionRatePercent: "",
+    priorityScoreBonus: "",
+    freeInstantPayouts: false,
+  },
   sortOrder: 1,
 };
+

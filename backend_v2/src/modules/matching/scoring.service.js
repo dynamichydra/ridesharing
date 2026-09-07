@@ -97,7 +97,9 @@ export function scoreDrivers(candidates, weights = DEFAULT_WEIGHTS, options = {}
           )
         : 0.5;
 
-      const priorityBonus = c.priorityMatching ? PRIORITY_MATCHING_BONUS : 0.0;
+      const priorityBonus = c.entitlements?.priorityScoreBonus != null
+        ? Number(c.entitlements.priorityScoreBonus)
+        : (c.priorityMatching ? PRIORITY_MATCHING_BONUS : 0.0);
 
       // 2. Weighted total score
       const rawScore =

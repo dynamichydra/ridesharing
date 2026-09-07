@@ -19,6 +19,7 @@ interface SubscriptionPlanFormDialogProps {
   defaultValues: SubscriptionPlanFormValues;
   countries: LookupOption[];
   vehicleTypes: LookupOption[];
+  driverGroups?: LookupOption[];
   isSaving: boolean;
   onSubmit: (values: SubscriptionPlanFormValues) => void;
 }
@@ -30,12 +31,13 @@ export function SubscriptionPlanFormDialog({
   defaultValues,
   countries,
   vehicleTypes,
+  driverGroups = [],
   isSaving,
   onSubmit,
 }: SubscriptionPlanFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[540px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {selectedPlan ? "Edit Subscription Plan" : "Create Subscription Plan"}
@@ -47,6 +49,7 @@ export function SubscriptionPlanFormDialog({
           defaultValues={defaultValues}
           countries={countries}
           vehicleTypes={vehicleTypes}
+          driverGroups={driverGroups}
           onSubmit={onSubmit}
         />
 
