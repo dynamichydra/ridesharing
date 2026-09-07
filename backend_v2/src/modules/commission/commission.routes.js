@@ -4,11 +4,13 @@ import * as commissionService from './commission.service.js';
 
 export async function commissionRoutes(app) {
 
-  // GET /api/v1/commission-rules?countryId=&isActive=&page=&limit=
+  // GET /api/v1/commission-rules?countryId=&cityId=&vehicleTypeId=&isActive=&page=&limit=
   app.get('/', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);
     const filters = {
       countryId: request.query.countryId,
+      cityId: request.query.cityId,
+      vehicleTypeId: request.query.vehicleTypeId,
       isActive: request.query.isActive !== undefined ? request.query.isActive === 'true' : undefined,
     };
     const { rows, pagination } = await commissionService.listRules(page, limit, offset, filters);

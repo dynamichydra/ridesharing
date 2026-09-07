@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
 import Loader from "@/components/fullpage-loader";
 import ProtectedRoute from "@/components/protected-route";
 
@@ -35,7 +35,6 @@ const FlaggedTripList = lazy(() => import("@/features/flagged-trips/pages"));
 const AuditLogList = lazy(() => import("@/features/audit-logs/pages"));
 const OnboardingConfigList = lazy(() => import("@/features/onboarding-config/pages"));
 const NotificationTemplateList = lazy(() => import("@/features/notification-templates/pages/list"));
-const CommissionRuleList = lazy(() => import("@/features/commission-rules/pages"));
 const PromoList = lazy(() => import("@/features/promos/pages"));
 const SosAlertList = lazy(() => import("@/features/sos-alerts/pages"));
 const ModerationList = lazy(() => import("@/features/moderation/pages"));
@@ -186,13 +185,7 @@ const router = createBrowserRouter([
       },
       {
         path: "commission-rules",
-        element: (
-          <ProtectedRoute allowedRoles={["super_admin"]}>
-            <Suspense fallback={<Loader />}>
-              <CommissionRuleList />
-            </Suspense>
-          </ProtectedRoute>
-        ),
+        element: <Navigate to="/fare-rules" replace />,
       },
       {
         path: "promos",

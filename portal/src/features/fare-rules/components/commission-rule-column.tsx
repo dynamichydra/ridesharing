@@ -7,10 +7,11 @@ interface Props {
   onEdit: (rule: CommissionRule) => void;
   onToggleActive: (rule: CommissionRule) => void;
   countries: LookupOption[];
+  cities?: LookupOption[];
   vehicleTypes: LookupOption[];
 }
 
-function nameFromId(options: LookupOption[], id: string | null): string {
+function nameFromId(options: LookupOption[], id: string | null | undefined): string {
   if (!id) return "All";
   return options.find((o) => o.id === id)?.name || id;
 }
@@ -19,7 +20,7 @@ function pct(rate: string): string {
   return `${(Number(rate) * 100).toFixed(2)}%`;
 }
 
-export function getCommissionRuleColumns({ onEdit, onToggleActive, countries, vehicleTypes }: Props): ColumnDef<CommissionRule>[] {
+export function getCommissionRuleColumns({ onEdit, onToggleActive, countries, cities = [], vehicleTypes }: Props): ColumnDef<CommissionRule>[] {
   return [
     {
       accessorKey: "name",
@@ -32,6 +33,15 @@ export function getCommissionRuleColumns({ onEdit, onToggleActive, countries, ve
       cell: ({ row }) => <span className="text-foreground">{nameFromId(countries, row.original.countryId)}</span>,
     },
     {
+      accessorKey: "cityId",
+      header: "City",
+      cell: ({ row }) => (
+        <span className="text-foreground">
+          {row.original.city?.name || nameFromId(cities, row.original.cityId)}
+        </span>
+      ),
+    },
+    {
       accessorKey: "vehicleTypeId",
       header: "Vehicle Type",
       cell: ({ row }) => <span className="text-foreground">{nameFromId(vehicleTypes, row.original.vehicleTypeId)}</span>,
@@ -40,6 +50,21 @@ export function getCommissionRuleColumns({ onEdit, onToggleActive, countries, ve
       accessorKey: "bookingFeeMinor",
       header: "Booking Fee",
       cell: ({ row }) => <span className="text-foreground">{(row.original.bookingFeeMinor / 100).toFixed(2)}</span>,
+    },
+    {
+      id: "caps",
+      header: "Floor / Cap",
+      cell: ({ row }) => {
+        const min = row.original.minCommissionMinor ? (row.original.minCommissionMinor / 100).toFixed(2) : null;
+        const max = row.original.maxCommissionMinor ? (row.original.maxCommissionMinor / 100).toFixed(2) : null;
+        if (!min && !max) return <span className="text-xs text-muted-foreground">—</span>;
+        return (
+          <div className="text-xs space-y-0.5">
+            {min && <div className="text-muted-foreground">Min: <span className="font-medium text-foreground">{min}</span></div>}
+            {max && <div className="text-muted-foreground">Max: <span className="font-medium text-foreground">{max}</span></div>}
+          </div>
+        );
+      },
     },
     {
       accessorKey: "subscriberRate",

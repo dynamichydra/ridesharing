@@ -12,7 +12,8 @@ import {
   useCountryOptions,
   useVehicleTypeOptions,
 } from "../hooks";
-import type { CommissionRule, Pagination } from "../types";
+import { useCities } from "@/features/geo/hooks";
+import type { CommissionRule, Pagination, LookupOption } from "../types";
 
 export default function CommissionRulesTab() {
   const controller = useFilterController({ page: 1, limit: 10 });
@@ -25,8 +26,14 @@ export default function CommissionRulesTab() {
 
   const { data, isLoading, isFetching } = useCommissionRules({ page, limit });
   const { data: countriesData } = useCountryOptions();
+  const { data: citiesData } = useCities({ limit: 500 });
   const { data: vehicleTypesData } = useVehicleTypeOptions();
   const countries = countriesData?.MESSAGE || [];
+  const rawCities = (citiesData?.MESSAGE || []) as Array<{ id: string; name: string; countryId?: string }>;
+  const cities: (LookupOption & { countryId?: string })[] = useMemo(
+    () => rawCities.map((c) => ({ id: c.id, name: c.name, countryId: c.countryId })),
+    [rawCities],
+  );
   const vehicleTypes = vehicleTypesData?.MESSAGE || [];
 
   const setActiveMutation = useSetCommissionRuleActive();
@@ -53,8 +60,8 @@ export default function CommissionRulesTab() {
   };
 
   const columns = useMemo(
-    () => getCommissionRuleColumns({ onEdit: handleOpenEdit, onToggleActive: handleToggleActive, countries, vehicleTypes }),
-    [countries, vehicleTypes],
+    () => getCommissionRuleColumns({ onEdit: handleOpenEdit, onToggleActive: handleToggleActive, countries, cities, vehicleTypes }),
+    [countries, cities, vehicleTypes],
   );
 
   return (
@@ -63,9 +70,8 @@ export default function CommissionRulesTab() {
         <div>
           <h3 className="text-sm font-semibold text-foreground">Commission Rules</h3>
           <p className="text-xs text-muted-foreground">
-            {totalRecords} rules. Per-ride platform cut — a booking fee plus a % split, lower for drivers with
-            an active subscription. Resolved most-specific first: exact country + vehicle type, then
-            country-only, then the global default.
+            {totalRecords} rules. Dynamic per-ride platform cut — booking fee, % split (discounted for active subscribers),
+            and optional floor/ceiling caps. Resolved top-down: City + Vehicle Type &rarr; City Default &rarr; Country + Vehicle Type &rarr; Country Default &rarr; Global Default.
           </p>
         </div>
         <Button size="sm" onClick={handleOpenCreate} className="gap-2 cursor-pointer">
@@ -93,6 +99,7 @@ export default function CommissionRulesTab() {
         mode={mode}
         rule={selected}
         countries={countries}
+        cities={cities}
         vehicleTypes={vehicleTypes}
       />
     </div>

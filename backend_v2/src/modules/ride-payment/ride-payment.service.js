@@ -102,9 +102,18 @@ export async function recordCashCollection(driverId, rideId, collectedAmountMino
   // Calculate platform commission for cash auditing & settlement tracking
   let commissionMinor = 0;
   try {
-    const rule = await resolveCommissionRule({ countryId: ride.countryId, cityId: ride.cityId, serviceType: ride.serviceType });
-    const commResult = computeCommission(ride.finalFareMinor, rule);
-    commissionMinor = commResult?.commissionMinor || Math.round(ride.finalFareMinor * 0.2);
+    const resolvedCityId = ride.fareSnapshot?.cityId || ride.cityId || null;
+    const rule = await resolveCommissionRule({
+      vehicleTypeId: ride.vehicleTypeId,
+      countryId: ride.countryId,
+      cityId: resolvedCityId,
+    });
+    const commResult = computeCommission({
+      finalFareMinor: ride.finalFareMinor,
+      rule,
+      isSubscriber: false,
+    });
+    commissionMinor = commResult?.commissionMinor ?? Math.round(ride.finalFareMinor * 0.2);
   } catch {
     commissionMinor = Math.round(ride.finalFareMinor * 0.2);
   }
@@ -327,22 +336,34 @@ export async function resolveRideCommission(ride) {
 
   let rule = null;
   try {
-    rule = await resolveCommissionRule(ride.vehicleTypeId, ride.countryId);
+    const resolvedCityId = ride.fareSnapshot?.cityId || ride.cityId || null;
+    rule = await resolveCommissionRule({
+      vehicleTypeId: ride.vehicleTypeId,
+      countryId: ride.countryId,
+      cityId: resolvedCityId,
+    });
   } catch (err) {
     console.warn('[RidePayment] No commission rule found, using default 20% platform cut:', err.message);
   }
 
   let breakdown;
   if (customRate !== null && !isNaN(customRate)) {
-    const bookingFee = rule ? rule.bookingFeeMinor || 0 : 0;
+    const bookingFee = rule ? (rule.bookingFeeMinor || 0) : 0;
     const remainingFare = Math.max(0, (ride.finalFareMinor || 0) - bookingFee);
-    const variableCut = Math.round(remainingFare * customRate);
-    const commissionMinor = bookingFee + variableCut;
+    let commissionMinor = bookingFee + Math.round(remainingFare * customRate);
+    if (rule?.minCommissionMinor && commissionMinor < rule.minCommissionMinor) {
+      commissionMinor = rule.minCommissionMinor;
+    }
+    if (rule?.maxCommissionMinor && commissionMinor > rule.maxCommissionMinor) {
+      commissionMinor = rule.maxCommissionMinor;
+    }
+    commissionMinor = Math.min(commissionMinor, ride.finalFareMinor || 0);
     breakdown = {
       bookingFeeMinor: bookingFee,
       rate: customRate,
       commissionMinor,
       driverEarningsMinor: Math.max(0, (ride.finalFareMinor || 0) - commissionMinor),
+      resolutionTier: rule?.resolutionTier || null,
     };
   } else if (rule) {
     breakdown = computeCommission({

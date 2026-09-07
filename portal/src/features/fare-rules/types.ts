@@ -133,31 +133,43 @@ export interface CommissionRule {
   id: string;
   name: string;
   countryId: string | null; // null = global default
+  cityId?: string | null; // null = all cities in country / global
   vehicleTypeId: string | null; // null = all vehicle types
   bookingFeeMinor: number;
   subscriberRate: string; // decimal string, e.g. "0.1500" = 15%
   nonSubscriberRate: string;
+  minCommissionMinor?: number | null; // floor limit
+  maxCommissionMinor?: number | null; // ceiling cap
   priority: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  city?: LookupOption | null;
+  country?: LookupOption | null;
+  vehicleType?: LookupOption | null;
 }
 
 export interface CommissionRuleListParams {
   page?: number;
   limit?: number;
   countryId?: string;
+  cityId?: string;
+  vehicleTypeId?: string;
   isActive?: boolean;
 }
 
 export interface CommissionRulePayload {
   name: string;
   countryId?: string;
+  cityId?: string;
   vehicleTypeId?: string;
   bookingFeeMinor: number;
   subscriberRate: number;
   nonSubscriberRate: number;
+  minCommissionMinor?: number;
+  maxCommissionMinor?: number | null;
   priority?: number;
 }
 
 export type UpdateCommissionRulePayload = Partial<CommissionRulePayload> & { isActive?: boolean };
+
