@@ -1,6 +1,6 @@
 import { eq, and, count, desc, gte, lte, sql } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { promos, promoUsages, referrals, users } from '../../../drizzle/schema/index.js';
+import { promos, promoUsages, referrals, users, cities, vehicleTypes, countries, rides } from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { publishNotification } from '../notification/notification-events.js';
@@ -10,9 +10,21 @@ import { getOrCreateWalletAccount, getOrCreateSystemAccount, postTransaction } f
 
 // ── Rider — Validate Promo Code ───────────────────────────────────────────────
 
-export async function validatePromoCode(code, fareMinor, userId, countryId = null) {
+export async function validatePromoCode(code, fareMinor, userId, contextOrCountryId = null) {
   if (!code) throw { statusCode: 400, message: 'Promo code is required' };
   if (fareMinor == null || fareMinor < 0) throw { statusCode: 400, message: 'fareMinor must be a non-negative integer' };
+
+  let countryId = null;
+  let cityId = null;
+  let vehicleTypeId = null;
+
+  if (contextOrCountryId && typeof contextOrCountryId === 'object') {
+    countryId = contextOrCountryId.countryId || null;
+    cityId = contextOrCountryId.cityId || null;
+    vehicleTypeId = contextOrCountryId.vehicleTypeId || null;
+  } else {
+    countryId = contextOrCountryId;
+  }
 
   const cleanCode = String(code).trim().toUpperCase();
   const [promo] = await db.select().from(promos).where(eq(promos.code, cleanCode)).limit(1);
@@ -29,8 +41,29 @@ export async function validatePromoCode(code, fareMinor, userId, countryId = nul
     throw { statusCode: 400, message: 'This promo code has expired' };
   }
 
+  // 1. Regional country check
   if (promo.countryId && countryId && promo.countryId !== countryId) {
-    throw { statusCode: 400, message: 'This promo code is not valid in your region' };
+    throw { statusCode: 400, message: 'This promo code is not valid in your country' };
+  }
+
+  // 2. City check
+  if (promo.cityId && cityId && promo.cityId !== cityId) {
+    throw { statusCode: 400, message: 'This promo code is not valid in your city' };
+  }
+
+  // 3. Vehicle class check
+  if (promo.vehicleTypeId && vehicleTypeId && promo.vehicleTypeId !== vehicleTypeId) {
+    throw { statusCode: 400, message: 'This promo code is not valid for the selected vehicle category' };
+  }
+
+  // 4. First-ride only validation
+  if (promo.isFirstRideOnly && userId) {
+    const [{ completedRides }] = await db.select({ completedRides: count() })
+      .from(rides)
+      .where(and(eq(rides.riderId, userId), eq(rides.status, 'completed')));
+    if (completedRides > 0) {
+      throw { statusCode: 400, message: 'This promo code is only valid for your first trip' };
+    }
   }
 
   if (fareMinor < promo.minFareMinor) {
@@ -120,8 +153,14 @@ export async function applyReferralCode(refereeId, referralCode) {
   if (!referralCode) throw { statusCode: 400, message: 'Referral code is required' };
   const cleanCode = String(referralCode).trim().toUpperCase();
 
-  const allUsers = await db.select({ id: users.id }).from(users);
-  const referrer = allUsers.find((u) => generateReferralCodeForUser(u.id) === cleanCode);
+  // Fast direct indexed lookup: check users.referralCode or legacy REF-<shortPrefix>
+  let [referrer] = await db.select().from(users).where(eq(users.referralCode, cleanCode)).limit(1);
+
+  if (!referrer && cleanCode.startsWith('REF-')) {
+    const shortPrefix = cleanCode.replace('REF-', '').toLowerCase();
+    const [matched] = await db.select().from(users).where(sql`replace(${users.id}::text, '-', '') ILIKE ${shortPrefix + '%'}`).limit(1);
+    referrer = matched;
+  }
 
   if (!referrer) throw { statusCode: 404, message: 'Invalid referral code' };
   if (referrer.id === refereeId) throw { statusCode: 400, message: 'You cannot use your own referral code' };
@@ -228,9 +267,12 @@ export async function createPromo(data) {
     minFareMinor: data.minFareMinor || 0,
     usageLimit,
     perUserLimit: data.perUserLimit || 1,
+    isFirstRideOnly: Boolean(data.isFirstRideOnly),
     validFrom,
     validUntil,
     countryId: data.countryId || null,
+    cityId: data.cityId || null,
+    vehicleTypeId: data.vehicleTypeId || null,
     isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
   }).returning();
 
@@ -249,14 +291,32 @@ export async function listPromos(filters, page, limit, offset) {
     conditions.push(eq(promos.isActive, String(filters.isActive) === 'true'));
   }
   if (filters.countryId) conditions.push(eq(promos.countryId, filters.countryId));
+  if (filters.cityId) conditions.push(eq(promos.cityId, filters.cityId));
+  if (filters.vehicleTypeId) conditions.push(eq(promos.vehicleTypeId, filters.vehicleTypeId));
   const where = conditions.length ? and(...conditions) : undefined;
 
   const [{ total }] = await db.select({ total: count() }).from(promos).where(where);
-  const rawRows = await db.select().from(promos).where(where)
-    .orderBy(desc(promos.createdAt)).limit(limit).offset(offset);
+  const rawRows = await db
+    .select({
+      promo: promos,
+      country: countries,
+      city: cities,
+      vehicleType: vehicleTypes,
+    })
+    .from(promos)
+    .leftJoin(countries, eq(promos.countryId, countries.id))
+    .leftJoin(cities, eq(promos.cityId, cities.id))
+    .leftJoin(vehicleTypes, eq(promos.vehicleTypeId, vehicleTypes.id))
+    .where(where)
+    .orderBy(desc(promos.createdAt))
+    .limit(limit)
+    .offset(offset);
 
-  const rows = rawRows.map((r) => ({
+  const rows = rawRows.map(({ promo: r, country, city, vehicleType }) => ({
     ...r,
+    country,
+    city,
+    vehicleType,
     discountValueMinor: r.discountValue,
     maxUses: r.usageLimit,
     expiresAt: r.validUntil ? r.validUntil.toISOString() : null,
@@ -275,6 +335,10 @@ export async function updatePromo(id, updates) {
   if (updates.code) patch.code = String(updates.code).trim().toUpperCase();
   if (updates.description !== undefined) patch.description = updates.description;
   if (updates.isActive !== undefined) patch.isActive = Boolean(updates.isActive);
+  if (updates.countryId !== undefined) patch.countryId = updates.countryId || null;
+  if (updates.cityId !== undefined) patch.cityId = updates.cityId || null;
+  if (updates.vehicleTypeId !== undefined) patch.vehicleTypeId = updates.vehicleTypeId || null;
+  if (updates.isFirstRideOnly !== undefined) patch.isFirstRideOnly = Boolean(updates.isFirstRideOnly);
 
   if (updates.discountType) {
     const rawType = String(updates.discountType).toLowerCase();

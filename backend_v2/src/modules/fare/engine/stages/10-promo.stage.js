@@ -13,7 +13,16 @@ export async function executePromoStage(context) {
   if (promoCode) {
     try {
       const { validatePromoCode } = await import('../../../promo/promo.service.js');
-      const promoResult = await validatePromoCode(promoCode, taxes.postTaxFareMinor, userId, country.id);
+      const promoResult = await validatePromoCode(
+        promoCode,
+        taxes.postTaxFareMinor,
+        userId,
+        {
+          countryId: country.id,
+          cityId: context.cityId || null,
+          vehicleTypeId: request.vehicleTypeId || null,
+        }
+      );
 
       discountAmountMinor = promoResult.discountAmountMinor || 0;
       discountedFareMinor = promoResult.finalFareMinor;

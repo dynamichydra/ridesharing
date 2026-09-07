@@ -346,10 +346,18 @@ export async function resolveRideCommission(ride) {
     console.warn('[RidePayment] No commission rule found, using default 20% platform cut:', err.message);
   }
 
+  // Industrial Promo Subsidy Architecture:
+  // Driver earnings are calculated based on the gross metered trip fare before promo deduction.
+  // The platform absorbs promo discounts as a marketing subsidy so drivers are never penalized.
+  const promoDiscountMinor = ride.fareSnapshot?.breakdown?.promo?.discountAmountMinor
+    || ride.fareSnapshot?.discountAmountMinor
+    || 0;
+  const grossFareMinor = Math.max(ride.finalFareMinor || 0, (ride.finalFareMinor || 0) + promoDiscountMinor);
+
   let breakdown;
   if (customRate !== null && !isNaN(customRate)) {
     const bookingFee = rule ? (rule.bookingFeeMinor || 0) : 0;
-    const remainingFare = Math.max(0, (ride.finalFareMinor || 0) - bookingFee);
+    const remainingFare = Math.max(0, grossFareMinor - bookingFee);
     let commissionMinor = bookingFee + Math.round(remainingFare * customRate);
     if (rule?.minCommissionMinor && commissionMinor < rule.minCommissionMinor) {
       commissionMinor = rule.minCommissionMinor;
@@ -357,26 +365,43 @@ export async function resolveRideCommission(ride) {
     if (rule?.maxCommissionMinor && commissionMinor > rule.maxCommissionMinor) {
       commissionMinor = rule.maxCommissionMinor;
     }
-    commissionMinor = Math.min(commissionMinor, ride.finalFareMinor || 0);
+    commissionMinor = Math.min(commissionMinor, grossFareMinor);
+    const driverEarningsMinor = Math.max(0, grossFareMinor - commissionMinor);
     breakdown = {
+      grossFareMinor,
+      promoDiscountMinor,
+      platformSubsidyMinor: promoDiscountMinor,
       bookingFeeMinor: bookingFee,
       rate: customRate,
       commissionMinor,
-      driverEarningsMinor: Math.max(0, (ride.finalFareMinor || 0) - commissionMinor),
+      driverEarningsMinor,
+      netPlatformRevenueMinor: commissionMinor - promoDiscountMinor,
       resolutionTier: rule?.resolutionTier || null,
     };
   } else if (rule) {
-    breakdown = computeCommission({
-      finalFareMinor: ride.finalFareMinor,
+    const computed = computeCommission({
+      finalFareMinor: grossFareMinor,
       rule,
       isSubscriber,
     });
-  } else {
     breakdown = {
+      ...computed,
+      grossFareMinor,
+      promoDiscountMinor,
+      platformSubsidyMinor: promoDiscountMinor,
+      netPlatformRevenueMinor: computed.commissionMinor - promoDiscountMinor,
+    };
+  } else {
+    const defaultComm = Math.round(grossFareMinor * 0.2);
+    breakdown = {
+      grossFareMinor,
+      promoDiscountMinor,
+      platformSubsidyMinor: promoDiscountMinor,
       bookingFeeMinor: 0,
       rate: 0.2,
-      commissionMinor: Math.round((ride.finalFareMinor || 0) * 0.2),
-      driverEarningsMinor: (ride.finalFareMinor || 0) - Math.round((ride.finalFareMinor || 0) * 0.2),
+      commissionMinor: defaultComm,
+      driverEarningsMinor: Math.max(0, grossFareMinor - defaultComm),
+      netPlatformRevenueMinor: defaultComm - promoDiscountMinor,
     };
   }
 

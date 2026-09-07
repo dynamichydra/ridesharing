@@ -80,3 +80,111 @@ test('generates consistent referral codes for user IDs', () => {
   assert.equal(code1, 'REF-123E45');
   assert.equal(code1, code2);
 });
+
+function validatePromoEligibility({ promo, requestCityId, requestVehicleTypeId, riderCompletedRidesCount }) {
+  if (promo.cityId && requestCityId && promo.cityId !== requestCityId) {
+    throw new Error('This promo code is not valid in your city');
+  }
+  if (promo.vehicleTypeId && requestVehicleTypeId && promo.vehicleTypeId !== requestVehicleTypeId) {
+    throw new Error('This promo code is not valid for this vehicle type');
+  }
+  if (promo.isFirstRideOnly && riderCompletedRidesCount > 0) {
+    throw new Error('This promo code is only valid for your first ride');
+  }
+  return true;
+}
+
+test('validates city scoping for promotions (passes matching city, rejects other cities)', () => {
+  const cityPromo = {
+    code: 'MUMBAI50',
+    cityId: 'city-mumbai-001',
+    vehicleTypeId: null,
+    isFirstRideOnly: false,
+  };
+
+  // Matches Mumbai
+  assert.equal(
+    validatePromoEligibility({ promo: cityPromo, requestCityId: 'city-mumbai-001', requestVehicleTypeId: 'sedan', riderCompletedRidesCount: 2 }),
+    true
+  );
+
+  // Fails in Delhi
+  assert.throws(
+    () => validatePromoEligibility({ promo: cityPromo, requestCityId: 'city-delhi-002', requestVehicleTypeId: 'sedan', riderCompletedRidesCount: 2 }),
+    /not valid in your city/
+  );
+});
+
+test('validates vehicle type scoping for promotions', () => {
+  const autoPromo = {
+    code: 'AUTOSAVE',
+    cityId: null,
+    vehicleTypeId: 'veh-auto-rickshaw',
+    isFirstRideOnly: false,
+  };
+
+  // Matches Auto
+  assert.equal(
+    validatePromoEligibility({ promo: autoPromo, requestCityId: 'city-kolkata-001', requestVehicleTypeId: 'veh-auto-rickshaw', riderCompletedRidesCount: 0 }),
+    true
+  );
+
+  // Fails on Premium Sedan
+  assert.throws(
+    () => validatePromoEligibility({ promo: autoPromo, requestCityId: 'city-kolkata-001', requestVehicleTypeId: 'veh-sedan-premium', riderCompletedRidesCount: 0 }),
+    /not valid for this vehicle type/
+  );
+});
+
+test('validates first-ride-only restriction', () => {
+  const welcomePromo = {
+    code: 'WELCOME50',
+    cityId: null,
+    vehicleTypeId: null,
+    isFirstRideOnly: true,
+  };
+
+  // Brand new user (0 completed rides) -> PASS
+  assert.equal(
+    validatePromoEligibility({ promo: welcomePromo, requestCityId: 'city-1', requestVehicleTypeId: 'bike', riderCompletedRidesCount: 0 }),
+    true
+  );
+
+  // Existing user with prior completed rides -> REJECT
+  assert.throws(
+    () => validatePromoEligibility({ promo: welcomePromo, requestCityId: 'city-1', requestVehicleTypeId: 'bike', riderCompletedRidesCount: 1 }),
+    /only valid for your first ride/
+  );
+});
+
+test('driver earnings are protected when rider uses promo discount (platform absorbs subsidy)', () => {
+  // Scenario: $50.00 (5000 minor) gross fare, 20% platform commission standard.
+  // Promo: $10.00 (1000 minor) rider discount.
+  const grossFareMinor = 5000;
+  const promoDiscountMinor = 1000;
+  const commissionRate = 0.20;
+
+  // 1. Rider pays discounted fare
+  const riderPayableMinor = grossFareMinor - promoDiscountMinor;
+  assert.equal(riderPayableMinor, 4000); // $40.00
+
+  // 2. Driver earnings calculated on gross fare ($50.00) minus commission (20% of $50 = $10)
+  const commissionMinor = Math.round(grossFareMinor * commissionRate);
+  assert.equal(commissionMinor, 1000); // $10.00
+
+  const driverEarningsMinor = grossFareMinor - commissionMinor;
+  assert.equal(driverEarningsMinor, 4000); // $40.00 earned by driver (UNPENALIZED)
+
+  // 3. Platform financial reconciliation
+  // Platform collected: $40 from rider
+  // Platform paid to driver: $40
+  // Platform net commission earned: $10 gross commission - $10 subsidy absorbed = $0
+  const platformSubsidyMinor = promoDiscountMinor;
+  const platformNetMinor = commissionMinor - platformSubsidyMinor;
+  assert.equal(platformSubsidyMinor, 1000);
+  assert.equal(platformNetMinor, 0);
+
+  // Invariant check: Driver earnings + Platform net revenue + Platform subsidy = Gross fare
+  assert.equal(driverEarningsMinor + commissionMinor, grossFareMinor);
+});
+

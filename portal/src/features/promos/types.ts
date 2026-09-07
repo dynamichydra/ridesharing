@@ -4,6 +4,12 @@ export type DiscountType =
   | "percentage"
   | "flat_amount";
 
+export interface LookupOption {
+  id: string;
+  name: string;
+  countryId?: string;
+}
+
 export interface Promo {
   id: string;
   code: string;
@@ -17,11 +23,17 @@ export interface Promo {
   maxUses?: number | null;
   usedCount: number;
   perUserLimit?: number | null;
+  isFirstRideOnly?: boolean;
   startsAt?: string | null;
   expiresAt?: string | null;
   validFrom?: string | null;
   validUntil?: string | null;
   countryId?: string | null;
+  cityId?: string | null;
+  vehicleTypeId?: string | null;
+  country?: LookupOption | null;
+  city?: LookupOption | null;
+  vehicleType?: LookupOption | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -30,6 +42,8 @@ export interface Promo {
 export interface PromoListParams {
   isActive?: boolean | string;
   countryId?: string;
+  cityId?: string;
+  vehicleTypeId?: string;
   page?: number;
   limit?: number;
 }
@@ -45,12 +59,16 @@ export interface CreatePromoPayload {
   maxUses?: number | null;
   usageLimit?: number | null;
   perUserLimit?: number | null;
+  isFirstRideOnly?: boolean;
   startsAt?: string | null;
   expiresAt?: string | null;
   validFrom?: string | null;
   validUntil?: string | null;
   countryId?: string | null;
+  cityId?: string | null;
+  vehicleTypeId?: string | null;
   isActive?: boolean;
 }
 
 export interface UpdatePromoPayload extends Partial<CreatePromoPayload> {}
+

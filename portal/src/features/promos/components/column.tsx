@@ -1,18 +1,22 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Power, Edit, Trash2 } from "lucide-react";
-import type { Promo } from "../types";
+import { Power, Edit, Trash2, Sparkles } from "lucide-react";
+import type { Promo, LookupOption } from "../types";
 import { formatDate, moment } from "@/lib/utils";
 
 export function getPromoColumns({
   onEdit,
   onToggleStatus,
   onDelete,
+  cities = [],
+  vehicleTypes = [],
 }: {
   onEdit: (promo: Promo) => void;
   onToggleStatus: (promo: Promo) => void;
   onDelete?: (promo: Promo) => void;
+  cities?: LookupOption[];
+  vehicleTypes?: LookupOption[];
 }): ColumnDef<Promo>[] {
   return [
     {
@@ -20,9 +24,16 @@ export function getPromoColumns({
       header: "Promo Code",
       cell: ({ row }) => (
         <div className="flex flex-col gap-0.5">
-          <span className="font-mono font-bold text-foreground tracking-wider bg-accent/60 px-2 py-0.5 rounded border border-border w-fit text-xs">
-            {row.original.code}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono font-bold text-foreground tracking-wider bg-accent/60 px-2 py-0.5 rounded border border-border w-fit text-xs">
+              {row.original.code}
+            </span>
+            {row.original.isFirstRideOnly && (
+              <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/30 gap-1 px-1.5 py-0">
+                <Sparkles className="h-2.5 w-2.5" /> 1st Ride
+              </Badge>
+            )}
+          </div>
           {row.original.description && (
             <span className="text-[11px] text-muted-foreground line-clamp-1 max-w-[200px]">
               {row.original.description}
@@ -30,6 +41,20 @@ export function getPromoColumns({
           )}
         </div>
       ),
+    },
+    {
+      id: "scope",
+      header: "Scope (City / Vehicle)",
+      cell: ({ row }) => {
+        const cityName = row.original.city?.name || cities.find((c) => c.id === row.original.cityId)?.name || "All Cities";
+        const vehicleName = row.original.vehicleType?.name || vehicleTypes.find((v) => v.id === row.original.vehicleTypeId)?.name || "All Vehicles";
+        return (
+          <div className="flex flex-col text-xs space-y-0.5">
+            <span className="font-medium text-foreground">{cityName}</span>
+            <span className="text-[11px] text-muted-foreground">{vehicleName}</span>
+          </div>
+        );
+      },
     },
     {
       accessorKey: "discountType",

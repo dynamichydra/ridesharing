@@ -9,7 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPromoColumns } from "../components/column";
 import { PromoDialog } from "../components/dialog";
 import { usePromos, useTogglePromoStatus, useDeletePromo } from "../hooks";
-import type { Promo } from "../types";
+import { useCountryOptions, useVehicleTypeOptions } from "@/features/fare-rules/hooks";
+import { useCities } from "@/features/geo/hooks";
+import type { Promo, LookupOption } from "../types";
 
 const FILTER_SCHEMA: FilterSchema = {
   isActive: {
@@ -38,6 +40,18 @@ export default function PromoList() {
     page,
     limit,
   });
+
+  const { data: countriesData } = useCountryOptions();
+  const { data: citiesData } = useCities({ limit: 500 });
+  const { data: vehicleTypesData } = useVehicleTypeOptions();
+
+  const countries = countriesData?.MESSAGE || [];
+  const rawCities = (citiesData?.MESSAGE || []) as Array<{ id: string; name: string; countryId?: string }>;
+  const cities: (LookupOption & { countryId?: string })[] = useMemo(
+    () => rawCities.map((c) => ({ id: c.id, name: c.name, countryId: c.countryId })),
+    [rawCities],
+  );
+  const vehicleTypes = vehicleTypesData?.MESSAGE || [];
 
   const toggleStatusMutation = useTogglePromoStatus();
   const deleteMutation = useDeletePromo();
@@ -83,8 +97,10 @@ export default function PromoList() {
         onEdit: handleEdit,
         onToggleStatus: handleToggleStatus,
         onDelete: handleDelete,
+        cities,
+        vehicleTypes,
       }),
-    [handleToggleStatus, handleDelete]
+    [handleToggleStatus, handleDelete, cities, vehicleTypes]
   );
 
   const handlePageChange = (pageIndex: number) => {
@@ -208,6 +224,9 @@ export default function PromoList() {
           if (!open) setEditingPromo(null);
         }}
         promoToEdit={editingPromo}
+        countries={countries}
+        cities={cities}
+        vehicleTypes={vehicleTypes}
       />
     </div>
   );

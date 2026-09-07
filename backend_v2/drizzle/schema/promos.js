@@ -1,5 +1,7 @@
 import { pgTable, uuid, varchar, text, integer, boolean, timestamp } from 'drizzle-orm/pg-core';
 import { countries } from './countries.js';
+import { cities } from './cities.js';
+import { vehicleTypes } from './vehicle-types.js';
 
 export const promos = pgTable('promos', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -12,10 +14,14 @@ export const promos = pgTable('promos', {
   usageLimit: integer('usage_limit'), // total overall usages allowed (null = unlimited)
   usedCount: integer('used_count').default(0).notNull(),
   perUserLimit: integer('per_user_limit').default(1).notNull(),
+  isFirstRideOnly: boolean('is_first_ride_only').default(false).notNull(), // true = applies only to rider's first trip
   validFrom: timestamp('valid_from').defaultNow().notNull(),
   validUntil: timestamp('valid_until'),
   countryId: uuid('country_id').references(() => countries.id), // null = all countries
+  cityId: uuid('city_id').references(() => cities.id), // null = all cities in country
+  vehicleTypeId: uuid('vehicle_type_id').references(() => vehicleTypes.id), // null = all vehicle classes
   isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+

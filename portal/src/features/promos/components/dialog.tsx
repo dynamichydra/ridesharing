@@ -17,15 +17,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreatePromo, useUpdatePromo } from "../hooks";
-import type { Promo, DiscountType } from "../types";
+import type { Promo, DiscountType, LookupOption } from "../types";
 
 interface PromoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   promoToEdit?: Promo | null;
+  countries?: LookupOption[];
+  cities?: LookupOption[];
+  vehicleTypes?: LookupOption[];
 }
 
-export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProps) {
+export function PromoDialog({
+  open,
+  onOpenChange,
+  promoToEdit,
+  countries = [],
+  cities = [],
+  vehicleTypes = [],
+}: PromoDialogProps) {
   const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
   const [discountType, setDiscountType] = useState<DiscountType>("PERCENTAGE");
@@ -35,6 +45,10 @@ export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProp
   const [maxUses, setMaxUses] = useState("");
   const [perUserLimit, setPerUserLimit] = useState("1");
   const [expiresAt, setExpiresAt] = useState("");
+  const [countryId, setCountryId] = useState("");
+  const [cityId, setCityId] = useState("");
+  const [vehicleTypeId, setVehicleTypeId] = useState("");
+  const [isFirstRideOnly, setIsFirstRideOnly] = useState(false);
 
   const createMutation = useCreatePromo();
   const updateMutation = useUpdatePromo();
@@ -66,6 +80,10 @@ export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProp
       );
       const exp = promoToEdit.expiresAt || promoToEdit.validUntil;
       setExpiresAt(exp ? exp.split("T")[0] : "");
+      setCountryId(promoToEdit.countryId || "");
+      setCityId(promoToEdit.cityId || "");
+      setVehicleTypeId(promoToEdit.vehicleTypeId || "");
+      setIsFirstRideOnly(Boolean(promoToEdit.isFirstRideOnly));
     } else {
       setCode("");
       setDescription("");
@@ -76,8 +94,14 @@ export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProp
       setMaxUses("");
       setPerUserLimit("1");
       setExpiresAt("");
+      setCountryId("");
+      setCityId("");
+      setVehicleTypeId("");
+      setIsFirstRideOnly(false);
     }
   }, [promoToEdit, open]);
+
+  const filteredCities = cities.filter((c) => !countryId || !c.countryId || c.countryId === countryId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +122,10 @@ export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProp
       perUserLimit: perUserLimit ? parseInt(perUserLimit, 10) : 1,
       validUntil: expiresAt ? new Date(expiresAt).toISOString() : null,
       expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+      countryId: countryId || null,
+      cityId: cityId || null,
+      vehicleTypeId: vehicleTypeId || null,
+      isFirstRideOnly,
     };
 
     if (promoToEdit) {
@@ -112,7 +140,7 @@ export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[540px]">
         <DialogHeader>
           <DialogTitle>{promoToEdit ? "Edit Promo Code" : "Create Promo Code"}</DialogTitle>
         </DialogHeader>
@@ -137,6 +165,61 @@ export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProp
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
+            </div>
+          </div>
+
+          {/* Regional & Category Scoping */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="promo-country">Country</Label>
+              <select
+                id="promo-country"
+                value={countryId}
+                onChange={(e) => {
+                  setCountryId(e.target.value);
+                  setCityId("");
+                }}
+                className="w-full h-9 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">All Countries</option>
+                {countries.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="promo-city">City</Label>
+              <select
+                id="promo-city"
+                value={cityId}
+                onChange={(e) => setCityId(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">All Cities</option>
+                {filteredCities.map((ct) => (
+                  <option key={ct.id} value={ct.id}>
+                    {ct.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="promo-vehicle">Vehicle Class</Label>
+              <select
+                id="promo-vehicle"
+                value={vehicleTypeId}
+                onChange={(e) => setVehicleTypeId(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">All Vehicles</option>
+                {vehicleTypes.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -226,6 +309,20 @@ export function PromoDialog({ open, onOpenChange, promoToEdit }: PromoDialogProp
                 onChange={(e) => setExpiresAt(e.target.value)}
               />
             </div>
+          </div>
+
+          {/* First Ride Only Acquisition Checkbox */}
+          <div className="flex items-center gap-2 p-2.5 rounded-md border border-border bg-accent/30">
+            <input
+              type="checkbox"
+              id="first-ride-only"
+              checked={isFirstRideOnly}
+              onChange={(e) => setIsFirstRideOnly(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+            />
+            <label htmlFor="first-ride-only" className="text-xs font-medium cursor-pointer">
+              First Ride Only (Restricted to new riders on their very first trip)
+            </label>
           </div>
 
           <DialogFooter className="pt-2">
