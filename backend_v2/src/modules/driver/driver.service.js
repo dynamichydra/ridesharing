@@ -231,7 +231,9 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
           eq(walletTransactions.reason, 'referral_bonus'),
           eq(walletTransactions.reason, 'incentive'),
           eq(walletTransactions.reason, 'bonus'),
-          eq(walletTransactions.reason, 'driver_incentive')
+          eq(walletTransactions.reason, 'driver_incentive'),
+          eq(walletTransactions.reason, 'ride_subsidy_cash'),
+          eq(walletTransactions.reason, 'promo_incentive')
         ),
         gte(walletTransactions.createdAt, currentStart),
         sql`${walletTransactions.createdAt} <= ${currentEnd}`
@@ -239,6 +241,17 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
     );
     for (const tx of incentiveTxs) {
       incentivesMinor += (tx.amountMinor || 0);
+    }
+  }
+
+  // Also include promo incentives embedded across completed rides in this period
+  for (const r of currentRides) {
+    const promoMinor = r.fareSnapshot?.commission?.promoDiscountMinor
+      || r.fareSnapshot?.breakdown?.promo?.discountAmountMinor
+      || r.fareSnapshot?.discountAmountMinor
+      || 0;
+    if (promoMinor > 0 && r.paymentMethod === 'online') {
+      incentivesMinor += promoMinor;
     }
   }
 

@@ -132,8 +132,10 @@ export async function executeDispatchWave(ride, candidates, waveParams) {
   // 4. Broadcast RIDE_MATCHED via Kafka -> Sockets
   try {
     const grossFareMinor = ride.fareSnapshot?.originalEstimatedFareMinor
-      || ((ride.fareSnapshot?.estimatedFareMinor || ride.estimatedFareMinor || 0) + (ride.fareSnapshot?.discountAmountMinor || ride.fareSnapshot?.breakdown?.promo?.discountAmountMinor || 0))
-      || ride.estimatedFareMinor;
+    const promoDiscountMinor = ride.fareSnapshot?.discountAmountMinor
+      || ride.fareSnapshot?.breakdown?.promo?.discountAmountMinor
+      || 0;
+    const riderEstimatedFareMinor = ride.estimatedFareMinor || (grossFareMinor - promoDiscountMinor);
 
     await publishEvent(
       TOPICS.RIDE_MATCHED,
@@ -155,8 +157,11 @@ export async function executeDispatchWave(ride, candidates, waveParams) {
         estimatedFare: fromMinor(grossFareMinor, ride.currencyCode),
         grossEstimatedFare: fromMinor(grossFareMinor, ride.currencyCode),
         grossEstimatedFareMinor: grossFareMinor,
-        riderEstimatedFare: fromMinor(ride.estimatedFareMinor, ride.currencyCode),
-        hasPromo: !!(ride.fareSnapshot?.breakdown?.promo || ride.fareSnapshot?.discountAmountMinor),
+        riderEstimatedFare: fromMinor(riderEstimatedFareMinor, ride.currencyCode),
+        riderEstimatedFareMinor,
+        promoIncentive: fromMinor(promoDiscountMinor, ride.currencyCode),
+        promoIncentiveMinor: promoDiscountMinor,
+        hasPromo: promoDiscountMinor > 0,
         currency: ride.currencyCode,
         distanceKm: ride.distanceKm,
         polyline: ride.polyline,
