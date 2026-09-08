@@ -90,6 +90,7 @@ export async function recalculateTripFare({
 
   // 7. Rounding
   const roundingIncrementMinor = snapshot.country?.roundingIncrementMinor || 100;
+  const roundedGrossFareMinor = roundToIncrement(postTaxFareMinor, roundingIncrementMinor);
   const roundedFinalFareMinor = roundToIncrement(finalFareMinor, roundingIncrementMinor);
 
   const updatedBreakdown = {
@@ -123,6 +124,8 @@ export async function recalculateTripFare({
     },
     preTaxFareMinor,
     taxMinor,
+    grossFareMinor: roundedGrossFareMinor,
+    discountAmountMinor,
     finalFareMinor: roundedFinalFareMinor,
   };
 
@@ -134,6 +137,8 @@ export async function recalculateTripFare({
     fareSnapshot: {
       ...snapshot,
       breakdown: updatedBreakdown,
+      grossFareMinor: roundedGrossFareMinor,
+      discountAmountMinor,
       finalFareMinor: roundedFinalFareMinor,
       estimatedFareMinor: roundedFinalFareMinor,
     },

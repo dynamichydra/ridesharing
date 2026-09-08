@@ -1,11 +1,11 @@
 import { redis, REDIS_KEYS } from '../config/redis.js';
 import { env } from '../config/env.js';
 
-const CODE_TTL_SECONDS       = 600;  // 10 minutes
+const CODE_TTL_SECONDS = 600;  // 10 minutes
 const RESEND_COOLDOWN_SECONDS = 30;
-const MAX_SENDS_PER_HOUR    = 5;
-const MAX_VERIFY_ATTEMPTS   = 5;
-const LOCKOUT_SECONDS       = 900;
+const MAX_SENDS_PER_HOUR = 5;
+const MAX_VERIFY_ATTEMPTS = 5;
+const LOCKOUT_SECONDS = 900;
 
 function generateCode() {
   return String(Math.floor(100000 + Math.random() * 900000));

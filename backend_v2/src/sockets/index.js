@@ -1,5 +1,5 @@
 /**
- * Socket.IO — /driver and /rider namespaces
+ * Socket.IO — /driver, /rider, and /admin namespaces
  *
  * Bug 2 fix:  Socket.IO attaches to app.server directly (Fastify raw server), no extra createServer()
  * Bug 3 fix:  location_update reads driverRideActive {rideId,riderId} and attaches both to Kafka event
@@ -7,7 +7,6 @@
  */
 
 import { Server } from 'socket.io';
-import { env } from '../config/env.js';
 import { db } from '../config/db.js';
 import { drivers } from '../../drizzle/schema/index.js';
 import { eq } from 'drizzle-orm';
@@ -45,10 +44,12 @@ export function broadcastToAdmin(event, payload) {
 }
 
 function extractToken(socket) {
+  const rawHeader = socket.handshake.headers?.authorization || socket.handshake.headers?.['Authorization'];
   let token = socket.handshake.auth?.token
     || socket.handshake.auth?.authorization
     || socket.handshake.query?.token
-    || socket.handshake.headers?.authorization;
+    || rawHeader;
+
   if (token && typeof token === 'string') {
     token = token.replace(/^Bearer\s+/i, '').trim();
   }
@@ -57,12 +58,11 @@ function extractToken(socket) {
 
 function verifyJwt(app, socket) {
   const token = extractToken(socket);
-  if (!token) return { user: null, error: 'Authentication token is missing. Pass token in auth or query.' };
+  if (!token) return null;
   try {
-    const user = app.jwt.verify(token);
-    return { user, error: null };
-  } catch (err) {
-    return { user: null, error: `Invalid or expired token: ${err.message}` };
+    return app.jwt.verify(token);
+  } catch {
+    return null;
   }
 }
 
@@ -78,18 +78,6 @@ export function initSocketIO(fastifyServer, app) {
     pingTimeout: 20000,
     pingInterval: 10000,
   });
-
-  // Fastify route handler to route polling & websocket handshakes to Engine.IO
-  if (app) {
-    app.all('/socket.io/*', (request, reply) => {
-      reply.hijack();
-      io.engine.handleRequest(request.raw, reply.raw);
-    });
-    app.all('/socket.io', (request, reply) => {
-      reply.hijack();
-      io.engine.handleRequest(request.raw, reply.raw);
-    });
-  }
 
   ioInstance = io;
   setSocketIO(io);
@@ -135,14 +123,10 @@ export function initSocketIO(fastifyServer, app) {
   const driverNS = io.of('/driver');
 
   driverNS.use((socket, next) => {
-    const { user, error } = verifyJwt(app, socket);
-    if (!user) {
-      console.warn(`[Socket/driver] Connection rejected: ${error}`);
-      return next(new Error(error));
-    }
-    if (user.role !== 'driver') {
-      console.warn(`[Socket/driver] Connection rejected: role '${user.role}' is not 'driver'`);
-      return next(new Error(`Forbidden: driver role required, but token has role '${user.role}'`));
+    const user = verifyJwt(app, socket);
+    if (!user || user.role !== 'driver') {
+      console.warn(`[Socket/driver] Unauthorized connection attempt`);
+      return next(new Error('Unauthorized'));
     }
     socket.data.driverId = user.id;
     next();
@@ -151,7 +135,7 @@ export function initSocketIO(fastifyServer, app) {
   driverNS.on('connection', (socket) => {
     const { driverId } = socket.data;
     socket.join(`driver:${driverId}`);
-    console.log(`[Socket/driver] connected: ${driverId}`);
+    console.log(`[Socket/driver] connected: ${driverId} (socketId: ${socket.id})`);
 
     // ── go_online ──────────────────────────────────────────────────────────
     socket.on('go_online', async ({ lat, lng }) => {
@@ -179,6 +163,7 @@ export function initSocketIO(fastifyServer, app) {
       socket.emit('status', { isOnline: false });
     });
 
+    // ── location_update ────────────────────────────────────────────────────
     socket.on('location_update', async ({ lat, lng, accuracy, speedKmh, recordedAt }) => {
       try {
         const now = recordedAt ? new Date(recordedAt) : new Date();
@@ -253,7 +238,7 @@ export function initSocketIO(fastifyServer, app) {
       try {
         const { markMessagesAsRead } = await import('../modules/ride/chat.service.js');
         await markMessagesAsRead(rideId, driverId, 'driver');
-      } catch {}
+      } catch { }
     });
 
     // ── disconnect ─────────────────────────────────────────────────────────
@@ -272,14 +257,10 @@ export function initSocketIO(fastifyServer, app) {
   const riderNS = io.of('/rider');
 
   riderNS.use((socket, next) => {
-    const { user, error } = verifyJwt(app, socket);
-    if (!user) {
-      console.warn(`[Socket/rider] Connection rejected: ${error}`);
-      return next(new Error(error));
-    }
-    if (user.role !== 'rider') {
-      console.warn(`[Socket/rider] Connection rejected: role '${user.role}' is not 'rider'`);
-      return next(new Error(`Forbidden: rider role required, but token has role '${user.role}'`));
+    const user = verifyJwt(app, socket);
+    if (!user || user.role !== 'rider') {
+      console.warn(`[Socket/rider] Unauthorized connection attempt`);
+      return next(new Error('Unauthorized'));
     }
     socket.data.riderId = user.id;
     next();
@@ -320,7 +301,7 @@ export function initSocketIO(fastifyServer, app) {
       try {
         const { markMessagesAsRead } = await import('../modules/ride/chat.service.js');
         await markMessagesAsRead(rideId, riderId, 'rider');
-      } catch {}
+      } catch { }
     });
 
     socket.on('disconnect', (reason) => {
@@ -332,17 +313,16 @@ export function initSocketIO(fastifyServer, app) {
   const adminNS = io.of('/admin');
 
   adminNS.use((socket, next) => {
-    const { user, error } = verifyJwt(app, socket);
+    const user = verifyJwt(app, socket);
     if (!user) {
-      // In dev or query token fallback
-      if (process.env.NODE_ENV === 'development' || !socket.handshake.auth?.token) {
+      if (process.env.NODE_ENV === 'development') {
         socket.data.adminUser = { id: 'admin-local', role: 'admin' };
         return next();
       }
-      return next(new Error(error));
+      return next(new Error('Unauthorized'));
     }
     if (!['admin', 'super_admin'].includes(user.role)) {
-      return next(new Error(`Forbidden: admin role required, but token has role '${user.role}'`));
+      return next(new Error('Unauthorized'));
     }
     socket.data.adminUser = user;
     next();
@@ -365,12 +345,12 @@ export function initSocketIO(fastifyServer, app) {
         } = await import('../modules/admin/admin.service.js');
 
         const [overview, queue, alerts, supplyDemand, recentActivity, fleetMap] = await Promise.all([
-          getDashboardStats(),
-          getDispatchQueue(10),
-          getLiveMonitoringAlerts(),
-          getSupplyDemandAnalytics(),
-          getRecentActivity(10),
-          getSupplyDemandHeatmap(),
+          getDashboardStats().catch(() => null),
+          getDispatchQueue(10).catch(() => []),
+          getLiveMonitoringAlerts().catch(() => []),
+          getSupplyDemandAnalytics().catch(() => null),
+          getRecentActivity(10).catch(() => []),
+          getSupplyDemandHeatmap().catch(() => []),
         ]);
 
         socket.emit('dashboard:snapshot', {
@@ -405,7 +385,7 @@ export function initSocketIO(fastifyServer, app) {
   });
 
   // Background broadcast timer: Push fresh dashboard snapshot every 20s to all connected admins
-  setInterval(async () => {
+  const adminBroadcastTimer = setInterval(async () => {
     if (!ioInstance) return;
     const adminCount = ioInstance.of('/admin').sockets.size;
     if (adminCount === 0) return;
@@ -421,12 +401,12 @@ export function initSocketIO(fastifyServer, app) {
       } = await import('../modules/admin/admin.service.js');
 
       const [overview, queue, alerts, supplyDemand, recentActivity, fleetMap] = await Promise.all([
-        getDashboardStats(),
-        getDispatchQueue(10),
-        getLiveMonitoringAlerts(),
-        getSupplyDemandAnalytics(),
-        getRecentActivity(10),
-        getSupplyDemandHeatmap(),
+        getDashboardStats().catch(() => null),
+        getDispatchQueue(10).catch(() => []),
+        getLiveMonitoringAlerts().catch(() => []),
+        getSupplyDemandAnalytics().catch(() => null),
+        getRecentActivity(10).catch(() => []),
+        getSupplyDemandHeatmap().catch(() => []),
       ]);
 
       ioInstance.of('/admin').to('admin:dashboard').emit('dashboard:snapshot', {
@@ -442,6 +422,8 @@ export function initSocketIO(fastifyServer, app) {
       // Quietly ignore background broadcast failure
     }
   }, 20000);
+
+  adminBroadcastTimer.unref?.();
 
   console.log('✅ Socket.IO initialised (/driver, /rider, /admin)');
   return io;

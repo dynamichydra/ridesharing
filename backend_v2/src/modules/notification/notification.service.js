@@ -1,25 +1,32 @@
-import { env } from '../../config/env.js';
+import { env, isFirebaseConfigured } from '../../config/env.js';
 
 let _messaging = null;
 
 async function getMessaging() {
   if (_messaging) return _messaging;
-  if (!env.FIREBASE_PROJECT_ID) {
+  if (!isFirebaseConfigured) {
     console.warn('[FCM] Firebase not configured — push notifications disabled');
     return null;
   }
-  const { default: admin } = await import('firebase-admin');
-  if (!admin.apps.length) {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId:    env.FIREBASE_PROJECT_ID,
-        privateKey:   env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        clientEmail:  env.FIREBASE_CLIENT_EMAIL,
-      }),
-    });
+  try {
+    const { initializeApp, cert, getApps } = await import('firebase-admin/app');
+    const { getMessaging: getAdminMessaging } = await import('firebase-admin/messaging');
+    const apps = getApps();
+    const app = apps.length > 0
+      ? apps[0]
+      : initializeApp({
+        credential: cert({
+          projectId: env.FIREBASE_PROJECT_ID,
+          privateKey: env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+          clientEmail: env.FIREBASE_CLIENT_EMAIL,
+        }),
+      });
+    _messaging = getAdminMessaging(app);
+    return _messaging;
+  } catch (err) {
+    console.error('[FCM] Firebase initialization error:', err.message);
+    return null;
   }
-  _messaging = admin.messaging();
-  return _messaging;
 }
 
 /**
@@ -38,7 +45,7 @@ export async function sendPush({ fcmToken, title, body, data = {} }) {
       notification: { title, body },
       data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
       android: { priority: 'high' },
-      apns:    { payload: { aps: { sound: 'default' } } },
+      apns: { payload: { aps: { sound: 'default' } } },
     });
   } catch (err) {
     console.error(`[FCM] Failed to send to ${fcmToken.slice(-8)}:`, err.message);

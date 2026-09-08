@@ -268,7 +268,7 @@ export const razorpayGateway = {
     const results = [];
     const count = 100;
     let skip = 0;
-    for (;;) {
+    for (; ;) {
       const page = await _call(client.payments.all({ from: fromUnix, to: toUnix, count, skip }));
       for (const p of page.items) {
         if (p.status === 'captured' || p.status === 'refunded') {
@@ -299,9 +299,11 @@ export const razorpayGateway = {
   async createContact({ name, email, phone, referenceId }) {
     if (!client) return { razorpayContactId: `cont_mock_${Date.now()}` };
     try {
-      const contact = await _call(client.api.post({ url: '/contacts', data: {
-        name, email, contact: phone, type: 'vendor', reference_id: referenceId,
-      } }));
+      const contact = await _call(client.api.post({
+        url: '/contacts', data: {
+          name, email, contact: phone, type: 'vendor', reference_id: referenceId,
+        }
+      }));
       return { razorpayContactId: contact.id };
     } catch (err) {
       if (env.NODE_ENV !== 'production' && (err.message?.includes('URL was not found') || !env.RAZORPAYX_ACCOUNT_NUMBER)) {
@@ -325,10 +327,10 @@ export const razorpayGateway = {
       const fundAccount = await _call(client.fundAccount.create(upiId
         ? { contact_id: contactId, account_type: 'vpa', vpa: { address: upiId } }
         : {
-            contact_id: contactId,
-            account_type: 'bank_account',
-            bank_account: { name: bankAccount.name, ifsc: bankAccount.routingCode, account_number: bankAccount.accountNumber },
-          }));
+          contact_id: contactId,
+          account_type: 'bank_account',
+          bank_account: { name: bankAccount.name, ifsc: bankAccount.routingCode, account_number: bankAccount.accountNumber },
+        }));
       return { razorpayFundAccountId: fundAccount.id, razorpayFundAccountType: upiId ? 'vpa' : 'bank_account' };
     } catch (err) {
       if (env.NODE_ENV !== 'production' && (err.message?.includes('URL was not found') || !env.RAZORPAYX_ACCOUNT_NUMBER)) {
@@ -354,16 +356,18 @@ export const razorpayGateway = {
       };
     }
     try {
-      const result = await _call(client.api.post({ url: '/payouts', data: {
-        account_number: env.RAZORPAYX_ACCOUNT_NUMBER,
-        fund_account_id: fundAccountId,
-        amount: amountMinor,
-        currency: currencyCode,
-        mode,
-        purpose: 'payout',
-        queue_if_low_balance: true,
-        reference_id: idempotencyKey,
-      } }));
+      const result = await _call(client.api.post({
+        url: '/payouts', data: {
+          account_number: env.RAZORPAYX_ACCOUNT_NUMBER,
+          fund_account_id: fundAccountId,
+          amount: amountMinor,
+          currency: currencyCode,
+          mode,
+          purpose: 'payout',
+          queue_if_low_balance: true,
+          reference_id: idempotencyKey,
+        }
+      }));
       return { gatewayPayoutId: result.id, status: result.status };
     } catch (err) {
       if (env.NODE_ENV !== 'production' && err.message?.includes('URL was not found')) {
@@ -399,8 +403,8 @@ export const razorpayGateway = {
         notes,
       },
     }));
-    console.log({result});
-    
+    console.log({ result });
+
     return {
       validationId: result.id,
       status: result.status, // 'created' | 'completed' | 'failed'

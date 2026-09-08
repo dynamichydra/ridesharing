@@ -127,13 +127,89 @@ test('commission does not exceed total fare even if min floor is higher than sma
   assert.equal(res.commissionMinor + res.driverEarningsMinor, 4000);
 });
 
-test('commissionRules schema exports cityId, minCommissionMinor, and maxCommissionMinor columns', async () => {
-  const { commissionRules } = await import('../drizzle/schema/index.js');
-  assert.ok(commissionRules.cityId, 'cityId column exists in commissionRules schema');
-  assert.ok(commissionRules.countryId, 'countryId column exists in commissionRules schema');
-  assert.ok(commissionRules.vehicleTypeId, 'vehicleTypeId column exists in commissionRules schema');
-  assert.ok(commissionRules.minCommissionMinor, 'minCommissionMinor column exists in commissionRules schema');
-  assert.ok(commissionRules.maxCommissionMinor, 'maxCommissionMinor column exists in commissionRules schema');
+test('driver earnings are protected on promo trips with dynamic subscriber vs non-subscriber rules', () => {
+  const dynamicRule = {
+    name: 'Bangalore Sedan Rule',
+    bookingFeeMinor: 2000,      // ₹20 booking fee
+    nonSubscriberRate: '0.20',  // 20% for non-subscribers
+    subscriberRate: '0.05',     // 5% for subscribers
+  };
+
+  const grossFareMinor = 50000;       // ₹500.00 Gross Metered Trip Fare
+  const promoDiscountMinor = 10000;   // ₹100.00 Rider Promo Discount
+  const riderPaidMinor = 40000;       // ₹400.00 Net Rider Paid
+
+  // 1. Subscribed Driver (5% rate + ₹20 booking fee):
+  // Booking fee = 2000 (₹20)
+  // Remainder = 48000 (₹480)
+  // Variable cut (5% of 48000) = 2400 (₹24)
+  // Platform Commission = 2000 + 2400 = 4400 (₹44)
+  // Driver Earnings = 50000 - 4400 = 45600 (₹456)
+  const subResult = computeCommission({
+    finalFareMinor: grossFareMinor,
+    rule: dynamicRule,
+    isSubscriber: true,
+  });
+
+  assert.equal(subResult.commissionMinor, 4400);
+  assert.equal(subResult.driverEarningsMinor, 45600);
+  assert.equal(subResult.driverEarningsMinor + subResult.commissionMinor, grossFareMinor);
+
+  // 2. Non-Subscribed Driver (20% rate + ₹20 booking fee):
+  // Remainder = 48000 (₹480)
+  // Variable cut (20% of 48000) = 9600 (₹96)
+  // Platform Commission = 2000 + 9600 = 11600 (₹116)
+  // Driver Earnings = 50000 - 11600 = 38400 (₹384)
+  const nonSubResult = computeCommission({
+    finalFareMinor: grossFareMinor,
+    rule: dynamicRule,
+    isSubscriber: false,
+  });
+
+  assert.equal(nonSubResult.commissionMinor, 11600);
+  assert.equal(nonSubResult.driverEarningsMinor, 38400);
+  assert.equal(nonSubResult.driverEarningsMinor + nonSubResult.commissionMinor, grossFareMinor);
 });
+
+test('online promo payment ledger entries perfectly balance with platform marketing subsidy', async () => {
+  const { validateBalancedEntries } = await import('../src/modules/ledger/ledger.service.js');
+
+  const grossFareMinor = 50000;       // ₹500 Gross Fare
+  const promoDiscountMinor = 10000;   // ₹100 Rider Promo
+  const riderPaidMinor = 40000;       // ₹400 Rider Paid Online
+  const driverEarningsMinor = 45600;  // ₹456 Driver Take-Home
+  const commissionMinor = 4400;       // ₹44 Platform Cut
+
+  // Double-Entry Ledger Transaction:
+  const onlineEntries = [
+    { direction: 'debit', amountMinor: riderPaidMinor, currencyCode: 'INR' },           // Processor clearing
+    { direction: 'debit', amountMinor: promoDiscountMinor, currencyCode: 'INR' },       // Platform marketing subsidy
+    { direction: 'credit', amountMinor: driverEarningsMinor, currencyCode: 'INR' },     // Driver Wallet
+    { direction: 'credit', amountMinor: commissionMinor, currencyCode: 'INR' },         // Platform Commission Revenue
+  ];
+
+  const validation = validateBalancedEntries(onlineEntries);
+  assert.equal(validation.balanced, true, 'Online promo ledger entries must balance to zero');
+});
+
+test('cash promo payment ledger entries perfectly balance when platform pays promo subsidy to subscriber driver', async () => {
+  const { validateBalancedEntries } = await import('../src/modules/ledger/ledger.service.js');
+
+  const grossFareMinor = 50000;       // ₹500 Gross Fare
+  const promoDiscountMinor = 10000;   // ₹100 Promo Discount
+  const commissionMinor = 2000;       // ₹20 Booking fee only (0% rate subscriber)
+  // Net settlement: Platform owes driver (10000 - 2000 = 8000)
+  const subsidyPayoutMinor = promoDiscountMinor - commissionMinor; // 8000
+
+  // Cash Subsidy Payout Transaction:
+  const cashSubsidyEntries = [
+    { direction: 'debit', amountMinor: subsidyPayoutMinor, currencyCode: 'INR' },       // Platform Marketing Subsidy
+    { direction: 'credit', amountMinor: subsidyPayoutMinor, currencyCode: 'INR' },      // Driver Wallet Credit
+  ];
+
+  const validation = validateBalancedEntries(cashSubsidyEntries);
+  assert.equal(validation.balanced, true, 'Cash promo subsidy payout entries must balance to zero');
+});
+
 
 

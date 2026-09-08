@@ -174,10 +174,10 @@ async function start() {
   const shutdown = async (sig) => {
     console.log(`\n[Server] ${sig} — shutting down gracefully...`);
     await app.close();
-    await redis.quit().catch(() => {});
-    await redisPub.quit().catch(() => {});
-    await redisSub.quit().catch(() => {});
-    await pool.end().catch(() => {});
+    await redis.quit().catch(() => { });
+    await redisPub.quit().catch(() => { });
+    await redisSub.quit().catch(() => { });
+    await pool.end().catch(() => { });
     process.exit(0);
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));

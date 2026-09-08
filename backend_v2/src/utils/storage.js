@@ -6,7 +6,7 @@ import path from 'path';
 import { env, isS3Configured } from '../config/env.js';
 
 const UPLOAD_URL_TTL_SECONDS = 300;   // 5 minutes to complete the PUT
-const VIEW_URL_TTL_SECONDS   = 600;   // 10 minutes for admin document review
+const VIEW_URL_TTL_SECONDS = 600;   // 10 minutes for admin document review
 
 const UPLOAD_DIR = path.resolve(process.cwd(), 'uploads');
 
@@ -28,7 +28,7 @@ function s3() {
 
 const ALLOWED_CONTENT_TYPES = {
   'image/jpeg': 'jpg',
-  'image/png':  'png',
+  'image/png': 'png',
   'image/heic': 'heic',
   'image/webp': 'webp',
   'application/pdf': 'pdf',

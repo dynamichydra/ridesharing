@@ -249,15 +249,16 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
   let deductionsMinor = 0;
 
   for (const r of currentRides) {
-    const fare = r.finalFareMinor || r.estimatedFareMinor || 0;
-    fareAmountMinor += fare;
-    const comm = r.platformCommissionMinor ?? r.fareSnapshot?.commission?.commissionMinor ?? Math.round(fare * 0.2);
+    const gross = r.fareSnapshot?.commission?.grossFareMinor || r.fareSnapshot?.grossFareMinor || r.fareSnapshot?.originalEstimatedFareMinor || r.finalFareMinor || r.estimatedFareMinor || 0;
+    const fare = r.finalFareMinor || r.estimatedFareMinor || gross;
+    fareAmountMinor += gross;
+    const comm = r.platformCommissionMinor ?? r.fareSnapshot?.commission?.commissionMinor ?? Math.round(gross * 0.2);
     deductionsMinor += comm;
 
     if (r.paymentMethod === 'cash') {
       cashCollectedMinor += fare;
     } else {
-      walletPaymentsMinor += fare;
+      walletPaymentsMinor += (gross - comm);
     }
 
     if (r.actualDurationMin) {

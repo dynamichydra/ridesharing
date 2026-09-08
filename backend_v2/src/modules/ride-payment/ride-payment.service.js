@@ -99,21 +99,11 @@ export async function recordCashCollection(driverId, rideId, collectedAmountMino
 
   const updated = await _markRidePaid(ride, { method: 'cash', gateway: 'cash', paymentAttemptId: payment.id });
 
-  // Calculate platform commission for cash auditing & settlement tracking
+  // Calculate platform commission for cash auditing & settlement tracking dynamically
   let commissionMinor = 0;
   try {
-    const resolvedCityId = ride.fareSnapshot?.cityId || ride.cityId || null;
-    const rule = await resolveCommissionRule({
-      vehicleTypeId: ride.vehicleTypeId,
-      countryId: ride.countryId,
-      cityId: resolvedCityId,
-    });
-    const commResult = computeCommission({
-      finalFareMinor: ride.finalFareMinor,
-      rule,
-      isSubscriber: false,
-    });
-    commissionMinor = commResult?.commissionMinor ?? Math.round(ride.finalFareMinor * 0.2);
+    const commission = await resolveRideCommission(ride);
+    commissionMinor = commission?.commissionMinor ?? Math.round(ride.finalFareMinor * 0.2);
   } catch {
     commissionMinor = Math.round(ride.finalFareMinor * 0.2);
   }
@@ -233,7 +223,20 @@ export async function getRideInvoice(rideId, requester) {
     currencyCode: ride.currencyCode,
     fareBreakdown: ride.fareSnapshot?.breakdown || {},
     estimatedFareMinor: ride.estimatedFareMinor,
+    grossFareMinor: ride.fareSnapshot?.commission?.grossFareMinor || ride.fareSnapshot?.grossFareMinor || ride.fareSnapshot?.originalEstimatedFareMinor || ride.finalFareMinor,
     finalFareMinor: ride.finalFareMinor,
+    commissionBreakdown: (requester.role === 'driver' || requester.role === 'admin') && ride.fareSnapshot?.commission ? {
+      grossFareMinor: ride.fareSnapshot.commission.grossFareMinor,
+      promoDiscountMinor: ride.fareSnapshot.commission.promoDiscountMinor || 0,
+      platformSubsidyMinor: ride.fareSnapshot.commission.platformSubsidyMinor || 0,
+      bookingFeeMinor: ride.fareSnapshot.commission.bookingFeeMinor || 0,
+      commissionRate: ride.fareSnapshot.commission.rate,
+      commissionMinor: ride.fareSnapshot.commission.commissionMinor,
+      driverEarningsMinor: ride.fareSnapshot.commission.driverEarningsMinor,
+      isSubscriber: ride.fareSnapshot.commission.isSubscriber,
+      ruleName: ride.fareSnapshot.commission.ruleName || null,
+      resolutionTier: ride.fareSnapshot.commission.resolutionTier || null,
+    } : undefined,
     payment: {
       method: ride.paymentMethod, status: ride.paymentStatus,
       gateway: payment?.gateway ?? null, gatewayPaymentId: payment?.gatewayPaymentId ?? null,
@@ -300,7 +303,7 @@ async function _loadPayableRideForUser(rideId, userId) {
   return ride;
 }
 
-// Resolves the commission rule for this ride and the driver's subscription status *at
+// Resolves the dynamic commission rule for this ride and the driver's subscription status *at
 // settlement time* (not at request time — a driver's subscription can lapse mid-ride), and
 // stamps the breakdown onto ride.fareSnapshot so getRideInvoice/getRidePaymentStatus can show
 // it without a schema change to `rides`. Returns null (no commission applied) if there's no
@@ -343,7 +346,7 @@ export async function resolveRideCommission(ride) {
       cityId: resolvedCityId,
     });
   } catch (err) {
-    console.warn('[RidePayment] No commission rule found, using default 20% platform cut:', err.message);
+    console.warn('[RidePayment] No commission rule found, using default platform cut:', err.message);
   }
 
   // Industrial Promo Subsidy Architecture:
@@ -351,8 +354,13 @@ export async function resolveRideCommission(ride) {
   // The platform absorbs promo discounts as a marketing subsidy so drivers are never penalized.
   const promoDiscountMinor = ride.fareSnapshot?.breakdown?.promo?.discountAmountMinor
     || ride.fareSnapshot?.discountAmountMinor
+    || ride.discountAmountMinor
     || 0;
-  const grossFareMinor = Math.max(ride.finalFareMinor || 0, (ride.finalFareMinor || 0) + promoDiscountMinor);
+
+  const grossFareMinor = ride.grossFareMinor
+    || ride.fareSnapshot?.grossFareMinor
+    || ride.fareSnapshot?.originalEstimatedFareMinor
+    || Math.max(ride.finalFareMinor || 0, (ride.finalFareMinor || 0) + promoDiscountMinor);
 
   let breakdown;
   if (customRate !== null && !isNaN(customRate)) {
@@ -376,7 +384,11 @@ export async function resolveRideCommission(ride) {
       commissionMinor,
       driverEarningsMinor,
       netPlatformRevenueMinor: commissionMinor - promoDiscountMinor,
+      isSubscriber: true,
+      customPlanRate: true,
       resolutionTier: rule?.resolutionTier || null,
+      ruleId: rule?.id || null,
+      ruleName: rule?.name || null,
     };
   } else if (rule) {
     const computed = computeCommission({
@@ -390,24 +402,32 @@ export async function resolveRideCommission(ride) {
       promoDiscountMinor,
       platformSubsidyMinor: promoDiscountMinor,
       netPlatformRevenueMinor: computed.commissionMinor - promoDiscountMinor,
+      isSubscriber,
+      ruleId: rule.id,
+      ruleName: rule.name || null,
     };
   } else {
-    const defaultComm = Math.round(grossFareMinor * 0.2);
+    const defaultRate = isSubscriber ? 0.05 : 0.20;
+    const defaultComm = Math.round(grossFareMinor * defaultRate);
     breakdown = {
       grossFareMinor,
       promoDiscountMinor,
       platformSubsidyMinor: promoDiscountMinor,
       bookingFeeMinor: 0,
-      rate: 0.2,
+      rate: defaultRate,
       commissionMinor: defaultComm,
       driverEarningsMinor: Math.max(0, grossFareMinor - defaultComm),
       netPlatformRevenueMinor: defaultComm - promoDiscountMinor,
+      isSubscriber,
+      ruleId: null,
+      ruleName: null,
+      resolutionTier: 'fallback_default',
     };
   }
 
   try {
     await db.update(rides).set({
-      fareSnapshot: { ...(ride.fareSnapshot || {}), commission: { ruleId: rule?.id || null, ...breakdown } },
+      fareSnapshot: { ...(ride.fareSnapshot || {}), grossFareMinor, commission: { ruleId: rule?.id || null, ...breakdown } },
     }).where(eq(rides.id, ride.id));
   } catch (err) {
     console.error('[RidePayment] Failed to update ride fareSnapshot commission:', err.message);
@@ -417,16 +437,9 @@ export async function resolveRideCommission(ride) {
 }
 
 // Online fares: Dr the gateway's processor-clearing account, Cr the driver's wallet for their
-// post-commission earnings, Cr platform_commission_revenue for the booking fee + rate cut —
-// this is what actually makes an online fare payable to the driver (previously nothing did,
-// and nothing deducted a platform cut either).
-// Cash fares: the existing net-zero memo (driver already holds the cash, wallet untouched)
-// still records that revenue was recognized without the platform custodying funds — plus a
-// real debit against the driver's wallet for the commission they owe on cash already in hand,
-// which can legitimately run the wallet negative (allowNegative) for a mostly-cash driver, the
-// same way a refund clawback already can elsewhere in this codebase.
-// `idempotencyKey` is per-ride so a duplicate call (e.g. verify + webhook both landing) posts
-// once, not twice.
+// post-commission earnings, Cr platform_commission_revenue for the booking fee + rate cut,
+// Dr platform_marketing_subsidy for promo discounts absorbed by platform.
+// Cash fares: records cash memo + net settlement between platform commission and promo subsidy.
 async function _postRideFareLedger(ride, paymentInfo) {
   const currencyCode = ride.currencyCode;
   let commission = null;
@@ -436,21 +449,32 @@ async function _postRideFareLedger(ride, paymentInfo) {
     console.warn('[RidePayment] resolveRideCommission failed in _postRideFareLedger:', e.message);
   }
 
-  const driverEarningsMinor = commission?.driverEarningsMinor ?? Math.round((ride.finalFareMinor || 0) * 0.8);
-  const commissionMinor = commission?.commissionMinor ?? ((ride.finalFareMinor || 0) - driverEarningsMinor);
+  const grossFareMinor = commission?.grossFareMinor || ride.grossFareMinor || (ride.finalFareMinor || 0);
+  const promoDiscountMinor = commission?.promoDiscountMinor || 0;
+  const platformSubsidyMinor = commission?.platformSubsidyMinor || promoDiscountMinor;
+  const driverEarningsMinor = commission?.driverEarningsMinor ?? Math.round(grossFareMinor * 0.8);
+  const commissionMinor = commission?.commissionMinor ?? (grossFareMinor - driverEarningsMinor);
 
   if (paymentInfo.method === 'online') {
     if (!ride.driverId) return;
     const driverWallet = await getOrCreateWallet('driver', ride.driverId);
-    const [driverWalletAccount, commissionAccount, clearingAccount] = await Promise.all([
+    const [driverWalletAccount, commissionAccount, clearingAccount, subsidyAccount] = await Promise.all([
       getOrCreateWalletAccount(driverWallet.id, currencyCode, { ownerType: 'driver', ownerId: ride.driverId }),
       getOrCreateSystemAccount('platform_commission_revenue', currencyCode),
       getOrCreateSystemAccount(`processor_clearing:${paymentInfo.gateway}`, currencyCode),
+      platformSubsidyMinor > 0 ? getOrCreateSystemAccount('platform_marketing_subsidy', currencyCode, { accountCategory: 'EXPENSE' }) : null,
     ]);
 
     const entries = [
       { accountId: clearingAccount.id, direction: 'debit', amountMinor: ride.finalFareMinor, currencyCode },
     ];
+
+    if (platformSubsidyMinor > 0 && subsidyAccount) {
+      entries.push({
+        accountId: subsidyAccount.id, direction: 'debit', amountMinor: platformSubsidyMinor, currencyCode,
+        description: `Marketing subsidy for promo on ride ${ride.id}`,
+      });
+    }
 
     entries.push({
       accountId: driverWalletAccount.id, direction: 'credit', amountMinor: driverEarningsMinor, currencyCode,
@@ -472,20 +496,29 @@ async function _postRideFareLedger(ride, paymentInfo) {
   } else if (paymentInfo.method === 'wallet') {
     if (!ride.driverId) return;
     const driverWallet = await getOrCreateWallet('driver', ride.driverId);
-    const [driverWalletAccount, commissionAccount, clearingAccount] = await Promise.all([
+    const [driverWalletAccount, commissionAccount, clearingAccount, subsidyAccount] = await Promise.all([
       getOrCreateWalletAccount(driverWallet.id, currencyCode, { ownerType: 'driver', ownerId: ride.driverId }),
       getOrCreateSystemAccount('platform_commission_revenue', currencyCode),
       getOrCreateSystemAccount('processor_clearing:wallet', currencyCode),
+      platformSubsidyMinor > 0 ? getOrCreateSystemAccount('platform_marketing_subsidy', currencyCode, { accountCategory: 'EXPENSE' }) : null,
     ]);
 
     const entries = [
       { accountId: clearingAccount.id, direction: 'debit', amountMinor: ride.finalFareMinor, currencyCode },
-      {
-        accountId: driverWalletAccount.id, direction: 'credit', amountMinor: driverEarningsMinor, currencyCode,
-        reason: 'ride_fare_wallet', description: `Fare earnings for ride ${ride.id}`,
-        allowNegative: true,
-      },
     ];
+
+    if (platformSubsidyMinor > 0 && subsidyAccount) {
+      entries.push({
+        accountId: subsidyAccount.id, direction: 'debit', amountMinor: platformSubsidyMinor, currencyCode,
+        description: `Marketing subsidy for promo on wallet ride ${ride.id}`,
+      });
+    }
+
+    entries.push({
+      accountId: driverWalletAccount.id, direction: 'credit', amountMinor: driverEarningsMinor, currencyCode,
+      reason: 'ride_fare_wallet', description: `Fare earnings for ride ${ride.id}`,
+      allowNegative: true,
+    });
 
     if (commissionMinor > 0) {
       entries.push({ accountId: commissionAccount.id, direction: 'credit', amountMinor: commissionMinor, currencyCode });
@@ -514,25 +547,51 @@ async function _postRideFareLedger(ride, paymentInfo) {
       ],
     });
 
-    if (ride.driverId && commissionMinor > 0) {
-      const driverWallet = await getOrCreateWallet('driver', ride.driverId);
-      const [driverWalletAccount, commissionAccount] = await Promise.all([
-        getOrCreateWalletAccount(driverWallet.id, currencyCode),
-        getOrCreateSystemAccount('platform_commission_revenue', currencyCode),
-      ]);
-      await postTransaction({
-        businessType: 'ride_commission_cash',
-        idempotencyKey: `ride_commission_cash:${ride.id}`,
-        referenceType: 'ride',
-        referenceId: ride.id,
-        entries: [
-          {
-            accountId: driverWalletAccount.id, direction: 'debit', amountMinor: commissionMinor, currencyCode,
-            reason: 'ride_commission_cash', description: `Commission owed for cash ride ${ride.id}`, allowNegative: true,
-          },
-          { accountId: commissionAccount.id, direction: 'credit', amountMinor: commissionMinor, currencyCode },
-        ],
-      });
+    if (ride.driverId) {
+      const netDueToPlatformMinor = commissionMinor - platformSubsidyMinor;
+
+      if (netDueToPlatformMinor > 0) {
+        // Driver owes platform net commission (commission cut minus promo subsidy offset)
+        const driverWallet = await getOrCreateWallet('driver', ride.driverId);
+        const [driverWalletAccount, commissionAccount] = await Promise.all([
+          getOrCreateWalletAccount(driverWallet.id, currencyCode),
+          getOrCreateSystemAccount('platform_commission_revenue', currencyCode),
+        ]);
+        await postTransaction({
+          businessType: 'ride_commission_cash',
+          idempotencyKey: `ride_commission_cash:${ride.id}`,
+          referenceType: 'ride',
+          referenceId: ride.id,
+          entries: [
+            {
+              accountId: driverWalletAccount.id, direction: 'debit', amountMinor: netDueToPlatformMinor, currencyCode,
+              reason: 'ride_commission_cash', description: `Net commission owed for cash ride ${ride.id}`, allowNegative: true,
+            },
+            { accountId: commissionAccount.id, direction: 'credit', amountMinor: netDueToPlatformMinor, currencyCode },
+          ],
+        });
+      } else if (netDueToPlatformMinor < 0) {
+        // Platform owes driver promo subsidy (e.g. subscribed driver where platform subsidy > commission)
+        const subsidyPayoutMinor = Math.abs(netDueToPlatformMinor);
+        const driverWallet = await getOrCreateWallet('driver', ride.driverId);
+        const [driverWalletAccount, subsidyAccount] = await Promise.all([
+          getOrCreateWalletAccount(driverWallet.id, currencyCode),
+          getOrCreateSystemAccount('platform_marketing_subsidy', currencyCode, { accountCategory: 'EXPENSE' }),
+        ]);
+        await postTransaction({
+          businessType: 'ride_subsidy_cash',
+          idempotencyKey: `ride_subsidy_cash:${ride.id}`,
+          referenceType: 'ride',
+          referenceId: ride.id,
+          entries: [
+            { accountId: subsidyAccount.id, direction: 'debit', amountMinor: subsidyPayoutMinor, currencyCode, description: `Promo subsidy compensation for cash ride ${ride.id}` },
+            {
+              accountId: driverWalletAccount.id, direction: 'credit', amountMinor: subsidyPayoutMinor, currencyCode,
+              reason: 'ride_subsidy_cash', description: `Promo subsidy payout for cash ride ${ride.id}`, allowNegative: true,
+            },
+          ],
+        });
+      }
     }
   }
 }

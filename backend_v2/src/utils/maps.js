@@ -45,9 +45,9 @@ async function _distancematrix(origin, destination) {
   } catch (error) {
     console.log(error);
     throw error;
-    
+
   }
-  
+
 }
 
 async function _directions(origin, destination) {
@@ -66,9 +66,9 @@ async function _directions(origin, destination) {
   } catch (error) {
     console.log(error);
     throw error;
-    
+
   }
-  
+
 }
 
 // ── public ────────────────────────────────────────────────────────────────────
