@@ -1,4 +1,4 @@
-import { eq, desc, count, and, or, ilike } from 'drizzle-orm';
+import { eq, desc, count, and, or, ilike, ne } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import {
   users,

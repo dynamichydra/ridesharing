@@ -4,3 +4,6 @@ drizzle/migrations/*.sql
 *.log
 dist/
 uploads/
+
+.vercel
+.env*
