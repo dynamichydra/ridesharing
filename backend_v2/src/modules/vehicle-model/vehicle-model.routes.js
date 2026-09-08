@@ -6,14 +6,14 @@ export async function vehicleModelRoutes(app) {
 
   // Public — riders/drivers pick a model when registering a vehicle
   app.get('/', async (request, reply) => {
-    const { vehicleTypeId } = request.query;
+    const { vehicleTypeId, search } = request.query;
     const isAdmin = request.query.all === 'true';
     if (isAdmin) {
       const { page, limit, offset } = parsePagination(request.query);
-      const { rows, pagination } = await vmService.listPaginated(page, limit, offset, vehicleTypeId);
+      const { rows, pagination } = await vmService.listPaginated(page, limit, offset, vehicleTypeId, search);
       return sendList(reply, rows, pagination);
     }
-    const data = await vmService.listAll(true, vehicleTypeId);
+    const data = await vmService.listAll(true, vehicleTypeId, search);
     return sendSuccess(reply, data);
   });
 

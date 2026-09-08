@@ -1137,7 +1137,26 @@ export async function getRiderActiveRide(riderId) {
       currentLat: drivers.currentLat,
       currentLng: drivers.currentLng,
     }).from(drivers).where(eq(drivers.id, ride.driverId)).limit(1);
-    driver = d || null;
+
+    if (d) {
+      const [{ totalRides }] = await db.select({ totalRides: count() })
+        .from(rides)
+        .where(and(eq(rides.driverId, ride.driverId), eq(rides.status, 'completed')));
+
+      const [{ countWithRider }] = await db.select({ countWithRider: count() })
+        .from(rides)
+        .where(and(
+          eq(rides.driverId, ride.driverId),
+          eq(rides.riderId, riderId),
+          eq(rides.status, 'completed')
+        ));
+
+      driver = {
+        ...d,
+        totalRides: Number(totalRides || 0),
+        ridesWithThisRider: Number(countWithRider || 0),
+      };
+    }
   }
 
   return {
@@ -1199,7 +1218,50 @@ export async function getRideById(rideId) {
     .limit(1);
 
   if (!ride) throw { statusCode: 404, message: 'Ride not found' };
-  return ride;
+
+  let driver = null;
+  if (ride.driverId) {
+    const [d] = await db.select({
+      id: drivers.id,
+      name: drivers.name,
+      phone: drivers.phone,
+      vehicleNumber: drivers.vehicleNumber,
+      vehicleModel: drivers.vehicleModel,
+      rating: drivers.rating,
+      profilePhoto: drivers.profilePhoto,
+      currentLat: drivers.currentLat,
+      currentLng: drivers.currentLng,
+    }).from(drivers).where(eq(drivers.id, ride.driverId)).limit(1);
+
+    if (d) {
+      const [{ totalRides }] = await db.select({ totalRides: count() })
+        .from(rides)
+        .where(and(eq(rides.driverId, ride.driverId), eq(rides.status, 'completed')));
+
+      let countWithRider = 0;
+      if (ride.riderId) {
+        const [{ countWithRider: c }] = await db.select({ countWithRider: count() })
+          .from(rides)
+          .where(and(
+            eq(rides.driverId, ride.driverId),
+            eq(rides.riderId, ride.riderId),
+            eq(rides.status, 'completed')
+          ));
+        countWithRider = c;
+      }
+
+      driver = {
+        ...d,
+        totalRides: Number(totalRides || 0),
+        ridesWithThisRider: Number(countWithRider || 0),
+      };
+    }
+  }
+
+  return {
+    ...ride,
+    driver,
+  };
 }
 
 export async function getDriverRideHistory(driverId, { page = 1, limit = 20, offset = 0, status, fromDate, toDate, minEarnings, maxEarnings } = {}) {

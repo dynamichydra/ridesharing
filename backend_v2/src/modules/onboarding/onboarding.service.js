@@ -122,6 +122,14 @@ export async function getActiveQuestionnaire(countryId, languageCode = 'en') {
   const optIds = options.map((o) => o.id);
   const oLabels = await getTranslationsFor('onboarding_question_option', optIds, languageCode);
 
+  const defaultQuestionDescriptions = {
+    own_vehicle: 'Please specify whether you own the vehicle or drive for a fleet partner.',
+    driving_experience_years: 'Enter total years of commercial or professional driving experience.',
+    has_commercial_license: 'Confirm if you hold a valid commercial driving license/badge.',
+    preferred_shift: 'Select your preferred shift or daily driving hours.',
+    vehicle_fuel_type: 'Specify the primary fuel type of your vehicle (Petrol, Diesel, EV, CNG).',
+  };
+
   return questions.map((q) => ({
     id: q.id,
     code: q.code,
@@ -131,12 +139,15 @@ export async function getActiveQuestionnaire(countryId, languageCode = 'en') {
     minValue: q.minValue,
     maxValue: q.maxValue,
     label: qLabels[q.id]?.label ?? q.code,
-    description: qLabels[q.id]?.description,
+    description: qLabels[q.id]?.description ?? defaultQuestionDescriptions[q.code] ?? `Please provide details for ${q.code.replace(/_/g, ' ')}.`,
     dependsOn: q.dependsOnQuestionId
       ? { questionId: q.dependsOnQuestionId, operator: q.dependsOnOperator, value: q.dependsOnValue }
       : null,
     options: options.filter((o) => o.questionId === q.id).map((o) => ({
-      id: o.id, code: o.code, label: oLabels[o.id]?.label ?? o.code,
+      id: o.id,
+      code: o.code,
+      label: oLabels[o.id]?.label ?? o.code,
+      description: oLabels[o.id]?.description ?? null,
     })),
   }));
 }

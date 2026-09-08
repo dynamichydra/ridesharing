@@ -40,6 +40,11 @@ export async function driverRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  app.get('/commission-status', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const data = await driverService.getDriverCommissionStatus(request.user.id);
+    return sendSuccess(reply, data);
+  });
+
   app.get('/me', { preHandler: [authenticateDriver] }, async (request, reply) => {
     const data = await driverService.getDriverMe(request.user.id);
     return sendSuccess(reply, data);

@@ -88,6 +88,20 @@ function normalizeEntitlements(entitlements) {
     cleaned.maxRidesPerDay = normalizeMaxRidesPerDay(cleaned.maxRidesPerDay);
   }
 
+  if (cleaned.waiveBookingFee !== undefined && cleaned.waiveBookingFee !== null) {
+    if (typeof cleaned.waiveBookingFee !== 'boolean') {
+      throw { statusCode: 400, message: 'entitlements.waiveBookingFee must be a boolean' };
+    }
+  }
+
+  if (cleaned.customBookingFeeMinor !== undefined && cleaned.customBookingFeeMinor !== null) {
+    const fee = Number(cleaned.customBookingFeeMinor);
+    if (!Number.isInteger(fee) || fee < 0) {
+      throw { statusCode: 400, message: 'entitlements.customBookingFeeMinor must be a non-negative integer' };
+    }
+    cleaned.customBookingFeeMinor = fee;
+  }
+
   return cleaned;
 }
 

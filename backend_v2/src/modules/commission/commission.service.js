@@ -82,30 +82,59 @@ export async function resolveCommissionRule(paramsOrVehicleTypeId, countryIdPara
   throw { statusCode: 422, message: 'No commission rule is configured (not even a global default) — an admin must create one' };
 }
 
-// Booking fee comes off the top untouched by the rate, then the rate applies to the remainder.
+// Dynamic Booking fee & Rate calculation:
+// Priority: 1. Plan Entitlements (customRate / waiveBookingFee) -> 2. Matched Commission Rule (subscriberRate vs nonSubscriberRate) -> 3. Fallback defaults.
 // Also supports minCommissionMinor (floor) and maxCommissionMinor (ceiling cap).
-export function computeCommission({ finalFareMinor, rule, isSubscriber }) {
+export function computeCommission({
+  finalFareMinor,
+  rule,
+  isSubscriber,
+  customRate = null,
+  customBookingFeeMinor = null,
+  waiveBookingFee = false,
+}) {
   const fare = Math.max(0, finalFareMinor || 0);
-  const bookingFeeMinor = Math.min(rule.bookingFeeMinor || 0, fare);
-  const rate = parseFloat(isSubscriber ? rule.subscriberRate : rule.nonSubscriberRate) || 0;
 
-  // Base variable commission on fare remainder
+  // Dynamic Booking Fee Resolution
+  let bookingFeeMinor = 0;
+  if (!waiveBookingFee) {
+    if (customBookingFeeMinor !== null && !isNaN(customBookingFeeMinor)) {
+      bookingFeeMinor = Math.min(customBookingFeeMinor, fare);
+    } else if (rule?.bookingFeeMinor) {
+      bookingFeeMinor = Math.min(rule.bookingFeeMinor, fare);
+    }
+  }
+
+  // Dynamic Commission Rate Resolution:
+  let rate = 0;
+  if (customRate !== null && !isNaN(customRate)) {
+    rate = Number(customRate);
+  } else if (rule) {
+    const rawRate = isSubscriber
+      ? (rule.subscriberRate !== undefined ? rule.subscriberRate : rule.rate)
+      : (rule.nonSubscriberRate !== undefined ? rule.nonSubscriberRate : rule.rate);
+    rate = parseFloat(rawRate) || 0;
+  } else {
+    rate = isSubscriber ? 0.05 : 0.20;
+  }
+
+  // Base variable commission on fare remainder after booking fee
   const remainder = Math.max(0, fare - bookingFeeMinor);
   let commissionMinor = bookingFeeMinor + Math.round(remainder * rate);
 
   // Apply floor limit (minimum platform commission cut)
-  const minFloor = Number(rule.minCommissionMinor) || 0;
+  const minFloor = Number(rule?.minCommissionMinor) || 0;
   if (minFloor > 0 && commissionMinor < minFloor) {
     commissionMinor = minFloor;
   }
 
   // Apply ceiling limit (maximum platform commission cap)
-  const maxCap = rule.maxCommissionMinor != null && rule.maxCommissionMinor !== '' ? Number(rule.maxCommissionMinor) : null;
+  const maxCap = rule?.maxCommissionMinor != null && rule.maxCommissionMinor !== '' ? Number(rule.maxCommissionMinor) : null;
   if (maxCap != null && maxCap > 0 && commissionMinor > maxCap) {
     commissionMinor = maxCap;
   }
 
-  // Platform cut cannot exceed the total fare
+  // Platform cut cannot exceed total fare
   commissionMinor = Math.min(commissionMinor, fare);
   const driverEarningsMinor = Math.max(0, fare - commissionMinor);
 
@@ -116,7 +145,11 @@ export function computeCommission({ finalFareMinor, rule, isSubscriber }) {
     driverEarningsMinor,
     minCommissionMinor: minFloor,
     maxCommissionMinor: maxCap,
-    resolutionTier: rule.resolutionTier || null,
+    resolutionTier: rule?.resolutionTier || (customRate !== null ? 'plan_entitlement' : 'default'),
+    isSubscriber: !!isSubscriber,
+    customPlanRate: customRate !== null,
+    ruleId: rule?.id || null,
+    ruleName: rule?.name || null,
   };
 }
 

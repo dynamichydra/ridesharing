@@ -1,4 +1,4 @@
-import { eq, and, asc, count } from 'drizzle-orm';
+import { eq, and, or, ilike, asc, count } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { vehicleModels, vehicleTypes } from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
@@ -8,24 +8,96 @@ function toSlug(brand, name) {
   return `${brand}-${name}`.toLowerCase().replace(/\s+/g, '-');
 }
 
-export async function listAll(onlyActive = true, vehicleTypeId) {
+export async function listAll(onlyActive = true, vehicleTypeId, search = null) {
   const conditions = [];
   if (onlyActive) conditions.push(eq(vehicleModels.isActive, true));
   if (vehicleTypeId) conditions.push(eq(vehicleModels.vehicleTypeId, vehicleTypeId));
+  if (search) {
+    const term = `%${search.trim()}%`;
+    conditions.push(or(ilike(vehicleModels.name, term), ilike(vehicleModels.brand, term)));
+  }
   const where = conditions.length ? and(...conditions) : undefined;
-  return db.select().from(vehicleModels).where(where).orderBy(asc(vehicleModels.sortOrder));
+
+  return db
+    .select({
+      id: vehicleModels.id,
+      vehicleTypeId: vehicleModels.vehicleTypeId,
+      brand: vehicleModels.brand,
+      name: vehicleModels.name,
+      slug: vehicleModels.slug,
+      sortOrder: vehicleModels.sortOrder,
+      isActive: vehicleModels.isActive,
+      vehicleType: {
+        id: vehicleTypes.id,
+        name: vehicleTypes.name,
+        icon: vehicleTypes.icon,
+        capacity: vehicleTypes.capacity,
+      },
+    })
+    .from(vehicleModels)
+    .leftJoin(vehicleTypes, eq(vehicleModels.vehicleTypeId, vehicleTypes.id))
+    .where(where)
+    .orderBy(asc(vehicleModels.sortOrder), asc(vehicleModels.brand), asc(vehicleModels.name));
 }
 
-export async function listPaginated(page, limit, offset, vehicleTypeId) {
-  const where = vehicleTypeId ? eq(vehicleModels.vehicleTypeId, vehicleTypeId) : undefined;
+export async function listPaginated(page, limit, offset, vehicleTypeId, search = null) {
+  const conditions = [];
+  if (vehicleTypeId) conditions.push(eq(vehicleModels.vehicleTypeId, vehicleTypeId));
+  if (search) {
+    const term = `%${search.trim()}%`;
+    conditions.push(or(ilike(vehicleModels.name, term), ilike(vehicleModels.brand, term)));
+  }
+  const where = conditions.length ? and(...conditions) : undefined;
+
   const [{ total }] = await db.select({ total: count() }).from(vehicleModels).where(where);
-  const rows = await db.select().from(vehicleModels).where(where)
-    .orderBy(asc(vehicleModels.sortOrder)).limit(limit).offset(offset);
+  const rows = await db
+    .select({
+      id: vehicleModels.id,
+      vehicleTypeId: vehicleModels.vehicleTypeId,
+      brand: vehicleModels.brand,
+      name: vehicleModels.name,
+      slug: vehicleModels.slug,
+      sortOrder: vehicleModels.sortOrder,
+      isActive: vehicleModels.isActive,
+      vehicleType: {
+        id: vehicleTypes.id,
+        name: vehicleTypes.name,
+        icon: vehicleTypes.icon,
+        capacity: vehicleTypes.capacity,
+      },
+    })
+    .from(vehicleModels)
+    .leftJoin(vehicleTypes, eq(vehicleModels.vehicleTypeId, vehicleTypes.id))
+    .where(where)
+    .orderBy(asc(vehicleModels.sortOrder), asc(vehicleModels.brand), asc(vehicleModels.name))
+    .limit(limit)
+    .offset(offset);
+
   return { rows, pagination: paginate(page, limit, total) };
 }
 
 export async function getById(id) {
-  const [vm] = await db.select().from(vehicleModels).where(eq(vehicleModels.id, id)).limit(1);
+  const [vm] = await db
+    .select({
+      id: vehicleModels.id,
+      vehicleTypeId: vehicleModels.vehicleTypeId,
+      brand: vehicleModels.brand,
+      name: vehicleModels.name,
+      slug: vehicleModels.slug,
+      sortOrder: vehicleModels.sortOrder,
+      isActive: vehicleModels.isActive,
+      vehicleType: {
+        id: vehicleTypes.id,
+        name: vehicleTypes.name,
+        icon: vehicleTypes.icon,
+        capacity: vehicleTypes.capacity,
+      },
+    })
+    .from(vehicleModels)
+    .leftJoin(vehicleTypes, eq(vehicleModels.vehicleTypeId, vehicleTypes.id))
+    .where(eq(vehicleModels.id, id))
+    .limit(1);
+
   if (!vm) throw { statusCode: 404, message: 'Vehicle model not found' };
   return vm;
 }

@@ -95,6 +95,17 @@ export async function getProfile(riderId) {
 export async function updateProfile(riderId, data) {
   const allowed = ['name', 'email', 'avatar', 'fcmToken'];
   const updates = Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
+
+  if (updates.email) {
+    const cleanEmail = String(updates.email).trim().toLowerCase();
+    const [existing] = await db.select({ id: users.id }).from(users)
+      .where(and(eq(users.email, cleanEmail), ne(users.id, riderId))).limit(1);
+    if (existing) {
+      throw { statusCode: 409, code: 'EMAIL_ALREADY_EXISTS', message: 'This email address is already registered. Please use another email or log in.' };
+    }
+    updates.email = cleanEmail;
+  }
+
   updates.updatedAt = new Date();
   const [updated] = await db.update(users).set(updates).where(eq(users.id, riderId)).returning();
   return updated;

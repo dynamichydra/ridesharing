@@ -536,6 +536,17 @@ export async function updateProfile(driverId, data) {
     'dateOfBirth', 'gender', 'referralCode', 'preferredLanguageCode', 'profilePhoto',
   ];
   const updates = Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
+
+  if (updates.email) {
+    const cleanEmail = String(updates.email).trim().toLowerCase();
+    const [existing] = await db.select({ id: drivers.id }).from(drivers)
+      .where(and(eq(drivers.email, cleanEmail), ne(drivers.id, driverId))).limit(1);
+    if (existing) {
+      throw { statusCode: 409, code: 'EMAIL_ALREADY_EXISTS', message: 'A driver with this email already exists. Please use another email.' };
+    }
+    updates.email = cleanEmail;
+  }
+
   updates.updatedAt = new Date();
   const [updated] = await db.update(drivers).set(updates).where(eq(drivers.id, driverId)).returning();
 
@@ -1061,5 +1072,94 @@ export async function adminUpdateDriver(driverId, adminId, data) {
   });
 
   return updatedDriver;
+}
+
+export async function getDriverCommissionStatus(driverId) {
+  const [driver] = await db.select({
+    id: drivers.id,
+    countryId: drivers.countryId,
+    cityId: drivers.cityId,
+    vehicleTypeId: drivers.vehicleTypeId,
+    subscriptionStatus: drivers.subscriptionStatus,
+  }).from(drivers).where(eq(drivers.id, driverId)).limit(1);
+
+  if (!driver) throw { statusCode: 404, message: 'Driver not found' };
+
+  const isSubscriber = driver.subscriptionStatus === 'active';
+
+  // Check active plan
+  let activePlan = null;
+  let customRate = null;
+  let waiveBookingFee = false;
+  let priorityScoreBonus = 0;
+
+  if (isSubscriber) {
+    const [sub] = await db.select({
+      id: subscriptions.id,
+      planId: subscriptions.planId,
+      expiresAt: subscriptions.expiresAt,
+      status: subscriptions.status,
+      planName: subscriptionPlans.name,
+      planType: subscriptionPlans.type,
+      entitlements: subscriptionPlans.entitlements,
+      priorityMatching: subscriptionPlans.priorityMatching,
+    })
+      .from(subscriptions)
+      .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+      .where(and(eq(subscriptions.driverId, driverId), eq(subscriptions.status, 'active')))
+      .orderBy(desc(subscriptions.createdAt))
+      .limit(1);
+
+    if (sub) {
+      activePlan = {
+        id: sub.planId,
+        name: sub.planName,
+        type: sub.planType,
+        expiresAt: sub.expiresAt,
+      };
+      if (sub.entitlements?.commissionRate !== undefined && sub.entitlements?.commissionRate !== null) {
+        customRate = Number(sub.entitlements.commissionRate);
+      }
+      if (sub.entitlements?.waiveBookingFee === true) {
+        waiveBookingFee = true;
+      }
+      if (sub.entitlements?.priorityScoreBonus) {
+        priorityScoreBonus = Number(sub.entitlements.priorityScoreBonus);
+      }
+    }
+  }
+
+  // Resolve matched rule
+  let rule = null;
+  try {
+    const { resolveCommissionRule } = await import('../commission/commission.service.js');
+    rule = await resolveCommissionRule({
+      vehicleTypeId: driver.vehicleTypeId,
+      countryId: driver.countryId,
+      cityId: driver.cityId,
+    });
+  } catch {}
+
+  const standardRate = parseFloat(rule?.nonSubscriberRate || '0.20');
+  const subscriberRuleRate = parseFloat(rule?.subscriberRate || '0.05');
+  const effectiveRate = customRate !== null ? customRate : (isSubscriber ? subscriberRuleRate : standardRate);
+  const bookingFeeMinor = waiveBookingFee ? 0 : (rule?.bookingFeeMinor || 0);
+
+  return {
+    driverId,
+    subscriptionStatus: driver.subscriptionStatus || 'inactive',
+    isSubscriber,
+    activePlan,
+    effectiveCommissionRate: effectiveRate,
+    effectiveCommissionPercentage: `${(effectiveRate * 100).toFixed(0)}%`,
+    standardCommissionRate: standardRate,
+    standardCommissionPercentage: `${(standardRate * 100).toFixed(0)}%`,
+    commissionSavingsPercentage: `${((standardRate - effectiveRate) * 100).toFixed(0)}%`,
+    bookingFeeMinor,
+    bookingFeeWaived: waiveBookingFee,
+    priorityMatchingBonus: priorityScoreBonus,
+    resolutionTier: rule?.resolutionTier || 'default',
+    ruleName: rule?.name || 'Default Platform Commission',
+  };
 }
 

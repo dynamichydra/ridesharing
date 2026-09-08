@@ -83,7 +83,14 @@ export async function validatePromoCode(code, fareMinor, userId, contextOrCountr
       .where(and(eq(promoUsages.promoId, promo.id), eq(promoUsages.userId, userId)));
 
     if (userUsedCount >= promo.perUserLimit) {
-      throw { statusCode: 409, message: 'You have reached your personal usage limit for this promo code' };
+      throw {
+        statusCode: 409,
+        code: 'PROMO_ALREADY_APPLIED',
+        message: 'You have already used this promo code',
+        alreadyApplied: true,
+        userUsageCount: userUsedCount,
+        perUserLimit: promo.perUserLimit,
+      };
     }
   }
 
@@ -106,7 +113,70 @@ export async function validatePromoCode(code, fareMinor, userId, contextOrCountr
     discountAmountMinor,
     originalFareMinor: fareMinor,
     finalFareMinor,
+    alreadyApplied: false,
   };
+}
+
+export async function listAvailablePromosForUser(userId, { countryId = null, cityId = null, vehicleTypeId = null } = {}) {
+  const now = new Date();
+  const conditions = [
+    eq(promos.isActive, true),
+    or(isNull(promos.validFrom), lte(promos.validFrom, now)),
+    or(isNull(promos.validUntil), gte(promos.validUntil, now)),
+  ];
+
+  if (countryId) conditions.push(or(isNull(promos.countryId), eq(promos.countryId, countryId)));
+  if (cityId) conditions.push(or(isNull(promos.cityId), eq(promos.cityId, cityId)));
+  if (vehicleTypeId) conditions.push(or(isNull(promos.vehicleTypeId), eq(promos.vehicleTypeId, vehicleTypeId)));
+
+  const activePromos = await db.select().from(promos).where(and(...conditions)).orderBy(desc(promos.createdAt));
+
+  let completedRidesCount = 0;
+  if (userId) {
+    const [{ completedRides }] = await db.select({ completedRides: count() })
+      .from(rides)
+      .where(and(eq(rides.riderId, userId), eq(rides.status, 'completed')));
+    completedRidesCount = completedRides || 0;
+  }
+
+  const userUsageRows = userId ? await db.select({
+    promoId: promoUsages.promoId,
+    usageCount: count(),
+  }).from(promoUsages).where(eq(promoUsages.userId, userId)).groupBy(promoUsages.promoId) : [];
+
+  const usageMap = Object.fromEntries(userUsageRows.map((r) => [r.promoId, Number(r.usageCount)]));
+
+  return activePromos.map((p) => {
+    const userUsedCount = usageMap[p.id] || 0;
+    const isGlobalLimitReached = p.usageLimit != null && p.usedCount >= p.usageLimit;
+    const isUserLimitReached = userUsedCount >= p.perUserLimit;
+    const isFirstRideViolation = p.isFirstRideOnly && completedRidesCount > 0;
+    const alreadyApplied = userUsedCount > 0;
+    const canApply = !isGlobalLimitReached && !isUserLimitReached && !isFirstRideViolation;
+
+    return {
+      id: p.id,
+      code: p.code,
+      description: p.description,
+      discountType: p.discountType,
+      discountValue: p.discountValue,
+      maxDiscountMinor: p.maxDiscountMinor,
+      minFareMinor: p.minFareMinor,
+      validUntil: p.validUntil,
+      perUserLimit: p.perUserLimit,
+      isFirstRideOnly: p.isFirstRideOnly,
+      userUsedCount,
+      alreadyApplied,
+      canApply,
+      statusLabel: isUserLimitReached
+        ? 'Already Used'
+        : isFirstRideViolation
+        ? 'First Ride Only'
+        : isGlobalLimitReached
+        ? 'Offer Expired'
+        : 'Available',
+    };
+  });
 }
 
 export async function recordPromoUsage(promoId, userId, rideId, discountAmountMinor) {

@@ -4,6 +4,13 @@ import * as promoService from './promo.service.js';
 
 export async function promoRoutes(app) {
 
+  // ── Rider — Available Promo Codes ──────────────────────────────────────────
+  // GET /api/v1/promos/available
+  app.get('/available', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const data = await promoService.listAvailablePromosForUser(request.user?.id, request.query || {});
+    return sendSuccess(reply, data);
+  });
+
   // ── Rider — Validate Promo Code ─────────────────────────────────────────────
   // POST /api/v1/promos/validate
   app.post('/validate', { preHandler: [authenticateRider] }, async (request, reply) => {

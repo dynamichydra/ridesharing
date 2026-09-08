@@ -185,11 +185,55 @@ export async function getRidePaymentStatus(rideId, requester) {
   const [payment] = await db.select().from(payments)
     .where(eq(payments.rideId, rideId)).orderBy(desc(payments.createdAt)).limit(1);
 
+  let driverPaymentBreakdown = null;
+  if (requester.role === 'driver' || requester.role === 'admin') {
+    const comm = ride.fareSnapshot?.commission;
+    const promoDiscountMinor = comm?.promoDiscountMinor
+      || ride.fareSnapshot?.breakdown?.promo?.discountAmountMinor
+      || ride.fareSnapshot?.discountAmountMinor
+      || 0;
+    const grossFareMinor = comm?.grossFareMinor
+      || ride.fareSnapshot?.grossFareMinor
+      || ride.fareSnapshot?.originalEstimatedFareMinor
+      || ((ride.finalFareMinor || 0) + promoDiscountMinor);
+    const platformSubsidyMinor = comm?.platformSubsidyMinor ?? promoDiscountMinor;
+    const commissionMinor = comm?.commissionMinor ?? 0;
+    const bookingFeeMinor = comm?.bookingFeeMinor ?? 0;
+    const commissionRate = comm?.rate ?? (comm?.isSubscriber ? 0 : 0.2);
+    const driverEarningsMinor = comm?.driverEarningsMinor ?? Math.max(0, grossFareMinor - commissionMinor);
+    const isCash = ride.paymentMethod === 'cash';
+
+    driverPaymentBreakdown = {
+      paymentMethod: ride.paymentMethod,
+      paymentStatus: ride.paymentStatus,
+      currencyCode: ride.currencyCode,
+      grossFareMinor,
+      promoDiscountMinor,
+      platformSubsidyMinor,
+      bookingFeeMinor,
+      commissionRate,
+      commissionMinor,
+      driverEarningsMinor,
+      isSubscriber: comm?.isSubscriber ?? false,
+      collectFromCustomerMinor: isCash ? (ride.finalFareMinor || 0) : 0,
+      collectFromCustomerLabel: isCash
+        ? `Collect ${formatMoney(ride.finalFareMinor || 0, ride.currencyCode)} in cash from passenger`
+        : 'Paid via online / wallet (Do NOT collect cash)',
+      walletCreditMinor: isCash
+        ? Math.max(0, platformSubsidyMinor - commissionMinor)
+        : driverEarningsMinor,
+      walletDebitMinor: isCash
+        ? Math.max(0, commissionMinor - platformSubsidyMinor)
+        : 0,
+    };
+  }
+
   return {
     rideId: ride.id, status: ride.status,
     finalFareMinor: ride.finalFareMinor, currencyCode: ride.currencyCode,
     paymentMethod: ride.paymentMethod, paymentStatus: ride.paymentStatus,
     payment: payment || null,
+    driverPaymentBreakdown: driverPaymentBreakdown || undefined,
   };
 }
 
@@ -211,6 +255,45 @@ export async function getRideInvoice(rideId, requester) {
   const [payment] = await db.select().from(payments)
     .where(eq(payments.rideId, rideId)).orderBy(desc(payments.createdAt)).limit(1);
 
+  const comm = ride.fareSnapshot?.commission;
+  const promoDiscountMinor = comm?.promoDiscountMinor
+    || ride.fareSnapshot?.breakdown?.promo?.discountAmountMinor
+    || ride.fareSnapshot?.discountAmountMinor
+    || 0;
+  const grossFareMinor = comm?.grossFareMinor
+    || ride.fareSnapshot?.grossFareMinor
+    || ride.fareSnapshot?.originalEstimatedFareMinor
+    || ((ride.finalFareMinor || 0) + promoDiscountMinor);
+  const platformSubsidyMinor = comm?.platformSubsidyMinor ?? promoDiscountMinor;
+  const commissionMinor = comm?.commissionMinor ?? 0;
+  const bookingFeeMinor = comm?.bookingFeeMinor ?? 0;
+  const commissionRate = comm?.rate ?? (comm?.isSubscriber ? 0 : 0.2);
+  const driverEarningsMinor = comm?.driverEarningsMinor ?? Math.max(0, grossFareMinor - commissionMinor);
+  const isCash = ride.paymentMethod === 'cash';
+
+  const driverPaymentBreakdown = (requester.role === 'driver' || requester.role === 'admin') ? {
+    grossFareMinor,
+    promoDiscountMinor,
+    platformSubsidyMinor,
+    bookingFeeMinor,
+    commissionRate,
+    commissionMinor,
+    driverEarningsMinor,
+    isSubscriber: comm?.isSubscriber ?? false,
+    ruleName: comm?.ruleName || null,
+    resolutionTier: comm?.resolutionTier || null,
+    collectFromCustomerMinor: isCash ? (ride.finalFareMinor || 0) : 0,
+    collectFromCustomerLabel: isCash
+      ? `Collect ${formatMoney(ride.finalFareMinor || 0, ride.currencyCode)} in cash from passenger`
+      : 'Paid via online / wallet (Do NOT collect cash)',
+    walletCreditMinor: isCash
+      ? Math.max(0, platformSubsidyMinor - commissionMinor)
+      : driverEarningsMinor,
+    walletDebitMinor: isCash
+      ? Math.max(0, commissionMinor - platformSubsidyMinor)
+      : 0,
+  } : undefined;
+
   return {
     invoiceNumber: `INV-${ride.id.slice(0, 8).toUpperCase()}`,
     ride: {
@@ -223,20 +306,10 @@ export async function getRideInvoice(rideId, requester) {
     currencyCode: ride.currencyCode,
     fareBreakdown: ride.fareSnapshot?.breakdown || {},
     estimatedFareMinor: ride.estimatedFareMinor,
-    grossFareMinor: ride.fareSnapshot?.commission?.grossFareMinor || ride.fareSnapshot?.grossFareMinor || ride.fareSnapshot?.originalEstimatedFareMinor || ride.finalFareMinor,
+    grossFareMinor,
     finalFareMinor: ride.finalFareMinor,
-    commissionBreakdown: (requester.role === 'driver' || requester.role === 'admin') && ride.fareSnapshot?.commission ? {
-      grossFareMinor: ride.fareSnapshot.commission.grossFareMinor,
-      promoDiscountMinor: ride.fareSnapshot.commission.promoDiscountMinor || 0,
-      platformSubsidyMinor: ride.fareSnapshot.commission.platformSubsidyMinor || 0,
-      bookingFeeMinor: ride.fareSnapshot.commission.bookingFeeMinor || 0,
-      commissionRate: ride.fareSnapshot.commission.rate,
-      commissionMinor: ride.fareSnapshot.commission.commissionMinor,
-      driverEarningsMinor: ride.fareSnapshot.commission.driverEarningsMinor,
-      isSubscriber: ride.fareSnapshot.commission.isSubscriber,
-      ruleName: ride.fareSnapshot.commission.ruleName || null,
-      resolutionTier: ride.fareSnapshot.commission.resolutionTier || null,
-    } : undefined,
+    commissionBreakdown: driverPaymentBreakdown,
+    driverPaymentBreakdown,
     payment: {
       method: ride.paymentMethod, status: ride.paymentStatus,
       gateway: payment?.gateway ?? null, gatewayPaymentId: payment?.gatewayPaymentId ?? null,
@@ -315,8 +388,11 @@ export async function resolveRideCommission(ride) {
 
   const isSubscriber = driver?.subscriptionStatus === 'active';
 
-  // Check if driver has an active plan with custom commissionRate entitlement
+  // Check if driver has an active plan with custom entitlements
   let customRate = null;
+  let waiveBookingFee = false;
+  let customBookingFeeMinor = null;
+
   if (isSubscriber) {
     const [activeSub] = await db.select({
       entitlements: subscriptionPlans.entitlements,
@@ -334,6 +410,12 @@ export async function resolveRideCommission(ride) {
 
     if (activeSub?.entitlements?.commissionRate !== undefined && activeSub?.entitlements?.commissionRate !== null) {
       customRate = Number(activeSub.entitlements.commissionRate);
+    }
+    if (activeSub?.entitlements?.waiveBookingFee === true) {
+      waiveBookingFee = true;
+    }
+    if (activeSub?.entitlements?.customBookingFeeMinor !== undefined && activeSub?.entitlements?.customBookingFeeMinor !== null) {
+      customBookingFeeMinor = Number(activeSub.entitlements.customBookingFeeMinor);
     }
   }
 
@@ -362,68 +444,22 @@ export async function resolveRideCommission(ride) {
     || ride.fareSnapshot?.originalEstimatedFareMinor
     || Math.max(ride.finalFareMinor || 0, (ride.finalFareMinor || 0) + promoDiscountMinor);
 
-  let breakdown;
-  if (customRate !== null && !isNaN(customRate)) {
-    const bookingFee = rule ? (rule.bookingFeeMinor || 0) : 0;
-    const remainingFare = Math.max(0, grossFareMinor - bookingFee);
-    let commissionMinor = bookingFee + Math.round(remainingFare * customRate);
-    if (rule?.minCommissionMinor && commissionMinor < rule.minCommissionMinor) {
-      commissionMinor = rule.minCommissionMinor;
-    }
-    if (rule?.maxCommissionMinor && commissionMinor > rule.maxCommissionMinor) {
-      commissionMinor = rule.maxCommissionMinor;
-    }
-    commissionMinor = Math.min(commissionMinor, grossFareMinor);
-    const driverEarningsMinor = Math.max(0, grossFareMinor - commissionMinor);
-    breakdown = {
-      grossFareMinor,
-      promoDiscountMinor,
-      platformSubsidyMinor: promoDiscountMinor,
-      bookingFeeMinor: bookingFee,
-      rate: customRate,
-      commissionMinor,
-      driverEarningsMinor,
-      netPlatformRevenueMinor: commissionMinor - promoDiscountMinor,
-      isSubscriber: true,
-      customPlanRate: true,
-      resolutionTier: rule?.resolutionTier || null,
-      ruleId: rule?.id || null,
-      ruleName: rule?.name || null,
-    };
-  } else if (rule) {
-    const computed = computeCommission({
-      finalFareMinor: grossFareMinor,
-      rule,
-      isSubscriber,
-    });
-    breakdown = {
-      ...computed,
-      grossFareMinor,
-      promoDiscountMinor,
-      platformSubsidyMinor: promoDiscountMinor,
-      netPlatformRevenueMinor: computed.commissionMinor - promoDiscountMinor,
-      isSubscriber,
-      ruleId: rule.id,
-      ruleName: rule.name || null,
-    };
-  } else {
-    const defaultRate = isSubscriber ? 0.05 : 0.20;
-    const defaultComm = Math.round(grossFareMinor * defaultRate);
-    breakdown = {
-      grossFareMinor,
-      promoDiscountMinor,
-      platformSubsidyMinor: promoDiscountMinor,
-      bookingFeeMinor: 0,
-      rate: defaultRate,
-      commissionMinor: defaultComm,
-      driverEarningsMinor: Math.max(0, grossFareMinor - defaultComm),
-      netPlatformRevenueMinor: defaultComm - promoDiscountMinor,
-      isSubscriber,
-      ruleId: null,
-      ruleName: null,
-      resolutionTier: 'fallback_default',
-    };
-  }
+  const computed = computeCommission({
+    finalFareMinor: grossFareMinor,
+    rule,
+    isSubscriber,
+    customRate,
+    customBookingFeeMinor,
+    waiveBookingFee,
+  });
+
+  const breakdown = {
+    ...computed,
+    grossFareMinor,
+    promoDiscountMinor,
+    platformSubsidyMinor: promoDiscountMinor,
+    netPlatformRevenueMinor: computed.commissionMinor - promoDiscountMinor,
+  };
 
   try {
     await db.update(rides).set({
