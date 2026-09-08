@@ -30,5 +30,10 @@ abstract class BookingRepository {
   });
   Future<Map<String, dynamic>> getMyReferralInfo();
   Future<Map<String, dynamic>> applyReferralCode(String referralCode);
+  Future<List<Map<String, dynamic>>> getAvailablePromos({
+    String? vehicleTypeId,
+    String? cityId,
+    String? countryId,
+  });
 }
 

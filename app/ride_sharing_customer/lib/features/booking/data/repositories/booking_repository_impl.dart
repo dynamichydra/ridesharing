@@ -114,4 +114,17 @@ class BookingRepositoryImpl implements BookingRepository {
   Future<Map<String, dynamic>> applyReferralCode(String referralCode) async {
     return await _dataSource.applyReferralCode(referralCode);
   }
+
+  @override
+  Future<List<Map<String, dynamic>>> getAvailablePromos({
+    String? vehicleTypeId,
+    String? cityId,
+    String? countryId,
+  }) async {
+    return await _dataSource.getAvailablePromos(
+      vehicleTypeId: vehicleTypeId,
+      cityId: cityId,
+      countryId: countryId,
+    );
+  }
 }

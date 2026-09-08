@@ -364,7 +364,50 @@ class _WalletPageState extends State<WalletPage> {
                     ),
                     const SizedBox(height: 16),
 
-                    // 4. Info Card
+                    // 4. Promo & Fare Settlement Breakdown Card
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFDCFCE7), width: 1.2),
+                      ),
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.verified_user_outlined,
+                                color: Color(0xFF009048),
+                                size: 18,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Fare & Promo Settlement',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 6),
+                          Text(
+                            'Your wallet balance includes settled online trip earnings, promo incentives from discount rides, minus platform commission deductions.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF15803D),
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // 5. Transfer Info Card
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
@@ -376,14 +419,14 @@ class _WalletPageState extends State<WalletPage> {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Icon(
-                            Icons.info_outline_rounded,
+                            Icons.account_balance_outlined,
                             color: Color(0xFF2563EB),
-                            size: 22,
+                            size: 20,
                           ),
                           SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Cashout will be transferred to your bank account within 24 hours.',
+                              'Instant cashout will be transferred directly to your verified bank account.',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Color(0xFF475569),

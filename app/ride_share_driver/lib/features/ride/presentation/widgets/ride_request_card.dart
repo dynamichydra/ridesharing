@@ -348,7 +348,7 @@ class _RideRequestCardState extends State<RideRequestCard>
 
                     const SizedBox(width: 8),
 
-                    // Fare Display (₹ 125)
+                    // Fare Display (₹270, and below (₹172 + ₹98) if Cash + Promo)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
@@ -366,15 +366,15 @@ class _RideRequestCardState extends State<RideRequestCard>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              '₹ ',
+                              '₹',
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF0F172A),
                               ),
                             ),
                             Text(
-                              offer.estimatedFare.toStringAsFixed(0),
+                              (offer.grossEstimatedFare > 0 ? offer.grossEstimatedFare : offer.estimatedFare).toStringAsFixed(0),
                               style: const TextStyle(
                                 fontSize: 26,
                                 fontWeight: FontWeight.w900,
@@ -383,6 +383,54 @@ class _RideRequestCardState extends State<RideRequestCard>
                             ),
                           ],
                         ),
+                        if (offer.hasPromo && (offer.paymentMethod == null || offer.paymentMethod == 'cash') && offer.promoIncentive > 0) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                '(',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                              Text(
+                                '₹${(offer.riderEstimatedFare > 0 ? offer.riderEstimatedFare : (offer.estimatedFare - offer.promoIncentive)).toStringAsFixed(offer.riderEstimatedFare % 1 == 0 ? 0 : 2)}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0065B3), // Blue: Amount rider pays in cash
+                                ),
+                              ),
+                              const Text(
+                                ' + ',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                              Text(
+                                '₹${offer.promoIncentive.toStringAsFixed(offer.promoIncentive % 1 == 0 ? 0 : 2)}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF009048), // Green: Promo incentive from platform
+                                ),
+                              ),
+                              const Text(
+                                ')',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ],
@@ -472,7 +520,9 @@ class _RideRequestCardState extends State<RideRequestCard>
                               : () => widget.onAccept(offer.rideId),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF009048),
-                            disabledBackgroundColor: const Color(0xFF009048).withValues(alpha: 0.7),
+                            disabledBackgroundColor: const Color(
+                              0xFF009048,
+                            ).withValues(alpha: 0.7),
                             foregroundColor: Colors.white,
                             disabledForegroundColor: Colors.white,
                             elevation: 0,
@@ -487,7 +537,9 @@ class _RideRequestCardState extends State<RideRequestCard>
                                   height: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2.5,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
                                   ),
                                 )
                               : const Text(

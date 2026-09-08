@@ -31,6 +31,11 @@ abstract class BookingDataSource {
   });
   Future<Map<String, dynamic>> getMyReferralInfo();
   Future<Map<String, dynamic>> applyReferralCode(String referralCode);
+  Future<List<Map<String, dynamic>>> getAvailablePromos({
+    String? vehicleTypeId,
+    String? cityId,
+    String? countryId,
+  });
 }
 
 class BookingDataSourceImpl implements BookingDataSource {
@@ -181,6 +186,12 @@ class BookingDataSourceImpl implements BookingDataSource {
         return Map<String, dynamic>.from(response.data['MESSAGE'] as Map);
       }
       throw Exception(response.data['MESSAGE'] ?? 'Failed to request ride');
+    } on DioException catch (e) {
+      print('[BookingDataSource] POST /api/v1/rides DIO ERROR: ${e.response?.statusCode} - ${e.response?.data}');
+      final msg = e.response?.data is Map
+          ? (e.response?.data['MESSAGE'] ?? e.response?.data['message'] ?? e.message)
+          : (e.message ?? 'Failed to request ride');
+      throw Exception(msg);
     } catch (e) {
       print('[BookingDataSource] POST /api/v1/rides ERROR: $e');
       throw Exception('Failed to request ride: $e');
@@ -251,6 +262,33 @@ class BookingDataSourceImpl implements BookingDataSource {
       throw Exception(e.response?.data?['MESSAGE'] ?? 'Failed to apply referral code');
     } catch (e) {
       throw Exception('Failed to apply referral code: $e');
+    }
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getAvailablePromos({
+    String? vehicleTypeId,
+    String? cityId,
+    String? countryId,
+  }) async {
+    try {
+      final Map<String, dynamic> queryParams = {};
+      if (vehicleTypeId != null) queryParams['vehicleTypeId'] = vehicleTypeId;
+      if (cityId != null) queryParams['cityId'] = cityId;
+      if (countryId != null) queryParams['countryId'] = countryId;
+
+      final response = await _dioClient.dio.get(
+        '/api/v1/promos/available',
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      if (response.data['SUCCESS'] == true) {
+        final List<dynamic> list = response.data['MESSAGE'] ?? [];
+        return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('[BookingDataSource] getAvailablePromos error: $e');
+      return [];
     }
   }
 }

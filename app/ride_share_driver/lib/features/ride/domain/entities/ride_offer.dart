@@ -8,6 +8,10 @@ class RideOffer {
   final String? pickupAddress;
   final String? dropAddress;
   final double estimatedFare;
+  final double grossEstimatedFare;
+  final double riderEstimatedFare;
+  final double promoIncentive;
+  final bool hasPromo;
   final String currencyCode;
   final double distanceKm;
   final String? polyline;
@@ -26,6 +30,10 @@ class RideOffer {
     this.pickupAddress,
     this.dropAddress,
     required this.estimatedFare,
+    this.grossEstimatedFare = 0.0,
+    this.riderEstimatedFare = 0.0,
+    this.promoIncentive = 0.0,
+    this.hasPromo = false,
     required this.currencyCode,
     required this.distanceKm,
     this.polyline,
@@ -60,13 +68,23 @@ class RideOffer {
       return DateTime.tryParse(val.toString());
     }
 
+    final double estFare = parseDouble(json['estimatedFare']);
+    final double grossFare = parseDouble(json['grossEstimatedFare'] ?? json['estimatedFare']);
+    final double riderFare = parseDouble(json['riderEstimatedFare'] ?? json['estimatedFare']);
+    final double promoInc = parseDouble(json['promoIncentive']);
+    final bool hasPromoCode = json['hasPromo'] == true || promoInc > 0;
+
     return RideOffer(
       rideId: json['rideId']?.toString() ?? '',
       ring: parseInt(json['ring']),
       radiusKm: parseDouble(json['radiusKm']),
       pickupAddress: json['pickupAddress'] as String?,
       dropAddress: json['dropAddress'] as String?,
-      estimatedFare: parseDouble(json['estimatedFare']),
+      estimatedFare: estFare,
+      grossEstimatedFare: grossFare > 0 ? grossFare : estFare,
+      riderEstimatedFare: riderFare > 0 ? riderFare : estFare,
+      promoIncentive: promoInc,
+      hasPromo: hasPromoCode,
       currencyCode: json['currency'] as String? ?? '',
       distanceKm: parseDouble(json['distanceKm']),
       polyline: json['polyline'] as String?,
@@ -76,7 +94,9 @@ class RideOffer {
       dropLng: parseDouble(json['dropLng']),
       myDistanceKm: parseDouble(json['myDistanceKm']),
       expiresAt: parseExpiresAt(json['expiresAt']),
-      paymentMethod: json['paymentMethod']?.toString() ?? json['payment_method']?.toString(),
+      paymentMethod:
+          json['paymentMethod']?.toString() ??
+          json['payment_method']?.toString(),
     );
   }
 }

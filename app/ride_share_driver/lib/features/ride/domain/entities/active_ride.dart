@@ -29,6 +29,9 @@ class ActiveRide {
   final String? paymentMethod;
   final int? driverEarningsMinor;
   final int? commissionMinor;
+  final int? grossFareMinor;
+  final int? promoDiscountMinor;
+  final int? collectFromCustomerMinor;
 
   const ActiveRide({
     required this.id,
@@ -49,6 +52,9 @@ class ActiveRide {
     this.paymentMethod,
     this.driverEarningsMinor,
     this.commissionMinor,
+    this.grossFareMinor,
+    this.promoDiscountMinor,
+    this.collectFromCustomerMinor,
   });
 
   factory ActiveRide.fromJson(Map<String, dynamic> json) {
@@ -64,6 +70,30 @@ class ActiveRide {
       if (val is num) return val.toDouble();
       return double.tryParse(val.toString()) ?? fallback;
     }
+
+    // Extract breakdown if provided by API
+    final snapshot = json['fareSnapshot'] is Map ? json['fareSnapshot'] as Map : null;
+    final commission = snapshot != null && snapshot['commission'] is Map ? snapshot['commission'] as Map : null;
+    final promoBreakdown = snapshot != null && snapshot['breakdown'] is Map && snapshot['breakdown']['promo'] is Map
+        ? snapshot['breakdown']['promo'] as Map
+        : null;
+
+    final grossMinor = parseInt(
+      json['grossFareMinor'] ??
+          json['gross_fare_minor'] ??
+          commission?['grossFareMinor'] ??
+          snapshot?['grossFareMinor'] ??
+          snapshot?['originalEstimatedFareMinor'],
+    );
+
+    final promoMinor = parseInt(
+      json['promoDiscountMinor'] ??
+          json['promo_discount_minor'] ??
+          commission?['promoDiscountMinor'] ??
+          promoBreakdown?['discountAmountMinor'] ??
+          snapshot?['discountAmountMinor'] ??
+          snapshot?['promoDiscountMinor'],
+    );
 
     return ActiveRide(
       id: json['id']?.toString() ?? json['rideId']?.toString() ?? '',
@@ -85,17 +115,16 @@ class ActiveRide {
       driverEarningsMinor: parseInt(
         json['driverEarningsMinor'] ??
             json['driver_earnings_minor'] ??
-            (json['fareSnapshot'] is Map && json['fareSnapshot']['commission'] is Map
-                ? json['fareSnapshot']['commission']['driverEarningsMinor']
-                : null),
+            commission?['driverEarningsMinor'],
       ),
       commissionMinor: parseInt(
         json['commissionMinor'] ??
             json['commission_minor'] ??
-            (json['fareSnapshot'] is Map && json['fareSnapshot']['commission'] is Map
-                ? json['fareSnapshot']['commission']['commissionMinor']
-                : null),
+            commission?['commissionMinor'],
       ),
+      grossFareMinor: grossMinor,
+      promoDiscountMinor: promoMinor,
+      collectFromCustomerMinor: parseInt(json['collectFromCustomerMinor']),
     );
   }
 
@@ -115,6 +144,8 @@ class ActiveRide {
       distanceKm: offer.distanceKm,
       polyline: offer.polyline,
       paymentMethod: offer.paymentMethod,
+      grossFareMinor: (offer.grossEstimatedFare * 100).round(),
+      promoDiscountMinor: (offer.promoIncentive * 100).round(),
     );
   }
 }

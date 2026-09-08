@@ -413,6 +413,8 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
       } catch (e) {
         print('[BookingBloc] ConfirmRideBooking failed: $e');
         emit(BookingError(e.toString().replaceAll('Exception: ', '')));
+        // Restore loaded options so user can retry or change vehicle/payment
+        emit(currentState);
       }
     }
   }
