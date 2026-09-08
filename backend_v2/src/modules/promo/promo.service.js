@@ -1,4 +1,4 @@
-import { eq, and, count, desc, gte, lte, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, count, desc, gte, lte, sql } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { promos, promoUsages, referrals, users, cities, vehicleTypes, countries, rides } from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
