@@ -60,6 +60,7 @@ export const REDIS_KEYS = {
 
   // Cache
   fareCache: (key) => `fare:${key}`,                // TTL 120s
+  fxRate: (base, quote) => `fx:rate:${base}:${quote}`, // TTL 3600s
 
   // Hex-zone reverse index (H3 geofencing) — no TTL, rebuilt on zone write, not time-based
   hexZoneIndex: (resolution, cell) => `hexzone:${resolution}:${cell}`, // SET of zoneIds

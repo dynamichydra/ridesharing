@@ -315,10 +315,6 @@ export function initSocketIO(fastifyServer, app) {
   adminNS.use((socket, next) => {
     const user = verifyJwt(app, socket);
     if (!user) {
-      if (process.env.NODE_ENV === 'development') {
-        socket.data.adminUser = { id: 'admin-local', role: 'admin' };
-        return next();
-      }
       return next(new Error('Unauthorized'));
     }
     if (!['admin', 'super_admin'].includes(user.role)) {

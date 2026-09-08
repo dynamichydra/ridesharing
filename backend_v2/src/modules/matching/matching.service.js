@@ -180,7 +180,7 @@ async function _runMatchingPipeline(ride) {
           explainableData: explainableAudit,
           updatedAt: new Date(),
         })
-        .where(eq(dispatchJobs.id, dispatchJobId));
+        .where(eq(dispatchJobs.id, dispatchJob.id));
       return;
     }
 

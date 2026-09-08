@@ -26,6 +26,7 @@ import {
   PackageSearch,
   MessageSquareWarning,
   UserCheck,
+  ArrowLeftRight,
   type LucideIcon,
 } from "lucide-react";
 
@@ -268,6 +269,14 @@ export const navItem: NavType[] = [
     isActive: true,
     type: "regular",
     roles: ["super_admin"],
+  },
+  {
+    title: "Exchange Rates (FX)",
+    url: "/fx-rates",
+    icon: ArrowLeftRight,
+    isActive: true,
+    type: "regular",
+    roles: ["super_admin", "admin"],
   },
 ];
 

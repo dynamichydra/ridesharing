@@ -54,6 +54,7 @@ import { publicTripRoutes } from './modules/tracking/public-trip.routes.js';
 import { lostItemRoutes } from './modules/ride/lost-item.routes.js';
 import { matchingRoutes } from './modules/matching/matching.routes.js';
 import { driverGroupRoutes } from './modules/driver-group/driver-group.routes.js';
+import { fxRoutes } from './modules/fx/fx.routes.js';
 
 const PREFIX = `/api/${env.API_VERSION}`;
 
@@ -124,6 +125,7 @@ async function build() {
   await app.register(publicTripRoutes, { prefix: `${PREFIX}/public` });
   await app.register(lostItemRoutes, { prefix: `${PREFIX}/lost-items` });
   await app.register(matchingRoutes, { prefix: `${PREFIX}/matching` });
+  await app.register(fxRoutes, { prefix: `${PREFIX}/fx` });
 
 
 

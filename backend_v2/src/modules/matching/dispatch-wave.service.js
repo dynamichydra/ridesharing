@@ -55,26 +55,33 @@ export function waitForAcceptanceSignal(rideId, timeoutMs) {
     const channel = REDIS_KEYS.CHAN.rideAccepted(rideId);
     let settled = false;
 
+    const cleanup = () => {
+      redisSub.removeListener('message', onMessage);
+      redisSub.unsubscribe(channel).catch(() => {});
+    };
+
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      redisSub.unsubscribe(channel).catch(() => {});
+      cleanup();
       resolve(false);
     }, timeoutMs);
+
+    function onMessage(ch, msg) {
+      if (ch !== channel || settled) return;
+      settled = true;
+      clearTimeout(timer);
+      cleanup();
+      // msg = "accepted" | "cancelled"
+      resolve(true);
+    }
+
+    redisSub.on('message', onMessage);
 
     redisSub.subscribe(channel, (err) => {
       if (err) {
         console.error('[DispatchWave] redisSub error:', err.message);
       }
-    });
-
-    redisSub.on('message', (ch, msg) => {
-      if (ch !== channel || settled) return;
-      settled = true;
-      clearTimeout(timer);
-      redisSub.unsubscribe(channel).catch(() => {});
-      // msg = "accepted" | "cancelled"
-      resolve(true);
     });
   });
 }

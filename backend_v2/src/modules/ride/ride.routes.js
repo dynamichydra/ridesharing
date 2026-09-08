@@ -67,6 +67,9 @@ export async function rideRoutes(app) {
   // GET /api/v1/rides/:id
   app.get('/:id', { preHandler: [authenticateAny] }, async (request, reply) => {
     const data = await rideService.getRideById(request.params.id);
+    if (request.user.role !== 'admin' && request.user.role !== 'super_admin' && data.riderId !== request.user.id && data.driverId !== request.user.id) {
+      return sendError(reply, 'Forbidden: Not authorized to view this ride', 403);
+    }
     return sendSuccess(reply, data);
   });
 

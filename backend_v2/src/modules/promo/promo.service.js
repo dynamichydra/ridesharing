@@ -180,17 +180,21 @@ export async function listAvailablePromosForUser(userId, { countryId = null, cit
 }
 
 export async function recordPromoUsage(promoId, userId, rideId, discountAmountMinor) {
-  await db.transaction(async (tx) => {
-    await tx.insert(promoUsages).values({
+  return db.transaction(async (tx) => {
+    const [inserted] = await tx.insert(promoUsages).values({
       promoId,
       userId,
       rideId,
       discountAmountMinor,
-    });
+    }).onConflictDoNothing().returning();
 
-    await tx.update(promos)
-      .set({ usedCount: sql`${promos.usedCount} + 1`, updatedAt: new Date() })
-      .where(eq(promos.id, promoId));
+    if (inserted) {
+      await tx.update(promos)
+        .set({ usedCount: sql`${promos.usedCount} + 1`, updatedAt: new Date() })
+        .where(eq(promos.id, promoId));
+    }
+
+    return inserted || null;
   });
 }
 

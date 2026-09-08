@@ -1,12 +1,16 @@
 import { eq, desc, count, and, or, sql, gte, lte } from 'drizzle-orm';
 import crypto from 'crypto';
 import { db } from '../../config/db.js';
-import { rides, drivers, users, vehicleTypes, ridePassengers, tripShareTokens, driverEarnings } from '../../../drizzle/schema/index.js';
+import {
+  rides, drivers, users, vehicleTypes, ridePassengers, tripShareTokens,
+  driverEarnings, rideOffers, rideDriverAssignments, outboxEvents, dispatchJobs,
+} from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { calculateFare, validateAndLockQuote } from '../fare/fare.service.js';
 import { detectZone, isLocationInServiceArea } from '../zone/zone.service.js';
 import { moment } from '../../utils/time.js';
+import { releaseLocks } from '../matching/driver-lock.service.js';
 
 import {
   startMatchingProcess,
@@ -457,86 +461,197 @@ export async function getRideReceipt(rideId, requesterId) {
 
 // ── Driver actions ─────────────────────────────────────────────────────────────
 
-export async function acceptRide(rideId, driverId) {
+export async function acceptRide(rideId, driverId, options = {}) {
+  const { assignmentType = 'automatic', dispatchJobId = null, reason = 'Offer accepted by driver' } = options;
+
   await validateDriverCanAccept(rideId, driverId);
 
-  const [ride] = await db.select().from(rides).where(
-    and(eq(rides.id, rideId), eq(rides.status, 'searching')),
-  ).limit(1);
-  if (!ride) throw { statusCode: 409, message: 'Ride is no longer available' };
-
-  // Bug 2 fix: check driverRideActive as JSON
+  // Fast-path check in Redis
   const activeRaw = await redis.get(REDIS_KEYS.driverRideActive(driverId));
   if (activeRaw) throw { statusCode: 409, message: 'You already have an active ride' };
 
-  // Close this driver's ride_offer row (accepted) and supersede every other
-  // pending offer for this ride in one atomic step. If this returns null it
-  // means another driver's accept won the race on the offers table — bail out
-  // before touching the rides row so we never end up with a mismatched state.
-  const offer = await acceptOffer(rideId, driverId);
-  if (!offer) throw { statusCode: 409, message: 'This ride offer is no longer available' };
-
-  // Rider reads this off the app and reads it aloud to the driver, who must
-  // enter it to start the trip — confirms the driver picked up the right rider.
   const startOtp = String(Math.floor(1000 + Math.random() * 9000));
 
-  // Atomic update — prevents two drivers accepting simultaneously
-  const [updated] = await db.update(rides).set({
-    driverId, status: 'accepted', acceptedAt: new Date(), startOtp,
-  }).where(and(eq(rides.id, rideId), eq(rides.status, 'searching'))).returning();
-  if (!updated) throw { statusCode: 409, message: 'Ride was just accepted by another driver' };
+  let updatedRide = null;
+  let acceptedOffer = null;
+  let supersededOffers = [];
+  let driverDetails = null;
 
-  await recordStatusChange({
-    rideId, fromStatus: 'searching', toStatus: 'accepted',
-    changedBy: 'driver', changedById: driverId,
-    meta: { ring: offer.ring, distanceKm: offer.distanceKm, offerId: offer.id },
+  await db.transaction(async (tx) => {
+    // 1. Lock ride row (FOR UPDATE)
+    const [ride] = await tx.select().from(rides)
+      .where(and(eq(rides.id, rideId), eq(rides.status, 'searching')))
+      .for('update');
+    if (!ride) {
+      throw { statusCode: 409, message: 'Ride is no longer available or already accepted by another driver' };
+    }
+
+    // 2. Lock driver row (FOR UPDATE)
+    const [driver] = await tx.select().from(drivers)
+      .where(and(eq(drivers.id, driverId), eq(drivers.isBlocked, false)))
+      .for('update');
+    if (!driver) {
+      throw { statusCode: 403, message: 'Driver account is invalid or blocked' };
+    }
+    driverDetails = driver;
+
+    // 3. Atomically accept driver's offer
+    const [offer] = await tx.update(rideOffers).set({
+      status: 'accepted',
+      respondedAt: new Date(),
+    }).where(and(
+      eq(rideOffers.rideId, rideId),
+      eq(rideOffers.driverId, driverId),
+      eq(rideOffers.status, 'pending'),
+    )).returning();
+
+    acceptedOffer = offer;
+
+    // 4. Supersede all other pending offers for this ride
+    supersededOffers = await tx.update(rideOffers).set({
+      status: 'superseded',
+      respondedAt: new Date(),
+    }).where(and(
+      eq(rideOffers.rideId, rideId),
+      eq(rideOffers.status, 'pending'),
+    )).returning();
+
+    // 5. Update ride status and assign driver
+    const [updated] = await tx.update(rides).set({
+      driverId,
+      status: 'accepted',
+      acceptedAt: new Date(),
+      startOtp,
+      updatedAt: new Date(),
+    }).where(and(eq(rides.id, rideId), eq(rides.status, 'searching'))).returning();
+
+    if (!updated) {
+      throw { statusCode: 409, message: 'Ride was just accepted by another driver' };
+    }
+    updatedRide = updated;
+
+    // 6. Record assignment in ride_driver_assignments
+    await tx.insert(rideDriverAssignments).values({
+      rideId,
+      driverId,
+      dispatchJobId,
+      offerId: offer?.id || null,
+      assignmentType,
+      status: 'active',
+      assignedAt: new Date(),
+      reason,
+    });
+
+    // 7. Update dispatch job if provided
+    if (dispatchJobId) {
+      await tx.update(dispatchJobs).set({
+        status: 'assigned',
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(dispatchJobs.id, dispatchJobId));
+    }
+
+    // 8. Outbox event for reliable delivery
+    await tx.insert(outboxEvents).values({
+      aggregateType: 'ride',
+      aggregateId: rideId,
+      topic: TOPICS.RIDE_ACCEPTED,
+      payload: {
+        rideId,
+        driverId,
+        riderId: ride.riderId,
+        startOtp,
+        driver: {
+          id: driver.id,
+          name: driver.name,
+          phone: driver.phone,
+          vehicleNumber: driver.vehicleNumber,
+          vehicleModel: driver.vehicleModel,
+          rating: driver.rating,
+          profilePhoto: driver.profilePhoto,
+        },
+      },
+      status: 'pending',
+    });
   });
 
-  // Bug 2 fix: store {rideId, riderId} JSON so location consumer can route without DB
+  // 9. Post-transaction coordination (outside DB transaction)
+  const driversToUnlock = [driverId, ...supersededOffers.map((o) => o.driverId)];
+  await releaseLocks(driversToUnlock, rideId).catch(() => {});
+
+  await recordStatusChange({
+    rideId,
+    fromStatus: 'searching',
+    toStatus: 'accepted',
+    changedBy: 'driver',
+    changedById: driverId,
+    meta: {
+      offerId: acceptedOffer?.id,
+      ring: acceptedOffer?.ring,
+      distanceKm: acceptedOffer?.distanceKm,
+    },
+  });
+
   await redis.setex(
     REDIS_KEYS.driverRideActive(driverId),
     7200,
-    JSON.stringify({ rideId, riderId: ride.riderId }),
+    JSON.stringify({ rideId, riderId: updatedRide.riderId }),
   );
   await redis.del(REDIS_KEYS.rideRequest(rideId));
 
-  // Driver → on_trip: remove from the available-driver geo-index so they stop
-  // surfacing as a match candidate for other rides.
-  await removeDriverFromIndex(driverId)
-    .catch((err) => console.error('[Ride] removeDriverFromIndex failed:', err.message));
-
-  // Driver details for rider notification
-  const [driver] = await db.select({
-    id: drivers.id,
-    name: drivers.name,
-    phone: drivers.phone,
-    vehicleNumber: drivers.vehicleNumber,
-    vehicleModel: drivers.vehicleModel,
-    rating: drivers.rating,
-    profilePhoto: drivers.profilePhoto,
-    currentLat: drivers.currentLat,
-    currentLng: drivers.currentLng,
-  }).from(drivers).where(eq(drivers.id, driverId)).limit(1);
-
-  // Bug 11 fix: compute approach route (driver → pickup) immediately after accept
-  // Fire-and-forget — don't block the response
-  computeApproachRoute(updated, driver).catch((err) =>
-    console.error('[Ride] computeApproachRoute failed:', err.message),
+  await removeDriverFromIndex(driverId).catch((err) =>
+    console.error('[Ride] removeDriverFromIndex failed:', err.message),
   );
 
+  // Compute approach route (driver -> pickup) fire-and-forget
+  if (driverDetails) {
+    computeApproachRoute(updatedRide, driverDetails).catch((err) =>
+      console.error('[Ride] computeApproachRoute failed:', err.message),
+    );
+  }
+
+  // Real-time socket broadcast immediately
+  try {
+    const { getSocketIO } = await import('../../kafka/consumers/index.js');
+    const io = getSocketIO();
+    if (io) {
+      io.of('/rider').to(`rider:${updatedRide.riderId}`).emit('ride:driver_assigned', {
+        rideId,
+        driver: driverDetails,
+        startOtp,
+      });
+      io.of('/rider').to(`ride:${rideId}`).emit('ride:driver_assigned', {
+        rideId,
+        driver: driverDetails,
+        startOtp,
+      });
+      io.of('/driver').to(`ride:candidates:${rideId}`).emit('ride:taken', {
+        rideId,
+      });
+    }
+  } catch (err) {
+    console.error('[Ride] Direct socket emit on accept failed:', err.message);
+  }
+
+  // Signal matching engine via pub/sub
+  const { signalRideAccepted } = await import('../matching/matching.service.js');
+  await signalRideAccepted(rideId).catch(() => {});
+
   await publishEvent(TOPICS.RIDE_ACCEPTED, {
-    id: rideId, rideId, driverId, driver,
-    riderId: ride.riderId,
+    id: rideId, rideId, driverId,
+    driver: driverDetails,
+    riderId: updatedRide.riderId,
     startOtp,
   });
+
   await publishEvent(TOPICS.NOTIF_PUSH, {
-    userType: 'rider', userId: ride.riderId,
+    userType: 'rider', userId: updatedRide.riderId,
     type: 'RIDE_ACCEPTED',
     title: 'Driver Found!',
-    body: `${driver.name} is on the way — ${driver.vehicleModel} ${driver.vehicleNumber}. Share OTP ${startOtp} with the driver to start your ride.`,
+    body: `${driverDetails?.name || 'Driver'} is on the way — ${driverDetails?.vehicleModel || ''} ${driverDetails?.vehicleNumber || ''}. Share OTP ${startOtp} with the driver to start your ride.`,
   });
 
-  return stripOtp(updated);
+  return stripOtp(updatedRide);
 }
 
 export async function markArriving(rideId, driverId) {
@@ -674,31 +789,47 @@ export async function cancelNoShow(rideId, driverId, reason = 'rider_no_show') {
 }
 
 export async function startRide(rideId, driverId, otp) {
-  const [ride] = await db.select().from(rides).where(
-    and(eq(rides.id, rideId), eq(rides.driverId, driverId)),
-  ).limit(1);
-  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
-  if (ride.status !== 'accepted' && ride.status !== 'arriving' && ride.status !== 'arrived') {
-    throw { statusCode: 409, message: `Cannot start ride in status: ${ride.status}` };
-  }
-  if (!otp || String(otp) !== ride.startOtp) {
-    throw { statusCode: 400, message: 'Invalid or missing OTP. Ask the rider for the ride start OTP.' };
-  }
+  let updated;
+  let previousStatus;
+  let riderId;
+  await db.transaction(async (tx) => {
+    const [ride] = await tx.select().from(rides).where(
+      and(eq(rides.id, rideId), eq(rides.driverId, driverId)),
+    ).for('update').limit(1);
 
-  let waitingDurationSec = 0;
-  if (ride.driverArrivedAt) {
-    waitingDurationSec = Math.max(0, Math.floor((Date.now() - new Date(ride.driverArrivedAt).getTime()) / 1000));
-  }
+    if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+    if (ride.status !== 'accepted' && ride.status !== 'arriving' && ride.status !== 'arrived') {
+      throw { statusCode: 409, message: `Cannot start ride in status: ${ride.status}` };
+    }
+    if (!otp || String(otp) !== ride.startOtp) {
+      throw { statusCode: 400, message: 'Invalid or missing OTP. Ask the rider for the ride start OTP.' };
+    }
 
-  const [updated] = await db.update(rides).set({
-    status: 'started',
-    startedAt: new Date(),
-    startOtpVerifiedAt: new Date(),
-    waitingDurationSec,
-  }).where(eq(rides.id, rideId)).returning();
+    let waitingDurationSec = 0;
+    if (ride.driverArrivedAt) {
+      waitingDurationSec = Math.max(0, Math.floor((Date.now() - new Date(ride.driverArrivedAt).getTime()) / 1000));
+    }
+
+    const [u] = await tx.update(rides).set({
+      status: 'started',
+      startedAt: new Date(),
+      startOtpVerifiedAt: new Date(),
+      waitingDurationSec,
+    }).where(eq(rides.id, rideId)).returning();
+    updated = u;
+    previousStatus = ride.status;
+    riderId = ride.riderId;
+
+    await tx.insert(outboxEvents).values({
+      aggregateType: 'ride',
+      aggregateId: rideId,
+      eventType: 'RIDE_STARTED',
+      payload: { id: rideId, rideId, driverId, riderId },
+    });
+  });
 
   await recordStatusChange({
-    rideId, fromStatus: ride.status, toStatus: 'started',
+    rideId, fromStatus: previousStatus, toStatus: 'started',
     changedBy: 'driver', changedById: driverId,
   });
 
@@ -707,9 +838,9 @@ export async function startRide(rideId, driverId, otp) {
     console.error('[Ride] initTripTracking failed:', err.message),
   );
 
-  await publishEvent(TOPICS.RIDE_STARTED, { id: rideId, rideId, driverId, riderId: ride.riderId });
+  await publishEvent(TOPICS.RIDE_STARTED, { id: rideId, rideId, driverId, riderId });
   await publishEvent(TOPICS.NOTIF_PUSH, {
-    userType: 'rider', userId: ride.riderId,
+    userType: 'rider', userId: riderId,
     type: 'RIDE_STARTED',
     title: 'Your ride has started',
     body: 'Enjoy your trip!',
@@ -816,50 +947,58 @@ export async function tipDriver(rideId, riderId, tipAmountMinor) {
 }
 
 export async function completeRide(rideId, driverId) {
-  const [ride] = await db.select().from(rides).where(
-    and(eq(rides.id, rideId), eq(rides.driverId, driverId)),
-  ).limit(1);
-  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
-  if (ride.status !== 'started') throw { statusCode: 409, message: 'Ride has not started yet' };
+  let updated;
+  let grossFareMinor;
+  let finalFareMinor;
+  let promoDiscountMinor;
+  let driverEarningsMinor;
+  let platformCommissionMinor;
+  let actualDurationMin;
+  let ride;
+  let snapshot;
+  let commission;
 
-  // Bug 10 fix: recalculate final fare using actual trip duration
-  const actualDurationMin = ride.startedAt
-    ? Math.ceil((Date.now() - new Date(ride.startedAt).getTime()) / 60_000)
-    : ride.durationMin;
+  await db.transaction(async (tx) => {
+    const [lockedRide] = await tx.select().from(rides).where(
+      and(eq(rides.id, rideId), eq(rides.driverId, driverId)),
+    ).for('update').limit(1);
 
-  const snapshot = ride.fareSnapshot || {};
-  const baseFareMinor = snapshot.breakdown?.baseFareMinor ?? Math.round((snapshot.originalEstimatedFareMinor || ride.estimatedFareMinor) * 0.2);
-  const distanceFareMinor = snapshot.breakdown?.distanceFareMinor ?? Math.round((snapshot.originalEstimatedFareMinor || ride.estimatedFareMinor) * 0.6);
-  const perMinRateMinor = snapshot.breakdown?.timeFareMinor
-    ? snapshot.breakdown.timeFareMinor / Math.max(ride.durationMin, 1)
-    : 0;
-  const actualTimeFareMinor = perMinRateMinor * actualDurationMin;
-  const zoneMultiplier = snapshot.breakdown?.zoneMultiplier ?? 1;
-  const surgeMultiplier = snapshot.breakdown?.surgeMultiplier ?? 1;
-  const minFareMinor = snapshot.breakdown?.minFareMinor ?? 0;
-  const rawFinalFareMinor = (baseFareMinor + distanceFareMinor + actualTimeFareMinor) * zoneMultiplier * surgeMultiplier;
-  const grossFareMinor = Math.ceil(Math.max(rawFinalFareMinor, minFareMinor));
+    if (!lockedRide) throw { statusCode: 404, message: 'Ride not found' };
+    if (lockedRide.status !== 'started') throw { statusCode: 409, message: `Ride has not started yet (current status: ${lockedRide.status})` };
 
-  // Determine promo discount applied to the ride
-  const promoDiscountMinor = snapshot.breakdown?.promo?.discountAmountMinor
-    || snapshot.discountAmountMinor
-    || 0;
-  const finalFareMinor = Math.max(0, grossFareMinor - promoDiscountMinor);
+    ride = lockedRide;
+    actualDurationMin = ride.startedAt
+      ? Math.ceil((Date.now() - new Date(ride.startedAt).getTime()) / 60_000)
+      : ride.durationMin;
 
-  // Resolve commission and driver earnings breakdown dynamically against gross fare
-  let commission = null;
-  try {
-    commission = await resolveRideCommission({ ...ride, grossFareMinor, finalFareMinor });
-  } catch (err) {
-    console.error('[Ride] resolveRideCommission failed:', err.message);
-  }
+    snapshot = ride.fareSnapshot || {};
+    const baseFareMinor = snapshot.breakdown?.baseFareMinor ?? Math.round((snapshot.originalEstimatedFareMinor || ride.estimatedFareMinor) * 0.2);
+    const distanceFareMinor = snapshot.breakdown?.distanceFareMinor ?? Math.round((snapshot.originalEstimatedFareMinor || ride.estimatedFareMinor) * 0.6);
+    const perMinRateMinor = snapshot.breakdown?.timeFareMinor
+      ? snapshot.breakdown.timeFareMinor / Math.max(ride.durationMin, 1)
+      : 0;
+    const actualTimeFareMinor = perMinRateMinor * actualDurationMin;
+    const zoneMultiplier = snapshot.breakdown?.zoneMultiplier ?? 1;
+    const surgeMultiplier = snapshot.breakdown?.surgeMultiplier ?? 1;
+    const minFareMinor = snapshot.breakdown?.minFareMinor ?? 0;
+    const rawFinalFareMinor = (baseFareMinor + distanceFareMinor + actualTimeFareMinor) * zoneMultiplier * surgeMultiplier;
+    grossFareMinor = Math.ceil(Math.max(rawFinalFareMinor, minFareMinor));
 
-  const driverEarningsMinor = commission?.driverEarningsMinor ?? Math.round(grossFareMinor * 0.8);
-  const platformCommissionMinor = commission?.commissionMinor ?? (grossFareMinor - driverEarningsMinor);
+    promoDiscountMinor = snapshot.breakdown?.promo?.discountAmountMinor
+      || snapshot.discountAmountMinor
+      || 0;
+    finalFareMinor = Math.max(0, grossFareMinor - promoDiscountMinor);
 
-  // Insert or update driver_earnings row
-  try {
-    await db.insert(driverEarnings).values({
+    try {
+      commission = await resolveRideCommission({ ...ride, grossFareMinor, finalFareMinor });
+    } catch (err) {
+      console.error('[Ride] resolveRideCommission failed:', err.message);
+    }
+
+    driverEarningsMinor = commission?.driverEarningsMinor ?? Math.round(grossFareMinor * 0.8);
+    platformCommissionMinor = commission?.commissionMinor ?? (grossFareMinor - driverEarningsMinor);
+
+    await tx.insert(driverEarnings).values({
       driverId,
       rideId,
       grossFareMinor,
@@ -868,29 +1007,47 @@ export async function completeRide(rideId, driverId) {
       currencyCode: ride.currencyCode || 'INR',
       status: 'available',
     });
-  } catch (err) {
-    console.error('[Ride] driverEarnings insert failed:', err.message);
-  }
 
-  const [updated] = await db.update(rides).set({
-    status: 'completed',
-    finalFareMinor,
-    durationMin: actualDurationMin,
-    completedAt: new Date(),
-    fareSnapshot: {
-      ...(snapshot || {}),
-      grossFareMinor,
-      discountAmountMinor: promoDiscountMinor,
+    const [u] = await tx.update(rides).set({
+      status: 'completed',
       finalFareMinor,
-      commission: commission ? { ruleId: commission.ruleId, ...commission } : {
+      durationMin: actualDurationMin,
+      completedAt: new Date(),
+      fareSnapshot: {
+        ...(snapshot || {}),
         grossFareMinor,
-        promoDiscountMinor,
-        platformSubsidyMinor: promoDiscountMinor,
-        commissionMinor: platformCommissionMinor,
-        driverEarningsMinor,
+        discountAmountMinor: promoDiscountMinor,
+        finalFareMinor,
+        commission: commission ? { ruleId: commission.ruleId, ...commission } : {
+          grossFareMinor,
+          promoDiscountMinor,
+          platformSubsidyMinor: promoDiscountMinor,
+          commissionMinor: platformCommissionMinor,
+          driverEarningsMinor,
+        },
       },
-    },
-  }).where(eq(rides.id, rideId)).returning();
+    }).where(eq(rides.id, rideId)).returning();
+    updated = u;
+
+    await tx.insert(outboxEvents).values({
+      aggregateType: 'ride',
+      aggregateId: rideId,
+      eventType: 'RIDE_COMPLETED',
+      payload: {
+        id: rideId,
+        rideId,
+        driverId,
+        riderId: ride.riderId,
+        finalFareMinor,
+        grossFareMinor,
+        driverEarningsMinor,
+        currencyCode: ride.currencyCode,
+      },
+    });
+
+    await tx.update(drivers).set({ totalRides: sql`total_rides + 1` })
+      .where(eq(drivers.id, driverId));
+  });
 
   await recordStatusChange({
     rideId, fromStatus: 'started', toStatus: 'completed',

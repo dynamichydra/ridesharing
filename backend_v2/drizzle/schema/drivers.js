@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, decimal, text, smallint, integer, date } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, decimal, text, smallint, integer, date, index } from 'drizzle-orm/pg-core';
 import { vehicleTypes } from './vehicle-types.js';
 import { countries } from './countries.js';
 import { states } from './states.js';
@@ -56,4 +56,11 @@ export const drivers = pgTable('drivers', {
   // active | inactive | expired
   createdAt:          timestamp('created_at').defaultNow(),
   updatedAt:          timestamp('updated_at').defaultNow(),
-});
+}, (t) => ([
+  index('drivers_online_idx').on(t.isOnline),
+  index('drivers_approval_status_idx').on(t.approvalStatus),
+  index('drivers_registration_status_idx').on(t.registrationStatus),
+  index('drivers_vehicle_type_idx').on(t.vehicleTypeId),
+  index('drivers_location_idx').on(t.countryId, t.cityId),
+]));
+

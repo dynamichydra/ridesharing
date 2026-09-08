@@ -17,10 +17,11 @@ export function sendSuccess(reply, message, statusCode = 200) {
 }
 
 export function sendList(reply, items, pagination) {
+  const safeItems = Array.isArray(items) ? items : (items ? [items] : []);
   return reply.status(200).send({
     SUCCESS: true,
-    MESSAGE: items,
-    COUNT: items.length,
+    MESSAGE: safeItems,
+    COUNT: safeItems.length,
     PAGINATION: pagination,
   });
 }

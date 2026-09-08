@@ -41,6 +41,7 @@ const ModerationList = lazy(() => import("@/features/moderation/pages"));
 const DispatchOpsPage = lazy(() => import("@/features/dispatch-ops/pages"));
 const CashManagementList = lazy(() => import("@/features/cash-management/pages"));
 const LostItemList = lazy(() => import("@/features/lost-items/pages"));
+const FxRateList = lazy(() => import("@/features/fx/pages"));
 
 const router = createBrowserRouter([
   {
@@ -369,6 +370,16 @@ const router = createBrowserRouter([
           <ProtectedRoute allowedRoles={["super_admin"]}>
             <Suspense fallback={<Loader />}>
               <NotificationTemplateList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "fx-rates",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
+            <Suspense fallback={<Loader />}>
+              <FxRateList />
             </Suspense>
           </ProtectedRoute>
         ),

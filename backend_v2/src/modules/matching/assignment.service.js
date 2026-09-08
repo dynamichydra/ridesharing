@@ -60,6 +60,8 @@ export async function assignDriverToRide(rideId, driverId, options = {}) {
   let acceptedOffer = null;
   let supersededOffers = [];
 
+  let driverRecord = null;
+
   await db.transaction(async (tx) => {
     // A. Lock and verify Ride row (FOR UPDATE)
     const [ride] = await tx
@@ -82,6 +84,7 @@ export async function assignDriverToRide(rideId, driverId, options = {}) {
     if (!driver) {
       throw { statusCode: 403, message: 'Driver account is invalid or blocked' };
     }
+    driverRecord = driver;
 
     // C. Atomic offer acceptance & supersede competing offers
     const [offer] = await tx
@@ -154,7 +157,9 @@ export async function assignDriverToRide(rideId, driverId, options = {}) {
 
     // G. Outbox event for reliable asynchronous delivery
     await tx.insert(outboxEvents).values({
-      eventType: 'DriverAssigned',
+      aggregateType: 'ride',
+      aggregateId: rideId,
+      topic: TOPICS.RIDE_ACCEPTED,
       payload: {
         rideId,
         driverId,
@@ -183,9 +188,12 @@ export async function assignDriverToRide(rideId, driverId, options = {}) {
   );
   await redis.del(REDIS_KEYS.rideRequest(rideId));
 
-  // Initialize live approach route and tracking
-  initTripTracking(rideId, driverId, updatedRide.riderId).catch(() => {});
-  computeApproachRoute(rideId, driverId, updatedRide.pickupLat, updatedRide.pickupLng).catch(() => {});
+  // Initialize live approach route
+  if (driverRecord) {
+    computeApproachRoute(updatedRide, driverRecord).catch((err) =>
+      console.error('[Assignment] computeApproachRoute failed:', err.message),
+    );
+  }
 
   // Record status history
   await recordStatusChange({

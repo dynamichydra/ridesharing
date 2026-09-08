@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, decimal, integer, text, smallint, jsonb, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, decimal, integer, text, smallint, jsonb, boolean, index } from 'drizzle-orm/pg-core';
 import { users } from './users.js';
 import { drivers } from './drivers.js';
 import { vehicleTypes } from './vehicle-types.js';
@@ -58,5 +58,12 @@ export const rides = pgTable('rides', {
   startedAt:      timestamp('started_at'),
   completedAt:    timestamp('completed_at'),
   cancelledAt:    timestamp('cancelled_at'),
-});
+}, (t) => ([
+  index('rides_rider_status_idx').on(t.riderId, t.status),
+  index('rides_driver_status_idx').on(t.driverId, t.status),
+  index('rides_status_idx').on(t.status),
+  index('rides_requested_at_idx').on(t.requestedAt),
+  index('rides_country_idx').on(t.countryId),
+]));
+
 

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, integer, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, integer, jsonb, index } from 'drizzle-orm/pg-core';
 import { subscriptions } from './subscriptions.js';
 import { riderSubscriptions } from './rider-subscriptions.js';
 import { countries } from './countries.js';
@@ -29,4 +29,10 @@ export const payments = pgTable('payments', {
   metadata:            jsonb('metadata'),
   createdAt:           timestamp('created_at').defaultNow(),
   updatedAt:           timestamp('updated_at').defaultNow(),
-});
+}, (t) => ([
+  index('payments_ride_status_idx').on(t.rideId, t.status),
+  index('payments_gateway_order_idx').on(t.gatewayOrderId),
+  index('payments_wallet_idx').on(t.walletId),
+  index('payments_subscription_idx').on(t.subscriptionId),
+]));
+

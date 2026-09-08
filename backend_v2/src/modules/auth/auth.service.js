@@ -23,38 +23,24 @@ export async function findDriverByPhone(phone) {
   if (!phone) return null;
   const raw = normalizePhone(phone);
   const digitsOnly = raw.replace(/\D/g, '');
-  const last10 = digitsOnly.slice(-10);
 
-  console.log(`[DriverAuth:findDriverByPhone] input="${phone}", raw="${raw}", digitsOnly="${digitsOnly}", last10="${last10}"`);
-
-  // Exact match first
+  // 1. Direct exact match
   let [driver] = await db.select().from(drivers).where(eq(drivers.phone, raw)).limit(1);
-  if (driver) {
-    console.log(`[DriverAuth:findDriverByPhone] exact match found! driverId="${driver.id}", name="${driver.name}", phone="${driver.phone}"`);
-    return driver;
+  if (driver) return driver;
+
+  // 2. Canonical internationalized format (+ prefix or digits-only)
+  const variations = [];
+  if (digitsOnly && digitsOnly !== raw) variations.push(digitsOnly);
+  if (digitsOnly && !raw.startsWith('+')) variations.push(`+${digitsOnly}`);
+  if (digitsOnly.length === 10) variations.push(`+91${digitsOnly}`, `+1${digitsOnly}`);
+
+  if (variations.length > 0) {
+    const [matched] = await db.select().from(drivers)
+      .where(or(...variations.map((v) => eq(drivers.phone, v))))
+      .limit(1);
+    if (matched) return matched;
   }
 
-  // Suffix match on last 10 digits
-  if (last10.length >= 7) {
-    const candidates = await db.select().from(drivers)
-      .where(or(
-        like(drivers.phone, `%${last10}`),
-        eq(drivers.phone, digitsOnly),
-        eq(drivers.phone, `+91${last10}`)
-      )).limit(5);
-
-    console.log(`[DriverAuth:findDriverByPhone] candidates matching last10="${last10}":`, candidates.map(c => ({ id: c.id, name: c.name, phone: c.phone })));
-
-    for (const c of candidates) {
-      const cDigits = (c.phone || '').replace(/\D/g, '');
-      if (cDigits.endsWith(last10) || digitsOnly.endsWith(cDigits.slice(-10))) {
-        console.log(`[DriverAuth:findDriverByPhone] suffix match selected! driverId="${c.id}", name="${c.name}", phone="${c.phone}"`);
-        return c;
-      }
-    }
-  }
-
-  console.log(`[DriverAuth:findDriverByPhone] NO driver found matching phone="${phone}".`);
   return null;
 }
 
