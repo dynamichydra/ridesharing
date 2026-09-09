@@ -823,7 +823,7 @@ export async function startRide(rideId, driverId, otp) {
     await tx.insert(outboxEvents).values({
       aggregateType: 'ride',
       aggregateId: rideId,
-      eventType: 'RIDE_STARTED',
+      topic: TOPICS.RIDE_STARTED,
       payload: { id: rideId, rideId, driverId, riderId },
     });
   });
@@ -1032,7 +1032,7 @@ export async function completeRide(rideId, driverId) {
     await tx.insert(outboxEvents).values({
       aggregateType: 'ride',
       aggregateId: rideId,
-      eventType: 'RIDE_COMPLETED',
+      topic: TOPICS.RIDE_COMPLETED,
       payload: {
         id: rideId,
         rideId,
