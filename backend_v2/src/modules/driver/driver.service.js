@@ -539,8 +539,31 @@ export async function getDriverMe(driverId) {
 export async function getProfile(driverId) {
   const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId)).limit(1);
   if (!driver) throw { statusCode: 404, message: 'Driver not found' };
+
+  let countryName = null;
+  let stateName = null;
+  let cityName = null;
+
+  if (driver.countryId) {
+    const [c] = await db.select({ name: countries.name }).from(countries).where(eq(countries.id, driver.countryId)).limit(1);
+    countryName = c?.name || null;
+  }
+  if (driver.stateId) {
+    const [s] = await db.select({ name: states.name }).from(states).where(eq(states.id, driver.stateId)).limit(1);
+    stateName = s?.name || null;
+  }
+  if (driver.cityId) {
+    const [ct] = await db.select({ name: cities.name }).from(cities).where(eq(cities.id, driver.cityId)).limit(1);
+    cityName = ct?.name || null;
+  }
+
   const { aadharNumber, ...safe } = driver;
-  return safe;
+  return {
+    ...safe,
+    countryName,
+    stateName,
+    cityName,
+  };
 }
 
 export async function updateProfile(driverId, data) {
