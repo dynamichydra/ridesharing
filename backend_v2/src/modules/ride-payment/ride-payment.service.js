@@ -381,7 +381,7 @@ async function _loadPayableRideForUser(rideId, userId) {
 // stamps the breakdown onto ride.fareSnapshot so getRideInvoice/getRidePaymentStatus can show
 // it without a schema change to `rides`. Returns null (no commission applied) if there's no
 // driver to charge one against.
-export async function resolveRideCommission(ride) {
+export async function resolveRideCommission(ride, { skipDbUpdate = false } = {}) {
   if (!ride.driverId) return null;
   const [driver] = await db.select({ subscriptionStatus: drivers.subscriptionStatus })
     .from(drivers).where(eq(drivers.id, ride.driverId)).limit(1);
@@ -461,12 +461,14 @@ export async function resolveRideCommission(ride) {
     netPlatformRevenueMinor: computed.commissionMinor - promoDiscountMinor,
   };
 
-  try {
-    await db.update(rides).set({
-      fareSnapshot: { ...(ride.fareSnapshot || {}), grossFareMinor, commission: { ruleId: rule?.id || null, ...breakdown } },
-    }).where(eq(rides.id, ride.id));
-  } catch (err) {
-    console.error('[RidePayment] Failed to update ride fareSnapshot commission:', err.message);
+  if (!skipDbUpdate) {
+    try {
+      await db.update(rides).set({
+        fareSnapshot: { ...(ride.fareSnapshot || {}), grossFareMinor, commission: { ruleId: rule?.id || null, ...breakdown } },
+      }).where(eq(rides.id, ride.id));
+    } catch (err) {
+      console.error('[RidePayment] Failed to update ride fareSnapshot commission:', err.message);
+    }
   }
 
   return breakdown;

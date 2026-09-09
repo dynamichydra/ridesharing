@@ -1,7 +1,8 @@
 import { eq, and, desc, asc, ne, isNull } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { rideChatMessages, rides } from '../../../drizzle/schema/index.js';
+import { rideChatMessages, rides, users, drivers } from '../../../drizzle/schema/index.js';
 import { getSocketIO } from '../../kafka/consumers/index.js';
+import { publishEvent, TOPICS } from '../../config/kafka.js';
 
 /**
  * Send an in-trip chat message between driver and rider.
@@ -49,6 +50,27 @@ export async function sendMessage({ rideId, senderId, senderRole, content, messa
     } else if (senderRole === 'driver') {
       io.of('/rider').to(`rider:${ride.riderId}`).emit('chat:message', message);
     }
+  }
+
+  // Fire push notification asynchronously
+  if (senderRole === 'rider' && ride.driverId) {
+    publishEvent(TOPICS.NOTIF_PUSH, {
+      userType: 'driver',
+      userId: ride.driverId,
+      type: 'CHAT_MESSAGE',
+      title: 'New message from Rider',
+      body: content.trim(),
+      rideId,
+    }).catch(() => {});
+  } else if (senderRole === 'driver' && ride.riderId) {
+    publishEvent(TOPICS.NOTIF_PUSH, {
+      userType: 'rider',
+      userId: ride.riderId,
+      type: 'CHAT_MESSAGE',
+      title: 'New message from Driver',
+      body: content.trim(),
+      rideId,
+    }).catch(() => {});
   }
 
   return message;

@@ -990,7 +990,7 @@ export async function completeRide(rideId, driverId) {
     finalFareMinor = Math.max(0, grossFareMinor - promoDiscountMinor);
 
     try {
-      commission = await resolveRideCommission({ ...ride, grossFareMinor, finalFareMinor });
+      commission = await resolveRideCommission({ ...ride, grossFareMinor, finalFareMinor }, { skipDbUpdate: true });
     } catch (err) {
       console.error('[Ride] resolveRideCommission failed:', err.message);
     }
@@ -1058,10 +1058,30 @@ export async function completeRide(rideId, driverId) {
   // Release driver
   await redis.del(REDIS_KEYS.driverRideActive(driverId));
   await cleanupRideTracking(rideId);
-  await db.update(drivers).set({ totalRides: sql`total_rides + 1` })
-    .where(eq(drivers.id, driverId));
   await reAddToGeoIndexIfOnline(driverId)
     .catch((err) => console.error('[Ride] reAddToGeoIndexIfOnline failed:', err.message));
+
+  // Direct socket broadcast to rider room so customer UI switches to completed state immediately
+  try {
+    const { getSocketIO } = await import('../../kafka/consumers/index.js');
+    const io = getSocketIO();
+    if (io) {
+      io.of('/rider').to(`rider:${ride.riderId}`).emit('ride:completed', {
+        rideId,
+        finalFareMinor,
+        grossFareMinor,
+        currencyCode: ride.currencyCode,
+      });
+      io.of('/rider').to(`ride:${rideId}`).emit('ride:completed', {
+        rideId,
+        finalFareMinor,
+        grossFareMinor,
+        currencyCode: ride.currencyCode,
+      });
+    }
+  } catch (err) {
+    console.error('[Ride] Direct socket emit on ride complete failed:', err.message);
+  }
 
   // Fire-and-forget (same pattern as computeApproachRoute/initTripTracking above):
   // recomputes the fare from actual GPS-derived distance/time using the SAME
@@ -1259,12 +1279,73 @@ export async function getRideStatusTimeline(rideId) {
 }
 
 export async function getDriverActiveRide(driverId) {
-  // Bug 2 fix: parse JSON
+  const activeStatuses = ['accepted', 'arriving', 'arrived', 'started'];
+  let ride = null;
   const raw = await redis.get(REDIS_KEYS.driverRideActive(driverId));
-  if (!raw) return null;
-  const { rideId } = JSON.parse(raw);
-  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
-  return stripOtp(ride) || null;
+  if (raw) {
+    try {
+      const { rideId } = JSON.parse(raw);
+      const [r] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+      if (r && activeStatuses.includes(r.status)) {
+        ride = r;
+      }
+    } catch (e) {
+      console.error('[Ride] Error parsing driverRideActive key:', e.message);
+    }
+    if (!ride) {
+      // Key was stale or ride is completed/cancelled — purge stale Redis key
+      await redis.del(REDIS_KEYS.driverRideActive(driverId));
+    }
+  }
+
+  if (!ride) {
+    // Fallback: Check DB directly for any active ongoing ride assigned to this driver
+    const [dbRide] = await db.select().from(rides).where(
+      and(
+        eq(rides.driverId, driverId),
+        or(
+          eq(rides.status, 'accepted'),
+          eq(rides.status, 'arriving'),
+          eq(rides.status, 'arrived'),
+          eq(rides.status, 'started'),
+        ),
+      ),
+    ).orderBy(desc(rides.requestedAt)).limit(1);
+
+    if (dbRide) {
+      ride = dbRide;
+      // Re-populate Redis cache with valid active ride
+      await redis.setex(
+        REDIS_KEYS.driverRideActive(driverId),
+        7200,
+        JSON.stringify({ rideId: dbRide.id, riderId: dbRide.riderId }),
+      );
+    }
+  }
+
+  if (!ride) return null;
+
+  let rider = null;
+  if (ride.riderId) {
+    const [u] = await db.select({
+      id: users.id,
+      name: users.name,
+      phone: users.phone,
+      avatar: users.avatar,
+      rating: users.rating,
+    }).from(users).where(eq(users.id, ride.riderId)).limit(1);
+    if (u) {
+      rider = u;
+    }
+  }
+
+  return stripOtp({
+    ...ride,
+    rider,
+    riderName: rider?.name || ride.riderName || 'Rider',
+    riderPhone: rider?.phone || ride.riderPhone || '',
+    riderAvatar: rider?.avatar || ride.riderAvatar || null,
+  });
 }
 
 export async function getRiderActiveRide(riderId) {
