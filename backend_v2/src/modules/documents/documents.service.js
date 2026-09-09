@@ -174,14 +174,61 @@ export async function verifyDocument(docId, adminId, approve, rejectionReason) {
     entityType: 'driver_document', entityId: docId,
   });
 
-  if (!approve) {
-    const [driver] = await db.select({ id: drivers.id }).from(drivers).where(eq(drivers.id, doc.driverId)).limit(1);
-    if (driver) {
+  const [driver] = await db.select({
+    id: drivers.id,
+    countryId: drivers.countryId,
+    cityId: drivers.cityId,
+    vehicleTypeId: drivers.vehicleTypeId,
+    approvalStatus: drivers.approvalStatus,
+    registrationStatus: drivers.registrationStatus,
+  }).from(drivers).where(eq(drivers.id, doc.driverId)).limit(1);
+
+  if (driver) {
+    if (!approve) {
       await publishNotification('DOCUMENT_REJECTED', {
         userId: doc.driverId, userType: 'driver',
         variables: { reason: rejectionReason || 'Please re-upload this document.' },
       });
+    } else {
+      // Check if all required documents for this driver are now approved
+      try {
+        const requiredDocTypes = await getRequiredDocumentTypesFor(
+          driver.countryId,
+          driver.cityId,
+          driver.vehicleTypeId
+        );
+        const allDocs = await db.select().from(driverDocuments).where(eq(driverDocuments.driverId, doc.driverId));
+        const approvedDocTypeIds = new Set(
+          allDocs.filter((d) => d.status === 'approved').map((d) => d.documentTypeId)
+        );
+
+        const allRequiredApproved = requiredDocTypes
+          .filter((t) => t.isRequired)
+          .every((t) => approvedDocTypeIds.has(t.id));
+
+        if (allRequiredApproved && driver.approvalStatus !== 'approved') {
+          // If all required documents are approved, advance driver status to approved
+          await db.update(drivers).set({
+            approvalStatus: 'approved',
+            registrationStatus: 'approved',
+            approvedBy: adminId,
+            approvedAt: new Date(),
+            updatedAt: new Date(),
+          }).where(eq(drivers.id, doc.driverId));
+
+          await publishEvent(TOPICS.NOTIF_PUSH, {
+            userId: doc.driverId,
+            userType: 'driver',
+            title: 'Account Approved! 🎉',
+            body: 'All your documents have been verified and approved. You can now go online!',
+            type: 'ACCOUNT_APPROVED',
+          });
+        }
+      } catch (err) {
+        console.error('Error auto-evaluating driver approval after document verification:', err);
+      }
     }
   }
+
   return doc;
 }
