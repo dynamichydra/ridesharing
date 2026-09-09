@@ -19,6 +19,18 @@ class RideRemoteDataSource {
     }
   }
 
+  Future<Map<String, dynamic>> markArrived(String rideId) async {
+    try {
+      final response = await apiClient.dio.post('/rides/$rideId/arrived');
+      if (response.data['SUCCESS'] != true) {
+        throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to mark arrived');
+      }
+      return response.data['MESSAGE'] as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
   Future<Map<String, dynamic>> startRide(String rideId, String otp) async {
     try {
       final response = await apiClient.dio.post('/rides/$rideId/start', data: {

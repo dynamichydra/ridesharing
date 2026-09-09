@@ -2,6 +2,7 @@ import '../../common/entities/driver_profile.dart';
 import '../../domain/entities/geo.dart';
 import '../../domain/entities/document.dart';
 import '../../domain/entities/vehicle.dart';
+import '../../domain/entities/vehicle_model.dart';
 import '../../domain/entities/question.dart';
 import '../../domain/entities/onboarding_progress.dart';
 import '../../domain/repositories/onboarding_repository.dart';
@@ -189,30 +190,81 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
   }
 
   @override
+  Future<List<VehicleModel>> getVehicleModels({
+    String? vehicleTypeId,
+    String? search,
+  }) async {
+    final list = await remoteDataSource.getVehicleModels(
+      vehicleTypeId: vehicleTypeId,
+      search: search,
+    );
+    return list
+        .map((m) => VehicleModel.fromJson(m as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<String> uploadVehiclePhoto({
+    required List<int> bytes,
+    required String contentType,
+  }) async {
+    try {
+      final uploadResp = await remoteDataSource.requestVehiclePhotoUploadUrl(contentType);
+      final uploadUrl = uploadResp['uploadUrl']?.toString() ?? '';
+      final key = uploadResp['key']?.toString() ?? '';
+      final publicUrl = uploadResp['url']?.toString() ?? key;
+
+      if (uploadUrl.isNotEmpty) {
+        await remoteDataSource.uploadDocumentFile(uploadUrl, bytes, contentType);
+        return publicUrl.isNotEmpty ? publicUrl : key;
+      }
+    } catch (_) {
+      // Fallback to direct multipart upload endpoint
+    }
+
+    final ext = contentType.contains('png') ? 'png' : 'jpg';
+    final filename = 'vehicle_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final directResp = await remoteDataSource.uploadVehiclePhotoDirect(bytes, filename, contentType);
+    return directResp['url']?.toString() ?? directResp['key']?.toString() ?? '';
+  }
+
+  @override
   Future<DriverVehicle> addVehicle({
     required String vehicleTypeId,
+    String? vehicleModelId,
     required String model,
     required String year,
     required String registrationNumber,
     String? color,
+    String? image,
   }) async {
-    String? resolvedModelId;
-    try {
-      final list = await remoteDataSource.getVehicleModels(vehicleTypeId: vehicleTypeId);
-      if (list.isNotEmpty) {
-        final query = model.toLowerCase();
-        final matched = list.firstWhere(
-          (m) {
-            final name = (m['name'] as String?)?.toLowerCase() ?? '';
-            final slug = (m['slug'] as String?)?.toLowerCase() ?? '';
-            return name == query || slug.contains(query) || query.contains(name);
-          },
-          orElse: () => list.first,
+    String? resolvedModelId = vehicleModelId;
+    if (resolvedModelId == null || resolvedModelId.isEmpty) {
+      try {
+        final list = await remoteDataSource.getVehicleModels(
+          vehicleTypeId: vehicleTypeId,
+          search: model,
         );
-        resolvedModelId = matched['id']?.toString();
+        if (list.isNotEmpty) {
+          final query = model.toLowerCase().trim();
+          final matched = list.firstWhere(
+            (m) {
+              final name = (m['name'] as String?)?.toLowerCase() ?? '';
+              final brand = (m['brand'] as String?)?.toLowerCase() ?? '';
+              final full = '$brand $name'.trim().toLowerCase();
+              final slug = (m['slug'] as String?)?.toLowerCase() ?? '';
+              return full == query ||
+                  name == query ||
+                  slug.contains(query) ||
+                  query.contains(name);
+            },
+            orElse: () => list.first,
+          );
+          resolvedModelId = matched['id']?.toString();
+        }
+      } catch (_) {
+        // Fallback if /vehicle-models endpoint is unreachable
       }
-    } catch (_) {
-      // Fallback if /vehicle-models endpoint is unreachable
     }
 
     final data = await remoteDataSource.addVehicle({
@@ -222,6 +274,7 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
       'year': year,
       'registrationNumber': registrationNumber,
       if (color != null) 'color': color,
+      if (image != null && image.isNotEmpty) 'image': image,
     });
     return DriverVehicle.fromJson(data);
   }

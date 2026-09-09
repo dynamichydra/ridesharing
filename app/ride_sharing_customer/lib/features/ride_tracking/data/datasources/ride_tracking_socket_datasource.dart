@@ -15,6 +15,7 @@ class RideTrackingSocketDataSource {
   final _rideCompletedController = StreamController<Map<String, dynamic>>.broadcast();
   final _rideCancelledController = StreamController<Map<String, dynamic>>.broadcast();
   final _socketErrorController = StreamController<String>.broadcast();
+  final _chatMessageController = StreamController<Map<String, dynamic>>.broadcast();
 
   RideTrackingSocketDataSource({required this.storageService});
 
@@ -25,6 +26,7 @@ class RideTrackingSocketDataSource {
   Stream<Map<String, dynamic>> get onRideCompleted => _rideCompletedController.stream;
   Stream<Map<String, dynamic>> get onRideCancelled => _rideCancelledController.stream;
   Stream<String> get onSocketError => _socketErrorController.stream;
+  Stream<Map<String, dynamic>> get onChatMessage => _chatMessageController.stream;
 
   Future<void> connectAndSubscribe(String rideId) async {
     // Clean up any existing connection
@@ -149,8 +151,30 @@ class RideTrackingSocketDataSource {
       }
     });
 
+    // ── In-trip chat ──────────────────────────────────────────────────
+    socket.on('chat:message', (data) {
+      AppLogger.d('[RideTrackingSocket] event: chat:message -> $data');
+      if (data is Map) {
+        _chatMessageController.add(Map<String, dynamic>.from(data));
+      }
+    });
+
     _socket = socket;
     socket.connect();
+  }
+
+  void sendChatMessage(String rideId, String content, {String messageType = 'text'}) {
+    _socket?.emit('chat:send', {
+      'rideId': rideId,
+      'content': content,
+      'messageType': messageType,
+    });
+  }
+
+  void markChatRead(String rideId) {
+    _socket?.emit('chat:read', {
+      'rideId': rideId,
+    });
   }
 
   void disconnect() {
@@ -168,5 +192,6 @@ class RideTrackingSocketDataSource {
     _rideCompletedController.close();
     _rideCancelledController.close();
     _socketErrorController.close();
+    _chatMessageController.close();
   }
 }

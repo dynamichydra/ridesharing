@@ -49,16 +49,20 @@ class SubmitQuestionAnswers extends OnboardingEvent {
 
 class AddVehicleDetails extends OnboardingEvent {
   final String vehicleTypeId;
+  final String? vehicleModelId;
   final String model;
   final String year;
   final String registrationNumber;
   final String? color;
+  final String? image;
   AddVehicleDetails({
     required this.vehicleTypeId,
+    this.vehicleModelId,
     required this.model,
     required this.year,
     required this.registrationNumber,
     this.color,
+    this.image,
   });
 }
 
@@ -227,10 +231,12 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
       try {
         await onboardingRepository.addVehicle(
           vehicleTypeId: event.vehicleTypeId,
+          vehicleModelId: event.vehicleModelId,
           model: event.model,
           year: event.year,
           registrationNumber: event.registrationNumber,
           color: event.color,
+          image: event.image,
         );
         emit(OnboardingSuccess());
       } catch (e) {

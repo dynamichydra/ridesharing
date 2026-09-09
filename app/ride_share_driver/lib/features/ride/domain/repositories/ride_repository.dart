@@ -27,6 +27,7 @@ abstract class RideRepository {
 
   // ── REST lifecycle actions ────────────────────────────────────────────────
   Future<ActiveRide> markArriving(String rideId);
+  Future<ActiveRide> markArrived(String rideId);
   Future<ActiveRide> startRide(String rideId, String otp);
   Future<ActiveRide> completeRide(String rideId);
   Future<void> cancelRideByDriver(String rideId, {String? reason});

@@ -2,6 +2,7 @@ import '../../common/entities/driver_profile.dart';
 import '../entities/geo.dart';
 import '../entities/document.dart';
 import '../entities/vehicle.dart';
+import '../entities/vehicle_model.dart';
 import '../entities/question.dart';
 import '../entities/onboarding_progress.dart';
 
@@ -92,12 +93,22 @@ abstract class OnboardingRepository {
   Future<UploadUrlResponse> requestProfilePhotoUploadUrl(String contentType);
   Future<DriverProfile> confirmProfilePhoto(String key);
   Future<List<DriverVehicle>> getMyVehicles();
+  Future<List<VehicleModel>> getVehicleModels({
+    String? vehicleTypeId,
+    String? search,
+  });
+  Future<String> uploadVehiclePhoto({
+    required List<int> bytes,
+    required String contentType,
+  });
   Future<DriverVehicle> addVehicle({
     required String vehicleTypeId,
+    String? vehicleModelId,
     required String model,
     required String year,
     required String registrationNumber,
     String? color,
+    String? image,
   });
   Future<List<DriverAnswer>> getMyAnswers();
   Future<bool> submitAnswers(List<Map<String, dynamic>> answers);

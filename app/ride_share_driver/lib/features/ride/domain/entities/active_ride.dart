@@ -33,6 +33,11 @@ class ActiveRide {
   final int? promoDiscountMinor;
   final int? collectFromCustomerMinor;
 
+  final String? riderName;
+  final String? riderPhone;
+  final String? riderAvatar;
+  final double? riderRating;
+
   const ActiveRide({
     required this.id,
     required this.riderId,
@@ -55,6 +60,10 @@ class ActiveRide {
     this.grossFareMinor,
     this.promoDiscountMinor,
     this.collectFromCustomerMinor,
+    this.riderName,
+    this.riderPhone,
+    this.riderAvatar,
+    this.riderRating,
   });
 
   factory ActiveRide.fromJson(Map<String, dynamic> json) {
@@ -95,9 +104,11 @@ class ActiveRide {
           snapshot?['promoDiscountMinor'],
     );
 
+    final riderObj = json['rider'] is Map ? json['rider'] as Map : null;
+
     return ActiveRide(
       id: json['id']?.toString() ?? json['rideId']?.toString() ?? '',
-      riderId: json['riderId']?.toString() ?? json['rider_id']?.toString() ?? '',
+      riderId: json['riderId']?.toString() ?? json['rider_id']?.toString() ?? riderObj?['id']?.toString() ?? '',
       status: json['status']?.toString() ?? 'accepted',
       pickupLat: parseDouble(json['pickupLat'] ?? json['pickup_lat']),
       pickupLng: parseDouble(json['pickupLng'] ?? json['pickup_lng']),
@@ -125,6 +136,10 @@ class ActiveRide {
       grossFareMinor: grossMinor,
       promoDiscountMinor: promoMinor,
       collectFromCustomerMinor: parseInt(json['collectFromCustomerMinor']),
+      riderName: json['riderName']?.toString() ?? json['rider_name']?.toString() ?? riderObj?['name']?.toString() ?? 'Passenger',
+      riderPhone: json['riderPhone']?.toString() ?? json['rider_phone']?.toString() ?? riderObj?['phone']?.toString(),
+      riderAvatar: json['riderAvatar']?.toString() ?? json['rider_avatar']?.toString() ?? riderObj?['avatar']?.toString(),
+      riderRating: parseDouble(json['riderRating'] ?? json['rider_rating'] ?? riderObj?['rating'], fallback: 5.0),
     );
   }
 

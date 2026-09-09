@@ -41,8 +41,8 @@ class _OnboardingWizardState extends State<OnboardingWizard>
     with TickerProviderStateMixin {
   int _currentStep = 0;
   bool _isForward = true;
-  // 0: Welcome, 1: Phone, 2: OTP, 3: PersonalInfo, 4: Terms, 5: Location, 6: VehiclePref, 7: VehicleForm, 8: Checklist
-  // Sub-flows: 9: Document DL, 10: Document Aadhar, 11: Questionnaire, 12: ProfilePhoto, 13: BankDetails, 14: EmergencyContact
+  // 0: Welcome, 1: Phone, 2: OTP, 3: PersonalInfo, 4: Terms, 5: Location, 6: Questionnaire, 7: VehicleForm, 8: Checklist
+  // Sub-flows: 9: Document Upload, 10: ProfilePhoto, 11: BankDetails
 
   String _phoneNumber = '';
   bool _isLogin = false;
@@ -123,16 +123,12 @@ class _OnboardingWizardState extends State<OnboardingWizard>
       setState(() {
         _isForward = false;
         if (_enteredFromChecklist) {
-          _currentStep = 9;
+          _currentStep = 8;
           _enteredFromChecklist = false;
-        } else if (_currentStep >= 10) {
-          _currentStep = 9; // Go back to checklist from subflows
-        } else if (_currentStep == 9) {
-          if (_needsVehicleRental) {
-            _currentStep = 7;
-          } else {
-            _currentStep = 8;
-          }
+        } else if (_currentStep >= 9) {
+          _currentStep = 8; // Go back to checklist from subflows
+        } else if (_currentStep == 8) {
+          _currentStep = 7;
         } else {
           _currentStep--;
         }
@@ -239,15 +235,15 @@ class _OnboardingWizardState extends State<OnboardingWizard>
                   } else if (regStep == 4) {
                     _currentStep = 6; // Questionnaire
                   } else if (regStep == 5) {
-                    _currentStep = 7; // Vehicle Selection
+                    _currentStep = 7; // Vehicle Form
                   } else {
-                    _currentStep = 9; // Checklist
+                    _currentStep = 8; // Checklist
                   }
                 } else if (_transitionOnSummaryLoad) {
                   _transitionOnSummaryLoad = false;
                   bool shouldGoBackToChecklist = true;
 
-                  if (_currentStep == 10) {
+                  if (_currentStep == 9) {
                     final docCode = _selectedUploadDocCode;
                     if (_config != null &&
                         _summary != null &&
@@ -292,12 +288,12 @@ class _OnboardingWizardState extends State<OnboardingWizard>
 
                   if (shouldGoBackToChecklist) {
                     if (_enteredFromChecklist) {
-                      _currentStep = 9;
+                      _currentStep = 8;
                       _enteredFromChecklist = false;
-                    } else if (_currentStep >= 3 && _currentStep < 9) {
+                    } else if (_currentStep >= 3 && _currentStep < 8) {
                       _nextStep();
                     } else {
-                      _currentStep = 9;
+                      _currentStep = 8;
                     }
                   } else {
                     debugPrint(
@@ -480,7 +476,7 @@ class _OnboardingWizardState extends State<OnboardingWizard>
                           setState(() {
                             _isEditingRejectedApplication = true;
                             _currentStep =
-                                9; // checklist — shows exactly what's incomplete
+                                8; // checklist — shows exactly what's incomplete
                           });
                         }
                       : null,
@@ -521,7 +517,7 @@ class _OnboardingWizardState extends State<OnboardingWizard>
                         onPressed: _prevStep,
                       ),
                       title: Text(
-                        _currentStep >= 9
+                        _currentStep >= 8
                             ? l10n.verificationSteps
                             : (_currentStep >= 3
                                   ? l10n.stepNOf8(_currentStep - 2)
@@ -543,9 +539,9 @@ class _OnboardingWizardState extends State<OnboardingWizard>
                       bottom: _currentStep >= 3,
                       child: Column(
                         children: [
-                          if (_currentStep >= 3 && _currentStep < 9)
+                          if (_currentStep >= 3 && _currentStep < 8)
                             LinearProgressIndicator(
-                              value: (_currentStep - 2) / 7.0,
+                              value: (_currentStep - 2) / 6.0,
                               color: AppColors.primary,
                               backgroundColor: AppColors.border,
                               minHeight: 3,
@@ -804,22 +800,6 @@ class _OnboardingWizardState extends State<OnboardingWizard>
           },
         );
       case 7:
-        return VehicleSelectionScreen(
-          isLoading: isOnboardingLoading,
-          onHasVehicle: () {
-            setState(() {
-              _needsVehicleRental = false;
-              _currentStep = 8;
-            });
-          },
-          onNeedVehicle: () {
-            CustomToast.show(
-              context,
-              'Rental services are not available right now. Please register with your own vehicle.',
-            );
-          },
-        );
-      case 8:
         if (_config == null) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -838,22 +818,26 @@ class _OnboardingWizardState extends State<OnboardingWizard>
               ({
                 color,
                 required model,
+                String? vehicleModelId,
                 required registrationNumber,
                 required vehicleTypeId,
                 required year,
+                String? image,
               }) {
                 context.read<OnboardingBloc>().add(
                   AddVehicleDetails(
                     vehicleTypeId: vehicleTypeId,
+                    vehicleModelId: vehicleModelId,
                     model: model,
                     year: year,
                     registrationNumber: registrationNumber,
                     color: color,
+                    image: image,
                   ),
                 );
               },
         );
-      case 9:
+      case 8:
         if (_summary == null || _config == null) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -878,7 +862,7 @@ class _OnboardingWizardState extends State<OnboardingWizard>
               _enteredFromChecklist = true;
               if (code.startsWith('document:')) {
                 _selectedUploadDocCode = code.split(':').last;
-                _currentStep = 10;
+                _currentStep = 9;
               } else if (code == 'personal_info') {
                 _currentStep = 3;
               } else if (code == 'drivingLocation') {
@@ -888,11 +872,11 @@ class _OnboardingWizardState extends State<OnboardingWizard>
               } else if (code == 'questionnaire') {
                 _currentStep = 6;
               } else if (code == 'vehicle') {
-                _currentStep = 8;
+                _currentStep = 7;
               } else if (code == 'profile_photo') {
-                _currentStep = 12;
+                _currentStep = 10;
               } else if (code == 'bank_details') {
-                _currentStep = 13;
+                _currentStep = 11;
               }
             });
           },
@@ -942,7 +926,7 @@ class _OnboardingWizardState extends State<OnboardingWizard>
             context.read<OnboardingBloc>().add(SubmitOnboardingApplication());
           },
         );
-      case 10:
+      case 9:
         if (_config == null || _selectedUploadDocCode == null) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -980,7 +964,7 @@ class _OnboardingWizardState extends State<OnboardingWizard>
                 );
               },
         );
-      case 12:
+      case 10:
         return ProfilePhotoScreen(
           currentPhotoUrl: _summary?.driver.profilePhoto,
           isLoading: isOnboardingLoading,
@@ -990,7 +974,7 @@ class _OnboardingWizardState extends State<OnboardingWizard>
             );
           },
         );
-      case 13:
+      case 11:
         return BankDetailsScreen(
           initialHolder: _bankHolder ?? _summary?.bankAccount?['accountHolderName']?.toString(),
           initialBankName: _bankName ?? _summary?.bankAccount?['bankName']?.toString(),
@@ -1000,7 +984,7 @@ class _OnboardingWizardState extends State<OnboardingWizard>
           isLoading: isOnboardingLoading,
           onSkip: () {
             setState(() {
-              _currentStep = 9;
+              _currentStep = 8;
               _enteredFromChecklist = false;
             });
           },
@@ -1030,16 +1014,6 @@ class _OnboardingWizardState extends State<OnboardingWizard>
             );
           },
         );
-      case 14:
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {
-              _currentStep = 9;
-              _enteredFromChecklist = false;
-            });
-          }
-        });
-        return const Center(child: CircularProgressIndicator());
       default:
         return WelcomeScreen(
           isLoading: isAuthLoading,

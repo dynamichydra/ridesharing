@@ -12,10 +12,12 @@ import '../../features/earnings/presentation/pages/earnings_page.dart';
 import '../../features/wallet/presentation/pages/wallet_page.dart';
 import '../../features/wallet/presentation/pages/transactions_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
+import '../../features/profile/presentation/pages/edit_profile_page.dart';
 import '../../features/profile/presentation/pages/vehicle_info_page.dart';
 import '../../features/profile/presentation/pages/driver_documents_page.dart';
 import '../../features/profile/presentation/pages/bank_payout_page.dart';
 import '../../features/ride/presentation/screens/active_ride_screen.dart';
+import '../../features/chat/presentation/pages/ride_chat_page.dart';
 
 class AppRouter {
   final AuthBloc authBloc;
@@ -195,11 +197,23 @@ class AppRouter {
         ],
       ),
 
-      // Full-screen pages
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/active-ride',
         builder: (context, state) => const ActiveRidePage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/ride-chat',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return RideChatPage(
+            rideId: extra['rideId']?.toString() ?? '',
+            otherPartyName: extra['name']?.toString() ?? 'Passenger',
+            otherPartyAvatar: extra['avatar']?.toString(),
+            otherPartyPhone: extra['phone']?.toString(),
+          );
+        },
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
@@ -237,6 +251,11 @@ class AppRouter {
             },
           );
         },
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/edit-profile',
+        builder: (context, state) => const EditProfilePage(),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,

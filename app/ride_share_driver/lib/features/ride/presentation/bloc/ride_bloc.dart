@@ -38,6 +38,8 @@ class OfferExpiredLocally extends RideEvent {
 
 class MarkArrivingRequested extends RideEvent {}
 
+class MarkArrivedRequested extends RideEvent {}
+
 class StartRideRequested extends RideEvent {
   final String otp;
   StartRideRequested({required this.otp});
@@ -190,6 +192,7 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     on<DeclineOfferRequested>(_onDeclineOfferRequested);
     on<OfferExpiredLocally>(_onOfferExpiredLocally);
     on<MarkArrivingRequested>(_onMarkArrivingRequested);
+    on<MarkArrivedRequested>(_onMarkArrivedRequested);
     on<StartRideRequested>(_onStartRideRequested);
     on<CompleteRideRequested>(_onCompleteRideRequested);
     on<DriverCancelRequested>(_onDriverCancelRequested);
@@ -504,6 +507,33 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     emit(RideActionInProgress(ride: ride));
     try {
       final updated = await rideRepository.markArriving(ride.id);
+      _currentRide = updated;
+      emit(RideActive(
+        ride: updated,
+        driverPosition: _lastDriverPos,
+        driverBearing: _lastDriverBearing,
+        traveledPath: List.unmodifiable(_traveledPath),
+      ));
+    } catch (e) {
+      emit(RideOperationFailed(message: e.toString()));
+      emit(RideActive(
+        ride: ride,
+        driverPosition: _lastDriverPos,
+        driverBearing: _lastDriverBearing,
+        traveledPath: List.unmodifiable(_traveledPath),
+      ));
+    }
+  }
+
+  Future<void> _onMarkArrivedRequested(
+    MarkArrivedRequested event,
+    Emitter<RideState> emit,
+  ) async {
+    final ride = _currentRide;
+    if (ride == null) return;
+    emit(RideActionInProgress(ride: ride));
+    try {
+      final updated = await rideRepository.markArrived(ride.id);
       _currentRide = updated;
       emit(RideActive(
         ride: updated,

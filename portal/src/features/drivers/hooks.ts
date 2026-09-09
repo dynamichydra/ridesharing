@@ -236,6 +236,8 @@ export function useVerifyDocument(driverId: string | undefined) {
       documentsApi.verify(docId, payload),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY, driverId, "documents"] });
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY, driverId] });
+      queryClient.invalidateQueries({ queryKey: [DRIVERS_KEY], refetchType: "active" });
       toast.success(variables.payload.approve ? "Document approved" : "Document rejected");
     },
     onError: (err: any) => {

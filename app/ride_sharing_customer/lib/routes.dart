@@ -31,6 +31,7 @@ import 'features/profile/presentation/pages/ride_history_page.dart';
 import 'features/profile/presentation/pages/ride_detail_page.dart';
 import 'features/subscription/presentation/pages/subscription_management_page.dart';
 import 'features/wallet/presentation/pages/transactions_page.dart';
+import 'features/chat/presentation/pages/ride_chat_page.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -59,6 +60,7 @@ class AppRoutes {
   static const String rideHistory = '/ride-history';
   static const String rideDetail = '/ride-detail';
   static const String transactions = '/transactions';
+  static const String rideChat = '/ride-chat';
 
   // Root navigator key — sub-pages use this to push on top of the shell
   static final GlobalKey<NavigatorState> _rootNavigatorKey =
@@ -254,6 +256,19 @@ class AppRoutes {
         parentNavigatorKey: _rootNavigatorKey,
         path: notifications,
         builder: (context, state) => const NotificationsPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: rideChat,
+        builder: (context, state) {
+          final extra = state.extra is Map ? Map<String, dynamic>.from(state.extra as Map) : <String, dynamic>{};
+          return CustomerRideChatPage(
+            rideId: extra['rideId']?.toString() ?? '',
+            otherPartyName: extra['name']?.toString() ?? 'Driver',
+            otherPartyAvatar: extra['avatar']?.toString(),
+            otherPartyPhone: extra['phone']?.toString(),
+          );
+        },
       ),
     ],
   );

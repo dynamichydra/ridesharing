@@ -214,18 +214,48 @@ class OnboardingRemoteDataSource {
     }
   }
 
-  Future<List<dynamic>> getVehicleModels({String? vehicleTypeId}) async {
+  Future<List<dynamic>> getVehicleModels({String? vehicleTypeId, String? search}) async {
     try {
       final response = await apiClient.dio.get(
         '/vehicle-models',
         queryParameters: {
-          if (vehicleTypeId != null) 'vehicleTypeId': vehicleTypeId,
+          if (vehicleTypeId != null && vehicleTypeId.isNotEmpty) 'vehicleTypeId': vehicleTypeId,
+          if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
         },
       );
       if (response.data['SUCCESS'] == true) {
         return response.data['MESSAGE'] as List<dynamic>? ?? [];
       }
       return [];
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> requestVehiclePhotoUploadUrl(String contentType) async {
+    try {
+      final response = await apiClient.dio.post('/vehicles/upload-url', data: {
+        'contentType': contentType,
+      });
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to get vehicle upload URL');
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> uploadVehiclePhotoDirect(List<int> bytes, String filename, String contentType) async {
+    try {
+      final formData = FormData.fromMap({
+        'file': MultipartFile.fromBytes(bytes, filename: filename, contentType: DioMediaType.parse(contentType)),
+      });
+      final response = await apiClient.dio.post('/vehicles/upload-image', data: formData);
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to upload vehicle photo');
     } on DioException catch (e) {
       throw mapDioException(e);
     }

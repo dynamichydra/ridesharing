@@ -9,6 +9,7 @@ import 'features/dashboard/data/datasources/driver_status_remote_datasource.dart
 import 'features/subscription/data/datasources/subscription_remote_datasource.dart';
 import 'features/ride/data/datasources/ride_remote_datasource.dart';
 import 'features/ride/data/datasources/ride_socket_datasource.dart';
+import 'features/chat/data/datasources/ride_chat_datasource.dart';
 import 'features/auth/data/repositories/auth_repository_impl.dart';
 import 'data/repositories/onboarding_repository_impl.dart';
 import 'features/dashboard/data/repositories/driver_status_repository_impl.dart';
@@ -60,6 +61,8 @@ Future<void> init() async {
   // not be recreated with every RideBloc instance.
   sl.registerLazySingleton<RideSocketDataSource>(
       () => RideSocketDataSource(secureStorage: sl()));
+  sl.registerLazySingleton<RideChatDataSource>(
+      () => RideChatDataSource(apiClient: sl(), socketDataSource: sl()));
   sl.registerLazySingleton<ProfileRemoteDataSource>(
       () => ProfileRemoteDataSource(apiClient: sl()));
   sl.registerLazySingleton<WalletRemoteDataSource>(

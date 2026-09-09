@@ -85,7 +85,14 @@ class _SettingsPageState extends State<SettingsPage> {
               ]),
             ),
 
-          _sectionHeader('Subscription & Plan'),
+          _sectionHeader('Account & Documents'),
+          _navTile(
+            icon: Icons.assignment_turned_in_rounded,
+            iconColor: AppColors.primary,
+            title: 'Documents & Verification',
+            trailing: 'View & Manage',
+            onTap: () => context.push('/documents'),
+          ),
           _navTile(
             icon: Icons.card_membership_rounded,
             iconColor: AppColors.secondary,

@@ -135,8 +135,9 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
   String _titleFor(String status) {
     switch (status) {
       case 'accepted':
-        return 'Heading to Pickup';
       case 'arriving':
+        return 'Heading to Pickup';
+      case 'arrived':
         return 'Arrived at Pickup';
       case 'started':
         return 'Trip in Progress';
@@ -148,9 +149,10 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
   String _primaryLabelFor(String status) {
     switch (status) {
       case 'accepted':
-        return "I've Arrived";
       case 'arriving':
-        return 'Start Trip';
+        return "I've Arrived";
+      case 'arrived':
+        return 'Enter OTP & Start Trip';
       case 'started':
         return 'Complete Trip';
       default:
@@ -195,7 +197,26 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
         }
       },
       builder: (context, state) {
-        if (state is! RideActive) {
+        // Extract ride from RideActive or RideActionInProgress
+        final ActiveRide rideData;
+        final LatLng? driverPosition;
+        final double driverBearing;
+        final List<LatLng> traveledPath;
+        final bool isActionInProgress;
+
+        if (state is RideActive) {
+          rideData = state.ride;
+          driverPosition = state.driverPosition;
+          driverBearing = state.driverBearing;
+          traveledPath = state.traveledPath;
+          isActionInProgress = false;
+        } else if (state is RideActionInProgress) {
+          rideData = state.ride;
+          driverPosition = null;
+          driverBearing = 0.0;
+          traveledPath = const [];
+          isActionInProgress = true;
+        } else {
           return const Scaffold(
             backgroundColor: Colors.white,
             body: Center(
@@ -204,10 +225,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
           );
         }
 
-        final ride = state.ride;
-        final driverPosition = state.driverPosition;
-        final driverBearing = state.driverBearing;
-        final traveledPath = state.traveledPath;
+        final ride = rideData;
         final pickupPos = LatLng(ride.pickupLat, ride.pickupLng);
         final dropPos = LatLng(ride.dropLat, ride.dropLng);
 
@@ -291,7 +309,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                             Text(
                               ride.status == 'started'
                                   ? 'En route to Destination'
-                                  : (ride.status == 'arriving'
+                                  : (ride.status == 'arrived'
                                       ? 'Waiting at Pickup Point'
                                       : 'Heading to Pickup Location'),
                               style: const TextStyle(
@@ -304,7 +322,9 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                             Text(
                               ride.status == 'started'
                                   ? 'Path is being recorded...'
-                                  : 'Follow live route to passenger',
+                                  : (ride.status == 'arrived'
+                                      ? 'Ask passenger for 4-digit start OTP'
+                                      : 'Follow live route to passenger'),
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: Color(0xFF64748B),
@@ -367,10 +387,92 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                         Container(
                           width: 38,
                           height: 4,
-                          margin: const EdgeInsets.only(bottom: 16),
+                          margin: const EdgeInsets.only(bottom: 14),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade300,
                             borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+
+                        // Passenger Card with Chat button
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.02),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundColor: const Color(0xFFE2E8F0),
+                                backgroundImage: ride.riderAvatar != null && ride.riderAvatar!.isNotEmpty
+                                    ? NetworkImage(ride.riderAvatar!)
+                                    : null,
+                                child: ride.riderAvatar == null || ride.riderAvatar!.isEmpty
+                                    ? const Icon(Icons.person_rounded, color: Color(0xFF64748B), size: 22)
+                                    : null,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      ride.riderName ?? 'Passenger',
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.star_rounded, size: 14, color: Colors.amber),
+                                        const SizedBox(width: 2),
+                                        Text(
+                                          '${(ride.riderRating ?? 5.0).toStringAsFixed(1)} • Passenger',
+                                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  context.push('/ride-chat', extra: {
+                                    'rideId': ride.id,
+                                    'name': ride.riderName ?? 'Passenger',
+                                    'avatar': ride.riderAvatar,
+                                    'phone': ride.riderPhone,
+                                  });
+                                },
+                                icon: const Icon(Icons.chat_bubble_rounded, size: 16),
+                                label: const Text('Chat'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFE8F5E9),
+                                  foregroundColor: const Color(0xFF009048),
+                                  elevation: 0,
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
 
@@ -459,25 +561,38 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                           width: double.infinity,
                           height: 52,
                           child: ElevatedButton(
-                            onPressed: () {
-                              if (ride.status == 'accepted') {
-                                _rideBloc.add(MarkArrivingRequested());
-                              } else if (ride.status == 'arriving') {
-                                _promptStartOtpAndDispatch(context);
-                              } else if (ride.status == 'started') {
-                                _rideBloc.add(CompleteRideRequested());
-                              }
-                            },
+                            onPressed: isActionInProgress
+                                ? null
+                                : () {
+                                    if (ride.status == 'accepted' || ride.status == 'arriving') {
+                                      _rideBloc.add(MarkArrivedRequested());
+                                    } else if (ride.status == 'arrived') {
+                                      _promptStartOtpAndDispatch(context);
+                                    } else if (ride.status == 'started') {
+                                      _rideBloc.add(CompleteRideRequested());
+                                    }
+                                  },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF009048),
                               foregroundColor: Colors.white,
+                              disabledBackgroundColor: const Color(0xFF009048).withOpacity(0.6),
+                              disabledForegroundColor: Colors.white70,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               elevation: 0,
                             ),
-                            child: Text(
-                              _primaryLabelFor(ride.status),
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
+                            child: isActionInProgress
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  )
+                                : Text(
+                                    _primaryLabelFor(ride.status),
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  ),
                           ),
                         ),
 

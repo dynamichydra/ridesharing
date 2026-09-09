@@ -838,7 +838,7 @@ class _DriverDashboardState extends State<DriverDashboard>
                                                     Text(
                                                       activeRide.status == 'started'
                                                           ? 'Trip in Progress'
-                                                          : (activeRide.status == 'arriving' ? 'Waiting at Pickup' : 'Heading to Pickup'),
+                                                          : (activeRide.status == 'arriving' || activeRide.status == 'arrived' ? 'Waiting at Pickup' : 'Heading to Pickup'),
                                                       style: const TextStyle(
                                                         color: Colors.white,
                                                         fontWeight: FontWeight.bold,

@@ -15,6 +15,7 @@ class UpdateProfile extends ProfileEvent {
   final String? email;
   final String? dateOfBirth;
   final String? gender;
+  final String? referralCode;
   final String? vehicleModel;
   final String? vehicleNumber;
   final String? vehicleYear;
@@ -25,6 +26,7 @@ class UpdateProfile extends ProfileEvent {
     this.email,
     this.dateOfBirth,
     this.gender,
+    this.referralCode,
     this.vehicleModel,
     this.vehicleNumber,
     this.vehicleYear,
@@ -38,15 +40,27 @@ class UploadDriverDocument extends ProfileEvent {
   final String documentTypeId;
   final String? documentNumber;
   final String? expiryDate;
-  final String? key;
   final String side;
+  final List<int> bytes;
+  final String contentType;
 
   UploadDriverDocument({
     required this.documentTypeId,
     this.documentNumber,
     this.expiryDate,
-    this.key,
     this.side = 'front',
+    required this.bytes,
+    required this.contentType,
+  });
+}
+
+class UpdateProfilePhoto extends ProfileEvent {
+  final List<int> bytes;
+  final String contentType;
+
+  UpdateProfilePhoto({
+    required this.bytes,
+    required this.contentType,
   });
 }
 
@@ -74,6 +88,13 @@ class ProfileUpdating extends ProfileState {
   final DriverDashboardSummary? summary;
   final List<DriverDocumentItem> documents;
   ProfileUpdating(this.profile, {this.summary, this.documents = const []});
+}
+
+class ProfilePhotoUploading extends ProfileState {
+  final DriverProfile? profile;
+  final DriverDashboardSummary? summary;
+  final List<DriverDocumentItem> documents;
+  ProfilePhotoUploading({this.profile, this.summary, this.documents = const []});
 }
 
 class ProfileUpdateSuccess extends ProfileState {
@@ -111,6 +132,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     on<UpdateProfile>(_onUpdateProfile);
     on<LoadDriverDocuments>(_onLoadDriverDocuments);
     on<UploadDriverDocument>(_onUploadDriverDocument);
+    on<UpdateProfilePhoto>(_onUpdateProfilePhoto);
   }
 
   (DriverProfile?, DriverDashboardSummary?, List<DriverDocumentItem>) _extractPrevious() {
@@ -165,6 +187,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         if (event.email != null) 'email': event.email,
         if (event.dateOfBirth != null) 'dateOfBirth': event.dateOfBirth,
         if (event.gender != null) 'gender': event.gender,
+        if (event.referralCode != null) 'referralCode': event.referralCode,
         if (event.vehicleModel != null) 'vehicleModel': event.vehicleModel,
         if (event.vehicleNumber != null) 'vehicleNumber': event.vehicleNumber,
         if (event.vehicleYear != null) 'vehicleYear': event.vehicleYear,
@@ -198,18 +221,70 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     final (prevProfile, _, prevDocs) = _extractPrevious();
     emit(ProfileDocumentUploading(profile: prevProfile, documents: prevDocs));
     try {
+      // 1. Request presigned upload URL & storage key
+      final uploadData = await dataSource.requestUploadUrl(
+        event.documentTypeId,
+        event.side,
+        event.contentType,
+      );
+      final uploadUrl = uploadData['uploadUrl'] as String;
+      final key = uploadData['key'] as String;
+
+      // 2. Upload file bytes to direct storage
+      final uploaded = await dataSource.uploadDocumentFile(
+        uploadUrl,
+        event.bytes,
+        event.contentType,
+      );
+      if (!uploaded) {
+        throw Exception('Failed to upload document file binary');
+      }
+
+      // 3. Confirm document registration with backend
       await dataSource.uploadDocument(
         event.documentTypeId,
         documentNumber: event.documentNumber,
         expiryDate: event.expiryDate,
-        key: event.key,
+        key: key,
         side: event.side,
       );
+
+      // 4. Refresh documents list
       final docsJson = await dataSource.getDocuments();
       final docs = docsJson
           .map((d) => DriverDocumentItem.fromJson(d as Map<String, dynamic>))
           .toList();
       emit(ProfileDocumentUploadSuccess('Document submitted for verification!', profile: prevProfile, documents: docs));
+      add(LoadProfile());
+    } catch (e) {
+      emit(ProfileError(e.toString()));
+    }
+  }
+
+  Future<void> _onUpdateProfilePhoto(UpdateProfilePhoto event, Emitter<ProfileState> emit) async {
+    final (prevProfile, prevSummary, prevDocs) = _extractPrevious();
+    emit(ProfilePhotoUploading(profile: prevProfile, summary: prevSummary, documents: prevDocs));
+    try {
+      // 1. Request presigned upload URL & storage key for profile photo
+      final uploadData = await dataSource.requestProfilePhotoUploadUrl(event.contentType);
+      final uploadUrl = uploadData['uploadUrl'] as String;
+      final key = uploadData['key'] as String;
+
+      // 2. Upload file bytes to direct storage
+      final uploaded = await dataSource.uploadDocumentFile(
+        uploadUrl,
+        event.bytes,
+        event.contentType,
+      );
+      if (!uploaded) {
+        throw Exception('Failed to upload profile photo binary');
+      }
+
+      // 3. Confirm profile photo update on backend
+      await dataSource.confirmProfilePhoto(key);
+
+      // 4. Invalidate & refresh profile
+      emit(ProfileUpdateSuccess('Profile photo updated successfully!', prevProfile!, summary: prevSummary, documents: prevDocs));
       add(LoadProfile());
     } catch (e) {
       emit(ProfileError(e.toString()));

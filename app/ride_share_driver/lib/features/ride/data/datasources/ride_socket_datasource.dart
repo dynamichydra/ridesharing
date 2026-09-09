@@ -5,6 +5,7 @@ import '../../../../core/storage/secure_storage.dart';
 import '../../../../services/app_logger.dart';
 import '../../domain/entities/ride_offer.dart';
 import '../../domain/entities/ride_accept_result.dart';
+import '../../../chat/domain/entities/ride_chat_message.dart';
 
 /// Owns the Socket.IO connection to the backend's `/driver` namespace.
 /// Ride offers arrive *only* over this connection — there is no REST
@@ -20,6 +21,7 @@ class RideSocketDataSource {
   final _cancelledByRiderController = StreamController<String>.broadcast();
   final _socketErrorController = StreamController<String>.broadcast();
   final _acceptResultController = StreamController<RideAcceptResult>.broadcast();
+  final _chatMessageController = StreamController<RideChatMessage>.broadcast();
 
   RideSocketDataSource({required this.secureStorage});
 
@@ -28,6 +30,7 @@ class RideSocketDataSource {
   Stream<String> get onRideCancelledByRider => _cancelledByRiderController.stream;
   Stream<String> get onSocketError => _socketErrorController.stream;
   Stream<RideAcceptResult> get onAcceptResult => _acceptResultController.stream;
+  Stream<RideChatMessage> get onChatMessage => _chatMessageController.stream;
 
   Future<void> connect() async {
     final token = await secureStorage.getToken();
@@ -124,6 +127,19 @@ class RideSocketDataSource {
       _acceptResultController.add(RideAcceptFailed(message ?? 'Failed to accept ride.'));
     });
 
+    // ── In-trip chat ──────────────────────────────────────────────────
+    socket.on('chat:message', (data) {
+      AppLogger.i('[RideSocket] received chat:message: $data');
+      if (data is Map) {
+        try {
+          final msg = RideChatMessage.fromJson(Map<String, dynamic>.from(data));
+          _chatMessageController.add(msg);
+        } catch (e) {
+          AppLogger.w('[RideSocket] failed to parse RideChatMessage: $e');
+        }
+      }
+    });
+
     _socket = socket;
     socket.connect();
   }
@@ -136,6 +152,22 @@ class RideSocketDataSource {
 
   void acceptOffer(String rideId) {
     _socket?.emit('ride:accept', {'rideId': rideId});
+  }
+
+  /// Send chat message via socket
+  void sendChatMessage(String rideId, String content, {String messageType = 'text'}) {
+    _socket?.emit('chat:send', {
+      'rideId': rideId,
+      'content': content,
+      'messageType': messageType,
+    });
+  }
+
+  /// Mark chat messages as read via socket
+  void markChatRead(String rideId) {
+    _socket?.emit('chat:read', {
+      'rideId': rideId,
+    });
   }
 
   /// Backend refreshes the driver's live Redis position from this and (if
@@ -174,5 +206,6 @@ class RideSocketDataSource {
     _cancelledByRiderController.close();
     _socketErrorController.close();
     _acceptResultController.close();
+    _chatMessageController.close();
   }
 }

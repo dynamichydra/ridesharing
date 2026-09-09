@@ -61,6 +61,12 @@ class RideRepositoryImpl implements RideRepository {
   }
 
   @override
+  Future<ActiveRide> markArrived(String rideId) async {
+    final json = await remoteDataSource.markArrived(rideId);
+    return ActiveRide.fromJson(json);
+  }
+
+  @override
   Future<ActiveRide> startRide(String rideId, String otp) async {
     final json = await remoteDataSource.startRide(rideId, otp);
     return ActiveRide.fromJson(json);

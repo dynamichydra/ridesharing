@@ -564,10 +564,15 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
               children: [
                 Row(
                   children: [
-                    const CircleAvatar(
+                    CircleAvatar(
                       radius: 22,
-                      backgroundColor: Color(0xFFF1F5F9),
-                      child: Icon(Icons.person, color: Color(0xFF021B47), size: 26),
+                      backgroundColor: const Color(0xFFF1F5F9),
+                      backgroundImage: state.driverAvatar.isNotEmpty
+                          ? NetworkImage(state.driverAvatar)
+                          : null,
+                      child: state.driverAvatar.isEmpty
+                          ? const Icon(Icons.person, color: Color(0xFF021B47), size: 26)
+                          : null,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -591,6 +596,27 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                           const SizedBox(height: 2),
                           Text(state.driverVehicle, style: const TextStyle(fontSize: 12, color: Color(0xFF8A94A6))),
                         ],
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        context.push('/ride-chat', extra: {
+                          'rideId': state.rideId,
+                          'name': state.driverName,
+                          'avatar': state.driverAvatar,
+                          'phone': state.plateNumber,
+                        });
+                      },
+                      icon: const Icon(Icons.chat_bubble_rounded, size: 16),
+                      label: const Text('Chat'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE8F5E9),
+                        foregroundColor: const Color(0xFF009048),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
                     ),
                   ],
@@ -755,10 +781,15 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
               children: [
                 Row(
                   children: [
-                    const CircleAvatar(
+                    CircleAvatar(
                       radius: 22,
-                      backgroundColor: Color(0xFFF1F5F9),
-                      child: Icon(Icons.person, color: Color(0xFF021B47), size: 26),
+                      backgroundColor: const Color(0xFFF1F5F9),
+                      backgroundImage: state.driverAvatar.isNotEmpty
+                          ? NetworkImage(state.driverAvatar)
+                          : null,
+                      child: state.driverAvatar.isEmpty
+                          ? const Icon(Icons.person, color: Color(0xFF021B47), size: 26)
+                          : null,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -782,6 +813,27 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                           const SizedBox(height: 2),
                           Text(state.driverVehicle, style: const TextStyle(fontSize: 12, color: Color(0xFF8A94A6))),
                         ],
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        context.push('/ride-chat', extra: {
+                          'rideId': state.rideId,
+                          'name': state.driverName,
+                          'avatar': state.driverAvatar,
+                          'phone': state.plateNumber,
+                        });
+                      },
+                      icon: const Icon(Icons.chat_bubble_rounded, size: 16),
+                      label: const Text('Chat'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE8F5E9),
+                        foregroundColor: const Color(0xFF009048),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
                     ),
                   ],
@@ -1037,10 +1089,23 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                 ),
                 const SizedBox(height: 18),
 
-                // 3 Circular Quick Actions: Support, SOS, Share Live Location
+                // 4 Circular Quick Actions: Chat, Support, SOS, Share Live Location
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
+                    _buildCircularAction(
+                      icon: Icons.chat_bubble_rounded,
+                      color: const Color(0xFF009048),
+                      label: 'Chat',
+                      onTap: () {
+                        context.push('/ride-chat', extra: {
+                          'rideId': state.rideId,
+                          'name': state.driverName,
+                          'avatar': state.driverAvatar,
+                          'phone': state.plateNumber,
+                        });
+                      },
+                    ),
                     _buildCircularAction(
                       icon: Icons.headset_mic_rounded,
                       color: const Color(0xFF009048),
