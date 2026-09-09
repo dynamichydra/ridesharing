@@ -117,7 +117,34 @@ export async function confirmDocument(driverId, documentTypeId, { side, key, doc
 }
 
 export async function listMyDocuments(driverId) {
-  return db.select().from(driverDocuments).where(eq(driverDocuments.driverId, driverId));
+  const types = await db.select().from(documentTypes).where(eq(documentTypes.isActive, true)).orderBy(asc(documentTypes.sortOrder));
+  const docs = await db.select().from(driverDocuments).where(eq(driverDocuments.driverId, driverId));
+
+  const docMap = new Map(docs.map((d) => [d.documentTypeId, d]));
+
+  return types.map((type) => {
+    const doc = docMap.get(type.id);
+    return {
+      documentTypeId: type.id,
+      code: type.code,
+      name: type.code.replace(/_/g, ' '),
+      requiresFront: type.requiresFront ?? true,
+      requiresBack: type.requiresBack ?? false,
+      requiresPdf: type.requiresPdf ?? false,
+      requiresExpiry: type.requiresExpiry ?? true,
+      requiresDocNumber: type.requiresDocNumber ?? true,
+      id: doc?.id,
+      documentNumber: doc?.documentNumber,
+      frontUrl: doc?.frontUrl,
+      backUrl: doc?.backUrl,
+      pdfUrl: doc?.pdfUrl,
+      expiryDate: doc?.expiryDate,
+      status: doc?.status || 'missing',
+      rejectionReason: doc?.rejectionReason,
+      uploadedAt: doc?.uploadedAt,
+      verifiedAt: doc?.verifiedAt,
+    };
+  });
 }
 
 // ── Admin verification ───────────────────────────────────────────────────────────
