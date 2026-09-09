@@ -37,6 +37,10 @@ export const DEPENDS_ON_OPERATOR_OPTIONS = ["equals", "not_equals", "in", "gt", 
 
 export const questionSchema = z.object({
   code: z.string().min(2, "Code is required"),
+  label: z.string().min(1, "Question title/label is required"),
+  description: z.string().optional(),
+  placeholder: z.string().optional(),
+  helpText: z.string().optional(),
   questionType: z.enum(QUESTION_TYPE_OPTIONS),
   isRequired: z.boolean(),
   sortOrder: z.coerce.number().int().min(0),
@@ -50,6 +54,10 @@ export const questionSchema = z.object({
 export type QuestionFormValues = z.infer<typeof questionSchema>;
 export const emptyQuestionFormValues: QuestionFormValues = {
   code: "",
+  label: "",
+  description: "",
+  placeholder: "",
+  helpText: "",
   questionType: "text",
   isRequired: false,
   sortOrder: 0,
@@ -63,10 +71,12 @@ export const emptyQuestionFormValues: QuestionFormValues = {
 
 export const optionSchema = z.object({
   code: z.string().min(1, "Code is required"),
+  label: z.string().optional(),
+  description: z.string().optional(),
   sortOrder: z.coerce.number().int().min(0),
 });
 export type OptionFormValues = z.infer<typeof optionSchema>;
-export const emptyOptionFormValues: OptionFormValues = { code: "", sortOrder: 0 };
+export const emptyOptionFormValues: OptionFormValues = { code: "", label: "", description: "", sortOrder: 0 };
 
 export const LEGAL_TYPE_OPTIONS = ["terms", "privacy_policy"] as const;
 

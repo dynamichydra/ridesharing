@@ -74,8 +74,18 @@ export async function onboardingRoutes(app) {
     return sendSuccess(reply, data, 201);
   });
 
+  app.get('/admin/questions/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await onboardingService.getQuestionById(request.params.id);
+    return sendSuccess(reply, data);
+  });
+
   app.patch('/admin/questions/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const data = await onboardingService.updateQuestion(request.params.id, request.body);
+    return sendSuccess(reply, data);
+  });
+
+  app.delete('/admin/questions/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await onboardingService.deleteQuestion(request.params.id);
     return sendSuccess(reply, data);
   });
 
@@ -105,6 +115,11 @@ export async function onboardingRoutes(app) {
 
   app.delete('/admin/options/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const data = await onboardingService.removeOption(request.params.id);
+    return sendSuccess(reply, data);
+  });
+
+  app.get('/admin/translations/:entityType/:entityId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await onboardingService.getAllTranslationsForEntity(request.params.entityType, request.params.entityId);
     return sendSuccess(reply, data);
   });
 

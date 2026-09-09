@@ -41,9 +41,30 @@ export default function QuestionForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="label">Question Label / Title</Label>
+        <Input
+          id="label"
+          value={values.label}
+          onChange={(e) => update("label", e.target.value)}
+          placeholder="e.g. Do you own a vehicle?"
+        />
+        {errors.label && <p className="text-xs text-destructive">{errors.label}</p>}
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="description">Description / Subtitle (Optional)</Label>
+        <Input
+          id="description"
+          value={values.description || ""}
+          onChange={(e) => update("description", e.target.value)}
+          placeholder="e.g. Please specify whether you own the vehicle or drive for a partner."
+        />
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="code">Code</Label>
+          <Label htmlFor="code">Code (Unique Key)</Label>
           <Input
             id="code"
             value={values.code}

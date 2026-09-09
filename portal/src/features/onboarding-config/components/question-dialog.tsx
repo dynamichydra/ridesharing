@@ -66,7 +66,7 @@ interface OptionsDialogProps {
   question: OnboardingQuestion | null;
   options: OnboardingQuestionOption[];
   isLoading: boolean;
-  onAdd: (code: string) => void;
+  onAdd: (data: { code: string; label?: string; description?: string }) => void;
   onRemove: (optionId: string) => void;
   isAdding: boolean;
 }
@@ -82,38 +82,63 @@ export function OptionsDialog({
   isAdding,
 }: OptionsDialogProps) {
   const [code, setCode] = useState("");
+  const [label, setLabel] = useState("");
+  const [description, setDescription] = useState("");
+
+  const handleAdd = () => {
+    if (!code.trim()) return;
+    onAdd({
+      code: code.trim(),
+      label: label.trim() || undefined,
+      description: description.trim() || undefined,
+    });
+    setCode("");
+    setLabel("");
+    setDescription("");
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[420px]">
+      <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>Options — {question?.code}</DialogTitle>
+          <DialogTitle>Options — {question?.label || question?.code}</DialogTitle>
           <DialogDescription>
             The choices a driver can pick for this question.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 py-2">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Option code (e.g. yes)"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-            />
-            <Button
-              type="button"
-              disabled={!code.trim() || isAdding}
-              onClick={() => {
-                onAdd(code.trim());
-                setCode("");
-              }}
-              className="cursor-pointer"
-            >
-              Add
-            </Button>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2 border border-border p-3 rounded-lg bg-muted/30">
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                placeholder="Display Label (e.g. Yes / Electric)"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+              />
+              <Input
+                placeholder="Code Key (e.g. yes / ev)"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Description (optional)"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+              <Button
+                type="button"
+                disabled={!code.trim() || isAdding}
+                onClick={handleAdd}
+                className="cursor-pointer whitespace-nowrap"
+              >
+                Add Option
+              </Button>
+            </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[260px] overflow-y-auto">
             {isLoading ? (
               <div className="text-center py-4 text-xs text-muted-foreground">Loading options...</div>
             ) : options.length === 0 ? (
@@ -124,7 +149,13 @@ export function OptionsDialog({
                   key={opt.id}
                   className="flex items-center justify-between border border-border rounded-md px-3 py-2 text-sm"
                 >
-                  <span className="font-medium text-foreground">{opt.code}</span>
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-foreground">{opt.label || opt.code}</span>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className="font-mono bg-muted px-1 rounded">{opt.code}</span>
+                      {opt.description && <span>• {opt.description}</span>}
+                    </div>
+                  </div>
                   <Button
                     type="button"
                     variant="ghost"

@@ -10,6 +10,7 @@ import {
   useQuestions,
   useCreateQuestion,
   useUpdateQuestion,
+  useDeleteQuestion,
   useQuestionOptions,
   useCreateOption,
   useRemoveOption,
@@ -41,6 +42,7 @@ export default function QuestionsTab() {
 
   const createMutation = useCreateQuestion();
   const updateMutation = useUpdateQuestion();
+  const deleteMutation = useDeleteQuestion();
   const createOptionMutation = useCreateOption();
   const removeOptionMutation = useRemoveOption();
 
@@ -62,6 +64,10 @@ export default function QuestionsTab() {
     setSelected(q);
     setFormValues({
       code: q.code,
+      label: q.label || "",
+      description: q.description || "",
+      placeholder: q.placeholder || "",
+      helpText: q.helpText || "",
       questionType: q.questionType,
       isRequired: q.isRequired,
       sortOrder: q.sortOrder,
@@ -78,6 +84,12 @@ export default function QuestionsTab() {
 
   const handleToggleActive = (q: OnboardingQuestion) => {
     updateMutation.mutate({ id: q.id, payload: { isActive: !q.isActive } });
+  };
+
+  const handleDeleteQuestion = (q: OnboardingQuestion) => {
+    if (window.confirm(`Are you sure you want to delete question "${q.label || q.code}"? This will also delete all options and translations.`)) {
+      deleteMutation.mutate(q.id);
+    }
   };
 
   const handleOpenOptions = (q: OnboardingQuestion) => {
@@ -98,6 +110,13 @@ export default function QuestionsTab() {
     }
     setFormErrors({});
     const v = result.data;
+    const translations = [
+      { fieldName: "label", languageCode: "en", value: v.label },
+      ...(v.description ? [{ fieldName: "description", languageCode: "en", value: v.description }] : []),
+      ...(v.placeholder ? [{ fieldName: "placeholder", languageCode: "en", value: v.placeholder }] : []),
+      ...(v.helpText ? [{ fieldName: "helpText", languageCode: "en", value: v.helpText }] : []),
+    ];
+
     const payload = {
       code: v.code,
       questionType: v.questionType,
@@ -109,6 +128,7 @@ export default function QuestionsTab() {
       dependsOnQuestionId: v.dependsOnQuestionId || null,
       dependsOnOperator: v.dependsOnOperator || null,
       dependsOnValue: v.dependsOnValue || null,
+      translations,
     };
 
     if (formMode === "create") {
@@ -122,9 +142,19 @@ export default function QuestionsTab() {
     }
   };
 
-  const handleAddOption = (code: string) => {
+  const handleAddOption = (data: { code: string; label?: string; description?: string }) => {
     if (!optionsTarget) return;
-    createOptionMutation.mutate({ questionId: optionsTarget.id, payload: { code } });
+    const translations = [
+      ...(data.label ? [{ fieldName: "label", languageCode: "en", value: data.label }] : []),
+      ...(data.description ? [{ fieldName: "description", languageCode: "en", value: data.description }] : []),
+    ];
+    createOptionMutation.mutate({
+      questionId: optionsTarget.id,
+      payload: {
+        code: data.code,
+        translations: translations.length ? translations : undefined,
+      },
+    });
   };
 
   const handleRemoveOption = (optionId: string) => {
@@ -139,6 +169,7 @@ export default function QuestionsTab() {
         onEdit: handleOpenEdit,
         onManageOptions: handleOpenOptions,
         onToggleActive: handleToggleActive,
+        onDelete: handleDeleteQuestion,
       }),
     [countries],
   );

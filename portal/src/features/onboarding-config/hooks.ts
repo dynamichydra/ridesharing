@@ -125,6 +125,18 @@ export function useUpdateQuestion() {
   });
 }
 
+export function useDeleteQuestion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => questionsApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUESTIONS_KEY], refetchType: "active" });
+      toast.success("Question deleted!");
+    },
+    onError: (err: any) => toast.error(err.message || "Failed to delete question"),
+  });
+}
+
 export function useQuestionOptions(questionId: string | undefined) {
   return useQuery({
     queryKey: [QUESTIONS_KEY, questionId, "options"],

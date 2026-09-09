@@ -71,6 +71,15 @@ export type QuestionType =
 
 export type DependsOnOperator = "equals" | "not_equals" | "in" | "gt" | "lt";
 
+export interface TranslationItem {
+  id?: string;
+  entityType?: string;
+  entityId?: string;
+  fieldName: string;
+  languageCode: string;
+  value: string;
+}
+
 export interface OnboardingQuestion {
   id: string;
   code: string;
@@ -84,6 +93,12 @@ export interface OnboardingQuestion {
   dependsOnQuestionId: string | null;
   dependsOnOperator: DependsOnOperator | null;
   dependsOnValue: unknown;
+  label?: string | null;
+  description?: string | null;
+  placeholder?: string | null;
+  helpText?: string | null;
+  optionsCount?: number;
+  translations?: TranslationItem[];
 }
 
 export interface QuestionListParams {
@@ -103,6 +118,11 @@ export interface QuestionPayload {
   dependsOnQuestionId?: string | null;
   dependsOnOperator?: DependsOnOperator | null;
   dependsOnValue?: unknown;
+  label?: string;
+  description?: string;
+  placeholder?: string;
+  helpText?: string;
+  translations?: TranslationItem[];
 }
 
 export interface OnboardingQuestionOption {
@@ -111,12 +131,18 @@ export interface OnboardingQuestionOption {
   code: string;
   sortOrder: number;
   isActive: boolean;
+  label?: string | null;
+  description?: string | null;
+  translations?: TranslationItem[];
 }
 
 export interface OptionPayload {
   code: string;
   sortOrder?: number;
   isActive?: boolean;
+  label?: string;
+  description?: string;
+  translations?: TranslationItem[];
 }
 
 // ── Legal documents ──────────────────────────────────────────────────────────

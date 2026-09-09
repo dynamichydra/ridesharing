@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Ban, CheckCircle2, ListPlus, Pencil, XCircle } from "lucide-react";
+import { Ban, CheckCircle2, ListPlus, Pencil, Trash2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { LookupOption, OnboardingQuestion } from "../types";
 
@@ -8,6 +8,7 @@ interface Props {
   onEdit: (q: OnboardingQuestion) => void;
   onManageOptions: (q: OnboardingQuestion) => void;
   onToggleActive: (q: OnboardingQuestion) => void;
+  onDelete: (q: OnboardingQuestion) => void;
 }
 
 const CHOICE_TYPES = new Set(["single_choice", "multiple_choice", "dropdown"]);
@@ -17,18 +18,35 @@ export function getQuestionColumns({
   onEdit,
   onManageOptions,
   onToggleActive,
+  onDelete,
 }: Props): ColumnDef<OnboardingQuestion>[] {
   return [
     {
       accessorKey: "code",
-      header: "Code",
-      cell: ({ row }) => <span className="font-semibold text-foreground">{row.original.code}</span>,
+      header: "Question / Code",
+      cell: ({ row }) => (
+        <div className="flex flex-col">
+          <span className="font-semibold text-foreground text-sm">
+            {row.original.label || row.original.code}
+          </span>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-0.2 rounded">
+              {row.original.code}
+            </span>
+            {row.original.description && (
+              <span className="text-[11px] text-muted-foreground truncate max-w-[220px]" title={row.original.description}>
+                • {row.original.description}
+              </span>
+            )}
+          </div>
+        </div>
+      ),
     },
     {
       accessorKey: "questionType",
       header: "Type",
       cell: ({ row }) => (
-        <span className="px-2 py-0.5 text-[11px] font-medium rounded bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+        <span className="px-2 py-0.5 text-[11px] font-medium rounded bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 whitespace-nowrap">
           {row.original.questionType.replace(/_/g, " ")}
         </span>
       ),
@@ -86,7 +104,7 @@ export function getQuestionColumns({
       id: "actions",
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => (
-        <div className="flex items-center gap-2 justify-end">
+        <div className="flex items-center gap-1.5 justify-end">
           {CHOICE_TYPES.has(row.original.questionType) && (
             <Button
               variant="outline"
@@ -108,13 +126,22 @@ export function getQuestionColumns({
             <Pencil className="h-3.5 w-3.5" />
           </Button>
           <Button
-            variant={row.original.isActive ? "destructive" : "outline"}
+            variant={row.original.isActive ? "secondary" : "outline"}
             size="sm"
             onClick={() => onToggleActive(row.original)}
             title={row.original.isActive ? "Disable" : "Enable"}
             className="cursor-pointer"
           >
             <Ban className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onDelete(row.original)}
+            title="Delete question"
+            className="cursor-pointer text-destructive hover:text-destructive hover:bg-destructive/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </div>
       ),

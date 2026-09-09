@@ -62,6 +62,10 @@ export const questionsApi = {
   list: (params: QuestionListParams = {}) =>
     apiClient.get<OnboardingQuestion[]>(`${ONBOARDING_BASE}/admin/questions?${buildQuery(params)}`),
 
+  // GET /onboarding/admin/questions/:id  (Admin)
+  getById: (id: string) =>
+    apiClient.get<OnboardingQuestion>(`${ONBOARDING_BASE}/admin/questions/${id}`),
+
   // POST /onboarding/admin/questions  (Admin)
   create: (payload: QuestionPayload) =>
     apiClient.post<OnboardingQuestion>(`${ONBOARDING_BASE}/admin/questions`, payload),
@@ -69,6 +73,10 @@ export const questionsApi = {
   // PATCH /onboarding/admin/questions/:id  (Admin) — also used to toggle isActive
   update: (id: string, payload: Partial<QuestionPayload>) =>
     apiClient.patch<OnboardingQuestion>(`${ONBOARDING_BASE}/admin/questions/${id}`, payload),
+
+  // DELETE /onboarding/admin/questions/:id  (Admin)
+  delete: (id: string) =>
+    apiClient.delete(`${ONBOARDING_BASE}/admin/questions/${id}`),
 
   // GET /onboarding/admin/questions/:id/options  (Admin)
   listOptions: (questionId: string) =>
@@ -88,6 +96,14 @@ export const questionsApi = {
   // DELETE /onboarding/admin/options/:id  (Admin)
   removeOption: (optionId: string) =>
     apiClient.delete(`${ONBOARDING_BASE}/admin/options/${optionId}`),
+
+  // GET /onboarding/admin/translations/:entityType/:entityId
+  getTranslations: (entityType: string, entityId: string) =>
+    apiClient.get<any[]>(`${ONBOARDING_BASE}/admin/translations/${entityType}/${entityId}`),
+
+  // PUT /onboarding/admin/translations/:entityType/:entityId
+  setTranslations: (entityType: string, entityId: string, items: Array<{ fieldName: string; languageCode: string; value: string }>) =>
+    apiClient.put(`${ONBOARDING_BASE}/admin/translations/${entityType}/${entityId}`, { items }),
 };
 
 export const legalDocumentsApi = {

@@ -13,21 +13,40 @@ import * as vehicleTypeService from '../vehicle-type/vehicle-type.service.js';
 
 // ── Translations (generic helper, reused by other admin-configurable entities) ──
 
-export async function getTranslationsFor(entityType, entityIds, languageCode) {
+export async function getTranslationsFor(entityType, entityIds, languageCode, fallbackLanguageCode = 'en') {
   if (!entityIds.length) return {};
+  const langs = languageCode === fallbackLanguageCode ? [languageCode] : [fallbackLanguageCode, languageCode];
   const rows = await db.select().from(translations).where(
     and(
       eq(translations.entityType, entityType),
       inArray(translations.entityId, entityIds),
-      eq(translations.languageCode, languageCode),
+      inArray(translations.languageCode, langs),
     ),
   );
+
   const map = {};
-  for (const r of rows) {
+  // First populate with fallback language
+  for (const r of rows.filter((r) => r.languageCode === fallbackLanguageCode)) {
     map[r.entityId] ??= {};
     map[r.entityId][r.fieldName] = r.value;
   }
+  // Then overwrite with requested language (if different)
+  if (languageCode !== fallbackLanguageCode) {
+    for (const r of rows.filter((r) => r.languageCode === languageCode)) {
+      map[r.entityId] ??= {};
+      map[r.entityId][r.fieldName] = r.value;
+    }
+  }
   return map;
+}
+
+export async function getAllTranslationsForEntity(entityType, entityId) {
+  return db.select().from(translations).where(
+    and(
+      eq(translations.entityType, entityType),
+      eq(translations.entityId, entityId),
+    ),
+  );
 }
 
 export async function setTranslations(entityType, entityId, items) {
@@ -61,19 +80,96 @@ export async function getDriverCountryId(driverId) {
 export async function listQuestionsPaginated(page, limit, offset) {
   const [{ total }] = await db.select({ total: count() }).from(onboardingQuestions);
   const rows = await db.select().from(onboardingQuestions).orderBy(asc(onboardingQuestions.sortOrder)).limit(limit).offset(offset);
-  return { rows, pagination: paginate(page, limit, total) };
+  const questionIds = rows.map((r) => r.id);
+  const trans = await getTranslationsFor('onboarding_question', questionIds, 'en');
+  const allOptions = questionIds.length
+    ? await db.select().from(onboardingQuestionOptions).where(inArray(onboardingQuestionOptions.questionId, questionIds))
+    : [];
+
+  const rowsWithMeta = rows.map((q) => ({
+    ...q,
+    label: trans[q.id]?.label ?? q.code,
+    description: trans[q.id]?.description ?? null,
+    placeholder: trans[q.id]?.placeholder ?? null,
+    helpText: trans[q.id]?.helpText ?? null,
+    optionsCount: allOptions.filter((o) => o.questionId === q.id).length,
+  }));
+
+  return { rows: rowsWithMeta, pagination: paginate(page, limit, total) };
+}
+
+export async function getQuestionById(id) {
+  const [question] = await db.select().from(onboardingQuestions).where(eq(onboardingQuestions.id, id)).limit(1);
+  if (!question) throw { statusCode: 404, message: 'Question not found' };
+
+  const options = await db.select().from(onboardingQuestionOptions)
+    .where(eq(onboardingQuestionOptions.questionId, id))
+    .orderBy(asc(onboardingQuestionOptions.sortOrder));
+
+  const optIds = options.map((o) => o.id);
+  const [qTranslations, optTranslations] = await Promise.all([
+    getAllTranslationsForEntity('onboarding_question', id),
+    optIds.length
+      ? db.select().from(translations).where(and(eq(translations.entityType, 'onboarding_question_option'), inArray(translations.entityId, optIds)))
+      : [],
+  ]);
+
+  return {
+    ...question,
+    translations: qTranslations,
+    options: options.map((opt) => ({
+      ...opt,
+      translations: optTranslations.filter((t) => t.entityId === opt.id),
+    })),
+  };
 }
 
 export async function createQuestion(data) {
-  const [row] = await db.insert(onboardingQuestions).values(data).returning();
-  return row;
+  const { translations: initialTranslations, options: initialOptions, ...questionData } = data;
+  const [row] = await db.insert(onboardingQuestions).values(questionData).returning();
+
+  if (Array.isArray(initialTranslations) && initialTranslations.length) {
+    await setTranslations('onboarding_question', row.id, initialTranslations);
+  }
+  if (Array.isArray(initialOptions) && initialOptions.length) {
+    for (const opt of initialOptions) {
+      const { translations: optTrans, ...optData } = opt;
+      const [optRow] = await db.insert(onboardingQuestionOptions).values({ ...optData, questionId: row.id }).returning();
+      if (Array.isArray(optTrans) && optTrans.length) {
+        await setTranslations('onboarding_question_option', optRow.id, optTrans);
+      }
+    }
+  }
+  return getQuestionById(row.id);
 }
 
 export async function updateQuestion(id, data) {
-  data.updatedAt = new Date();
-  const [row] = await db.update(onboardingQuestions).set(data).where(eq(onboardingQuestions.id, id)).returning();
+  const { translations: updateTranslations, options: updateOptions, ...questionData } = data;
+  questionData.updatedAt = new Date();
+  const [row] = await db.update(onboardingQuestions).set(questionData).where(eq(onboardingQuestions.id, id)).returning();
   if (!row) throw { statusCode: 404, message: 'Question not found' };
-  return row;
+
+  if (Array.isArray(updateTranslations) && updateTranslations.length) {
+    await setTranslations('onboarding_question', id, updateTranslations);
+  }
+  return getQuestionById(id);
+}
+
+export async function deleteQuestion(id) {
+  const [existing] = await db.select().from(onboardingQuestions).where(eq(onboardingQuestions.id, id)).limit(1);
+  if (!existing) throw { statusCode: 404, message: 'Question not found' };
+
+  const options = await db.select().from(onboardingQuestionOptions).where(eq(onboardingQuestionOptions.questionId, id));
+  const optIds = options.map((o) => o.id);
+
+  if (optIds.length) {
+    await db.delete(translations).where(and(eq(translations.entityType, 'onboarding_question_option'), inArray(translations.entityId, optIds)));
+    await db.delete(onboardingQuestionOptions).where(eq(onboardingQuestionOptions.questionId, id));
+  }
+  await db.delete(translations).where(and(eq(translations.entityType, 'onboarding_question'), eq(translations.entityId, id)));
+  await db.delete(onboardingQuestions).where(eq(onboardingQuestions.id, id));
+
+  return { deleted: true, id };
 }
 
 export async function reorderQuestions(orderedIds) {
@@ -83,23 +179,41 @@ export async function reorderQuestions(orderedIds) {
 }
 
 export async function listOptions(questionId) {
-  return db.select().from(onboardingQuestionOptions)
+  const options = await db.select().from(onboardingQuestionOptions)
     .where(eq(onboardingQuestionOptions.questionId, questionId))
     .orderBy(asc(onboardingQuestionOptions.sortOrder));
+
+  const optIds = options.map((o) => o.id);
+  const optTrans = await getTranslationsFor('onboarding_question_option', optIds, 'en');
+
+  return options.map((o) => ({
+    ...o,
+    label: optTrans[o.id]?.label ?? o.code,
+    description: optTrans[o.id]?.description ?? null,
+  }));
 }
 
 export async function createOption(questionId, data) {
-  const [row] = await db.insert(onboardingQuestionOptions).values({ ...data, questionId }).returning();
+  const { translations: optTrans, ...optData } = data;
+  const [row] = await db.insert(onboardingQuestionOptions).values({ ...optData, questionId }).returning();
+  if (Array.isArray(optTrans) && optTrans.length) {
+    await setTranslations('onboarding_question_option', row.id, optTrans);
+  }
   return row;
 }
 
 export async function updateOption(id, data) {
-  const [row] = await db.update(onboardingQuestionOptions).set(data).where(eq(onboardingQuestionOptions.id, id)).returning();
+  const { translations: optTrans, ...optData } = data;
+  const [row] = await db.update(onboardingQuestionOptions).set(optData).where(eq(onboardingQuestionOptions.id, id)).returning();
   if (!row) throw { statusCode: 404, message: 'Option not found' };
+  if (Array.isArray(optTrans) && optTrans.length) {
+    await setTranslations('onboarding_question_option', id, optTrans);
+  }
   return row;
 }
 
 export async function removeOption(id) {
+  await db.delete(translations).where(and(eq(translations.entityType, 'onboarding_question_option'), eq(translations.entityId, id)));
   await db.delete(onboardingQuestionOptions).where(eq(onboardingQuestionOptions.id, id));
   return { deleted: true };
 }
@@ -122,14 +236,6 @@ export async function getActiveQuestionnaire(countryId, languageCode = 'en') {
   const optIds = options.map((o) => o.id);
   const oLabels = await getTranslationsFor('onboarding_question_option', optIds, languageCode);
 
-  const defaultQuestionDescriptions = {
-    own_vehicle: 'Please specify whether you own the vehicle or drive for a fleet partner.',
-    driving_experience_years: 'Enter total years of commercial or professional driving experience.',
-    has_commercial_license: 'Confirm if you hold a valid commercial driving license/badge.',
-    preferred_shift: 'Select your preferred shift or daily driving hours.',
-    vehicle_fuel_type: 'Specify the primary fuel type of your vehicle (Petrol, Diesel, EV, CNG).',
-  };
-
   return questions.map((q) => ({
     id: q.id,
     code: q.code,
@@ -139,7 +245,9 @@ export async function getActiveQuestionnaire(countryId, languageCode = 'en') {
     minValue: q.minValue,
     maxValue: q.maxValue,
     label: qLabels[q.id]?.label ?? q.code,
-    description: qLabels[q.id]?.description ?? defaultQuestionDescriptions[q.code] ?? `Please provide details for ${q.code.replace(/_/g, ' ')}.`,
+    description: qLabels[q.id]?.description ?? null,
+    placeholder: qLabels[q.id]?.placeholder ?? null,
+    helpText: qLabels[q.id]?.helpText ?? null,
     dependsOn: q.dependsOnQuestionId
       ? { questionId: q.dependsOnQuestionId, operator: q.dependsOnOperator, value: q.dependsOnValue }
       : null,

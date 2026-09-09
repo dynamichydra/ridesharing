@@ -209,28 +209,34 @@ async function seed() {
     code: 'worked_before', questionType: 'yes_no', isRequired: false, sortOrder: 3, isActive: true,
   }).onConflictDoNothing().returning();
 
+  let qRentalInterest;
   if (qOwnVehicle?.id) {
-    await db.insert(onboardingQuestions).values({
+    [qRentalInterest] = await db.insert(onboardingQuestions).values({
       code: 'rental_interest', questionType: 'yes_no', isRequired: false, sortOrder: 4, isActive: true,
       dependsOnQuestionId: qOwnVehicle.id, dependsOnOperator: 'equals', dependsOnValue: false,
-    }).onConflictDoNothing();
+    }).onConflictDoNothing().returning();
   }
 
-  const questionLabels = [
-    [qOwnVehicle?.id, 'Do you own a vehicle?'],
-    [qWeeklyHours?.id, 'How many hours per week can you drive?'],
-    [qWorkedBefore?.id, 'Have you worked with another ride-sharing platform?'],
-  ].filter(([id]) => id);
+  const questionTranslations = [
+    { entityId: qOwnVehicle?.id, fieldName: 'label', value: 'Do you own a vehicle?' },
+    { entityId: qOwnVehicle?.id, fieldName: 'description', value: 'Please specify whether you own the vehicle or drive for a fleet partner.' },
+    { entityId: qWeeklyHours?.id, fieldName: 'label', value: 'How many hours per week can you drive?' },
+    { entityId: qWeeklyHours?.id, fieldName: 'description', value: 'Enter total weekly hours you are available to accept ride requests.' },
+    { entityId: qWorkedBefore?.id, fieldName: 'label', value: 'Have you worked with another ride-sharing platform?' },
+    { entityId: qWorkedBefore?.id, fieldName: 'description', value: 'Select yes if you have prior commercial driving experience on other platforms.' },
+    { entityId: qRentalInterest?.id, fieldName: 'label', value: 'Are you interested in our vehicle rental / lease program?' },
+    { entityId: qRentalInterest?.id, fieldName: 'description', value: 'We partner with fleets to provide affordable vehicle rentals for approved drivers.' },
+  ].filter((t) => t.entityId);
 
-  if (questionLabels.length) {
+  if (questionTranslations.length) {
     await db.insert(translations).values(
-      questionLabels.map(([entityId, value]) => ({
-        entityType: 'onboarding_question', entityId, fieldName: 'label', languageCode: 'en', value,
+      questionTranslations.map(({ entityId, fieldName, value }) => ({
+        entityType: 'onboarding_question', entityId, fieldName, languageCode: 'en', value,
       })),
     ).onConflictDoNothing();
   }
 
-  log.ok(`4 onboarding questions (own_vehicle, weekly_hours, worked_before, rental_interest)`);
+  log.ok(`4 onboarding questions seeded with labels and descriptions (translations)`);
 
   // ── 2. Vehicle Types (global catalog, flat global rate — no per-country cards) ─
   log.section('2. Vehicle Types (catalog + flat rate)');
