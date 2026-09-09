@@ -20,6 +20,8 @@ abstract class BookingRepository {
     required String dropAddress,
     String paymentMethod = 'cash',
     String? promoCode,
+    Map<String, dynamic>? passenger,
+    String? notes,
   });
   Future<Map<String, dynamic>> validatePromo(
     String code,

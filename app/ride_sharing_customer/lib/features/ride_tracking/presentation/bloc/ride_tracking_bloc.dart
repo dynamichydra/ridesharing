@@ -8,6 +8,7 @@ import '../../domain/repositories/ride_tracking_repository.dart';
 import '../../../../core/services/storage_service.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../injection_container.dart';
+import '../../../booking/domain/entities/passenger_info.dart';
 
 // ==========================================
 // Ride Tracking Events
@@ -27,6 +28,8 @@ class StartRideTracking extends RideTrackingEvent {
   final String vehicleName;
   final double fare;
   final String paymentMethod;
+  final PassengerInfo? passenger;
+  final String? trackingUrl;
 
   const StartRideTracking({
     required this.rideId,
@@ -37,10 +40,23 @@ class StartRideTracking extends RideTrackingEvent {
     required this.vehicleName,
     required this.fare,
     this.paymentMethod = 'cash',
+    this.passenger,
+    this.trackingUrl,
   });
 
   @override
-  List<Object?> get props => [rideId, pickup, pickupName, destination, destinationName, vehicleName, fare, paymentMethod];
+  List<Object?> get props => [
+        rideId,
+        pickup,
+        pickupName,
+        destination,
+        destinationName,
+        vehicleName,
+        fare,
+        paymentMethod,
+        passenger,
+        trackingUrl,
+      ];
 }
 
 class DriverAssigned extends RideTrackingEvent {
@@ -116,6 +132,8 @@ class RideTrackingSearching extends RideTrackingState {
   final double fare;
   final String paymentMethod;
   final List<LatLng> routePoints;
+  final PassengerInfo? passenger;
+  final String? trackingUrl;
 
   const RideTrackingSearching({
     required this.rideId,
@@ -127,6 +145,8 @@ class RideTrackingSearching extends RideTrackingState {
     required this.fare,
     this.paymentMethod = 'cash',
     this.routePoints = const [],
+    this.passenger,
+    this.trackingUrl,
   });
 
   @override
@@ -140,6 +160,8 @@ class RideTrackingSearching extends RideTrackingState {
         fare,
         paymentMethod,
         routePoints,
+        passenger,
+        trackingUrl,
       ];
 }
 
@@ -162,6 +184,8 @@ class RideTrackingActive extends RideTrackingState {
   final String vehicleName;
   final String otp;
   final String paymentMethod;
+  final PassengerInfo? passenger;
+  final String? trackingUrl;
 
   const RideTrackingActive({
     required this.rideId,
@@ -182,6 +206,8 @@ class RideTrackingActive extends RideTrackingState {
     required this.vehicleName,
     required this.otp,
     this.paymentMethod = 'cash',
+    this.passenger,
+    this.trackingUrl,
   });
 
   RideTrackingActive copyWith({
@@ -192,6 +218,8 @@ class RideTrackingActive extends RideTrackingState {
     double? fare,
     String? otp,
     String? paymentMethod,
+    PassengerInfo? passenger,
+    String? trackingUrl,
   }) {
     return RideTrackingActive(
       rideId: rideId,
@@ -212,6 +240,8 @@ class RideTrackingActive extends RideTrackingState {
       vehicleName: vehicleName,
       otp: otp ?? this.otp,
       paymentMethod: paymentMethod ?? this.paymentMethod,
+      passenger: passenger ?? this.passenger,
+      trackingUrl: trackingUrl ?? this.trackingUrl,
     );
   }
 
@@ -220,6 +250,7 @@ class RideTrackingActive extends RideTrackingState {
         rideId, driverName, driverRating, driverAvatar, driverVehicle, plateNumber,
         pickup, pickupName, destination, destinationName, driverPosition,
         driverBearing, routePoints, trackingState, fare, vehicleName, otp, paymentMethod,
+        passenger, trackingUrl,
       ];
 }
 
@@ -343,6 +374,8 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       fare: event.fare,
       paymentMethod: event.paymentMethod,
       routePoints: initialPoints,
+      passenger: event.passenger,
+      trackingUrl: event.trackingUrl,
     ));
 
     try {
@@ -359,6 +392,8 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         'fare': event.fare,
         'paymentMethod': event.paymentMethod,
         'trackingState': 'searching',
+        'passenger': event.passenger?.toJson(),
+        'trackingUrl': event.trackingUrl,
       });
     } catch (_) {}
     
@@ -411,6 +446,12 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       final paymentMethod = map['paymentMethod']?.toString() ?? 'cash';
       final trackingState = map['trackingState']?.toString() ?? 'searching';
 
+      PassengerInfo? passengerInfo;
+      if (map['passenger'] != null && map['passenger'] is Map) {
+        passengerInfo = PassengerInfo.fromJson(Map<String, dynamic>.from(map['passenger'] as Map));
+      }
+      final trackingUrl = map['trackingUrl']?.toString();
+
       _initialRideData = StartRideTracking(
         rideId: rideId,
         pickup: pickup,
@@ -420,6 +461,8 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         vehicleName: vehicleName,
         fare: fare,
         paymentMethod: paymentMethod,
+        passenger: passengerInfo,
+        trackingUrl: trackingUrl,
       );
 
       await _rideTrackingRepository.connectToRide(rideId);
@@ -443,6 +486,8 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
           fare: fare,
           paymentMethod: paymentMethod,
           routePoints: initialPoints,
+          passenger: passengerInfo,
+          trackingUrl: trackingUrl,
         ));
       } else {
         final driver = Map<String, dynamic>.from(map['driver'] as Map);
@@ -490,6 +535,8 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
           vehicleName: vehicleName,
           otp: otp,
           paymentMethod: paymentMethod,
+          passenger: passengerInfo,
+          trackingUrl: trackingUrl,
         ));
       }
     } catch (_) {}
@@ -559,6 +606,8 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       vehicleName: _initialRideData.vehicleName,
       otp: otp,
       paymentMethod: _initialRideData.paymentMethod,
+      passenger: _initialRideData.passenger,
+      trackingUrl: _initialRideData.trackingUrl,
     );
 
     try {

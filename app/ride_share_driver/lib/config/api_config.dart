@@ -1,5 +1,3 @@
-import 'dart:io';
-
 /// Central place for environment-dependent API settings. Nothing in the
 /// networking layer should hardcode a host, port, or timeout inline.
 class ApiConfig {
@@ -12,9 +10,10 @@ class ApiConfig {
 
   static String get baseUrl {
     if (_overrideBaseUrl.isNotEmpty) return _overrideBaseUrl;
-    return Platform.isAndroid ? 'http://10.0.2.2:3000/api/v1' : 'http://localhost:3000/api/v1';
+    // return Platform.isAndroid ? 'http://10.0.2.2:3000/api/v1' : 'http://localhost:3000/api/v1';
     // return Platform.isAndroid ? 'https://rideshareapi.dokume.in/api/v1' : 'https://rideshareapi.dokume.in/api/v1';
     // return Platform.isAndroid ? 'https://ryva.duckdns.org/api/v1' : 'https://ryva.duckdns.org/api/v1';
+       return 'https://rideshareapi.dokume.in/api/v1';
   }
 
   /// Socket.IO is mounted directly on the raw HTTP server (see

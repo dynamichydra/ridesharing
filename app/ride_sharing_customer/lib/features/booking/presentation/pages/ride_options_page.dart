@@ -3,8 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/loading_view.dart';
-import '../../../../core/widgets/error_view.dart';
 import '../../../../core/widgets/custom_toast.dart';
+import '../../domain/entities/passenger_info.dart';
+import '../widgets/passenger_details_sheet.dart';
 import '../bloc/booking_bloc.dart';
 import '../../../ride_tracking/presentation/bloc/ride_tracking_bloc.dart';
 import '../../../wallet/presentation/bloc/wallet_bloc.dart';
@@ -21,11 +22,29 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
   bool _isBooking = false;
   String _paymentMethod = 'Cash'; // 'Cash' or 'Wallet'
   BookingVehicleOptionsLoaded? _cachedOptions;
+  bool _isBookingForSomeoneElse = false;
+  PassengerInfo? _passenger;
+  String? _rideNotes;
 
   @override
   void initState() {
     super.initState();
     context.read<WalletBloc>().add(LoadWalletDetails());
+  }
+
+  void _openPassengerSheet(BuildContext context) {
+    PassengerDetailsSheet.show(
+      context: context,
+      initialPassenger: _passenger,
+      initialNotes: _rideNotes,
+      onSaved: (passenger, notes) {
+        setState(() {
+          _isBookingForSomeoneElse = true;
+          _passenger = passenger;
+          _rideNotes = notes;
+        });
+      },
+    );
   }
 
   String _getVehicleAsset(String name) {
@@ -47,7 +66,6 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final walletState = context.watch<WalletBloc>().state;
     double walletBalance = 0.0;
     if (walletState is WalletLoaded) {
@@ -98,6 +116,8 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                     vehicleName: state.selectedVehicle.name,
                     fare: state.fare,
                     paymentMethod: state.paymentMethod,
+                    passenger: state.passenger,
+                    trackingUrl: state.trackingUrl,
                   ),
                 );
             context.go('/ride-tracking');
@@ -274,6 +294,234 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
   }
 
   // ===========================================================================
+  // Rider Selector (For Me vs Someone Else)
+  // ===========================================================================
+  Widget _buildRiderSelector(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE2E8F0),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              // For Me Tab
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    if (_isBookingForSomeoneElse) {
+                      setState(() {
+                        _isBookingForSomeoneElse = false;
+                      });
+                    }
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: !_isBookingForSomeoneElse ? Colors.white : Colors.transparent,
+                      borderRadius: BorderRadius.circular(11),
+                      boxShadow: !_isBookingForSomeoneElse
+                          ? [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.06),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              )
+                            ]
+                          : null,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.person_rounded,
+                          size: 17,
+                          color: !_isBookingForSomeoneElse ? const Color(0xFF009048) : const Color(0xFF64748B),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'For Me',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: !_isBookingForSomeoneElse ? FontWeight.bold : FontWeight.w500,
+                            color: !_isBookingForSomeoneElse ? const Color(0xFF021B47) : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // Someone Else Tab
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isBookingForSomeoneElse = true;
+                    });
+                    if (_passenger == null) {
+                      _openPassengerSheet(context);
+                    }
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _isBookingForSomeoneElse ? Colors.white : Colors.transparent,
+                      borderRadius: BorderRadius.circular(11),
+                      boxShadow: _isBookingForSomeoneElse
+                          ? [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.06),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              )
+                            ]
+                          : null,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.people_alt_rounded,
+                          size: 17,
+                          color: _isBookingForSomeoneElse ? const Color(0xFF009048) : const Color(0xFF64748B),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'For Someone Else',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: _isBookingForSomeoneElse ? FontWeight.bold : FontWeight.w500,
+                            color: _isBookingForSomeoneElse ? const Color(0xFF021B47) : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Passenger Details Card (if Someone Else selected)
+        if (_isBookingForSomeoneElse) ...[
+          const SizedBox(height: 10),
+          _passenger != null
+              ? Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFF009048).withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF009048).withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.person_pin_rounded, color: Color(0xFF009048), size: 20),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    _passenger!.name,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF021B47)),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF009048),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    _passenger!.passengerType.toUpperCase(),
+                                    style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${_passenger!.phoneCountryCode} ${_passenger!.phoneNumber}',
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                            ),
+                            if (_rideNotes != null && _rideNotes!.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                'Note: "$_rideNotes"',
+                                style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Color(0xFF475569)),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          _openPassengerSheet(context);
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF0165B7),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Edit', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                )
+              : InkWell(
+                  onTap: () => _openPassengerSheet(context),
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF009048), width: 1.2),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_circle_outline_rounded, size: 18, color: Color(0xFF009048)),
+                        SizedBox(width: 8),
+                        Text(
+                          'Add Passenger Details',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF009048),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+        ],
+      ],
+    );
+  }
+
+  // ===========================================================================
   // Screen 2: Choose a ride (Available Ride Options)
   // ===========================================================================
   Widget _buildChooseRideView(BuildContext context, BookingVehicleOptionsLoaded state, double walletBalance) {
@@ -287,6 +535,10 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Who is riding selector (For Me vs Someone Else)
+                _buildRiderSelector(context),
+                const SizedBox(height: 14),
+
                 // Vehicle Option Cards
                 Column(
                   children: state.vehicles.map((vehicle) {
@@ -715,6 +967,11 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                         _showInsufficientWalletSnackbar(context, walletBalance, selectedPrice);
                         return;
                       }
+                      if (_isBookingForSomeoneElse && _passenger == null) {
+                        CustomToast.show(context, 'Please enter passenger details');
+                        _openPassengerSheet(context);
+                        return;
+                      }
                       setState(() {
                         _isConfirmStep = true;
                       });
@@ -872,6 +1129,97 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
             ),
           ),
           const SizedBox(height: 14),
+
+          // Passenger Details Card (when booking for someone else)
+          if (_isBookingForSomeoneElse && _passenger != null) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFF009048).withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF009048).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.people_alt_rounded, color: Color(0xFF009048), size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Riding on Behalf',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => _openPassengerSheet(context),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF0165B7),
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Edit', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _passenger!.name,
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${_passenger!.phoneCountryCode} ${_passenger!.phoneNumber} • ${_passenger!.passengerType[0].toUpperCase()}${_passenger!.passengerType.substring(1)}',
+                              style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_rideNotes != null && _rideNotes!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.speaker_notes_outlined, size: 14, color: Color(0xFF64748B)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Note: ${_rideNotes!.trim()}',
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF475569), fontStyle: FontStyle.italic),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
 
           // 2. Route Summary Card
           Container(
@@ -1174,11 +1522,22 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                         _showInsufficientWalletSnackbar(context, walletBalance, price);
                         return;
                       }
+                      if (_isBookingForSomeoneElse && _passenger == null) {
+                        CustomToast.show(context, 'Please enter passenger details');
+                        _openPassengerSheet(context);
+                        return;
+                      }
 
                       setState(() {
                         _isBooking = true;
                       });
-                      context.read<BookingBloc>().add(ConfirmRideBooking(paymentMethod: chosenMethod));
+                      context.read<BookingBloc>().add(
+                            ConfirmRideBooking(
+                              paymentMethod: chosenMethod,
+                              passenger: _isBookingForSomeoneElse ? _passenger : null,
+                              notes: _isBookingForSomeoneElse ? _rideNotes : null,
+                            ),
+                          );
                     },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF009048),

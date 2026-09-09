@@ -345,21 +345,53 @@ class _RideHistoryPageState extends State<RideHistoryPage>
     );
   }
 
+  Map<String, String> _parseAddress(String rawAddress) {
+    if (rawAddress.isEmpty) return {'title': 'Location', 'subtitle': ''};
+    final parts = rawAddress
+        .split(',')
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return {'title': rawAddress, 'subtitle': ''};
+    if (parts.length == 1) return {'title': parts[0], 'subtitle': ''};
+    if (parts.length == 2) return {'title': parts[0], 'subtitle': parts[1]};
+
+    // When 3 or more comma parts exist: first 2 parts in title, remaining in subtitle
+    final title = '${parts[0]}, ${parts[1]}';
+    final subtitle = parts.sublist(2).join(', ');
+    return {'title': title, 'subtitle': subtitle};
+  }
+
   Widget _buildRideCard(Map<String, dynamic> ride) {
     final status = (ride['status'] as String? ?? '').toLowerCase();
     final bool isCancelled = status == 'cancelled';
     final Color statusColor = isCancelled
-        ? const Color(0xFFE53935)
+        ? const Color(0xFFEF4444)
         : const Color(0xFF009048);
     final Color badgeBg = isCancelled
-        ? const Color(0xFFFFEBEE)
-        : const Color(0xFFE6F4EA);
+        ? const Color(0xFFFEE2E2)
+        : const Color(0xFFDCFCE7);
 
-    // Format Fare Minor units to Major currency units
+    // Format Fare Minor units to Major currency units (Full value, not rounded)
     final int estimatedFareMinor = ride['estimatedFareMinor'] as int? ?? 0;
     final int actualFareMinor =
         ride['actualFareMinor'] as int? ?? estimatedFareMinor;
     final double fare = actualFareMinor / 100.0;
+
+    final pickupRaw = ride['pickupAddress'] as String? ??
+        ride['pickup_address'] as String? ??
+        'Pickup Point';
+    final dropRaw = ride['dropAddress'] as String? ??
+        ride['drop_address'] as String? ??
+        'Drop-off Point';
+
+    final pickupParsed = _parseAddress(pickupRaw);
+    final pickupTitle = pickupParsed['title']!;
+    final pickupSubtitle = pickupParsed['subtitle']!;
+
+    final dropParsed = _parseAddress(dropRaw);
+    final dropTitle = dropParsed['title']!;
+    final dropSubtitle = dropParsed['subtitle']!;
 
     // Format Timestamp
     String formattedTime = 'Recent Trip';
@@ -372,210 +404,284 @@ class _RideHistoryPageState extends State<RideHistoryPage>
       } catch (_) {}
     }
 
-    // Resolves vehicle type from DB
-    final dynamic vehicleTypeId = ride['vehicleTypeId'] ?? ride['vehicle_type_id'];
-    final String vehicle = (vehicleTypeId == 2 || vehicleTypeId.toString().toLowerCase().contains('moto')) ? 'Moto' : 'Prime Sedan';
+    // Resolves vehicle type & model name dynamically
+    final String? vTypeName = ride['vehicleTypeName']?.toString() ??
+        ride['vehicle_type_name']?.toString() ??
+        ride['vehicleType']?.toString();
+    final String? vModel = ride['vehicleModel']?.toString() ??
+        ride['vehicle_model']?.toString();
+    final String? vGeneric = ride['vehicle']?.toString();
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
+    // Prefer specific vehicle model name, falling back to type name or generic
+    final String vehicleDisplayName = (vModel != null && vModel.trim().isNotEmpty)
+        ? vModel.trim()
+        : ((vTypeName != null && vTypeName.trim().isNotEmpty)
+            ? vTypeName.trim()
+            : ((vGeneric != null && vGeneric.trim().isNotEmpty) ? vGeneric.trim() : 'Sedan'));
+
+    // Determine matching Material Icon based on vehicle type / slug / model
+    final String typeKey = '${vTypeName ?? ''} ${ride['vehicleTypeSlug'] ?? ''} ${vModel ?? ''} ${vGeneric ?? ''}'.toLowerCase();
+    final IconData vehicleIcon;
+    if (typeKey.contains('auto') || typeKey.contains('rickshaw')) {
+      vehicleIcon = Icons.electric_rickshaw_rounded;
+    } else if (typeKey.contains('bike') || typeKey.contains('moto') || typeKey.contains('two')) {
+      vehicleIcon = Icons.two_wheeler_rounded;
+    } else {
+      vehicleIcon = Icons.local_taxi_rounded;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          final detailPayload = {
-            'id': ride['id']?.toString() ?? '',
-            'status': status,
-            'fare': fare,
-            'date': requestedAtStr ?? DateTime.now().toIso8601String(),
-            'pickup_address': ride['pickupAddress'] ?? ride['pickup_address'] ?? 'Pickup Point',
-            'pickup_name': ride['pickupAddress'] ?? ride['pickup_address'] ?? 'Pickup Location',
-            'destination_address': ride['dropAddress'] ?? ride['drop_address'] ?? 'Drop-off Point',
-            'destination_name': ride['dropAddress'] ?? ride['drop_address'] ?? 'Destination Location',
-            'driver': ride['driver'],
-            'driver_name': ride['driver'] != null ? ride['driver']['name'] : 'Ryva Captain',
-            'driver_rating': ride['driverRating'] ?? ride['driver_rating'] ?? 5.0,
-            'vehicle_info': vehicle,
-            'vehicle_plate': ride['vehicleNumber'] ?? ride['vehicle_number'] ?? '',
-          };
-          context.push('/ride-detail', extra: detailPayload);
-        },
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 14),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.02),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Location Line indicator
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4, right: 12),
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 10,
-                            height: 10,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isCancelled
-                                  ? const Color(0xFFE53935)
-                                  : const Color(0xFF009048),
+        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Top Section: Route, Locations, Fare, and Payment Method
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left Side: Route Indicator & Location Text with IntrinsicHeight
+              Expanded(
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Route Dots and Connecting Line with Middle Dot
+                      SizedBox(
+                        width: 12,
+                        child: Column(
+                          children: [
+                            // Solid Green Circle (Pickup)
+                            Container(
+                              margin: const EdgeInsets.only(top: 10),
+                              width: 10,
+                              height: 10,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF009048),
+                                shape: BoxShape.circle,
+                              ),
                             ),
-                            child: Center(
-                              child: Container(
-                                width: 4,
-                                height: 4,
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Colors.white,
+                            // Auto-expanding Connecting Line with Centered Mini Dot
+                            Expanded(
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Container(
+                                    width: 1.5,
+                                    color: const Color(0xFFCBD5E1),
+                                  ),
+                                  Container(
+                                    width: 3.5,
+                                    height: 3.5,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFCBD5E1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Red Ring with White Center (Drop-off)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: const Color(0xFFEF4444),
+                                  width: 2.5,
                                 ),
                               ),
                             ),
-                          ),
-                          Container(
-                            width: 1.5,
-                            height: 26,
-                            color: const Color(0xFFCBD5E1),
-                          ),
-                          Container(
-                            width: 10,
-                            height: 10,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: const Color(0xFFE53935),
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
 
-                    // Pickup & Destination text
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            ride['pickupAddress'] as String? ?? 'Pickup Point',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0A2540),
+                      // Location Titles and Subtitles
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Pickup Location
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  pickupTitle,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0F172A),
+                                    height: 1.2,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (pickupSubtitle.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    pickupSubtitle,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w400,
+                                      color: Color(0xFF64748B),
+                                      height: 1.2,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ],
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            ride['dropAddress'] as String? ?? 'Drop-off Point',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0A2540),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
 
-                    // Fare & Payment Method
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          '₹${fare.toStringAsFixed(0)}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0A2540),
-                          ),
+                            const SizedBox(height: 14),
+
+                            // Drop-off Location
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  dropTitle,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0F172A),
+                                    height: 1.2,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (dropSubtitle.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    dropSubtitle,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w400,
+                                      color: Color(0xFF64748B),
+                                      height: 1.2,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Cash',
-                          style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 16),
-                // Time, Vehicle & Status Badge
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.calendar_today_outlined,
-                          size: 14,
-                          color: Color(0xFF64748B),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          formattedTime,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF64748B),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Text('|', style: TextStyle(color: Color(0xFFCBD5E1))),
-                        const SizedBox(width: 8),
-                        const Icon(
-                          Icons.directions_car_rounded,
-                          size: 14,
-                          color: Color(0xFF64748B),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          vehicle,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF64748B),
-                          ),
-                        ),
-                      ],
+              ),
+
+              const SizedBox(width: 12),
+
+              // Right Side: Fare and Payment Method
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '₹${fare.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF009048),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: badgeBg,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        status.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: statusColor,
-                        ),
-                      ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    (ride['paymentMethod']?.toString() ?? 'Cash').toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF94A3B8),
                     ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ),
-      );
-    }
+
+          const SizedBox(height: 16),
+          const Divider(color: Color(0xFFF1F5F9), height: 1),
+          const SizedBox(height: 14),
+
+          // Bottom Section: Time, Vehicle & Status Badge (as requested)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.calendar_today_outlined,
+                    size: 15,
+                    color: Color(0xFF009048),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    formattedTime,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('|', style: TextStyle(color: Color(0xFFCBD5E1))),
+                  const SizedBox(width: 8),
+                  Icon(
+                    vehicleIcon,
+                    size: 16,
+                    color: const Color(0xFF0165B7), // Brand Secondary Blue
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    vehicleDisplayName,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w300,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  status.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
+}

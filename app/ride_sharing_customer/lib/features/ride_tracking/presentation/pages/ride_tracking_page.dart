@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/utils/location_helper.dart';
@@ -10,6 +12,8 @@ import '../bloc/ride_tracking_bloc.dart';
 import '../../../booking/presentation/bloc/booking_bloc.dart';
 import '../../../wallet/presentation/bloc/wallet_bloc.dart';
 import '../../../profile/presentation/bloc/profile_bloc.dart';
+import '../../../chat/data/datasources/ride_chat_datasource.dart';
+import '../../../chat/domain/entities/ride_chat_message.dart';
 import '../../../../injection_container.dart';
 import '../../../../core/network/dio_client.dart';
 
@@ -27,6 +31,79 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
   bool _showThankYou = false;
 
   late AnimationController _radarController;
+  int _unreadChatCount = 0;
+  StreamSubscription<RideChatMessage>? _chatMessageSub;
+
+  void _shareTrackingLink(BuildContext context, String? trackingUrl, String? passengerName) {
+    if (trackingUrl == null || trackingUrl.isEmpty) {
+      CustomToast.show(context, 'Live tracking link is not available yet');
+      return;
+    }
+    final fullUrl = trackingUrl.startsWith('http')
+        ? trackingUrl
+        : 'https://rideshare.app$trackingUrl';
+    Clipboard.setData(ClipboardData(text: fullUrl));
+    CustomToast.show(
+      context,
+      passengerName != null
+          ? 'Live tracking link copied! Send it to $passengerName'
+          : 'Live tracking link copied to clipboard!',
+    );
+  }
+
+  void _openChat(RideTrackingActive state) {
+    setState(() {
+      _unreadChatCount = 0;
+    });
+    context.push('/ride-chat', extra: {
+      'rideId': state.rideId,
+      'name': state.driverName,
+      'avatar': state.driverAvatar,
+      'phone': state.plateNumber,
+    });
+  }
+
+  Widget _buildChatButton(RideTrackingActive state) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        ElevatedButton.icon(
+          onPressed: () => _openChat(state),
+          icon: const Icon(Icons.chat_bubble_rounded, size: 16),
+          label: const Text('Chat'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFE8F5E9),
+            foregroundColor: const Color(0xFF009048),
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+        ),
+        if (_unreadChatCount > 0)
+          Positioned(
+            top: -4,
+            right: -4,
+            child: Container(
+              padding: const EdgeInsets.all(5),
+              decoration: const BoxDecoration(
+                color: Color(0xFFE53935),
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                '$_unreadChatCount',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 
   @override
   void initState() {
@@ -35,10 +112,65 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     )..repeat();
+
+    try {
+      final chatDataSource = sl<CustomerRideChatDataSource>();
+      _chatMessageSub = chatDataSource.onChatMessage.listen((msg) {
+        if (msg.senderRole == 'driver' && mounted) {
+          setState(() {
+            _unreadChatCount++;
+          });
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.chat_bubble_rounded, color: Colors.white, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Message from Driver',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                        ),
+                        Text(
+                          msg.content,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF021B47),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: 'REPLY',
+                textColor: const Color(0xFF009048),
+                onPressed: () {
+                  final state = context.read<RideTrackingBloc>().state;
+                  if (state is RideTrackingActive) {
+                    _openChat(state);
+                  }
+                },
+              ),
+            ),
+          );
+        }
+      });
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    _chatMessageSub?.cancel();
     _radarController.dispose();
     _commentController.dispose();
     super.dispose();
@@ -188,6 +320,37 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (state.passenger != null) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF009048).withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.people_alt_rounded, size: 16, color: Color(0xFF009048)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Booking for: ${state.passenger!.name} (${state.passenger!.passengerType})',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                          ),
+                        ),
+                        if (state.trackingUrl != null)
+                          GestureDetector(
+                            onTap: () => _shareTrackingLink(context, state.trackingUrl, state.passenger?.name),
+                            child: const Padding(
+                              padding: EdgeInsets.only(left: 6),
+                              child: Icon(Icons.share_rounded, size: 16, color: Color(0xFF009048)),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
                 const Row(
                   children: [
                     SizedBox(
@@ -356,13 +519,18 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Driver Profile Row
+                // Driver Profile Row with Chat button
                 Row(
                   children: [
-                    const CircleAvatar(
+                    CircleAvatar(
                       radius: 22,
-                      backgroundColor: Color(0xFFF1F5F9),
-                      child: Icon(Icons.person, color: Color(0xFF021B47), size: 26),
+                      backgroundColor: const Color(0xFFF1F5F9),
+                      backgroundImage: state.driverAvatar.isNotEmpty
+                          ? NetworkImage(state.driverAvatar)
+                          : null,
+                      child: state.driverAvatar.isEmpty
+                          ? const Icon(Icons.person, color: Color(0xFF021B47), size: 26)
+                          : null,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -388,6 +556,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                         ],
                       ),
                     ),
+                    _buildChatButton(state),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -598,27 +767,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                         ],
                       ),
                     ),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        context.push('/ride-chat', extra: {
-                          'rideId': state.rideId,
-                          'name': state.driverName,
-                          'avatar': state.driverAvatar,
-                          'phone': state.plateNumber,
-                        });
-                      },
-                      icon: const Icon(Icons.chat_bubble_rounded, size: 16),
-                      label: const Text('Chat'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE8F5E9),
-                        foregroundColor: const Color(0xFF009048),
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                    ),
+                    _buildChatButton(state),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -815,27 +964,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                         ],
                       ),
                     ),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        context.push('/ride-chat', extra: {
-                          'rideId': state.rideId,
-                          'name': state.driverName,
-                          'avatar': state.driverAvatar,
-                          'phone': state.plateNumber,
-                        });
-                      },
-                      icon: const Icon(Icons.chat_bubble_rounded, size: 16),
-                      label: const Text('Chat'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE8F5E9),
-                        foregroundColor: const Color(0xFF009048),
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                    ),
+                    _buildChatButton(state),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -1069,6 +1198,30 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                 ),
                 const SizedBox(height: 16),
 
+                if (state.passenger != null) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF009048).withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.people_alt_rounded, size: 16, color: Color(0xFF009048)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Passenger: ${state.passenger!.name} (${state.passenger!.passengerType}) • ${state.passenger!.phoneCountryCode} ${state.passenger!.phoneNumber}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF021B47)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
                 // Trip Stats: Distance, Duration, Fare
                 Container(
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -1097,14 +1250,8 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                       icon: Icons.chat_bubble_rounded,
                       color: const Color(0xFF009048),
                       label: 'Chat',
-                      onTap: () {
-                        context.push('/ride-chat', extra: {
-                          'rideId': state.rideId,
-                          'name': state.driverName,
-                          'avatar': state.driverAvatar,
-                          'phone': state.plateNumber,
-                        });
-                      },
+                      badgeCount: _unreadChatCount,
+                      onTap: () => _openChat(state),
                     ),
                     _buildCircularAction(
                       icon: Icons.headset_mic_rounded,
@@ -1122,7 +1269,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                       icon: Icons.share_location_rounded,
                       color: const Color(0xFF0065B3),
                       label: 'Share Live\nLocation',
-                      onTap: () {},
+                      onTap: () => _shareTrackingLink(context, state.trackingUrl, state.passenger?.name),
                     ),
                   ],
                 ),
@@ -1591,20 +1738,46 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
     required Color color,
     required String label,
     required VoidCallback onTap,
+    int badgeCount = 0,
   }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(30),
       child: Column(
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.10),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 22),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              if (badgeCount > 0)
+                Positioned(
+                  top: -2,
+                  right: -2,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE53935),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '$badgeCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 6),
           Text(

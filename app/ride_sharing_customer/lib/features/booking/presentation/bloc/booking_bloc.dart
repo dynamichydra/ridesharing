@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/utils/location_helper.dart';
 import '../../domain/entities/vehicle.dart';
+import '../../domain/entities/passenger_info.dart';
 import '../../domain/repositories/booking_repository.dart';
 
 // ==========================================
@@ -54,10 +55,17 @@ class SelectVehicle extends BookingEvent {
 
 class ConfirmRideBooking extends BookingEvent {
   final String paymentMethod;
-  const ConfirmRideBooking({this.paymentMethod = 'cash'});
+  final PassengerInfo? passenger;
+  final String? notes;
+
+  const ConfirmRideBooking({
+    this.paymentMethod = 'cash',
+    this.passenger,
+    this.notes,
+  });
 
   @override
-  List<Object?> get props => [paymentMethod];
+  List<Object?> get props => [paymentMethod, passenger, notes];
 }
 
 class ApplyPromoCode extends BookingEvent {
@@ -174,6 +182,9 @@ class BookingConfirmed extends BookingState {
   final Vehicle selectedVehicle;
   final double fare;
   final String paymentMethod;
+  final PassengerInfo? passenger;
+  final String? trackingUrl;
+  final String? notes;
 
   const BookingConfirmed({
     required this.rideId,
@@ -184,10 +195,25 @@ class BookingConfirmed extends BookingState {
     required this.selectedVehicle,
     required this.fare,
     this.paymentMethod = 'cash',
+    this.passenger,
+    this.trackingUrl,
+    this.notes,
   });
 
   @override
-  List<Object?> get props => [rideId, pickup, pickupName, destination, destinationName, selectedVehicle, fare, paymentMethod];
+  List<Object?> get props => [
+        rideId,
+        pickup,
+        pickupName,
+        destination,
+        destinationName,
+        selectedVehicle,
+        fare,
+        paymentMethod,
+        passenger,
+        trackingUrl,
+        notes,
+      ];
 }
 
 
@@ -394,10 +420,17 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
           dropAddress: currentState.destinationAddress,
           paymentMethod: event.paymentMethod,
           promoCode: currentState.appliedPromoCode,
+          passenger: event.passenger?.toJson(),
+          notes: event.notes,
         );
         print('[BookingBloc] requestRide successful: $result');
         
         final rideId = result['ride']?['id']?.toString() ?? 'fake_ride_id_${DateTime.now().millisecondsSinceEpoch}';
+        final trackingUrl = result['trackingUrl']?.toString();
+        PassengerInfo? passengerInfo = event.passenger;
+        if (result['passenger'] != null && result['passenger'] is Map) {
+          passengerInfo = PassengerInfo.fromJson(Map<String, dynamic>.from(result['passenger'] as Map));
+        }
         
         emit(BookingConfirmed(
           rideId: rideId,
@@ -408,6 +441,9 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
           selectedVehicle: currentState.selectedVehicle,
           fare: selectedFare,
           paymentMethod: event.paymentMethod,
+          passenger: passengerInfo,
+          trackingUrl: trackingUrl,
+          notes: event.notes,
         ));
 
       } catch (e) {

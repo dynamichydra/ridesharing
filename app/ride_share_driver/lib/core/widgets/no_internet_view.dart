@@ -107,6 +107,18 @@ class NoInternetView extends StatelessWidget {
                     );
                   },
                 ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => context.read<NetworkCubit>().forceConnected(),
+                  child: const Text(
+                    'Continue anyway',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

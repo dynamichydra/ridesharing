@@ -31,6 +31,15 @@ class MockBookingDataSource implements BookingDataSource {
   }
 
   @override
+  Future<List<Map<String, dynamic>>> getAvailablePromos({
+    String? vehicleTypeId,
+    String? cityId,
+    String? countryId,
+  }) async {
+    return [];
+  }
+
+  @override
   Future<List<VehicleModel>> getVehicles() async {
     return [
       const VehicleModel(
@@ -83,6 +92,8 @@ class MockBookingDataSource implements BookingDataSource {
     required String dropAddress,
     String paymentMethod = 'cash',
     String? promoCode,
+    Map<String, dynamic>? passenger,
+    String? notes,
   }) async {
     return {'id': 'ride_mock_id', 'status': 'searching'};
   }

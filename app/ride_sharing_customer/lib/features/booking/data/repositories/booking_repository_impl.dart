@@ -74,6 +74,8 @@ class BookingRepositoryImpl implements BookingRepository {
     required String dropAddress,
     String paymentMethod = 'cash',
     String? promoCode,
+    Map<String, dynamic>? passenger,
+    String? notes,
   }) async {
     return await _dataSource.requestRide(
       vehicleTypeId: vehicleTypeId,
@@ -85,6 +87,8 @@ class BookingRepositoryImpl implements BookingRepository {
       dropAddress: dropAddress,
       paymentMethod: paymentMethod,
       promoCode: promoCode,
+      passenger: passenger,
+      notes: notes,
     );
   }
 

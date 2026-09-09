@@ -7,7 +7,6 @@ import '../../presentation/screens/settings/settings_page.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/subscription/presentation/screens/subscription_plans_screen.dart';
 import '../../features/ride_history/presentation/pages/ride_history_page.dart';
-import '../../features/ride_history/presentation/pages/ride_details_page.dart';
 import '../../features/earnings/presentation/pages/earnings_page.dart';
 import '../../features/wallet/presentation/pages/wallet_page.dart';
 import '../../features/wallet/presentation/pages/transactions_page.dart';
@@ -213,14 +212,6 @@ class AppRouter {
             otherPartyAvatar: extra['avatar']?.toString(),
             otherPartyPhone: extra['phone']?.toString(),
           );
-        },
-      ),
-      GoRoute(
-        parentNavigatorKey: _rootNavigatorKey,
-        path: '/ride-details',
-        builder: (context, state) {
-          final rideData = state.extra as Map<String, dynamic>?;
-          return RideDetailsPage(rideData: rideData);
         },
       ),
       GoRoute(

@@ -28,7 +28,6 @@ import 'features/profile/presentation/pages/payment_methods_page.dart';
 import 'features/profile/presentation/pages/help_page.dart';
 import 'features/profile/presentation/pages/settings_page.dart';
 import 'features/profile/presentation/pages/ride_history_page.dart';
-import 'features/profile/presentation/pages/ride_detail_page.dart';
 import 'features/subscription/presentation/pages/subscription_management_page.dart';
 import 'features/wallet/presentation/pages/transactions_page.dart';
 import 'features/chat/presentation/pages/ride_chat_page.dart';
@@ -58,7 +57,6 @@ class AppRoutes {
   static const String settings = '/settings';
   static const String subscription = '/subscription';
   static const String rideHistory = '/ride-history';
-  static const String rideDetail = '/ride-detail';
   static const String transactions = '/transactions';
   static const String rideChat = '/ride-chat';
 
@@ -176,14 +174,6 @@ class AppRoutes {
       ),
       // Sub-pages: parentNavigatorKey forces them onto the root navigator
       // so they render full-screen WITHOUT the bottom nav bar
-      GoRoute(
-        parentNavigatorKey: _rootNavigatorKey,
-        path: rideDetail,
-        builder: (context, state) {
-          final ride = Map<String, dynamic>.from(state.extra as Map);
-          return RideDetailPage(ride: ride);
-        },
-      ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: addFunds,

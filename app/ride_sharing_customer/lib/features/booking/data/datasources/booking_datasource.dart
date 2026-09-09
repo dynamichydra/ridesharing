@@ -21,6 +21,8 @@ abstract class BookingDataSource {
     required String dropAddress,
     String paymentMethod = 'cash',
     String? promoCode,
+    Map<String, dynamic>? passenger,
+    String? notes,
   });
   Future<Map<String, dynamic>> validatePromo(
     String code,
@@ -159,6 +161,8 @@ class BookingDataSourceImpl implements BookingDataSource {
     required String dropAddress,
     String paymentMethod = 'cash',
     String? promoCode,
+    Map<String, dynamic>? passenger,
+    String? notes,
   }) async {
     try {
       print('[BookingDataSource] POST /api/v1/rides requesting...');
@@ -174,6 +178,12 @@ class BookingDataSourceImpl implements BookingDataSource {
       };
       if (promoCode != null) {
         requestData['promoCode'] = promoCode;
+      }
+      if (notes != null && notes.trim().isNotEmpty) {
+        requestData['notes'] = notes.trim();
+      }
+      if (passenger != null && passenger.isNotEmpty) {
+        requestData['passenger'] = passenger;
       }
       final response = await _dioClient.dio.post(
         '/api/v1/rides',

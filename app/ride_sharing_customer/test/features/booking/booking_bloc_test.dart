@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:bloc_test/bloc_test.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:ride_sharing_customer/features/booking/domain/entities/vehicle.dart';
+import 'package:ride_sharing_customer/features/booking/domain/entities/passenger_info.dart';
 import 'package:ride_sharing_customer/features/booking/domain/repositories/booking_repository.dart';
 import 'package:ride_sharing_customer/features/booking/presentation/bloc/booking_bloc.dart';
 
@@ -34,6 +35,15 @@ class MockBookingRepository implements BookingRepository {
   @override
   Future<Map<String, dynamic>> applyReferralCode(String referralCode) async {
     return {'status': 'pending'};
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getAvailablePromos({
+    String? vehicleTypeId,
+    String? cityId,
+    String? countryId,
+  }) async {
+    return [];
   }
 
   @override
@@ -94,8 +104,16 @@ class MockBookingRepository implements BookingRepository {
     required String dropAddress,
     String paymentMethod = 'cash',
     String? promoCode,
+    Map<String, dynamic>? passenger,
+    String? notes,
   }) async {
-    return {'id': 'ride_mock_id', 'status': 'searching'};
+    return {
+      'id': 'ride_mock_id',
+      'status': 'searching',
+      'ride': {'id': 'ride_mock_id'},
+      'passenger': passenger,
+      'trackingUrl': passenger != null ? '/api/v1/public/trips/mock_token_123' : null,
+    };
   }
 }
 
@@ -232,6 +250,69 @@ void main() {
             .having((s) => s.appliedPromoCode, 'appliedPromoCode', isNull)
             .having((s) => s.discountAmount, 'discountAmount', isNull)
             .having((s) => s.calculatedFares['veh_economy'], 'restoredFare', 10.0),
+      ],
+    );
+
+    blocTest<BookingBloc, BookingState>(
+      'confirms booking on behalf of someone else with passenger and trackingUrl',
+      build: () => BookingBloc(repository),
+      seed: () => const BookingVehicleOptionsLoaded(
+        pickup: LatLng(34.0, -118.0),
+        pickupName: 'Pickup Point',
+        pickupAddress: '123 St',
+        destination: LatLng(34.01, -118.01),
+        destinationName: 'Destination Point',
+        destinationAddress: '456 St',
+        distanceMiles: 5.0,
+        vehicles: [
+          Vehicle(
+            id: 'veh_economy',
+            name: 'Auto',
+            description: 'Affordable, everyday rides',
+            baseFare: 10.0,
+            perMile: 1.0,
+            perMinute: 0.2,
+            capacity: 3,
+            multiplier: 1.0,
+            etaMinutes: 3,
+            type: 'auto',
+          ),
+        ],
+        calculatedFares: {'veh_economy': 10.0},
+        originalFares: {'veh_economy': 10.0},
+        selectedVehicle: Vehicle(
+          id: 'veh_economy',
+          name: 'Auto',
+          description: 'Affordable, everyday rides',
+          baseFare: 10.0,
+          perMile: 1.0,
+          perMinute: 0.2,
+          capacity: 3,
+          multiplier: 1.0,
+          etaMinutes: 3,
+          type: 'auto',
+        ),
+      ),
+      act: (bloc) => bloc.add(ConfirmRideBooking(
+        paymentMethod: 'cash',
+        passenger: const PassengerInfo(
+          name: 'Sarah Connor',
+          phoneNumber: '9876543210',
+          phoneCountryCode: '+91',
+          email: 'sarah.connor@example.com',
+          passengerType: 'family',
+        ),
+        notes: 'Please help with luggage',
+      )),
+      expect: () => [
+        BookingLoading(),
+        isA<BookingConfirmed>()
+            .having((s) => s.rideId, 'rideId', 'ride_mock_id')
+            .having((s) => s.passenger?.name, 'passenger.name', 'Sarah Connor')
+            .having((s) => s.passenger?.phoneNumber, 'passenger.phoneNumber', '9876543210')
+            .having((s) => s.passenger?.passengerType, 'passenger.passengerType', 'family')
+            .having((s) => s.trackingUrl, 'trackingUrl', '/api/v1/public/trips/mock_token_123')
+            .having((s) => s.notes, 'notes', 'Please help with luggage'),
       ],
     );
   });
