@@ -11,6 +11,8 @@ import {
   riderSubscriptions,
   riderSubscriptionPlans,
   savedPlaces,
+  vehicleTypes,
+  drivers,
 } from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
 
@@ -119,8 +121,54 @@ export async function getRideHistory(riderId, page, limit, offset, status = null
   const whereClause = and(...conditions);
 
   const [{ total }] = await db.select({ total: count() }).from(rides).where(whereClause);
-  const rows = await db.select().from(rides).where(whereClause)
-    .orderBy(desc(rides.requestedAt)).limit(limit).offset(offset);
+  const rows = await db.select({
+    id: rides.id,
+    riderId: rides.riderId,
+    driverId: rides.driverId,
+    vehicleTypeId: rides.vehicleTypeId,
+    countryId: rides.countryId,
+    currencyCode: rides.currencyCode,
+    pickupLat: rides.pickupLat,
+    pickupLng: rides.pickupLng,
+    pickupAddress: rides.pickupAddress,
+    dropLat: rides.dropLat,
+    dropLng: rides.dropLng,
+    dropAddress: rides.dropAddress,
+    fareSnapshot: rides.fareSnapshot,
+    estimatedFareMinor: rides.estimatedFareMinor,
+    finalFareMinor: rides.finalFareMinor,
+    distanceKm: rides.distanceKm,
+    durationMin: rides.durationMin,
+    actualDistanceKm: rides.actualDistanceKm,
+    actualDurationMin: rides.actualDurationMin,
+    status: rides.status,
+    isScheduled: rides.isScheduled,
+    scheduledAt: rides.scheduledAt,
+    paymentMethod: rides.paymentMethod,
+    paymentStatus: rides.paymentStatus,
+    requestedAt: rides.requestedAt,
+    acceptedAt: rides.acceptedAt,
+    startedAt: rides.startedAt,
+    completedAt: rides.completedAt,
+    cancelledAt: rides.cancelledAt,
+    vehicleTypeName: vehicleTypes.name,
+    vehicleTypeSlug: vehicleTypes.slug,
+    vehicleTypeIcon: vehicleTypes.icon,
+    driverName: drivers.name,
+    driverPhone: drivers.phone,
+    driverRating: drivers.rating,
+    driverPhoto: drivers.profilePhoto,
+    vehicleNumber: drivers.vehicleNumber,
+    vehicleModel: drivers.vehicleModel,
+  })
+    .from(rides)
+    .leftJoin(vehicleTypes, eq(rides.vehicleTypeId, vehicleTypes.id))
+    .leftJoin(drivers, eq(rides.driverId, drivers.id))
+    .where(whereClause)
+    .orderBy(desc(rides.requestedAt))
+    .limit(limit)
+    .offset(offset);
+
   return { rows, pagination: paginate(page, limit, total) };
 }
 
