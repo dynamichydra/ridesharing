@@ -130,6 +130,68 @@ export async function subscriptionRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  // GET /api/v1/subscriptions/plans/:id (Full plan details, entitlements, vehicle types, group pricing, active subscribers)
+  app.get('/plans/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await subService.getSubscriptionPlanById(request.params.id);
+    return sendSuccess(reply, data);
+  });
+
+  // GET /api/v1/subscriptions/plans/:id/versions
+  app.get('/plans/:id/versions', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await subService.listPlanVersions(request.params.id);
+    return sendSuccess(reply, data);
+  });
+
+  // ── Admin — All Subscribers & Lifecycle Management ───────────────────────────
+
+  // GET /api/v1/subscriptions/admin/subscribers?status=&planId=&countryId=&search=&page=&limit=
+  app.get('/admin/subscribers', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { page, limit, offset } = parsePagination(request.query);
+    const filters = {
+      status: request.query.status,
+      planId: request.query.planId,
+      countryId: request.query.countryId,
+      search: request.query.search,
+      page,
+      limit,
+      offset,
+    };
+    const { rows, pagination } = await subService.listAllSubscribers(filters);
+    return sendList(reply, rows, pagination);
+  });
+
+  // GET /api/v1/subscriptions/admin/analytics
+  app.get('/admin/analytics', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await subService.getSubscriptionAnalytics();
+    return sendSuccess(reply, data);
+  });
+
+  // GET /api/v1/subscriptions/admin/subscriptions/:id
+  app.get('/admin/subscriptions/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await subService.getSubscriptionDetail(request.params.id);
+    return sendSuccess(reply, data);
+  });
+
+  // POST /api/v1/subscriptions/admin/subscriptions/:id/pause
+  app.post('/admin/subscriptions/:id/pause', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { reason } = request.body || {};
+    const data = await subService.pauseSubscription(request.params.id, request.user.id, reason);
+    return sendSuccess(reply, data);
+  });
+
+  // POST /api/v1/subscriptions/admin/subscriptions/:id/resume
+  app.post('/admin/subscriptions/:id/resume', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await subService.resumeSubscription(request.params.id, request.user.id);
+    return sendSuccess(reply, data);
+  });
+
+  // POST /api/v1/subscriptions/admin/subscriptions/:id/cancel
+  app.post('/admin/subscriptions/:id/cancel', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { reason } = request.body || {};
+    const data = await subService.cancelSubscription(request.params.id, request.user.id, reason);
+    return sendSuccess(reply, data);
+  });
+
   // ── Admin — per-driver subscription/payment history ─────────────────────────
 
   // GET /api/v1/subscriptions/admin/drivers/:driverId/history

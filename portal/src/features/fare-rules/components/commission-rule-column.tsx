@@ -20,12 +20,37 @@ function pct(rate: string): string {
   return `${(Number(rate) * 100).toFixed(2)}%`;
 }
 
+function baseLabel(base?: string): string {
+  switch (base) {
+    case "gross_fare": return "Gross Fare";
+    case "driver_fare": return "Driver Fare";
+    case "net_fare": return "Net Fare";
+    case "fare_after_booking_fee":
+    default:
+      return "After Booking Fee";
+  }
+}
+
 export function getCommissionRuleColumns({ onEdit, onToggleActive, countries, cities = [], vehicleTypes }: Props): ColumnDef<CommissionRule>[] {
   return [
     {
       accessorKey: "name",
       header: "Name",
-      cell: ({ row }) => <div className="font-semibold text-foreground">{row.original.name}</div>,
+      cell: ({ row }) => (
+        <div className="flex flex-col gap-0.5">
+          <div className="font-semibold text-foreground flex items-center gap-1.5">
+            {row.original.name}
+            {row.original.version && (
+              <span className="px-1.5 py-0.2 text-[10px] font-bold rounded bg-primary/10 text-primary">
+                v{row.original.version}
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            Base: <span className="font-medium text-foreground">{baseLabel(row.original.commissionBase)}</span>
+          </div>
+        </div>
+      ),
     },
     {
       accessorKey: "countryId",
@@ -49,7 +74,14 @@ export function getCommissionRuleColumns({ onEdit, onToggleActive, countries, ci
     {
       accessorKey: "bookingFeeMinor",
       header: "Booking Fee",
-      cell: ({ row }) => <span className="text-foreground">{(row.original.bookingFeeMinor / 100).toFixed(2)}</span>,
+      cell: ({ row }) => (
+        <div className="text-xs">
+          <span className="font-medium text-foreground">{(row.original.bookingFeeMinor / 100).toFixed(2)}</span>
+          {row.original.platformFeeMinor ? (
+            <span className="text-muted-foreground ml-1">(+{(row.original.platformFeeMinor / 100).toFixed(2)} plat)</span>
+          ) : null}
+        </div>
+      ),
     },
     {
       id: "caps",
@@ -108,7 +140,7 @@ export function getCommissionRuleColumns({ onEdit, onToggleActive, countries, ci
       header: () => <div className="w-full text-center">Actions</div>,
       cell: ({ row }) => (
         <div className="w-full flex items-center justify-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => onEdit(row.original)} className="border-border hover:bg-muted cursor-pointer">
+          <Button variant="outline" size="sm" onClick={() => onEdit(row.original)} className="border-border hover:bg-muted cursor-pointer" title="Edit / Create Version">
             <Edit2 className="h-3.5 w-3.5" />
           </Button>
           <Button

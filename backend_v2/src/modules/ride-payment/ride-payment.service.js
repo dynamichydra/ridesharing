@@ -10,6 +10,7 @@ import { postTransaction, getOrCreateSystemAccount, getOrCreateWalletAccount } f
 import { getOrCreateWallet } from '../wallet/wallet.service.js';
 import { handleDisputeEvent } from '../dispute/dispute.service.js';
 import { resolveCommissionRule, computeCommission } from '../commission/commission.service.js';
+import { getOrCalculateRideFinancials } from '../ride-financial/ride-financial.service.js';
 import { publishNotification } from '../notification/notification-events.js';
 
 
@@ -383,88 +384,20 @@ async function _loadPayableRideForUser(rideId, userId) {
 // driver to charge one against.
 export async function resolveRideCommission(ride, { skipDbUpdate = false } = {}) {
   if (!ride.driverId) return null;
-  const [driver] = await db.select({ subscriptionStatus: drivers.subscriptionStatus })
-    .from(drivers).where(eq(drivers.id, ride.driverId)).limit(1);
-
-  const isSubscriber = driver?.subscriptionStatus === 'active';
-
-  // Check if driver has an active plan with custom entitlements
-  let customRate = null;
-  let waiveBookingFee = false;
-  let customBookingFeeMinor = null;
-
-  if (isSubscriber) {
-    const [activeSub] = await db.select({
-      entitlements: subscriptionPlans.entitlements,
-    })
-      .from(subscriptions)
-      .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
-      .where(
-        and(
-          eq(subscriptions.driverId, ride.driverId),
-          eq(subscriptions.status, 'active')
-        )
-      )
-      .orderBy(desc(subscriptions.createdAt))
-      .limit(1);
-
-    if (activeSub?.entitlements?.commissionRate !== undefined && activeSub?.entitlements?.commissionRate !== null) {
-      customRate = Number(activeSub.entitlements.commissionRate);
-    }
-    if (activeSub?.entitlements?.waiveBookingFee === true) {
-      waiveBookingFee = true;
-    }
-    if (activeSub?.entitlements?.customBookingFeeMinor !== undefined && activeSub?.entitlements?.customBookingFeeMinor !== null) {
-      customBookingFeeMinor = Number(activeSub.entitlements.customBookingFeeMinor);
-    }
-  }
-
-  let rule = null;
-  try {
-    const resolvedCityId = ride.fareSnapshot?.cityId || ride.cityId || null;
-    rule = await resolveCommissionRule({
-      vehicleTypeId: ride.vehicleTypeId,
-      countryId: ride.countryId,
-      cityId: resolvedCityId,
-    });
-  } catch (err) {
-    console.warn('[RidePayment] No commission rule found, using default platform cut:', err.message);
-  }
-
-  // Industrial Promo Subsidy Architecture:
-  // Driver earnings are calculated based on the gross metered trip fare before promo deduction.
-  // The platform absorbs promo discounts as a marketing subsidy so drivers are never penalized.
-  const promoDiscountMinor = ride.fareSnapshot?.breakdown?.promo?.discountAmountMinor
-    || ride.fareSnapshot?.discountAmountMinor
-    || ride.discountAmountMinor
-    || 0;
-
-  const grossFareMinor = ride.grossFareMinor
-    || ride.fareSnapshot?.grossFareMinor
-    || ride.fareSnapshot?.originalEstimatedFareMinor
-    || Math.max(ride.finalFareMinor || 0, (ride.finalFareMinor || 0) + promoDiscountMinor);
-
-  const computed = computeCommission({
-    finalFareMinor: grossFareMinor,
-    rule,
-    isSubscriber,
-    customRate,
-    customBookingFeeMinor,
-    waiveBookingFee,
-  });
-
-  const breakdown = {
-    ...computed,
-    grossFareMinor,
-    promoDiscountMinor,
-    platformSubsidyMinor: promoDiscountMinor,
-    netPlatformRevenueMinor: computed.commissionMinor - promoDiscountMinor,
-  };
+  const financials = await getOrCalculateRideFinancials(ride.id);
+  const breakdown = financials.breakdown || financials;
 
   if (!skipDbUpdate) {
     try {
       await db.update(rides).set({
-        fareSnapshot: { ...(ride.fareSnapshot || {}), grossFareMinor, commission: { ruleId: rule?.id || null, ...breakdown } },
+        fareSnapshot: {
+          ...(ride.fareSnapshot || {}),
+          grossFareMinor: financials.grossFareMinor,
+          commission: {
+            ruleId: financials.commissionRuleId || null,
+            ...breakdown,
+          },
+        },
       }).where(eq(rides.id, ride.id));
     } catch (err) {
       console.error('[RidePayment] Failed to update ride fareSnapshot commission:', err.message);

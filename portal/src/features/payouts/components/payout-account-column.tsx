@@ -10,19 +10,7 @@ const STATUS_STYLES: Record<string, string> = {
   rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
 };
 
-function BoolBadge({ value, label }: { value: boolean; label: string }) {
-  return (
-    <span
-      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-        value
-          ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-          : "bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-400"
-      }`}
-    >
-      {label}
-    </span>
-  );
-}
+
 
 interface Actions {
   onApprove: (account: PayoutAccount) => void;
@@ -53,8 +41,24 @@ export function getPayoutAccountColumns({ onApprove, onReject, onPayNow }: Actio
       cell: ({ row }) =>
         row.original.gateway === "stripe" ? (
           <div className="flex gap-1.5">
-            <BoolBadge value={row.original.stripeDetailsSubmitted} label="Details" />
-            <BoolBadge value={row.original.stripePayoutsEnabled} label="Payouts" />
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                row.original.stripeDetailsSubmitted
+                  ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                  : "bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-400"
+              }`}
+            >
+              Details
+            </span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                row.original.stripePayoutsEnabled
+                  ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                  : "bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-400"
+              }`}
+            >
+              Payouts
+            </span>
           </div>
         ) : (
           <span className="text-muted-foreground text-xs">—</span>

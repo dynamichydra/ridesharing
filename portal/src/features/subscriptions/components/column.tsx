@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { CheckCircle, Pencil, CreditCard, Ban, XCircle, Info, Tag } from "lucide-react";
+import { CheckCircle, Pencil, CreditCard, Ban, XCircle, Info, Tag, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SubscriptionPlan, LookupOption } from "../types";
 import { formatDate } from "@/lib/utils";
@@ -7,6 +7,7 @@ import { formatDate } from "@/lib/utils";
 interface Props {
   onEdit: (plan: SubscriptionPlan) => void;
   onViewDetails: (plan: SubscriptionPlan) => void;
+  onViewVersions?: (plan: SubscriptionPlan) => void;
   onToggleActive: (plan: SubscriptionPlan) => void;
   onManageGroupPricing?: (plan: SubscriptionPlan) => void;
   countries: LookupOption[];
@@ -23,6 +24,7 @@ function formatPrice(priceMinor: number, currencyCode: string): string {
 export function getSubscriptionPlanColumns({
   onEdit,
   onViewDetails,
+  onViewVersions,
   onToggleActive,
   onManageGroupPricing,
   countries,
@@ -36,7 +38,34 @@ export function getSubscriptionPlanColumns({
           <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center text-primary font-bold">
             <CreditCard className="h-4 w-4" />
           </div>
-          <div className="font-semibold text-foreground">{row.original.name}</div>
+          <div className="flex flex-col">
+            <div className="font-semibold text-foreground flex items-center gap-1.5">
+              <span>{row.original.name}</span>
+              {row.original.version && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewVersions?.(row.original);
+                  }}
+                  className="px-1.5 py-0.2 text-[10px] font-bold rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer"
+                  title="Click to view all versions"
+                >
+                  v{row.original.version}
+                  {row.original.versionCount && row.original.versionCount > 1 && (
+                    <span className="ml-1 text-[9px] font-normal opacity-80">
+                      ({row.original.versionCount} vers)
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
+            {row.original.entitlements?.commissionRate !== undefined && (
+              <span className="text-[11px] text-green-600 dark:text-green-400 font-medium">
+                {Number(row.original.entitlements.commissionRate) * 100}% Comm. Rate
+              </span>
+            )}
+          </div>
         </div>
       ),
     },
@@ -95,9 +124,9 @@ export function getSubscriptionPlanColumns({
     },
     {
       id: "actions",
-      size: 150,
-      minSize: 150,
-      maxSize: 150,
+      size: 170,
+      minSize: 170,
+      maxSize: 170,
 
       header: () => (
         <div className="w-full text-center">
@@ -106,7 +135,7 @@ export function getSubscriptionPlanColumns({
       ),
 
       cell: ({ row }) => (
-        <div className="w-full flex items-center justify-center gap-2">
+        <div className="w-full flex items-center justify-center gap-1.5">
           <Button
             variant="outline"
             size="icon"
@@ -119,6 +148,21 @@ export function getSubscriptionPlanColumns({
           >
             <Info className="h-3.5 w-3.5" />
           </Button>
+
+          {onViewVersions && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewVersions(row.original);
+              }}
+              className="h-8 w-8 text-primary hover:text-primary cursor-pointer"
+              title="View Version History"
+            >
+              <History className="h-3.5 w-3.5" />
+            </Button>
+          )}
 
           {onManageGroupPricing && (
             <Button
@@ -143,7 +187,7 @@ export function getSubscriptionPlanColumns({
               onEdit(row.original);
             }}
             className="h-8 w-8 cursor-pointer"
-            title="Edit"
+            title="Edit / Version Plan"
           >
             <Pencil className="h-3.5 w-3.5" />
           </Button>
@@ -155,7 +199,7 @@ export function getSubscriptionPlanColumns({
               e.stopPropagation();
               onToggleActive(row.original);
             }}
-            className="h-8 w-8"
+            className="h-8 w-8 cursor-pointer"
             title={row.original.isActive ? "Disable" : "Enable"}
           >
             <Ban className="h-3.5 w-3.5" />

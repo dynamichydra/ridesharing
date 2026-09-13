@@ -127,20 +127,27 @@ export type UpdateTaxRulePayload = Partial<TaxRulePayload> & { isActive?: boolea
 // ── Commission Rules (same backend module family, /commission-rules) ─────
 // Per-ride platform cut — a booking fee off the top plus a %, with a separate rate for
 // drivers with an active subscription vs without one (subscription is a discount on the
-// commission, not a full waiver — see backend commission.service.js).
+export type CommissionBase = "gross_fare" | "fare_after_booking_fee" | "driver_fare" | "net_fare";
 
 export interface CommissionRule {
   id: string;
   name: string;
+  version?: number;
   countryId: string | null; // null = global default
   cityId?: string | null; // null = all cities in country / global
   vehicleTypeId: string | null; // null = all vehicle types
+  serviceTypeId?: string | null;
+  planTierId?: string | null;
   bookingFeeMinor: number;
+  platformFeeMinor?: number;
   subscriberRate: string; // decimal string, e.g. "0.1500" = 15%
   nonSubscriberRate: string;
+  commissionBase?: CommissionBase;
   minCommissionMinor?: number | null; // floor limit
   maxCommissionMinor?: number | null; // ceiling cap
   priority: number;
+  effectiveFrom?: string;
+  effectiveTo?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -163,13 +170,20 @@ export interface CommissionRulePayload {
   countryId?: string;
   cityId?: string;
   vehicleTypeId?: string;
+  serviceTypeId?: string;
+  planTierId?: string;
   bookingFeeMinor: number;
+  platformFeeMinor?: number;
   subscriberRate: number;
   nonSubscriberRate: number;
+  commissionBase?: CommissionBase;
   minCommissionMinor?: number;
   maxCommissionMinor?: number | null;
   priority?: number;
+  effectiveFrom?: string;
+  effectiveTo?: string | null;
 }
 
 export type UpdateCommissionRulePayload = Partial<CommissionRulePayload> & { isActive?: boolean };
+
 

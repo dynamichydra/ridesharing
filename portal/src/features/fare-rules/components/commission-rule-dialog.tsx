@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useCreateCommissionRule, useUpdateCommissionRule } from "../hooks";
-import type { CommissionRule, LookupOption } from "../types";
+import type { CommissionRule, CommissionBase, LookupOption } from "../types";
 
 interface Props {
   open: boolean;
@@ -31,12 +31,16 @@ export function CommissionRuleFormDialog({ open, onOpenChange, mode, rule, count
   const [countryId, setCountryId] = useState(""); // "" = global (every country)
   const [cityId, setCityId] = useState("");       // "" = all cities in country
   const [vehicleTypeId, setVehicleTypeId] = useState(""); // "" = every vehicle type
+  const [commissionBase, setCommissionBase] = useState<CommissionBase>("fare_after_booking_fee");
   const [bookingFee, setBookingFee] = useState(""); // major units, e.g. "2.50"
+  const [platformFee, setPlatformFee] = useState(""); // major units, e.g. "1.00"
   const [minCommission, setMinCommission] = useState(""); // major units, e.g. "15.00"
   const [maxCommission, setMaxCommission] = useState(""); // major units, e.g. "250.00"
   const [subscriberPct, setSubscriberPct] = useState("");
   const [nonSubscriberPct, setNonSubscriberPct] = useState("");
   const [priority, setPriority] = useState("1");
+  const [effectiveFrom, setEffectiveFrom] = useState("");
+  const [effectiveTo, setEffectiveTo] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -45,23 +49,31 @@ export function CommissionRuleFormDialog({ open, onOpenChange, mode, rule, count
       setCountryId(rule.countryId || "");
       setCityId(rule.cityId || "");
       setVehicleTypeId(rule.vehicleTypeId || "");
+      setCommissionBase(rule.commissionBase || "fare_after_booking_fee");
       setBookingFee((rule.bookingFeeMinor / 100).toString());
+      setPlatformFee(rule.platformFeeMinor ? (rule.platformFeeMinor / 100).toString() : "0");
       setMinCommission(rule.minCommissionMinor ? (rule.minCommissionMinor / 100).toString() : "");
       setMaxCommission(rule.maxCommissionMinor ? (rule.maxCommissionMinor / 100).toString() : "");
       setSubscriberPct((Number(rule.subscriberRate) * 100).toString());
       setNonSubscriberPct((Number(rule.nonSubscriberRate) * 100).toString());
       setPriority(String(rule.priority));
+      setEffectiveFrom(rule.effectiveFrom ? rule.effectiveFrom.slice(0, 10) : "");
+      setEffectiveTo(rule.effectiveTo ? rule.effectiveTo.slice(0, 10) : "");
     } else {
       setName("");
       setCountryId("");
       setCityId("");
       setVehicleTypeId("");
+      setCommissionBase("fare_after_booking_fee");
       setBookingFee("0");
+      setPlatformFee("0");
       setMinCommission("");
       setMaxCommission("");
       setSubscriberPct("");
       setNonSubscriberPct("");
       setPriority("1");
+      setEffectiveFrom("");
+      setEffectiveTo("");
     }
   }, [open, mode, rule]);
 
@@ -81,12 +93,16 @@ export function CommissionRuleFormDialog({ open, onOpenChange, mode, rule, count
       countryId: countryId || undefined,
       cityId: cityId || undefined,
       vehicleTypeId: vehicleTypeId || undefined,
+      commissionBase,
       bookingFeeMinor: Math.round(Number(bookingFee || 0) * 100),
+      platformFeeMinor: Math.round(Number(platformFee || 0) * 100),
       subscriberRate,
       nonSubscriberRate,
       minCommissionMinor: minCommission ? Math.round(Number(minCommission) * 100) : 0,
       maxCommissionMinor: maxCommission ? Math.round(Number(maxCommission) * 100) : null,
       priority: Number(priority) || 1,
+      effectiveFrom: effectiveFrom ? new Date(effectiveFrom).toISOString() : undefined,
+      effectiveTo: effectiveTo ? new Date(effectiveTo).toISOString() : null,
     };
 
     if (mode === "create") {
@@ -98,15 +114,23 @@ export function CommissionRuleFormDialog({ open, onOpenChange, mode, rule, count
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[540px]">
+      <DialogContent className="sm:max-w-[580px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{mode === "create" ? "Add Commission Rule" : "Edit Commission Rule"}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            {mode === "create" ? "Add Commission Rule" : "Edit Commission Rule"}
+            {mode === "edit" && rule?.version && (
+              <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">
+                Version {rule.version}
+              </span>
+            )}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4 py-2">
           <div className="space-y-2">
             <Label htmlFor="cr-name">Name</Label>
-            <Input id="cr-name" placeholder="e.g. Mumbai Sedan Rule" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input id="cr-name" placeholder="e.g. Mumbai Sedan Rule" value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
+
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
               <Label htmlFor="cr-country">Country</Label>
@@ -115,7 +139,7 @@ export function CommissionRuleFormDialog({ open, onOpenChange, mode, rule, count
                 value={countryId}
                 onChange={(e) => {
                   setCountryId(e.target.value);
-                  setCityId(""); // Reset city when country changes
+                  setCityId("");
                 }}
               >
                 <NativeSelectOption value="">All (Global)</NativeSelectOption>
@@ -153,7 +177,28 @@ export function CommissionRuleFormDialog({ open, onOpenChange, mode, rule, count
               </NativeSelect>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="cr-commission-base">Commission Base Calculation</Label>
+              <NativeSelect
+                id="cr-commission-base"
+                value={commissionBase}
+                onChange={(e) => setCommissionBase(e.target.value as CommissionBase)}
+              >
+                <NativeSelectOption value="fare_after_booking_fee">Fare After Booking Fee (Standard)</NativeSelectOption>
+                <NativeSelectOption value="gross_fare">Gross Passenger Fare</NativeSelectOption>
+                <NativeSelectOption value="driver_fare">Driver Net Metered Fare</NativeSelectOption>
+                <NativeSelectOption value="net_fare">Net Fare (After Promo & Fees)</NativeSelectOption>
+              </NativeSelect>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cr-priority">Priority (Tie-Breaker)</Label>
+              <Input id="cr-priority" type="number" step="1" value={priority} onChange={(e) => setPriority(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-3">
             <div className="space-y-2">
               <Label htmlFor="cr-booking-fee">Booking Fee</Label>
               <Input
@@ -161,9 +206,21 @@ export function CommissionRuleFormDialog({ open, onOpenChange, mode, rule, count
                 type="number"
                 step="0.01"
                 min="0"
-                placeholder="e.g. 2.50"
+                placeholder="e.g. 20.00"
                 value={bookingFee}
                 onChange={(e) => setBookingFee(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cr-platform-fee">Platform Fee</Label>
+              <Input
+                id="cr-platform-fee"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="e.g. 0.00"
+                value={platformFee}
+                onChange={(e) => setPlatformFee(e.target.value)}
               />
             </div>
             <div className="space-y-2">
@@ -191,9 +248,10 @@ export function CommissionRuleFormDialog({ open, onOpenChange, mode, rule, count
               />
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="cr-subscriber-rate">Subscriber Rate (%)</Label>
+              <Label htmlFor="cr-subscriber-rate">Subscriber Commission Rate (%)</Label>
               <Input
                 id="cr-subscriber-rate"
                 type="number"
@@ -203,6 +261,7 @@ export function CommissionRuleFormDialog({ open, onOpenChange, mode, rule, count
                 placeholder="e.g. 15"
                 value={subscriberPct}
                 onChange={(e) => setSubscriberPct(e.target.value)}
+                required
               />
             </div>
             <div className="space-y-2">
@@ -216,19 +275,38 @@ export function CommissionRuleFormDialog({ open, onOpenChange, mode, rule, count
                 placeholder="e.g. 25"
                 value={nonSubscriberPct}
                 onChange={(e) => setNonSubscriberPct(e.target.value)}
+                required
               />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="cr-priority">Priority</Label>
-            <Input id="cr-priority" type="number" step="1" value={priority} onChange={(e) => setPriority(e.target.value)} />
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="cr-effective-from">Effective From (Optional)</Label>
+              <Input
+                id="cr-effective-from"
+                type="date"
+                value={effectiveFrom}
+                onChange={(e) => setEffectiveFrom(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cr-effective-to">Effective To (Optional)</Label>
+              <Input
+                id="cr-effective-to"
+                type="date"
+                value={effectiveTo}
+                onChange={(e) => setEffectiveTo(e.target.value)}
+              />
+            </div>
           </div>
+
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="cursor-pointer">
               Cancel
             </Button>
             <Button type="submit" disabled={isPending} className="cursor-pointer">
-              {mode === "create" ? "Create" : "Save"}
+              {mode === "create" ? "Create Rule" : "Save Rule Version"}
             </Button>
           </DialogFooter>
         </form>

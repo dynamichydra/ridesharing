@@ -88,7 +88,7 @@ export async function getDriverPerformanceMetrics(driverId, { period = 'all' } =
 
   // 3. Earnings Summary
   const earningsQuery = await db.select({
-    netEarningsMinor: sql`COALESCE(SUM(${driverEarnings.netEarningMinor}), 0)::bigint`,
+    netEarningsMinor: sql`COALESCE(SUM(${driverEarnings.netFareMinor}), 0)::bigint`,
     tipsMinor: sql`COALESCE(SUM(${driverEarnings.tipMinor}), 0)::bigint`,
     totalTrips: sql`COUNT(${driverEarnings.id})::int`,
   }).from(driverEarnings)

@@ -1,90 +1,49 @@
 import { eq, and, isNull, desc, count } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { commissionRules, vehicleTypes, countries, cities } from '../../../drizzle/schema/index.js';
+import { commissionRules, commissionRuleVersions, vehicleTypes, countries, cities } from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
+import { resolveDeterministicCommissionRule } from './commission-resolver.js';
+import { calculateRideFinancialBreakdown } from '../ride-financial/ride-financial.service.js';
+import { logCommercialAudit } from '../admin/commercial-audit.service.js';
 
 /**
- * Commission-rule resolution — 5-tier waterfall specificity:
- *   1. City + Vehicle Type (Exact local)
- *   2. City Default (cityId set, vehicleTypeId IS NULL)
- *   3. Country + Vehicle Type (cityId IS NULL)
- *   4. Country Default (cityId IS NULL, vehicleTypeId IS NULL)
- *   5. Global Default (all IS NULL)
- * Highest `priority` wins within a tier if more than one row matches.
+ * Commission-rule resolution — uses the industrial 8-tier deterministic waterfall.
  */
 export async function resolveCommissionRule(paramsOrVehicleTypeId, countryIdParam, cityIdParam) {
   let vehicleTypeId = null;
   let countryId = null;
   let cityId = null;
+  let serviceTypeId = null;
+  let planTierId = null;
+  let evaluatedAt = new Date();
 
   if (paramsOrVehicleTypeId && typeof paramsOrVehicleTypeId === 'object') {
     vehicleTypeId = paramsOrVehicleTypeId.vehicleTypeId || null;
     countryId = paramsOrVehicleTypeId.countryId || null;
     cityId = paramsOrVehicleTypeId.cityId || null;
+    serviceTypeId = paramsOrVehicleTypeId.serviceTypeId || null;
+    planTierId = paramsOrVehicleTypeId.planTierId || null;
+    evaluatedAt = paramsOrVehicleTypeId.evaluatedAt || new Date();
   } else {
     vehicleTypeId = paramsOrVehicleTypeId || null;
     countryId = countryIdParam || null;
     cityId = cityIdParam || null;
   }
 
-  // 1. Tier 1: City + Vehicle Type (Exact local)
-  if (cityId && vehicleTypeId) {
-    const [exactCityVehicle] = await db.select().from(commissionRules).where(and(
-      eq(commissionRules.cityId, cityId),
-      eq(commissionRules.vehicleTypeId, vehicleTypeId),
-      eq(commissionRules.isActive, true),
-    )).orderBy(desc(commissionRules.priority), desc(commissionRules.createdAt)).limit(1);
-    if (exactCityVehicle) return { ...exactCityVehicle, resolutionTier: 'city_vehicle' };
-  }
-
-  // 2. Tier 2: City Default (cityId set, vehicleTypeId IS NULL)
-  if (cityId) {
-    const [cityDefault] = await db.select().from(commissionRules).where(and(
-      eq(commissionRules.cityId, cityId),
-      isNull(commissionRules.vehicleTypeId),
-      eq(commissionRules.isActive, true),
-    )).orderBy(desc(commissionRules.priority), desc(commissionRules.createdAt)).limit(1);
-    if (cityDefault) return { ...cityDefault, resolutionTier: 'city_default' };
-  }
-
-  // 3. Tier 3: Country + Vehicle Type (cityId IS NULL)
-  if (countryId && vehicleTypeId) {
-    const [countryVehicle] = await db.select().from(commissionRules).where(and(
-      isNull(commissionRules.cityId),
-      eq(commissionRules.countryId, countryId),
-      eq(commissionRules.vehicleTypeId, vehicleTypeId),
-      eq(commissionRules.isActive, true),
-    )).orderBy(desc(commissionRules.priority), desc(commissionRules.createdAt)).limit(1);
-    if (countryVehicle) return { ...countryVehicle, resolutionTier: 'country_vehicle' };
-  }
-
-  // 4. Tier 4: Country Default (both cityId & vehicleTypeId are null)
-  if (countryId) {
-    const [countryDefault] = await db.select().from(commissionRules).where(and(
-      isNull(commissionRules.cityId),
-      isNull(commissionRules.vehicleTypeId),
-      eq(commissionRules.countryId, countryId),
-      eq(commissionRules.isActive, true),
-    )).orderBy(desc(commissionRules.priority), desc(commissionRules.createdAt)).limit(1);
-    if (countryDefault) return { ...countryDefault, resolutionTier: 'country_default' };
-  }
-
-  // 5. Tier 5: Global Default (cityId, countryId, and vehicleTypeId all null)
-  const [global] = await db.select().from(commissionRules).where(and(
-    isNull(commissionRules.cityId),
-    isNull(commissionRules.countryId),
-    isNull(commissionRules.vehicleTypeId),
-    eq(commissionRules.isActive, true),
-  )).orderBy(desc(commissionRules.priority), desc(commissionRules.createdAt)).limit(1);
-  if (global) return { ...global, resolutionTier: 'global' };
-
-  throw { statusCode: 422, message: 'No commission rule is configured (not even a global default) — an admin must create one' };
+  return resolveDeterministicCommissionRule({
+    vehicleTypeId,
+    countryId,
+    cityId,
+    serviceTypeId,
+    planTierId,
+    evaluatedAt,
+  });
 }
 
-// Dynamic Booking fee & Rate calculation:
-// Priority: 1. Plan Entitlements (customRate / waiveBookingFee) -> 2. Matched Commission Rule (subscriberRate vs nonSubscriberRate) -> 3. Fallback defaults.
-// Also supports minCommissionMinor (floor) and maxCommissionMinor (ceiling cap).
+/**
+ * Pure calculation function for commission split.
+ */
 export function computeCommission({
   finalFareMinor,
   rule,
@@ -92,68 +51,46 @@ export function computeCommission({
   customRate = null,
   customBookingFeeMinor = null,
   waiveBookingFee = false,
+  tipMinor = 0,
+  tollMinor = 0,
+  taxMinor = 0,
 }) {
-  const fare = Math.max(0, finalFareMinor || 0);
+  const driverEntitlements = {
+    isSubscriber: !!isSubscriber,
+    commissionDiscountRate: customRate,
+    customBookingFeeMinor,
+    waiveBookingFee,
+  };
 
-  // Dynamic Booking Fee Resolution
-  let bookingFeeMinor = 0;
-  if (!waiveBookingFee) {
-    if (customBookingFeeMinor !== null && !isNaN(customBookingFeeMinor)) {
-      bookingFeeMinor = Math.min(customBookingFeeMinor, fare);
-    } else if (rule?.bookingFeeMinor) {
-      bookingFeeMinor = Math.min(rule.bookingFeeMinor, fare);
-    }
-  }
-
-  // Dynamic Commission Rate Resolution:
-  let rate = 0;
-  if (customRate !== null && !isNaN(customRate)) {
-    rate = Number(customRate);
-  } else if (rule) {
-    const rawRate = isSubscriber
-      ? (rule.subscriberRate !== undefined ? rule.subscriberRate : rule.rate)
-      : (rule.nonSubscriberRate !== undefined ? rule.nonSubscriberRate : rule.rate);
-    rate = parseFloat(rawRate) || 0;
-  } else {
-    rate = isSubscriber ? 0.05 : 0.20;
-  }
-
-  // Base variable commission on fare remainder after booking fee
-  const remainder = Math.max(0, fare - bookingFeeMinor);
-  let commissionMinor = bookingFeeMinor + Math.round(remainder * rate);
-
-  // Apply floor limit (minimum platform commission cut)
-  const minFloor = Number(rule?.minCommissionMinor) || 0;
-  if (minFloor > 0 && commissionMinor < minFloor) {
-    commissionMinor = minFloor;
-  }
-
-  // Apply ceiling limit (maximum platform commission cap)
-  const maxCap = rule?.maxCommissionMinor != null && rule.maxCommissionMinor !== '' ? Number(rule.maxCommissionMinor) : null;
-  if (maxCap != null && maxCap > 0 && commissionMinor > maxCap) {
-    commissionMinor = maxCap;
-  }
-
-  // Platform cut cannot exceed total fare
-  commissionMinor = Math.min(commissionMinor, fare);
-  const driverEarningsMinor = Math.max(0, fare - commissionMinor);
+  const calculated = calculateRideFinancialBreakdown({
+    grossFareMinor: finalFareMinor,
+    promoDiscountMinor: 0,
+    tipMinor,
+    tollMinor,
+    taxMinor,
+    rule,
+    driverEntitlements,
+  });
 
   return {
-    bookingFeeMinor,
-    rate,
-    commissionMinor,
-    driverEarningsMinor,
-    minCommissionMinor: minFloor,
-    maxCommissionMinor: maxCap,
-    resolutionTier: rule?.resolutionTier || (customRate !== null ? 'plan_entitlement' : 'default'),
-    isSubscriber: !!isSubscriber,
+    bookingFeeMinor: calculated.bookingFeeMinor,
+    platformFeeMinor: calculated.platformFeeMinor,
+    rate: Number(calculated.commissionRate),
+    commissionMinor: calculated.commissionMinor,
+    driverEarningsMinor: calculated.driverEarningMinor,
+    minCommissionMinor: calculated.minCommissionMinor,
+    maxCommissionMinor: calculated.maxCommissionMinor,
+    resolutionTier: calculated.resolutionTier,
+    isSubscriber: calculated.isSubscriber,
     customPlanRate: customRate !== null,
-    ruleId: rule?.id || null,
-    ruleName: rule?.name || null,
+    ruleId: calculated.commissionRuleId,
+    ruleName: calculated.ruleName,
+    commissionBase: calculated.commissionBase,
+    commissionBaseMinor: calculated.commissionBaseMinor,
   };
 }
 
-// ── Admin CRUD ────────────────────────────────────────────────────────────────
+// ── Admin CRUD & Versioning ──────────────────────────────────────────────────
 
 export async function listRules(page, limit, offset, filters = {}) {
   const conditions = [];
@@ -187,26 +124,159 @@ export async function getById(id) {
   return rule;
 }
 
-export async function create(data) {
-  const [rule] = await db.insert(commissionRules).values(data).returning();
+export async function create(data, adminId = null) {
+  const version = data.version || 1;
+  const [rule] = await db.insert(commissionRules).values({
+    ...data,
+    version,
+    effectiveFrom: data.effectiveFrom ? new Date(data.effectiveFrom) : new Date(),
+    effectiveTo: data.effectiveTo ? new Date(data.effectiveTo) : null,
+  }).returning();
+
+  // Create corresponding version row
+  const [ruleVersion] = await db.insert(commissionRuleVersions).values({
+    ruleId: rule.id,
+    version: rule.version,
+    name: rule.name,
+    countryId: rule.countryId,
+    cityId: rule.cityId,
+    vehicleTypeId: rule.vehicleTypeId,
+    serviceTypeId: rule.serviceTypeId,
+    planTierId: rule.planTierId,
+    bookingFeeMinor: rule.bookingFeeMinor,
+    platformFeeMinor: rule.platformFeeMinor || 0,
+    subscriberRate: rule.subscriberRate,
+    nonSubscriberRate: rule.nonSubscriberRate,
+    commissionBase: rule.commissionBase,
+    minCommissionMinor: rule.minCommissionMinor,
+    maxCommissionMinor: rule.maxCommissionMinor,
+    priority: rule.priority,
+    effectiveFrom: rule.effectiveFrom,
+    effectiveTo: rule.effectiveTo,
+    isActive: rule.isActive,
+    changeSummary: 'Initial version created',
+    createdByAdminId: adminId,
+  }).returning();
+
+  await db.update(commissionRules)
+    .set({ currentVersionId: ruleVersion.id })
+    .where(eq(commissionRules.id, rule.id));
+
+  await logCommercialAudit({
+    actorId: adminId,
+    action: 'create',
+    entityType: 'commission_rule',
+    entityId: rule.id,
+    newValue: rule,
+    reason: 'Initial commission rule creation',
+  });
+
   return rule;
 }
 
-export async function update(id, data) {
+export async function createRuleVersion(ruleId, newVersionData, adminId = null, reason = 'Rule version updated') {
+  const [currentRule] = await db.select().from(commissionRules).where(eq(commissionRules.id, ruleId)).limit(1);
+  if (!currentRule) throw { statusCode: 404, message: 'Commission rule not found' };
+
+  const newVersionNumber = (currentRule.version || 1) + 1;
+  const now = new Date();
+
+  // Close previous active version effectiveTo
+  await db.update(commissionRuleVersions)
+    .set({ effectiveTo: now, updatedAt: now })
+    .where(and(eq(commissionRuleVersions.ruleId, ruleId), isNull(commissionRuleVersions.effectiveTo)));
+
+  // Insert new version
+  const [createdVersion] = await db.insert(commissionRuleVersions).values({
+    ruleId,
+    version: newVersionNumber,
+    name: newVersionData.name || currentRule.name,
+    countryId: newVersionData.countryId !== undefined ? newVersionData.countryId : currentRule.countryId,
+    cityId: newVersionData.cityId !== undefined ? newVersionData.cityId : currentRule.cityId,
+    vehicleTypeId: newVersionData.vehicleTypeId !== undefined ? newVersionData.vehicleTypeId : currentRule.vehicleTypeId,
+    serviceTypeId: newVersionData.serviceTypeId !== undefined ? newVersionData.serviceTypeId : currentRule.serviceTypeId,
+    planTierId: newVersionData.planTierId !== undefined ? newVersionData.planTierId : currentRule.planTierId,
+    bookingFeeMinor: newVersionData.bookingFeeMinor !== undefined ? newVersionData.bookingFeeMinor : currentRule.bookingFeeMinor,
+    platformFeeMinor: newVersionData.platformFeeMinor !== undefined ? newVersionData.platformFeeMinor : (currentRule.platformFeeMinor || 0),
+    subscriberRate: newVersionData.subscriberRate !== undefined ? newVersionData.subscriberRate : currentRule.subscriberRate,
+    nonSubscriberRate: newVersionData.nonSubscriberRate !== undefined ? newVersionData.nonSubscriberRate : currentRule.nonSubscriberRate,
+    commissionBase: newVersionData.commissionBase !== undefined ? newVersionData.commissionBase : currentRule.commissionBase,
+    minCommissionMinor: newVersionData.minCommissionMinor !== undefined ? newVersionData.minCommissionMinor : currentRule.minCommissionMinor,
+    maxCommissionMinor: newVersionData.maxCommissionMinor !== undefined ? newVersionData.maxCommissionMinor : currentRule.maxCommissionMinor,
+    priority: newVersionData.priority !== undefined ? newVersionData.priority : currentRule.priority,
+    effectiveFrom: newVersionData.effectiveFrom ? new Date(newVersionData.effectiveFrom) : now,
+    effectiveTo: newVersionData.effectiveTo ? new Date(newVersionData.effectiveTo) : null,
+    isActive: newVersionData.isActive !== undefined ? newVersionData.isActive : true,
+    changeSummary: reason,
+    createdByAdminId: adminId,
+  }).returning();
+
+  // Update current master rule pointer
+  const [updatedRule] = await db.update(commissionRules).set({
+    ...newVersionData,
+    version: newVersionNumber,
+    currentVersionId: createdVersion.id,
+    updatedAt: now,
+  }).where(eq(commissionRules.id, ruleId)).returning();
+
+  await logCommercialAudit({
+    actorId: adminId,
+    action: 'version_created',
+    entityType: 'commission_rule',
+    entityId: ruleId,
+    oldValue: currentRule,
+    newValue: updatedRule,
+    reason,
+  });
+
+  return updatedRule;
+}
+
+export async function update(id, data, adminId = null) {
+  const [currentRule] = await db.select().from(commissionRules).where(eq(commissionRules.id, id)).limit(1);
+  if (!currentRule) throw { statusCode: 404, message: 'Commission rule not found' };
+
+  // If financial rates or scoping changed, create a new immutable version
+  const hasFinancialChanges = (
+    (data.subscriberRate !== undefined && data.subscriberRate !== currentRule.subscriberRate) ||
+    (data.nonSubscriberRate !== undefined && data.nonSubscriberRate !== currentRule.nonSubscriberRate) ||
+    (data.bookingFeeMinor !== undefined && data.bookingFeeMinor !== currentRule.bookingFeeMinor) ||
+    (data.commissionBase !== undefined && data.commissionBase !== currentRule.commissionBase)
+  );
+
+  if (hasFinancialChanges) {
+    return createRuleVersion(id, data, adminId, 'Financial parameter update');
+  }
+
   data.updatedAt = new Date();
   const [rule] = await db.update(commissionRules).set(data).where(eq(commissionRules.id, id)).returning();
-  if (!rule) throw { statusCode: 404, message: 'Commission rule not found' };
+
+  await logCommercialAudit({
+    actorId: adminId,
+    action: 'update',
+    entityType: 'commission_rule',
+    entityId: id,
+    oldValue: currentRule,
+    newValue: rule,
+  });
+
   return rule;
 }
 
-// No hard-delete — commission rules are configuration, not master data, but rides settled
-// under an old rule still reference it (ride.fareSnapshot.commission.ruleId), so disabling
-// (like fare-rules.js's setActive) rather than deleting keeps that history resolvable.
 export async function setActive(id, isActive, adminId) {
   const [rule] = await db.update(commissionRules)
     .set({ isActive, updatedAt: new Date() })
     .where(eq(commissionRules.id, id)).returning();
   if (!rule) throw { statusCode: 404, message: 'Commission rule not found' };
+
+  await logCommercialAudit({
+    actorId: adminId,
+    action: isActive ? 'activate' : 'deactivate',
+    entityType: 'commission_rule',
+    entityId: id,
+    newValue: { isActive },
+  });
+
   await publishEvent(TOPICS.AUDIT_LOG, {
     actorId: adminId, actorType: 'admin',
     action: isActive ? 'COMMISSION_RULE_ENABLED' : 'COMMISSION_RULE_DISABLED',
@@ -214,4 +284,3 @@ export async function setActive(id, isActive, adminId) {
   });
   return rule;
 }
-

@@ -2,7 +2,6 @@ import { z } from "zod";
 
 export const subscriptionPlanTypeOptions = ["monthly", "quarterly", "yearly", "lifetime"] as const;
 
-
 export const subscriptionPlanSchema = z
   .object({
     name: z.string().min(1, { message: "Plan name is required" }),
@@ -23,11 +22,17 @@ export const subscriptionPlanSchema = z
     allowedGroupIds: z.array(z.string()).default([]),
     maxRidesPerDay: z.string(),
     priorityMatching: z.boolean(),
+    effectiveFrom: z.string().optional(),
+    effectiveTo: z.string().optional(),
     entitlements: z
       .object({
         commissionRatePercent: z.string().optional(),
         priorityScoreBonus: z.string().optional(),
+        waiveBookingFee: z.boolean().optional(),
+        customBookingFeeMinor: z.string().optional(),
         freeInstantPayouts: z.boolean().optional(),
+        scheduledRidesAllowed: z.boolean().optional(),
+        supportLevel: z.enum(["standard", "priority", "dedicated"]).optional(),
       })
       .optional(),
     sortOrder: z.number({ message: "Sort order is required" }),
@@ -67,11 +72,16 @@ export const emptySubscriptionPlanFormValues: SubscriptionPlanFormValues = {
   allowedGroupIds: [],
   maxRidesPerDay: "",
   priorityMatching: false,
+  effectiveFrom: "",
+  effectiveTo: "",
   entitlements: {
     commissionRatePercent: "",
     priorityScoreBonus: "",
+    waiveBookingFee: false,
+    customBookingFeeMinor: "",
     freeInstantPayouts: false,
+    scheduledRidesAllowed: true,
+    supportLevel: "standard",
   },
   sortOrder: 1,
 };
-

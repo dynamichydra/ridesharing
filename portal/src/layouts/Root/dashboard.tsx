@@ -8,7 +8,7 @@ import Header from "./header";
 import { useIdleTimer } from "react-idle-timer";
 import { LogOut } from "@/features/auth/api";
 
-export function dashboard() {
+export function Dashboard() {
   useIdleTimer({
     timeout: 1000 * 60 * 60, // 1 hour
     onIdle: LogOut,

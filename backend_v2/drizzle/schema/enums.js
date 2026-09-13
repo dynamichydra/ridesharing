@@ -98,8 +98,29 @@ export const webhookStatusEnum = pgEnum('webhook_status', [
   'received', 'processed', 'failed',
 ]);
 
-export const subscriptionStatusEnum = pgEnum('subscription_status', [
+export const legacySubscriptionStatusEnum = pgEnum('subscription_status', [
   'active', 'inactive', 'expired', 'cancelled',
+]);
+
+export const subscriptionStatusEnum = pgEnum('subscription_lifecycle_status', [
+  'pending', 'trialing', 'active', 'past_due', 'paused', 'cancelled', 'expired', 'payment_failed', 'inactive',
+]);
+
+export const commissionBaseEnum = pgEnum('commission_base', [
+  'gross_fare', 'fare_after_booking_fee', 'driver_fare', 'net_fare',
+]);
+
+export const subscriptionEventTypeEnum = pgEnum('subscription_event_type', [
+  'created', 'trial_started', 'activated', 'renewed', 'payment_succeeded', 'payment_failed',
+  'plan_changed', 'paused', 'resumed', 'cancelled', 'expired', 'grace_period_entered',
+]);
+
+export const commercialAuditActionEnum = pgEnum('commercial_audit_action', [
+  'create', 'update', 'version_created', 'activate', 'deactivate', 'archive',
+]);
+
+export const commercialEntityTypeEnum = pgEnum('commercial_entity_type', [
+  'subscription_plan', 'subscription_plan_version', 'commission_rule', 'commission_rule_version', 'entitlement',
 ]);
 
 export const rideOfferStatusEnum = pgEnum('ride_offer_status', [

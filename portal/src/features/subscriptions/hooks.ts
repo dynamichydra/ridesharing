@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { subscriptionPlansApi, lookupsApi, planGroupPricingApi } from "./api";
+import { subscriptionPlansApi, subscribersApi, lookupsApi, planGroupPricingApi } from "./api";
 import type {
   SubscriptionPlanListParams,
   CreateSubscriptionPlanPayload,
   UpdateSubscriptionPlanPayload,
   SetPlanGroupPricingPayload,
+  SubscriberListParams,
 } from "./types";
 
 const SUBSCRIPTION_PLANS_KEY = "subscription-plans";
@@ -155,6 +156,92 @@ export function useDeletePlanGroupPricing(planId: string) {
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.MESSAGE ?? err?.message ?? "Failed to remove group pricing");
+    },
+  });
+}
+
+export function useSubscriptionPlanDetail(planId: string) {
+  return useQuery({
+    queryKey: [SUBSCRIPTION_PLANS_KEY, "detail", planId],
+    queryFn: () => subscriptionPlansApi.getById(planId),
+    enabled: Boolean(planId),
+  });
+}
+
+export function usePlanVersions(planId: string) {
+  return useQuery({
+    queryKey: [SUBSCRIPTION_PLANS_KEY, "versions", planId],
+    queryFn: () => subscriptionPlansApi.listVersions(planId),
+    enabled: Boolean(planId),
+  });
+}
+
+export const SUBSCRIBERS_KEY = "admin-subscribers";
+
+export function useSubscribers(params: SubscriberListParams) {
+  return useQuery({
+    queryKey: [SUBSCRIBERS_KEY, params],
+    queryFn: () => subscribersApi.list(params),
+  });
+}
+
+export function useSubscriptionDetail(subscriptionId: string) {
+  return useQuery({
+    queryKey: [SUBSCRIBERS_KEY, "detail", subscriptionId],
+    queryFn: () => subscribersApi.getById(subscriptionId),
+    enabled: Boolean(subscriptionId),
+  });
+}
+
+export function useSubscriptionAnalytics() {
+  return useQuery({
+    queryKey: [SUBSCRIBERS_KEY, "analytics"],
+    queryFn: () => subscribersApi.getAnalytics(),
+    staleTime: 60 * 1000,
+  });
+}
+
+export function usePauseSubscription() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      subscribersApi.pause(id, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [SUBSCRIBERS_KEY] });
+      toast.success("Subscription paused");
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.MESSAGE ?? err?.message ?? "Failed to pause subscription");
+    },
+  });
+}
+
+export function useResumeSubscription() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      subscribersApi.resume(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [SUBSCRIBERS_KEY] });
+      toast.success("Subscription resumed successfully");
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.MESSAGE ?? err?.message ?? "Failed to resume subscription");
+    },
+  });
+}
+
+export function useCancelSubscription() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      subscribersApi.cancel(id, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [SUBSCRIBERS_KEY] });
+      toast.success("Subscription cancelled");
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.MESSAGE ?? err?.message ?? "Failed to cancel subscription");
     },
   });
 }

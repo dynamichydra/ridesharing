@@ -1,6 +1,18 @@
-import { eq, and, desc, count, lt, inArray, sql } from 'drizzle-orm';
+import { eq, and, desc, count, lt, inArray, sql, isNull } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { subscriptionPlans, subscriptions, drivers, payments, countries, planGroupPricing, driverGroups } from '../../../drizzle/schema/index.js';
+import {
+  subscriptionPlans,
+  subscriptionPlanVersions,
+  subscriptionPlanVehicleTypes,
+  subscriptionPlanEntitlements,
+  subscriptions,
+  subscriptionEvents,
+  drivers,
+  payments,
+  countries,
+  planGroupPricing,
+  driverGroups,
+} from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { addDays } from '../../utils/time.js';
 import { paginate } from '../../utils/response.js';
@@ -12,10 +24,12 @@ import { postTransaction, getOrCreateSystemAccount } from '../ledger/ledger.serv
 import { handleDisputeEvent } from '../dispute/dispute.service.js';
 import { publishNotification } from '../notification/notification-events.js';
 import { getDriverActiveGroupIds } from '../driver-group/driver-group.service.js';
+import { logCommercialAudit } from '../admin/commercial-audit.service.js';
+import { transitionSubscription, pauseSubscription, resumeSubscription, cancelSubscription } from './subscription-lifecycle.service.js';
+import { resolveDriverEntitlements } from './subscription-entitlement.service.js';
 
-// TODO: Replace with live production Razorpay and Stripe API keys in .env when going live:
-// - RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET
-// - STRIPE_SECRET_KEY & STRIPE_PUBLISHABLE_KEY & STRIPE_WEBHOOK_SECRET
+// Re-export lifecycle and entitlement operations for clean service boundary
+export { pauseSubscription, resumeSubscription, cancelSubscription, resolveDriverEntitlements };
 
 // ── Plans (admin & driver) ───────────────────────────────────────────────────
 
@@ -102,7 +116,6 @@ export async function listPlans(onlyActive = true, countryId, driverId = null) {
   const rawPlans = await db.select().from(subscriptionPlans).where(where).orderBy(subscriptionPlans.sortOrder);
 
   if (!driverId) {
-    // Return plans visible publicly (allowedGroupIds is null or empty)
     return rawPlans
       .filter((p) => !Array.isArray(p.allowedGroupIds) || p.allowedGroupIds.length === 0)
       .map((p) => ({ ...p, originalPriceMinor: p.priceMinor, specialOffer: null }));
@@ -122,21 +135,91 @@ export async function listPlansPaginated(page, limit, offset, countryId, isActiv
   if (isActive !== undefined) conditions.push(eq(subscriptionPlans.isActive, isActive));
   const where = conditions.length ? and(...conditions) : undefined;
   const [{ total }] = await db.select({ total: count() }).from(subscriptionPlans).where(where);
-  const rows = await db.select().from(subscriptionPlans).where(where).limit(limit).offset(offset);
+  const rows = await db.select().from(subscriptionPlans).where(where).orderBy(subscriptionPlans.sortOrder).limit(limit).offset(offset);
+
+  const planIds = rows.map((r) => r.id);
+  if (planIds.length > 0) {
+    const allVersions = await db
+      .select()
+      .from(subscriptionPlanVersions)
+      .where(inArray(subscriptionPlanVersions.planId, planIds))
+      .orderBy(desc(subscriptionPlanVersions.version));
+
+    const versionsByPlanId = {};
+    for (const v of allVersions) {
+      if (!versionsByPlanId[v.planId]) versionsByPlanId[v.planId] = [];
+      versionsByPlanId[v.planId].push(v);
+    }
+
+    for (const r of rows) {
+      const pVersions = versionsByPlanId[r.id] || [];
+      r.versions = pVersions;
+      r.versionCount = pVersions.length;
+      r.version = pVersions[0]?.version || r.version || 1;
+    }
+  }
+
   return { rows, pagination: paginate(page, limit, total) };
 }
 
-export async function createPlan(data) {
+export async function createPlan(data, adminId = null) {
   const [plan] = await db.insert(subscriptionPlans).values(data).returning();
 
-  // If recurring (not lifetime), register a matching recurring plan with that
-  // currency's gateway for subscription billing.
+  // 1. Create normalized Plan Version 1
+  const [version] = await db.insert(subscriptionPlanVersions).values({
+    planId: plan.id,
+    version: 1,
+    name: plan.name,
+    type: plan.type,
+    currencyCode: plan.currencyCode,
+    priceMinor: plan.priceMinor,
+    durationDays: plan.durationDays,
+    trialDays: plan.trialDays || 0,
+    effectiveFrom: new Date(),
+    isActive: plan.isActive,
+    gateway: plan.gateway,
+    gatewayPlanId: plan.gatewayPlanId,
+    changeSummary: 'Initial plan version created',
+    createdByAdminId: adminId,
+  }).returning();
+
+  await db.update(subscriptionPlans)
+    .set({ currentVersionId: version.id })
+    .where(eq(subscriptionPlans.id, plan.id));
+
+  // 2. Populate normalized vehicle types if provided
+  if (Array.isArray(data.vehicleTypeIds) && data.vehicleTypeIds.length > 0) {
+    await db.insert(subscriptionPlanVehicleTypes).values(
+      data.vehicleTypeIds.map((vId) => ({
+        planId: plan.id,
+        planVersionId: version.id,
+        vehicleTypeId: vId,
+      }))
+    ).onConflictDoNothing();
+  }
+
+  // 3. Populate normalized entitlements if provided
+  if (data.entitlements && typeof data.entitlements === 'object') {
+    await db.insert(subscriptionPlanEntitlements).values({
+      planId: plan.id,
+      planVersionId: version.id,
+      priorityMatchingBonus: data.entitlements.priorityScoreBonus ? String(data.entitlements.priorityScoreBonus) : '0.00',
+      maxRidesPerDay: data.maxRidesPerDay || null,
+      commissionDiscountRate: data.entitlements.commissionRate != null ? String(data.entitlements.commissionRate) : null,
+      waiveBookingFee: Boolean(data.entitlements.waiveBookingFee),
+      customBookingFeeMinor: data.entitlements.customBookingFeeMinor != null ? Number(data.entitlements.customBookingFeeMinor) : null,
+      freeInstantPayouts: Boolean(data.entitlements.freeInstantPayouts),
+      supportLevel: data.entitlements.supportLevel || 'standard',
+      customEntitlements: data.entitlements,
+    }).returning();
+  }
+
+  // Gateway integration
   const gateway = gatewayForCurrency(plan.currencyCode);
   if (gateway && plan.type !== 'lifetime' && plan.durationDays) {
-    const period   = plan.type === 'monthly'    ? 'monthly'
-                   : plan.type === 'quarterly'  ? 'monthly'   // billed monthly x 3
-                   : plan.type === 'yearly'     ? 'yearly'
-                   : 'monthly'; // custom -> monthly as base
+    const period = plan.type === 'monthly' ? 'monthly'
+                 : plan.type === 'quarterly' ? 'monthly'
+                 : plan.type === 'yearly' ? 'yearly' : 'monthly';
     const interval = plan.type === 'quarterly' ? 3 : 1;
     try {
       const { gatewayPlanId } = await gateway.createPlan({
@@ -146,19 +229,114 @@ export async function createPlan(data) {
       await db.update(subscriptionPlans)
         .set({ gateway: gateway.name, gatewayPlanId })
         .where(eq(subscriptionPlans.id, plan.id));
+      await db.update(subscriptionPlanVersions)
+        .set({ gateway: gateway.name, gatewayPlanId })
+        .where(eq(subscriptionPlanVersions.id, version.id));
       plan.gateway = gateway.name;
       plan.gatewayPlanId = gatewayPlanId;
     } catch (err) {
       console.error(`[Subscription] ${gateway.name} plan creation failed:`, err.message);
     }
   }
+
+  await logCommercialAudit({
+    actorId: adminId,
+    action: 'create',
+    entityType: 'subscription_plan',
+    entityId: plan.id,
+    newValue: plan,
+    reason: 'New subscription plan created',
+  });
+
   return plan;
 }
 
-export async function updatePlan(id, data) {
+export async function createPlanVersion(planId, newVersionData, adminId = null, reason = 'Price or terms update') {
+  const [currentPlan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, planId)).limit(1);
+  if (!currentPlan) throw { statusCode: 404, message: 'Plan not found' };
+
+  const [latestVersion] = await db.select()
+    .from(subscriptionPlanVersions)
+    .where(eq(subscriptionPlanVersions.planId, planId))
+    .orderBy(desc(subscriptionPlanVersions.version))
+    .limit(1);
+
+  const newVersionNumber = (latestVersion?.version || 1) + 1;
+  const now = new Date();
+
+  // Close previous version effectiveTo
+  if (latestVersion && !latestVersion.effectiveTo) {
+    await db.update(subscriptionPlanVersions)
+      .set({ effectiveTo: now, updatedAt: now })
+      .where(eq(subscriptionPlanVersions.id, latestVersion.id));
+  }
+
+  // Insert new version
+  const [createdVersion] = await db.insert(subscriptionPlanVersions).values({
+    planId,
+    version: newVersionNumber,
+    name: newVersionData.name || currentPlan.name,
+    type: newVersionData.type || currentPlan.type,
+    currencyCode: newVersionData.currencyCode || currentPlan.currencyCode,
+    priceMinor: newVersionData.priceMinor !== undefined ? newVersionData.priceMinor : currentPlan.priceMinor,
+    durationDays: newVersionData.durationDays !== undefined ? newVersionData.durationDays : currentPlan.durationDays,
+    trialDays: newVersionData.trialDays !== undefined ? newVersionData.trialDays : currentPlan.trialDays,
+    effectiveFrom: newVersionData.effectiveFrom ? new Date(newVersionData.effectiveFrom) : now,
+    effectiveTo: newVersionData.effectiveTo ? new Date(newVersionData.effectiveTo) : null,
+    isActive: newVersionData.isActive !== undefined ? newVersionData.isActive : true,
+    gateway: newVersionData.gateway || currentPlan.gateway,
+    gatewayPlanId: newVersionData.gatewayPlanId || currentPlan.gatewayPlanId,
+    changeSummary: reason,
+    createdByAdminId: adminId,
+  }).returning();
+
+  // Update master plan pointer
+  const [updatedPlan] = await db.update(subscriptionPlans).set({
+    ...newVersionData,
+    currentVersionId: createdVersion.id,
+    updatedAt: now,
+  }).where(eq(subscriptionPlans.id, planId)).returning();
+
+  await logCommercialAudit({
+    actorId: adminId,
+    action: 'version_created',
+    entityType: 'subscription_plan_version',
+    entityId: createdVersion.id,
+    oldValue: latestVersion,
+    newValue: createdVersion,
+    reason,
+  });
+
+  return updatedPlan;
+}
+
+export async function updatePlan(id, data, adminId = null) {
+  const [currentPlan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, id)).limit(1);
+  if (!currentPlan) throw { statusCode: 404, message: 'Plan not found' };
+
+  // If price or duration changed, create an immutable version rather than mutating historical terms
+  const hasCommercialChanges = (
+    (data.priceMinor !== undefined && data.priceMinor !== currentPlan.priceMinor) ||
+    (data.durationDays !== undefined && data.durationDays !== currentPlan.durationDays) ||
+    (data.trialDays !== undefined && data.trialDays !== currentPlan.trialDays)
+  );
+
+  if (hasCommercialChanges) {
+    return createPlanVersion(id, data, adminId, 'Commercial price or terms update');
+  }
+
   data.updatedAt = new Date();
   const [plan] = await db.update(subscriptionPlans).set(data).where(eq(subscriptionPlans.id, id)).returning();
-  if (!plan) throw { statusCode: 404, message: 'Plan not found' };
+
+  await logCommercialAudit({
+    actorId: adminId,
+    action: 'update',
+    entityType: 'subscription_plan',
+    entityId: id,
+    oldValue: currentPlan,
+    newValue: plan,
+  });
+
   return plan;
 }
 
@@ -167,6 +345,15 @@ export async function setPlanActive(id, isActive, adminId) {
     .set({ isActive, updatedAt: new Date() })
     .where(eq(subscriptionPlans.id, id)).returning();
   if (!plan) throw { statusCode: 404, message: 'Plan not found' };
+
+  await logCommercialAudit({
+    actorId: adminId,
+    action: isActive ? 'activate' : 'deactivate',
+    entityType: 'subscription_plan',
+    entityId: id,
+    newValue: { isActive },
+  });
+
   await publishEvent(TOPICS.AUDIT_LOG, {
     actorId: adminId, actorType: 'admin',
     action: isActive ? 'SUBSCRIPTION_PLAN_ENABLED' : 'SUBSCRIPTION_PLAN_DISABLED',
@@ -244,9 +431,6 @@ export async function deletePlanGroupPricing(id) {
 
 // ── Driver subscription flow ───────────────────────────────────────────────────
 
-// idempotencyKey comes from the client's Idempotency-Key header (required — see
-// subscription.routes.js) so a retried/double-submitted initiate request returns the
-// original gateway order instead of creating a second charge attempt.
 export async function initiateSubscription(driverId, planId, idempotencyKey) {
   return withIdempotency('driver_subscription_initiate', idempotencyKey, driverId, async () => {
     const [rawPlan] = await db.select().from(subscriptionPlans)
@@ -261,7 +445,6 @@ export async function initiateSubscription(driverId, planId, idempotencyKey) {
     const [driver] = await db.select().from(drivers).where(eq(drivers.id, driverId)).limit(1);
     if (!driver) throw { statusCode: 404, message: 'Driver not found' };
 
-    // Resolve country code from driver's country or plan's country
     const countryId = driver.countryId || plan.countryId;
     let countryIsoCode = 'IN';
     if (countryId) {
@@ -279,12 +462,12 @@ export async function initiateSubscription(driverId, planId, idempotencyKey) {
     const order = await gateway.createOrder({
       amountMinor: totalMinor,
       currencyCode: plan.currencyCode,
-      metadata: { driverId, planId },
+      metadata: { driverId, planId, planVersionId: plan.currentVersionId },
       idempotencyKey,
     });
 
     const [payment] = await db.insert(payments).values({
-      subscriptionId: null, // filled in on activation — this row tracks the pending attempt via gatewayOrderId until then
+      subscriptionId: null,
       countryId: plan.countryId,
       gateway: gateway.name,
       currencyCode: plan.currencyCode,
@@ -297,7 +480,13 @@ export async function initiateSubscription(driverId, planId, idempotencyKey) {
       ...order,
       gateway: gateway.name,
       paymentAttemptId: payment.id,
-      plan: { id: plan.id, name: plan.name, type: plan.type, durationDays: plan.durationDays },
+      plan: {
+        id: plan.id,
+        name: plan.name,
+        type: plan.type,
+        durationDays: plan.durationDays,
+        currentVersionId: plan.currentVersionId,
+      },
     };
   });
 }
@@ -338,11 +527,6 @@ async function addSubscriptionTax(countryId, priceMinor) {
   return priceMinor + Math.round(priceMinor * exclusiveRate);
 }
 
-// verifyAndActivate (client-driven) and handleWebhook can both fire for the same order —
-// without this, both would race into _activateSubscription and double-activate the
-// subscription. Keying on gatewayOrderId means whichever path arrives first wins and the
-// second is a no-op replay. Dev mode (no real gateway, no orderRef) never races — it's only
-// ever called once, directly from initiateSubscription — so it skips the wrapper entirely.
 async function _activateSubscriptionIdempotent(driverId, planId, plan, amountMinor, paymentInfo) {
   if (!paymentInfo.gatewayOrderId) return _activateSubscription(driverId, planId, plan, amountMinor, paymentInfo);
   return withIdempotency('subscription_activation', paymentInfo.gatewayOrderId, driverId, () =>
@@ -350,25 +534,50 @@ async function _activateSubscriptionIdempotent(driverId, planId, plan, amountMin
 }
 
 async function _activateSubscription(driverId, planId, plan, amountMinor, paymentInfo) {
+  const now = new Date();
+
   // Expire any existing active sub
-  await db.update(subscriptions).set({ status: 'expired' }).where(
+  await db.update(subscriptions).set({ status: 'expired', updatedAt: now }).where(
     and(eq(subscriptions.driverId, driverId), eq(subscriptions.status, 'active')),
   );
 
-  const endDate = plan.durationDays ? addDays(new Date(), plan.durationDays) : null;
+  const endDate = plan.durationDays ? addDays(now, plan.durationDays) : null;
 
   const [sub] = await db.insert(subscriptions).values({
-    driverId, planId,
+    driverId,
+    planId,
+    planVersionId: plan.currentVersionId || null,
     status:       'active',
+    startDate:    now,
     endDate,
+    currentPeriodStart: now,
+    currentPeriodEnd: endDate,
     currencyCode: plan.currencyCode,
     amountMinor,
   }).returning();
 
+  // Record activation event in immutable journal
+  await db.insert(subscriptionEvents).values({
+    subscriptionId: sub.id,
+    eventType: 'activated',
+    fromStatus: 'pending',
+    toStatus: 'active',
+    actorType: paymentInfo.gateway ? 'webhook' : 'driver',
+    actorId: driverId,
+    reason: 'Subscription activated upon successful payment',
+    metadata: {
+      planId: plan.id,
+      planVersionId: plan.currentVersionId,
+      amountMinor,
+      gatewayOrderId: paymentInfo.gatewayOrderId,
+      gatewayPaymentId: paymentInfo.gatewayPaymentId,
+    },
+  });
+
   if (paymentInfo.paymentAttemptId) {
     await db.update(payments)
       .set({
-        subscriptionId: sub.id, status: 'captured', updatedAt: new Date(),
+        subscriptionId: sub.id, status: 'captured', updatedAt: now,
         gatewayPaymentId: paymentInfo.gatewayPaymentId,
       })
       .where(eq(payments.id, paymentInfo.paymentAttemptId));
@@ -416,8 +625,10 @@ export async function getMySubscription(driverId) {
   const [sub] = await db.select({
     subscription: subscriptions,
     plan:         subscriptionPlans,
+    planVersion:  subscriptionPlanVersions,
   }).from(subscriptions)
     .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+    .leftJoin(subscriptionPlanVersions, eq(subscriptions.planVersionId, subscriptionPlanVersions.id))
     .where(and(eq(subscriptions.driverId, driverId), eq(subscriptions.status, 'active')))
     .orderBy(desc(subscriptions.createdAt)).limit(1);
   return sub || null;
@@ -426,18 +637,19 @@ export async function getMySubscription(driverId) {
 export async function getSubscriptionHistory(driverId, page, limit, offset) {
   const [{ total }] = await db.select({ total: count() }).from(subscriptions)
     .where(eq(subscriptions.driverId, driverId));
-  const rows = await db.select({ subscription: subscriptions, plan: subscriptionPlans })
+  const rows = await db.select({
+    subscription: subscriptions,
+    plan: subscriptionPlans,
+    planVersion: subscriptionPlanVersions,
+  })
     .from(subscriptions)
     .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+    .leftJoin(subscriptionPlanVersions, eq(subscriptions.planVersionId, subscriptionPlanVersions.id))
     .where(eq(subscriptions.driverId, driverId))
     .orderBy(desc(subscriptions.createdAt)).limit(limit).offset(offset);
   return { rows, pagination: paginate(page, limit, total) };
 }
 
-// Admin — a driver's payment attempts (retries/renewals included). Only covers attempts
-// already linked to a subscription (payments.subscriptionId); an attempt that failed before
-// ever activating a subscription has no driverId anywhere on the payments row and can't be
-// traced back to a driver without a schema change.
 export async function getPaymentsForDriver(driverId, page, limit, offset) {
   const where = eq(subscriptions.driverId, driverId);
   const [{ total }] = await db.select({ total: count() }).from(payments)
@@ -452,10 +664,224 @@ export async function getPaymentsForDriver(driverId, page, limit, offset) {
   return { rows, pagination: paginate(page, limit, total) };
 }
 
+// ── Admin Subscribers & Comprehensive Management ──────────────────────────────
+
+export async function listAllSubscribers({ page = 1, limit = 10, offset = 0, status, planId, countryId, search }) {
+  const conditions = [];
+  if (status) conditions.push(eq(subscriptions.status, status));
+  if (planId) conditions.push(eq(subscriptions.planId, planId));
+  if (countryId) conditions.push(eq(drivers.countryId, countryId));
+  if (search) {
+    const term = `%${search}%`;
+    conditions.push(
+      sql`(${drivers.name} ILIKE ${term} OR ${drivers.phone} ILIKE ${term} OR ${drivers.email} ILIKE ${term} OR ${subscriptionPlans.name} ILIKE ${term})`
+    );
+  }
+  const where = conditions.length ? and(...conditions) : undefined;
+
+  const [{ total }] = await db
+    .select({ total: count() })
+    .from(subscriptions)
+    .innerJoin(drivers, eq(subscriptions.driverId, drivers.id))
+    .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+    .where(where);
+
+  const rows = await db
+    .select({
+      id: subscriptions.id,
+      driverId: subscriptions.driverId,
+      planId: subscriptions.planId,
+      planVersionId: subscriptions.planVersionId,
+      status: subscriptions.status,
+      startDate: subscriptions.startDate,
+      endDate: subscriptions.endDate,
+      currentPeriodStart: subscriptions.currentPeriodStart,
+      currentPeriodEnd: subscriptions.currentPeriodEnd,
+      trialEndsAt: subscriptions.trialEndsAt,
+      pausedAt: subscriptions.pausedAt,
+      resumedAt: subscriptions.resumedAt,
+      autoRenew: subscriptions.autoRenew,
+      amountMinor: subscriptions.amountMinor,
+      currencyCode: subscriptions.currencyCode,
+      cancelledAt: subscriptions.cancelledAt,
+      cancelNote: subscriptions.cancelNote,
+      createdAt: subscriptions.createdAt,
+      updatedAt: subscriptions.updatedAt,
+      driver: {
+        id: drivers.id,
+        name: drivers.name,
+        phone: drivers.phone,
+        email: drivers.email,
+        subscriptionStatus: drivers.subscriptionStatus,
+        approvalStatus: drivers.approvalStatus,
+        isBlocked: drivers.isBlocked,
+        countryId: drivers.countryId,
+        cityId: drivers.cityId,
+      },
+      plan: {
+        id: subscriptionPlans.id,
+        name: subscriptionPlans.name,
+        type: subscriptionPlans.type,
+        priceMinor: subscriptionPlans.priceMinor,
+        currencyCode: subscriptionPlans.currencyCode,
+        durationDays: subscriptionPlans.durationDays,
+        trialDays: subscriptionPlans.trialDays,
+        countryId: subscriptionPlans.countryId,
+      },
+      planVersion: {
+        id: subscriptionPlanVersions.id,
+        version: subscriptionPlanVersions.version,
+        name: subscriptionPlanVersions.name,
+      },
+    })
+    .from(subscriptions)
+    .innerJoin(drivers, eq(subscriptions.driverId, drivers.id))
+    .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+    .leftJoin(subscriptionPlanVersions, eq(subscriptions.planVersionId, subscriptionPlanVersions.id))
+    .where(where)
+    .orderBy(desc(subscriptions.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return { rows, pagination: paginate(page, limit, total) };
+}
+
+export async function getSubscriptionDetail(subscriptionId) {
+  const [row] = await db
+    .select({
+      subscription: subscriptions,
+      driver: drivers,
+      plan: subscriptionPlans,
+      planVersion: subscriptionPlanVersions,
+    })
+    .from(subscriptions)
+    .innerJoin(drivers, eq(subscriptions.driverId, drivers.id))
+    .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+    .leftJoin(subscriptionPlanVersions, eq(subscriptions.planVersionId, subscriptionPlanVersions.id))
+    .where(eq(subscriptions.id, subscriptionId))
+    .limit(1);
+
+  if (!row) throw { statusCode: 404, message: 'Subscription not found' };
+
+  const subPayments = await db
+    .select()
+    .from(payments)
+    .where(eq(payments.subscriptionId, subscriptionId))
+    .orderBy(desc(payments.createdAt));
+
+  const events = await db
+    .select()
+    .from(subscriptionEvents)
+    .where(eq(subscriptionEvents.subscriptionId, subscriptionId))
+    .orderBy(desc(subscriptionEvents.createdAt));
+
+  return {
+    ...row.subscription,
+    driver: row.driver,
+    plan: row.plan,
+    planVersion: row.planVersion,
+    payments: subPayments,
+    events,
+  };
+}
+
+export async function getSubscriptionPlanById(planId) {
+  const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, planId)).limit(1);
+  if (!plan) throw { statusCode: 404, message: 'Plan not found' };
+
+  const [currentVersion] = await db
+    .select()
+    .from(subscriptionPlanVersions)
+    .where(eq(subscriptionPlanVersions.planId, planId))
+    .orderBy(desc(subscriptionPlanVersions.version))
+    .limit(1);
+
+  const [entitlements] = await db
+    .select()
+    .from(subscriptionPlanEntitlements)
+    .where(eq(subscriptionPlanEntitlements.planId, planId))
+    .limit(1);
+
+  const vehicleTypes = await db
+    .select({
+      id: subscriptionPlanVehicleTypes.vehicleTypeId,
+    })
+    .from(subscriptionPlanVehicleTypes)
+    .where(eq(subscriptionPlanVehicleTypes.planId, planId));
+
+  const groupPricing = await listPlanGroupPricing(planId);
+
+  const [{ activeSubscribers }] = await db
+    .select({ activeSubscribers: count() })
+    .from(subscriptions)
+    .where(and(eq(subscriptions.planId, planId), eq(subscriptions.status, 'active')));
+
+  return {
+    ...plan,
+    currentVersion,
+    entitlements: plan.entitlements || entitlements?.customEntitlements || null,
+    vehicleTypeIds: plan.vehicleTypeIds || vehicleTypes.map((v) => v.id),
+    groupPricing,
+    activeSubscribers: Number(activeSubscribers || 0),
+  };
+}
+
+export async function listPlanVersions(planId) {
+  return db
+    .select()
+    .from(subscriptionPlanVersions)
+    .where(eq(subscriptionPlanVersions.planId, planId))
+    .orderBy(desc(subscriptionPlanVersions.version));
+}
+
+export async function getSubscriptionAnalytics() {
+  const [{ totalActive }] = await db
+    .select({ totalActive: count() })
+    .from(subscriptions)
+    .where(eq(subscriptions.status, 'active'));
+
+  const [{ totalPlans }] = await db
+    .select({ totalPlans: count() })
+    .from(subscriptionPlans)
+    .where(eq(subscriptionPlans.isActive, true));
+
+  const now = new Date();
+  const in7Days = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  const [{ expiringSoon }] = await db
+    .select({ expiringSoon: count() })
+    .from(subscriptions)
+    .where(
+      and(
+        eq(subscriptions.status, 'active'),
+        sql`${subscriptions.endDate} >= ${now}`,
+        sql`${subscriptions.endDate} <= ${in7Days}`
+      )
+    );
+
+  const [{ pastDue }] = await db
+    .select({ pastDue: count() })
+    .from(subscriptions)
+    .where(eq(subscriptions.status, 'past_due'));
+
+  const statusBreakdown = await db
+    .select({
+      status: subscriptions.status,
+      count: count(),
+    })
+    .from(subscriptions)
+    .groupBy(subscriptions.status);
+
+  return {
+    totalActive: Number(totalActive || 0),
+    totalPlans: Number(totalPlans || 0),
+    expiringSoon: Number(expiringSoon || 0),
+    pastDue: Number(pastDue || 0),
+    statusBreakdown,
+  };
+}
+
 // ── Gateway webhooks ────────────────────────────────────────────────────────
-// Split in two so the route can verify+parse synchronously (reject bad signatures outright)
-// while the actual business logic runs asynchronously via the webhook-processing job — see
-// subscription.routes.js and jobs/webhook-processing.job.js.
 
 export function parseAndVerifyWebhook(gatewayName, rawBody, signature) {
   const gateway = getGateway(gatewayName);
@@ -471,8 +897,6 @@ export function parseAndVerifyWebhook(gatewayName, rawBody, signature) {
 }
 
 export async function processWebhookEvent(event) {
-  // Dispute events can land on any of the three webhook routes — dispatch by looking up the
-  // disputed payment, not by which route received it. See dispute.service.js.
   if (event.kind === 'dispute') return handleDisputeEvent(event);
 
   const { driverId, planId } = event.metadata || {};
@@ -493,14 +917,30 @@ export async function processWebhookEvent(event) {
 // ── Expiry checker (called by BullMQ job) ─────────────────────────────────────
 
 export async function expireOverdueSubscriptions() {
-  const expired = await db.update(subscriptions).set({ status: 'expired' }).where(
-    and(eq(subscriptions.status, 'active'), lt(subscriptions.endDate, new Date())),
-  ).returning({ driverId: subscriptions.driverId, id: subscriptions.id });
+  const now = new Date();
+  const expired = await db.update(subscriptions)
+    .set({ status: 'expired', updatedAt: now })
+    .where(
+      and(
+        eq(subscriptions.status, 'active'),
+        lt(subscriptions.endDate, now)
+      )
+    ).returning({ driverId: subscriptions.driverId, id: subscriptions.id });
 
-  for (const { driverId } of expired) {
+  for (const { driverId, id } of expired) {
     await db.update(drivers)
       .set({ subscriptionStatus: 'expired', isOnline: false })
       .where(eq(drivers.id, driverId));
+
+    await db.insert(subscriptionEvents).values({
+      subscriptionId: id,
+      eventType: 'expired',
+      fromStatus: 'active',
+      toStatus: 'expired',
+      actorType: 'system',
+      reason: 'Subscription reached duration expiration',
+      metadata: { expiredAt: now.toISOString() },
+    });
 
     await publishEvent(TOPICS.SUBSCRIPTION_EXPIRED, { driverId });
     await publishEvent(TOPICS.NOTIF_PUSH, {

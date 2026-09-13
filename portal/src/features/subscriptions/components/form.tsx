@@ -13,8 +13,6 @@ import {
 } from "../schema";
 import type { LookupOption } from "../types";
 
-// Freeform marketing bullets (display-only, not enforced) — a plain tag/chip input rather than
-// the fixed-catalog MultiSelect, since there's no predefined list of allowed feature strings.
 function FeatureChipsInput({
   value,
   onChange,
@@ -169,7 +167,7 @@ export function SubscriptionPlanForm({
         </div>
         <div className="space-y-2">
           <Label htmlFor="priceMinor">
-            Price (minor units) <span className="text-red-500">*</span>
+            Price (minor units / paise) <span className="text-red-500">*</span>
           </Label>
           <Input id="priceMinor" type="number" step="1" min="0" placeholder="e.g. 29900" {...register("priceMinor", { valueAsNumber: true })} />
           {errors.priceMinor && <p className="text-xs text-red-500">{errors.priceMinor.message}</p>}
@@ -201,7 +199,7 @@ export function SubscriptionPlanForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Features (marketing copy — not enforced)</Label>
+        <Label>Features (marketing copy — display only)</Label>
         <Controller
           control={control as any}
           name="features"
@@ -231,7 +229,7 @@ export function SubscriptionPlanForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Target Driver Groups (empty = public to all drivers in country)</Label>
+        <Label>Target Driver Groups (empty = open to all drivers)</Label>
         <Controller
           control={control as any}
           name="allowedGroupIds"
@@ -244,21 +242,18 @@ export function SubscriptionPlanForm({
             />
           )}
         />
-        <p className="text-[11px] text-muted-foreground">
-          If selected, only drivers assigned to these groups will see or qualify for this plan.
-        </p>
       </div>
 
-      {/* Dynamic Entitlements & Platform Perks */}
+      {/* Strongly Typed Entitlements & Platform Perks */}
       <div className="border border-border rounded-lg p-3.5 bg-muted/20 space-y-3">
         <div className="font-semibold text-xs text-foreground uppercase tracking-wider">
-          Plan Entitlements & Perks (Enforced System Capabilities)
+          Plan Entitlements & Commercial Perks (Enforced System Rules)
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label htmlFor="entitlement-commission" className="text-xs">
-              Platform Commission Cut (%)
+              Custom Commission Rate (%)
             </Label>
             <Input
               id="entitlement-commission"
@@ -266,16 +261,16 @@ export function SubscriptionPlanForm({
               step="0.1"
               min="0"
               max="100"
-              placeholder="e.g. 5 (5% cut)"
+              placeholder="e.g. 5 (5% platform cut)"
               className="h-9 text-xs"
               {...register("entitlements.commissionRatePercent")}
             />
-            <p className="text-[10px] text-muted-foreground">Overrides standard rule at settlement</p>
+            <p className="text-[10px] text-muted-foreground">Overrides standard rule rate at settlement</p>
           </div>
 
           <div className="space-y-1">
             <Label htmlFor="entitlement-priority" className="text-xs">
-              Dispatch Priority Score Bonus
+              Matching Priority Bonus Score
             </Label>
             <Input
               id="entitlement-priority"
@@ -287,20 +282,64 @@ export function SubscriptionPlanForm({
               className="h-9 text-xs"
               {...register("entitlements.priorityScoreBonus")}
             />
-            <p className="text-[10px] text-muted-foreground">Custom weight in dispatch scoring</p>
+            <p className="text-[10px] text-muted-foreground">Bonus boost score in dispatch matching</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 pt-1">
-          <input
-            id="entitlement-instant-payout"
-            type="checkbox"
-            className="h-4 w-4 rounded border-border cursor-pointer text-primary"
-            {...register("entitlements.freeInstantPayouts")}
-          />
-          <Label htmlFor="entitlement-instant-payout" className="cursor-pointer text-xs font-normal">
-            Free Instant Wallet-to-Bank Payouts (0% cashout fee)
-          </Label>
+        <div className="grid grid-cols-2 gap-3 pt-1">
+          <div className="space-y-1">
+            <Label htmlFor="entitlement-support" className="text-xs">
+              Driver Support Level
+            </Label>
+            <select
+              id="entitlement-support"
+              {...register("entitlements.supportLevel")}
+              className="w-full bg-card text-foreground border border-border rounded-md px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
+            >
+              <option value="standard">Standard Support</option>
+              <option value="priority">Priority Support</option>
+              <option value="dedicated">Dedicated Agent / VIP</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="entitlement-booking-fee" className="text-xs">
+              Custom Booking Fee (minor units)
+            </Label>
+            <Input
+              id="entitlement-booking-fee"
+              type="number"
+              placeholder="Leave blank for standard rule fee"
+              className="h-9 text-xs"
+              {...register("entitlements.customBookingFeeMinor")}
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 pt-2">
+          <div className="flex items-center gap-2">
+            <input
+              id="entitlement-waive-fee"
+              type="checkbox"
+              className="h-4 w-4 rounded border-border cursor-pointer text-primary"
+              {...register("entitlements.waiveBookingFee")}
+            />
+            <Label htmlFor="entitlement-waive-fee" className="cursor-pointer text-xs font-normal">
+              Waive platform booking fee entirely (100% free booking fee for driver)
+            </Label>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              id="entitlement-instant-payout"
+              type="checkbox"
+              className="h-4 w-4 rounded border-border cursor-pointer text-primary"
+              {...register("entitlements.freeInstantPayouts")}
+            />
+            <Label htmlFor="entitlement-instant-payout" className="cursor-pointer text-xs font-normal">
+              Free Instant Wallet-to-Bank Payouts (0% cashout fee)
+            </Label>
+          </div>
         </div>
       </div>
 
@@ -329,7 +368,7 @@ export function SubscriptionPlanForm({
           {...register("priorityMatching")}
         />
         <Label htmlFor="priorityMatching" className="cursor-pointer">
-          Priority matching (boosts this plan's drivers in ride matching)
+          Priority matching enabled
         </Label>
       </div>
     </form>
