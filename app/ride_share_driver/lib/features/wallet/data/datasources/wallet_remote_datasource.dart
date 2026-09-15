@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/error/app_exception.dart';
+import '../models/payout_item.dart';
 
 class WalletRemoteDataSource {
   final ApiClient apiClient;
@@ -138,6 +139,41 @@ class WalletRemoteDataSource {
         throw ServerException(data['MESSAGE']?.toString() ?? 'Payout failed');
       }
       return (data['MESSAGE'] is Map<String, dynamic>) ? data['MESSAGE'] as Map<String, dynamic> : data;
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  /// GET /api/v1/payouts/mine?status=&page=&limit=
+  Future<({List<PayoutItem> payouts, PayoutPagination pagination})> getPayoutHistory({
+    String? status,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{
+        'page': page,
+        'limit': limit,
+      };
+      if (status != null && status.isNotEmpty && status.toLowerCase() != 'all') {
+        queryParams['status'] = status.toLowerCase();
+      }
+
+      final response = await apiClient.dio.get(
+        '/payouts/mine',
+        queryParameters: queryParams,
+      );
+
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        final rows = data['MESSAGE'] ?? data['rows'] ?? [];
+        final list = (rows is List)
+            ? rows.map((e) => PayoutItem.fromJson(Map<String, dynamic>.from(e as Map))).toList()
+            : <PayoutItem>[];
+        final pagination = PayoutPagination.fromJson(data['PAGINATION'] as Map<String, dynamic>?);
+        return (payouts: list, pagination: pagination);
+      }
+      return (payouts: <PayoutItem>[], pagination: const PayoutPagination());
     } on DioException catch (e) {
       throw mapDioException(e);
     }

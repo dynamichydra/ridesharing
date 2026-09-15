@@ -4,6 +4,7 @@ import '../../data/datasources/profile_remote_datasource.dart';
 import '../../data/models/driver_document_model.dart';
 import '../../../../common/entities/driver_profile.dart';
 import '../../../../common/entities/driver_dashboard_summary.dart';
+import '../../../../features/earnings/data/models/commission_status_model.dart';
 
 // ── Events ───────────────────────────────────────────────────────────────────
 abstract class ProfileEvent {}
@@ -73,28 +74,52 @@ class ProfileLoading extends ProfileState {
   final DriverProfile? previousProfile;
   final DriverDashboardSummary? previousSummary;
   final List<DriverDocumentItem>? previousDocuments;
-  ProfileLoading({this.previousProfile, this.previousSummary, this.previousDocuments});
+  final CommissionStatusModel? previousCommissionStatus;
+  ProfileLoading({
+    this.previousProfile,
+    this.previousSummary,
+    this.previousDocuments,
+    this.previousCommissionStatus,
+  });
 }
 
 class ProfileLoaded extends ProfileState {
   final DriverProfile profile;
   final DriverDashboardSummary? summary;
   final List<DriverDocumentItem> documents;
-  ProfileLoaded(this.profile, {this.summary, this.documents = const []});
+  final CommissionStatusModel? commissionStatus;
+  ProfileLoaded(
+    this.profile, {
+    this.summary,
+    this.documents = const [],
+    this.commissionStatus,
+  });
 }
 
 class ProfileUpdating extends ProfileState {
   final DriverProfile profile;
   final DriverDashboardSummary? summary;
   final List<DriverDocumentItem> documents;
-  ProfileUpdating(this.profile, {this.summary, this.documents = const []});
+  final CommissionStatusModel? commissionStatus;
+  ProfileUpdating(
+    this.profile, {
+    this.summary,
+    this.documents = const [],
+    this.commissionStatus,
+  });
 }
 
 class ProfilePhotoUploading extends ProfileState {
   final DriverProfile? profile;
   final DriverDashboardSummary? summary;
   final List<DriverDocumentItem> documents;
-  ProfilePhotoUploading({this.profile, this.summary, this.documents = const []});
+  final CommissionStatusModel? commissionStatus;
+  ProfilePhotoUploading({
+    this.profile,
+    this.summary,
+    this.documents = const [],
+    this.commissionStatus,
+  });
 }
 
 class ProfileUpdateSuccess extends ProfileState {
@@ -102,7 +127,14 @@ class ProfileUpdateSuccess extends ProfileState {
   final DriverProfile profile;
   final DriverDashboardSummary? summary;
   final List<DriverDocumentItem> documents;
-  ProfileUpdateSuccess(this.message, this.profile, {this.summary, this.documents = const []});
+  final CommissionStatusModel? commissionStatus;
+  ProfileUpdateSuccess(
+    this.message,
+    this.profile, {
+    this.summary,
+    this.documents = const [],
+    this.commissionStatus,
+  });
 }
 
 class ProfileDocumentUploading extends ProfileState {
@@ -135,20 +167,26 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     on<UpdateProfilePhoto>(_onUpdateProfilePhoto);
   }
 
-  (DriverProfile?, DriverDashboardSummary?, List<DriverDocumentItem>) _extractPrevious() {
+  (DriverProfile?, DriverDashboardSummary?, List<DriverDocumentItem>, CommissionStatusModel?) _extractPrevious() {
     final s = state;
-    if (s is ProfileLoaded) return (s.profile, s.summary, s.documents);
-    if (s is ProfileUpdateSuccess) return (s.profile, s.summary, s.documents);
-    if (s is ProfileUpdating) return (s.profile, s.summary, s.documents);
-    if (s is ProfileLoading) return (s.previousProfile, s.previousSummary, s.previousDocuments ?? []);
-    if (s is ProfileDocumentUploading) return (s.profile, null, s.documents);
-    if (s is ProfileDocumentUploadSuccess) return (s.profile, null, s.documents);
-    return (null, null, []);
+    if (s is ProfileLoaded) return (s.profile, s.summary, s.documents, s.commissionStatus);
+    if (s is ProfileUpdateSuccess) return (s.profile, s.summary, s.documents, s.commissionStatus);
+    if (s is ProfileUpdating) return (s.profile, s.summary, s.documents, s.commissionStatus);
+    if (s is ProfileLoading) return (s.previousProfile, s.previousSummary, s.previousDocuments ?? [], s.previousCommissionStatus);
+    if (s is ProfilePhotoUploading) return (s.profile, s.summary, s.documents, s.commissionStatus);
+    if (s is ProfileDocumentUploading) return (s.profile, null, s.documents, null);
+    if (s is ProfileDocumentUploadSuccess) return (s.profile, null, s.documents, null);
+    return (null, null, [], null);
   }
 
   Future<void> _onLoadProfile(LoadProfile event, Emitter<ProfileState> emit) async {
-    final (prevProfile, prevSummary, prevDocs) = _extractPrevious();
-    emit(ProfileLoading(previousProfile: prevProfile, previousSummary: prevSummary, previousDocuments: prevDocs));
+    final (prevProfile, prevSummary, prevDocs, prevCommission) = _extractPrevious();
+    emit(ProfileLoading(
+      previousProfile: prevProfile,
+      previousSummary: prevSummary,
+      previousDocuments: prevDocs,
+      previousCommissionStatus: prevCommission,
+    ));
     try {
       final results = await Future.wait([
         dataSource.getProfile(),
@@ -158,10 +196,14 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         dataSource.getDocuments().catchError((e) {
           return <dynamic>[];
         }),
+        dataSource.getCommissionStatus().catchError((e) {
+          return <String, dynamic>{};
+        }),
       ]);
       final profileJson = results[0] as Map<String, dynamic>;
       final summaryJson = results[1] as Map<String, dynamic>;
       final docsJson = results[2] as List<dynamic>;
+      final commissionJson = results[3] as Map<String, dynamic>;
 
       final profile = DriverProfile.fromJson(profileJson);
       final summary = summaryJson.isNotEmpty
@@ -170,17 +212,30 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final docs = docsJson
           .map((d) => DriverDocumentItem.fromJson(d as Map<String, dynamic>))
           .toList();
+      final commission = commissionJson.isNotEmpty
+          ? CommissionStatusModel.fromJson(commissionJson)
+          : prevCommission;
 
-      emit(ProfileLoaded(profile, summary: summary, documents: docs));
+      emit(ProfileLoaded(
+        profile,
+        summary: summary,
+        documents: docs,
+        commissionStatus: commission,
+      ));
     } catch (e) {
       emit(ProfileError(e.toString()));
     }
   }
 
   Future<void> _onUpdateProfile(UpdateProfile event, Emitter<ProfileState> emit) async {
-    final (prevProfile, prevSummary, prevDocs) = _extractPrevious();
+    final (prevProfile, prevSummary, prevDocs, prevCommission) = _extractPrevious();
     if (prevProfile == null) return;
-    emit(ProfileUpdating(prevProfile, summary: prevSummary, documents: prevDocs));
+    emit(ProfileUpdating(
+      prevProfile,
+      summary: prevSummary,
+      documents: prevDocs,
+      commissionStatus: prevCommission,
+    ));
     try {
       final updates = <String, dynamic>{
         if (event.name != null) 'name': event.name,
@@ -195,7 +250,13 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       };
       final json = await dataSource.updateProfile(updates);
       final updatedProfile = DriverProfile.fromJson(json);
-      emit(ProfileUpdateSuccess('Profile updated successfully!', updatedProfile, summary: prevSummary, documents: prevDocs));
+      emit(ProfileUpdateSuccess(
+        'Profile updated successfully!',
+        updatedProfile,
+        summary: prevSummary,
+        documents: prevDocs,
+        commissionStatus: prevCommission,
+      ));
       add(LoadProfile());
     } catch (e) {
       emit(ProfileError(e.toString()));
@@ -208,9 +269,14 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final docs = docsJson
           .map((d) => DriverDocumentItem.fromJson(d as Map<String, dynamic>))
           .toList();
-      final (prevProfile, prevSummary, _) = _extractPrevious();
+      final (prevProfile, prevSummary, _, prevCommission) = _extractPrevious();
       if (prevProfile != null) {
-        emit(ProfileLoaded(prevProfile, summary: prevSummary, documents: docs));
+        emit(ProfileLoaded(
+          prevProfile,
+          summary: prevSummary,
+          documents: docs,
+          commissionStatus: prevCommission,
+        ));
       }
     } catch (e) {
       emit(ProfileError(e.toString()));
@@ -218,7 +284,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   }
 
   Future<void> _onUploadDriverDocument(UploadDriverDocument event, Emitter<ProfileState> emit) async {
-    final (prevProfile, _, prevDocs) = _extractPrevious();
+    final (prevProfile, _, prevDocs, _) = _extractPrevious();
     emit(ProfileDocumentUploading(profile: prevProfile, documents: prevDocs));
     try {
       // 1. Request presigned upload URL & storage key
@@ -262,8 +328,13 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   }
 
   Future<void> _onUpdateProfilePhoto(UpdateProfilePhoto event, Emitter<ProfileState> emit) async {
-    final (prevProfile, prevSummary, prevDocs) = _extractPrevious();
-    emit(ProfilePhotoUploading(profile: prevProfile, summary: prevSummary, documents: prevDocs));
+    final (prevProfile, prevSummary, prevDocs, prevCommission) = _extractPrevious();
+    emit(ProfilePhotoUploading(
+      profile: prevProfile,
+      summary: prevSummary,
+      documents: prevDocs,
+      commissionStatus: prevCommission,
+    ));
     try {
       // 1. Request presigned upload URL & storage key for profile photo
       final uploadData = await dataSource.requestProfilePhotoUploadUrl(event.contentType);
@@ -284,10 +355,17 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       await dataSource.confirmProfilePhoto(key);
 
       // 4. Invalidate & refresh profile
-      emit(ProfileUpdateSuccess('Profile photo updated successfully!', prevProfile!, summary: prevSummary, documents: prevDocs));
+      emit(ProfileUpdateSuccess(
+        'Profile photo updated successfully!',
+        prevProfile!,
+        summary: prevSummary,
+        documents: prevDocs,
+        commissionStatus: prevCommission,
+      ));
       add(LoadProfile());
     } catch (e) {
       emit(ProfileError(e.toString()));
     }
   }
 }
+

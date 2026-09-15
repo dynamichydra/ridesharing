@@ -487,7 +487,7 @@ class _DriverDocumentsPageState extends State<DriverDocumentsPage> with WidgetsB
                   ],
 
                   // Document Number Field
-                  if (doc.requiresDocNumber || true) ...[
+                  if (doc.requiresDocNumber) ...[
                     const Text(
                       'Document / Registration Number',
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
@@ -678,9 +678,19 @@ class _DriverDocumentsPageState extends State<DriverDocumentsPage> with WidgetsB
                       ),
                       onPressed: () {
                         final docNum = docNumCtrl.text.trim();
-                        if (docNum.isEmpty) {
+                        if (doc.requiresDocNumber && docNum.isEmpty) {
                           CustomToast.show(context, 'Please enter the document number');
                           return;
+                        }
+                        if (doc.requiresExpiry) {
+                          if (selectedExpiry == null) {
+                            CustomToast.show(context, 'Please select the expiry date');
+                            return;
+                          }
+                          if (selectedExpiry!.isBefore(DateTime.now())) {
+                            CustomToast.show(context, 'Document expiry date must be in the future');
+                            return;
+                          }
                         }
                         if (pickedBytes == null || pickedContentType == null) {
                           CustomToast.show(context, 'Please select a document image or file to upload');
@@ -690,7 +700,7 @@ class _DriverDocumentsPageState extends State<DriverDocumentsPage> with WidgetsB
                         Navigator.pop(ctx);
                         _bloc.add(UploadDriverDocument(
                           documentTypeId: doc.documentTypeId,
-                          documentNumber: docNum,
+                          documentNumber: docNum.isNotEmpty ? docNum : null,
                           expiryDate: selectedExpiry?.toIso8601String(),
                           side: side,
                           bytes: pickedBytes!,
@@ -759,8 +769,14 @@ class _DriverDocumentsPageState extends State<DriverDocumentsPage> with WidgetsB
                                 ? state.previousDocuments ?? []
                                 : <DriverDocumentItem>[];
 
-            final approvedCount = docs.where((d) => d.isApproved).length;
+            final requiredDocs = docs.where((d) => d.isRequired).toList();
+            final optionalDocs = docs.where((d) => !d.isRequired).toList();
+
+            final approvedCount = docs.where((d) => d.isApproved && !d.isExpired).length;
+            final approvedRequiredCount = requiredDocs.where((d) => d.isApproved && !d.isExpired).length;
             final totalCount = docs.length;
+            final totalRequiredCount = requiredDocs.length;
+            final hasActionRequired = requiredDocs.any((d) => d.isExpired || d.isRejected);
 
             return Stack(
               children: [
@@ -773,6 +789,42 @@ class _DriverDocumentsPageState extends State<DriverDocumentsPage> with WidgetsB
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Action Required Banner if any document is expired or rejected
+                        if (hasActionRequired) ...[
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF2F2),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: const Color(0xFFF87171)),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 22),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: const [
+                                      Text(
+                                        'Action Required: Document Updates Needed',
+                                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF991B1B)),
+                                      ),
+                                      SizedBox(height: 3),
+                                      Text(
+                                        'One or more required documents have expired or were rejected. Please re-upload updated copies to keep your driver account in good standing.',
+                                        style: TextStyle(fontSize: 12, color: Color(0xFFB91C1C), height: 1.3),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+
                         // Verification Overview Header Card
                         Container(
                           padding: const EdgeInsets.all(16),
@@ -798,7 +850,9 @@ class _DriverDocumentsPageState extends State<DriverDocumentsPage> with WidgetsB
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      totalCount > 0 ? '$approvedCount of $totalCount Verified' : 'Document Verification',
+                                      totalRequiredCount > 0
+                                          ? '$approvedRequiredCount of $totalRequiredCount Required Verified'
+                                          : (totalCount > 0 ? '$approvedCount of $totalCount Verified' : 'Document Verification'),
                                       style: const TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
@@ -807,7 +861,7 @@ class _DriverDocumentsPageState extends State<DriverDocumentsPage> with WidgetsB
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      approvedCount == totalCount && totalCount > 0
+                                      approvedRequiredCount == totalRequiredCount && totalRequiredCount > 0
                                           ? 'All required documents are approved and active.'
                                           : 'Upload both sides and keep documents up-to-date to maintain active driving status.',
                                       style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
@@ -819,16 +873,6 @@ class _DriverDocumentsPageState extends State<DriverDocumentsPage> with WidgetsB
                           ),
                         ),
                         const SizedBox(height: 20),
-
-                        const Text(
-                          'Your Documents',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0F172A),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
 
                         if (docs.isEmpty && state is ProfileLoading) ...[
                           const Center(
@@ -848,7 +892,54 @@ class _DriverDocumentsPageState extends State<DriverDocumentsPage> with WidgetsB
                             ),
                           ),
                         ] else ...[
-                          ...docs.map((doc) => _buildDocumentCard(context, doc)),
+                          // Required Documents Section
+                          if (requiredDocs.isNotEmpty) ...[
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Required Documents',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                ),
+                                Text(
+                                  '$approvedRequiredCount / $totalRequiredCount Verified',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: approvedRequiredCount == totalRequiredCount
+                                        ? const Color(0xFF009048)
+                                        : const Color(0xFFB45309),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            ...requiredDocs.map((doc) => _buildDocumentCard(context, doc)),
+                          ],
+
+                          // Optional Documents Section
+                          if (optionalDocs.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Optional Documents & Badges',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Additional documents for specific vehicle categories, commercial permits, or extra verification.',
+                              style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                            ),
+                            const SizedBox(height: 12),
+                            ...optionalDocs.map((doc) => _buildDocumentCard(context, doc)),
+                          ],
                         ],
                       ],
                     ),
@@ -892,11 +983,23 @@ class _DriverDocumentsPageState extends State<DriverDocumentsPage> with WidgetsB
     String badgeText;
     IconData badgeIcon;
 
-    if (doc.isApproved) {
-      badgeBg = const Color(0xFFDCFCE7);
-      badgeTextColor = const Color(0xFF15803D);
-      badgeText = 'Approved';
-      badgeIcon = Icons.check_circle_rounded;
+    if (doc.isExpired) {
+      badgeBg = const Color(0xFFFEE2E2);
+      badgeTextColor = const Color(0xFFDC2626);
+      badgeText = 'Expired';
+      badgeIcon = Icons.warning_rounded;
+    } else if (doc.isApproved) {
+      if (doc.isExpiringSoon) {
+        badgeBg = const Color(0xFFFEF3C7);
+        badgeTextColor = const Color(0xFFD97706);
+        badgeText = 'Expiring Soon';
+        badgeIcon = Icons.schedule_rounded;
+      } else {
+        badgeBg = const Color(0xFFDCFCE7);
+        badgeTextColor = const Color(0xFF15803D);
+        badgeText = 'Approved';
+        badgeIcon = Icons.check_circle_rounded;
+      }
     } else if (doc.isPending) {
       badgeBg = const Color(0xFFFEF3C7);
       badgeTextColor = const Color(0xFFB45309);
@@ -910,7 +1013,7 @@ class _DriverDocumentsPageState extends State<DriverDocumentsPage> with WidgetsB
     } else {
       badgeBg = const Color(0xFFF1F5F9);
       badgeTextColor = const Color(0xFF64748B);
-      badgeText = 'Missing';
+      badgeText = doc.isRequired ? 'Required' : 'Optional';
       badgeIcon = Icons.upload_file_rounded;
     }
 
@@ -992,7 +1095,59 @@ class _DriverDocumentsPageState extends State<DriverDocumentsPage> with WidgetsB
             const SizedBox(height: 2),
             Text(
               'Expires: ${doc.expiryDate!.day}/${doc.expiryDate!.month}/${doc.expiryDate!.year}',
-              style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: (doc.isExpired || doc.isExpiringSoon) ? FontWeight.bold : FontWeight.normal,
+                color: doc.isExpired
+                    ? const Color(0xFFDC2626)
+                    : (doc.isExpiringSoon ? const Color(0xFFD97706) : const Color(0xFF64748B)),
+              ),
+            ),
+          ],
+
+          if (doc.isExpired) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFCA5A5)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFDC2626)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Document has expired. Please re-upload a valid renewed document to maintain driving eligibility.',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFDC2626)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (doc.isExpiringSoon) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.schedule_rounded, size: 16, color: Color(0xFFD97706)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Expiring in ${doc.expiryDate!.difference(DateTime.now()).inDays} days. Consider renewing early.',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFD97706)),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
 
@@ -1227,14 +1382,22 @@ class _DriverDocumentsPageState extends State<DriverDocumentsPage> with WidgetsB
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         padding: EdgeInsets.zero,
-                        backgroundColor: const Color(0xFF009048),
+                        backgroundColor: (doc.isExpired || doc.isRejected)
+                            ? const Color(0xFFDC2626)
+                            : (doc.isExpiringSoon ? const Color(0xFFD97706) : const Color(0xFF009048)),
                         foregroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       onPressed: () => _showUploadDialog(context, doc, targetSide: side),
                       child: Text(
-                        hasFile ? 'Replace' : 'Upload',
+                        doc.isExpired
+                            ? 'Renew'
+                            : (doc.isRejected
+                                ? 'Re-upload'
+                                : (doc.isExpiringSoon
+                                    ? 'Renew'
+                                    : (hasFile ? 'Replace' : 'Upload'))),
                         style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                       ),
                     ),

@@ -56,6 +56,20 @@ class DriverDocument {
     this.rejectionReason,
   });
 
+  bool get isApproved => status.toLowerCase() == 'approved';
+  bool get isPending => status.toLowerCase() == 'pending';
+  bool get isRejected => status.toLowerCase() == 'rejected';
+  bool get isExpired =>
+      status.toLowerCase() == 'expired' ||
+      (expiryDate != null &&
+          DateTime.tryParse(expiryDate!) != null &&
+          DateTime.tryParse(expiryDate!)!.isBefore(DateTime.now()));
+  bool get isExpiringSoon =>
+      !isExpired &&
+      expiryDate != null &&
+      DateTime.tryParse(expiryDate!) != null &&
+      DateTime.tryParse(expiryDate!)!.difference(DateTime.now()).inDays <= 30;
+
   factory DriverDocument.fromJson(Map<String, dynamic> json) {
     return DriverDocument(
       id: json['id']?.toString(),

@@ -10,6 +10,7 @@ import '../../features/ride_history/presentation/pages/ride_history_page.dart';
 import '../../features/earnings/presentation/pages/earnings_page.dart';
 import '../../features/wallet/presentation/pages/wallet_page.dart';
 import '../../features/wallet/presentation/pages/transactions_page.dart';
+import '../../features/wallet/presentation/pages/payout_history_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
 import '../../features/profile/presentation/pages/edit_profile_page.dart';
 import '../../features/profile/presentation/pages/vehicle_info_page.dart';
@@ -82,6 +83,23 @@ class AppRouter {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/subscription',
+        builder: (context, state) {
+          final authState = authBloc.state;
+          final countryId = authState is Authenticated ? (authState.driver.countryId ?? '') : '';
+          return SubscriptionPlansScreen(
+            countryId: countryId,
+            onSubscribed: () {
+              context.go('/dashboard');
+            },
+            onLogout: () {
+              authBloc.add(LogoutRequested());
+            },
+          );
+        },
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/subscription-plans',
         builder: (context, state) {
           final authState = authBloc.state;
           final countryId = authState is Authenticated ? (authState.driver.countryId ?? '') : '';
@@ -218,6 +236,11 @@ class AppRouter {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/transactions',
         builder: (context, state) => const TransactionsPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/payout-history',
+        builder: (context, state) => const PayoutHistoryPage(),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,

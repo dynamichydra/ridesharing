@@ -3,6 +3,7 @@ import '../../../../common/entities/driver_profile.dart';
 import '../../../../core/error/app_exception.dart';
 import '../../../../services/app_logger.dart';
 import '../../domain/repositories/auth_repository.dart';
+import '../../../../core/services/fcm_service.dart';
 
 // ── Events ──────────────────────────────────────────────────────────────────
 abstract class AuthEvent {}
@@ -55,8 +56,12 @@ class AuthError extends AuthState {
 // ── BLoC ───────────────────────────────────────────────────────────────────
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository authRepository;
+  final FcmService? fcmService;
 
-  AuthBloc({required this.authRepository}) : super(AuthInitial()) {
+  AuthBloc({
+    required this.authRepository,
+    this.fcmService,
+  }) : super(AuthInitial()) {
     on<CheckAuthStatus>(_onCheckAuthStatus);
     on<StartPhoneAuthentication>(_onStartPhoneAuthentication);
     on<VerifyOtpCode>(_onVerifyOtpCode);
@@ -78,6 +83,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final driver = await authRepository.getCurrentDriver();
       emit(Authenticated(driver: driver));
+      fcmService?.syncTokenWithBackend();
     } on AppException catch (e) {
       AppLogger.i(
         '[AuthBloc] Stored session is no longer valid (${e.runtimeType}); clearing it.',
@@ -131,6 +137,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         event.isLogin,
       );
       emit(Authenticated(driver: driver));
+      fcmService?.syncTokenWithBackend();
     } catch (e) {
       emit(AuthError(message: e.toString()));
     }
@@ -142,6 +149,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoading());
     try {
+      await fcmService?.deleteToken();
       await authRepository.logout();
     } catch (e) {
       AppLogger.w(

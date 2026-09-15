@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'core/services/storage_service.dart';
 import 'core/network/dio_client.dart';
 import 'core/services/google_routes_service.dart';
+import 'core/services/fcm_service.dart';
 
 // Auth
 import 'features/auth/data/datasources/auth_datasource.dart';
@@ -72,13 +73,14 @@ Future<void> init() async {
   sl.registerLazySingleton<Dio>(() => dio);
   sl.registerLazySingleton<DioClient>(() => DioClient(sl<Dio>()));
   sl.registerLazySingleton<GoogleRoutesService>(() => GoogleRoutesService());
+  sl.registerLazySingleton<FcmService>(() => FcmService(dioClient: sl<DioClient>(), storageService: sl<StorageService>()));
 
   // ==========================================
   // Auth Feature
   // ==========================================
   sl.registerLazySingleton<AuthDataSource>(() => AuthDataSourceImpl(sl<DioClient>(), sl<StorageService>()));
   sl.registerLazySingleton<AuthRepository>(() => AuthRepositoryImpl(sl<AuthDataSource>()));
-  sl.registerFactory(() => AuthBloc(sl<AuthRepository>()));
+  sl.registerFactory(() => AuthBloc(sl<AuthRepository>(), fcmService: sl<FcmService>()));
 
   // ==========================================
   // Home Feature

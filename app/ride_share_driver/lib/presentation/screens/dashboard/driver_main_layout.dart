@@ -11,9 +11,14 @@ class DriverMainLayout extends StatefulWidget {
   const DriverMainLayout({super.key, required this.navigationShell});
 
   static final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
+  static void Function(int)? onSwitchTab;
 
   static void openDrawer() {
     scaffoldKey.currentState?.openDrawer();
+  }
+
+  static void switchToTab(int index) {
+    onSwitchTab?.call(index);
   }
 
   @override
@@ -27,8 +32,15 @@ class _DriverMainLayoutState extends State<DriverMainLayout> {
   @override
   void initState() {
     super.initState();
+    DriverMainLayout.onSwitchTab = (index) => _onItemTapped(index);
     _profileBloc = di.sl<ProfileBloc>()..add(LoadProfile());
     _rideBloc = di.sl<RideBloc>();
+  }
+
+  @override
+  void dispose() {
+    DriverMainLayout.onSwitchTab = null;
+    super.dispose();
   }
 
   void _onItemTapped(int index) {

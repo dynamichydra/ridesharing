@@ -5,6 +5,7 @@ class DriverDocumentItem extends Equatable {
   final String code;
   final String name;
   final String? description;
+  final bool isRequired;
   final bool requiresFront;
   final bool requiresBack;
   final bool requiresPdf;
@@ -16,7 +17,7 @@ class DriverDocumentItem extends Equatable {
   final String? backUrl;
   final String? pdfUrl;
   final DateTime? expiryDate;
-  final String status; // 'approved' | 'pending' | 'rejected' | 'missing'
+  final String status; // 'approved' | 'pending' | 'rejected' | 'missing' | 'expired'
   final String? rejectionReason;
   final DateTime? uploadedAt;
   final DateTime? verifiedAt;
@@ -26,6 +27,7 @@ class DriverDocumentItem extends Equatable {
     required this.code,
     required this.name,
     this.description,
+    this.isRequired = true,
     this.requiresFront = true,
     this.requiresBack = false,
     this.requiresPdf = false,
@@ -47,6 +49,13 @@ class DriverDocumentItem extends Equatable {
   bool get isPending => status.toLowerCase() == 'pending';
   bool get isRejected => status.toLowerCase() == 'rejected';
   bool get isMissing => status.toLowerCase() == 'missing' || status.isEmpty;
+  bool get isExpired =>
+      status.toLowerCase() == 'expired' ||
+      (expiryDate != null && expiryDate!.isBefore(DateTime.now()));
+  bool get isExpiringSoon =>
+      !isExpired &&
+      expiryDate != null &&
+      expiryDate!.difference(DateTime.now()).inDays <= 30;
 
   factory DriverDocumentItem.fromJson(Map<String, dynamic> json) {
     final expStr = json['expiryDate'] as String?;
@@ -58,6 +67,7 @@ class DriverDocumentItem extends Equatable {
       code: json['code'] as String? ?? 'DOC',
       name: json['name'] as String? ?? (json['code'] as String? ?? 'Document').replaceAll('_', ' '),
       description: json['description'] as String?,
+      isRequired: json['isRequired'] as bool? ?? true,
       requiresFront: json['requiresFront'] as bool? ?? true,
       requiresBack: json['requiresBack'] as bool? ?? false,
       requiresPdf: json['requiresPdf'] as bool? ?? false,
@@ -81,6 +91,7 @@ class DriverDocumentItem extends Equatable {
         documentTypeId,
         code,
         name,
+        isRequired,
         id,
         documentNumber,
         frontUrl,

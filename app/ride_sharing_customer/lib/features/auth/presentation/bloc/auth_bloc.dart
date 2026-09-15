@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/errors/failures.dart';
 import '../../domain/repositories/auth_repository.dart';
+import '../../../../core/services/fcm_service.dart';
 
 // ==========================================
 // Auth Events
@@ -115,8 +116,9 @@ class AuthError extends AuthState {
 // ==========================================
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
+  final FcmService? fcmService;
 
-  AuthBloc(this._authRepository) : super(AuthInitial()) {
+  AuthBloc(this._authRepository, {this.fcmService}) : super(AuthInitial()) {
     on<AppStarted>(_onAppStarted);
     on<LoginSubmitted>(_onLoginSubmitted);
     on<SignupSubmitted>(_onSignupSubmitted);
@@ -132,6 +134,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final isLoggedIn = await _authRepository.checkAuthStatus();
       if (isLoggedIn) {
         emit(AuthAuthenticated());
+        fcmService?.syncTokenWithBackend();
       } else {
         emit(AuthUnauthenticated());
       }
@@ -177,6 +180,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(RegistrationDetailsRequired());
       } else {
         emit(AuthAuthenticated());
+        fcmService?.syncTokenWithBackend();
       }
     } catch (e) {
       emit(AuthError(_extractErrorMessage(e)));
@@ -188,6 +192,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       await _authRepository.registerProfileDetails(event.name, event.email);
       emit(AuthAuthenticated());
+      fcmService?.syncTokenWithBackend();
     } catch (e) {
       emit(AuthError(_extractErrorMessage(e)));
     }
@@ -205,7 +210,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   Future<void> _onLoggedOut(LoggedOut event, Emitter<AuthState> emit) async {
     emit(AuthLoading());
-    await _authRepository.logout();
+    try {
+      await fcmService?.deleteToken();
+      await _authRepository.logout();
+    } catch (_) {
+      await _authRepository.logout();
+    }
     emit(AuthUnauthenticated());
   }
 }

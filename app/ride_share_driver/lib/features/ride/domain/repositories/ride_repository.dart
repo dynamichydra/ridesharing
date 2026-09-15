@@ -25,6 +25,14 @@ abstract class RideRepository {
     int? recordedAt,
   });
 
+  /// Emits `go_online {lat, lng}` over the socket so the backend registers
+  /// the driver in the H3 geo-index and publishes the status Kafka event.
+  void goOnlineViaSocket(double lat, double lng);
+
+  /// Emits `go_offline` over the socket for a clean deregistration before
+  /// the physical socket disconnect fires.
+  void goOfflineViaSocket();
+
   // ── REST lifecycle actions ────────────────────────────────────────────────
   Future<ActiveRide> markArriving(String rideId);
   Future<ActiveRide> markArrived(String rideId);

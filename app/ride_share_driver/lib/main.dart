@@ -9,12 +9,14 @@ import 'core/localization/app_localizations.dart';
 import 'core/storage/secure_storage.dart';
 import 'core/network/network_cubit.dart';
 import 'core/widgets/no_internet_view.dart';
+import 'core/services/fcm_service.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'presentation/bloc/onboarding/onboarding_bloc.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await di.init();
+  await di.sl<FcmService>().initialize();
   runApp(const MyApp());
 }
 
@@ -39,6 +41,11 @@ class _MyAppState extends State<MyApp> {
     _onboardingBloc = di.sl<OnboardingBloc>();
     _networkCubit = di.sl<NetworkCubit>();
     _appRouter = AppRouter(_authBloc);
+
+    di.sl<FcmService>().onNotificationClicked = (route, data) {
+      _appRouter.router.push(route);
+    };
+
     _loadSavedLocale();
   }
 

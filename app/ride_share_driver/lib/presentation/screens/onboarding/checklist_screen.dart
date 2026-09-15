@@ -135,10 +135,11 @@ class ChecklistScreen extends StatelessWidget {
       todoItems.add(
         _ChecklistItem(
           code: 'document:${req.code}',
-          title: docTitle,
-          description: docDesc,
+          title: req.isRequired ? docTitle : '$docTitle (Optional)',
+          description: req.isRequired ? docDesc : 'Optional document upload',
           icon: docIcon,
           isCompleted: isDocumentComplete(req.code),
+          isRequired: req.isRequired,
         ),
       );
     }
@@ -184,8 +185,9 @@ class ChecklistScreen extends StatelessWidget {
     final completedCount = todoItems.where((i) => i.isCompleted).length;
     final totalCount = todoItems.length;
     // We allow skipping Bank Details (it is optional during registration, required before going online)
+    // and optional documents
     final isButtonEnabled = todoItems
-        .where((i) => i.code != 'bank_details')
+        .where((i) => i.code != 'bank_details' && i.isRequired)
         .every((i) => i.isCompleted);
 
     return Column(
@@ -383,6 +385,7 @@ class _ChecklistItem {
   final String description;
   final IconData icon;
   final bool isCompleted;
+  final bool isRequired;
 
   _ChecklistItem({
     required this.code,
@@ -390,5 +393,6 @@ class _ChecklistItem {
     required this.description,
     required this.icon,
     required this.isCompleted,
+    this.isRequired = true,
   });
 }

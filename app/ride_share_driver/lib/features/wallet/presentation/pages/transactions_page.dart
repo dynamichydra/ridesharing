@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../injection_container.dart' as di;
+import '../../../../style/appcolors.dart';
 import '../bloc/wallet_bloc.dart';
 
 class TransactionsPage extends StatefulWidget {
@@ -137,10 +138,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
                               decoration: BoxDecoration(
-                                color: isSelected ? const Color(0xFF009048) : Colors.white,
+                                color: isSelected ? AppColors.primary : Colors.white,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: isSelected ? const Color(0xFF009048) : const Color(0xFFE2E7E9),
+                                  color: isSelected ? AppColors.primary : const Color(0xFFE2E7E9),
                                 ),
                               ),
                               child: Text(
@@ -160,9 +161,41 @@ class _TransactionsPageState extends State<TransactionsPage> {
                 ),
                 const SizedBox(height: 8),
 
+                // Cash Out Payout History Banner
+                if (_selectedTab == 'Cash Out')
+                  Padding(
+                    padding: const EdgeInsets.only(left: 20, right: 20, bottom: 8),
+                    child: InkWell(
+                      onTap: () => context.push('/payout-history'),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.history_rounded, size: 18, color: AppColors.primary),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Track bank transfer receipts and gateway status in Payout History',
+                                style: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            Icon(Icons.arrow_forward_ios_rounded, size: 12, color: AppColors.primary),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
                 // Transactions List
                 Expanded(
                   child: RefreshIndicator(
+                    color: AppColors.primary,
                     onRefresh: () async {
                       _bloc.add(LoadWalletData());
                     },

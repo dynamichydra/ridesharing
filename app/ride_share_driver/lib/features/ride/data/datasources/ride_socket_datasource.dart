@@ -22,6 +22,8 @@ class RideSocketDataSource {
   final _socketErrorController = StreamController<String>.broadcast();
   final _acceptResultController = StreamController<RideAcceptResult>.broadcast();
   final _chatMessageController = StreamController<RideChatMessage>.broadcast();
+  // Carries the bool isOnline value from the server's `status` reply event.
+  final _driverStatusController = StreamController<bool>.broadcast();
 
   RideSocketDataSource({required this.secureStorage});
 
@@ -31,6 +33,9 @@ class RideSocketDataSource {
   Stream<String> get onSocketError => _socketErrorController.stream;
   Stream<RideAcceptResult> get onAcceptResult => _acceptResultController.stream;
   Stream<RideChatMessage> get onChatMessage => _chatMessageController.stream;
+  /// Emits the `isOnline` bool echoed back by the server after a `go_online`
+  /// or `go_offline` event is processed.
+  Stream<bool> get onDriverStatus => _driverStatusController.stream;
 
   Future<void> connect() async {
     final token = await secureStorage.getToken();
@@ -74,6 +79,17 @@ class RideSocketDataSource {
     socket.onError((data) {
       AppLogger.w('[RideSocket] error: $data');
       _socketErrorController.add('Socket error: $data');
+    });
+
+    // Server's echo after go_online / go_offline is processed.
+    socket.on('status', (data) {
+      if (data is Map) {
+        final isOnline = data['isOnline'];
+        if (isOnline is bool) {
+          AppLogger.i('[RideSocket] status confirmed: isOnline=$isOnline');
+          _driverStatusController.add(isOnline);
+        }
+      }
     });
 
     socket.on('error', (data) {
@@ -197,6 +213,23 @@ class RideSocketDataSource {
     });
   }
 
+  /// Emits the `go_online` socket event so the backend sets isOnline=true in
+  /// the DB, registers the driver in the H3 geo-index, refreshes Redis, and
+  /// publishes the DRIVER_STATUS_CHANGED Kafka event — all within the socket
+  /// handler rather than via a separate REST call.
+  void emitGoOnline(double lat, double lng) {
+    AppLogger.i('[RideSocket] emitting go_online lat=$lat lng=$lng');
+    _socket?.emit('go_online', {'lat': lat, 'lng': lng});
+  }
+
+  /// Emits the `go_offline` socket event so the backend cleanly removes the
+  /// driver from the H3 geo-index and publishes the offline Kafka event before
+  /// the physical socket disconnect fires.
+  void emitGoOffline() {
+    AppLogger.i('[RideSocket] emitting go_offline');
+    _socket?.emit('go_offline');
+  }
+
   /// Closes the broadcast controllers themselves — call once when the owning
   /// Bloc is closed for good (not on every online/offline toggle).
   void dispose() {
@@ -207,5 +240,6 @@ class RideSocketDataSource {
     _socketErrorController.close();
     _acceptResultController.close();
     _chatMessageController.close();
+    _driverStatusController.close();
   }
 }

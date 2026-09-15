@@ -12,6 +12,7 @@ import 'routes.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/home/presentation/bloc/home_bloc.dart';
 import 'features/booking/presentation/bloc/booking_bloc.dart';
+import 'core/services/fcm_service.dart';
 import 'features/ride_tracking/presentation/bloc/ride_tracking_bloc.dart';
 import 'features/wallet/presentation/bloc/wallet_bloc.dart';
 import 'features/notifications/presentation/bloc/notifications_bloc.dart';
@@ -20,6 +21,11 @@ import 'features/profile/presentation/bloc/profile_bloc.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await di.init();
+  await di.sl<FcmService>().initialize();
+
+  di.sl<FcmService>().onNotificationClicked = (route, data) {
+    AppRoutes.router.push(route);
+  };
 
   // Set currency code from storage
   final storageService = di.sl<StorageService>();

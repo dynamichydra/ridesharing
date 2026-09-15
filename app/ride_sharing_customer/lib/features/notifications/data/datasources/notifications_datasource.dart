@@ -18,6 +18,19 @@ class NotificationsDataSourceImpl implements NotificationsDataSource {
 
   @override
   Future<List<Map<String, dynamic>>> getNotifications() async {
+    try {
+      final response = await _dioClient.dio.get('/api/v1/rider/notifications');
+      if (response.data is Map && response.data['DATA'] is List) {
+        final list = (response.data['DATA'] as List)
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+        await _storageService.cacheData(_notificationsCacheKey, list);
+        return list;
+      }
+    } catch (_) {
+      // Fallback to cache or mock if offline or error
+    }
+
     final cached = _storageService.getCachedData(_notificationsCacheKey);
     if (cached != null) {
       return (cached as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -31,6 +44,10 @@ class NotificationsDataSourceImpl implements NotificationsDataSource {
 
   @override
   Future<void> markAsRead(String notificationId) async {
+    try {
+      await _dioClient.dio.patch('/api/v1/rider/notifications/$notificationId/read');
+    } catch (_) {}
+
     final current = await getNotifications();
     final updated = current.map((e) {
       if (e['id'] == notificationId) {

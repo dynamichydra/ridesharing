@@ -55,6 +55,13 @@ class RideRepositoryImpl implements RideRepository {
       );
 
   @override
+  void goOnlineViaSocket(double lat, double lng) =>
+      socketDataSource.emitGoOnline(lat, lng);
+
+  @override
+  void goOfflineViaSocket() => socketDataSource.emitGoOffline();
+
+  @override
   Future<ActiveRide> markArriving(String rideId) async {
     final json = await remoteDataSource.markArriving(rideId);
     return ActiveRide.fromJson(json);

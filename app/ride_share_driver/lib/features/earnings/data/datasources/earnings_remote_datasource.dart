@@ -2,11 +2,29 @@ import 'package:dio/dio.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/error/app_exception.dart';
 import '../models/earnings_model.dart';
+import '../models/commission_status_model.dart';
 
 class EarningsRemoteDataSource {
   final ApiClient apiClient;
 
   EarningsRemoteDataSource({required this.apiClient});
+
+  /// GET /api/v1/drivers/commission-status
+  Future<CommissionStatusModel> getCommissionStatus() async {
+    try {
+      final response = await apiClient.dio.get('/drivers/commission-status');
+      final data = response.data as Map<String, dynamic>;
+      if (data['SUCCESS'] != true) {
+        throw ServerException(data['MESSAGE']?.toString() ?? 'Failed to load commission status');
+      }
+      final payload = data['MESSAGE'] as Map<String, dynamic>;
+      return CommissionStatusModel.fromJson(payload);
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    } catch (_) {
+      return CommissionStatusModel.fallback();
+    }
+  }
 
   /// GET /api/v1/drivers/earnings?period=daily|weekly|monthly&weekOffset=0&monthOffset=0
   Future<EarningsDataModel> getEarnings({
@@ -68,3 +86,4 @@ class EarningsRemoteDataSource {
     }
   }
 }
+

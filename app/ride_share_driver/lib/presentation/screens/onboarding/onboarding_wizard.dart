@@ -306,6 +306,7 @@ class _OnboardingWizardState extends State<OnboardingWizard>
               setState(() {
                 _transitionOnSummaryLoad = true;
               });
+              context.read<OnboardingBloc>().add(LoadOnboardingConfig());
               context.read<OnboardingBloc>().add(LoadRegistrationSummary());
             } else if (state is ApplicationSubmitted) {
               showDialog(

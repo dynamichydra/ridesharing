@@ -10,6 +10,10 @@ import '../../domain/entities/ride_offer.dart';
 import '../../domain/entities/ride_accept_result.dart';
 import '../../domain/repositories/ride_repository.dart';
 
+// Interval at which a heartbeat `location_update` is emitted to keep the
+// Redis driver:location key (TTL 30s) alive when the driver is stationary.
+const Duration _kLocationHeartbeatInterval = Duration(seconds: 15);
+
 // ── Events ──────────────────────────────────────────────────────────────────
 abstract class RideEvent {}
 
@@ -177,6 +181,7 @@ class RideBloc extends Bloc<RideEvent, RideState> {
   StreamSubscription<RideAcceptResult>? _acceptResultSub;
   StreamSubscription<String>? _socketErrorSub;
   StreamSubscription<Position>? _locationSub;
+  Timer? _heartbeatTimer;
 
   ActiveRide? _currentRide;
   final List<RideOffer> _pendingOffers = [];
@@ -283,11 +288,26 @@ class RideBloc extends Bloc<RideEvent, RideState> {
       onError: (e) => AppLogger.w('[RideBloc] location stream error: $e'),
     );
 
-    // Send immediate initial location ping to update Redis & H3 index without waiting for GPS movement
+    // Get initial position, emit go_online to register in H3 geo-index and
+    // Kafka, then also send a location_update for the Redis live-position key.
     locationService.getCurrentPosition().then((pos) {
+      rideRepository.goOnlineViaSocket(pos.latitude, pos.longitude);
       add(_DriverLocationChanged(pos));
     }).catchError((e) {
       AppLogger.w('[RideBloc] failed to get initial position on connect: $e');
+    });
+
+    // Heartbeat: re-emit last known position every 15s so the Redis
+    // driver:location key (TTL 30s) never expires while the driver is idle.
+    _heartbeatTimer ??= Timer.periodic(_kLocationHeartbeatInterval, (_) {
+      final last = _lastDriverPos;
+      if (last == null) return;
+      rideRepository.sendLocationUpdate(
+        last.latitude,
+        last.longitude,
+        recordedAt: DateTime.now().millisecondsSinceEpoch,
+      );
+      AppLogger.i('[RideBloc] heartbeat location_update sent');
     });
 
     // Restore an in-progress ride if the app was killed/restarted mid-trip.
@@ -377,7 +397,12 @@ class RideBloc extends Bloc<RideEvent, RideState> {
   }
 
   void _cleanupSocket() {
+    // Notify backend of clean offline transition before closing the socket so
+    // the H3 geo-index is updated and the Kafka event fires synchronously.
+    rideRepository.goOfflineViaSocket();
     rideRepository.disconnect();
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
     _offerSub?.cancel();
     _takenSub?.cancel();
     _cancelledSub?.cancel();

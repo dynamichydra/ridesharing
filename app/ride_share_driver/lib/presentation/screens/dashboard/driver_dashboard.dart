@@ -14,9 +14,12 @@ import '../../../../features/ride_history/presentation/bloc/ride_history_bloc.da
 import '../../../../features/ride/presentation/widgets/ride_request_card.dart';
 import '../../../../common/entities/driver_dashboard_summary.dart';
 import '../../../../common/entities/driver_profile.dart';
+import '../../../../features/profile/data/models/driver_document_model.dart';
 import '../../../../core/storage/secure_storage.dart';
 import '../../../../features/subscription/domain/repositories/subscription_repository.dart';
 import '../../../../features/subscription/domain/entities/active_subscription.dart';
+import '../../../../style/appcolors.dart';
+import '../../../../features/earnings/data/models/commission_status_model.dart';
 import 'widgets/pulsing_radar_view.dart';
 import 'widgets/offline_mode_view.dart';
 import 'driver_main_layout.dart';
@@ -44,7 +47,6 @@ class _DriverDashboardState extends State<DriverDashboard>
   late final Animation<double> _moneyScaleAnim;
   double? _lastAddedAmount;
   bool _showMoneyBadge = false;
-  bool _hasCheckedExpiredOnLaunch = false;
 
   @override
   void initState() {
@@ -96,6 +98,10 @@ class _DriverDashboardState extends State<DriverDashboard>
       _driverStatusBloc.add(GoOfflineRequested());
       _rideBloc.add(DisconnectRideSocket());
       di.sl<SecureStorage>().saveOnlineStatus(false);
+    } else if (state == AppLifecycleState.resumed) {
+      // Refresh metrics, profile, and commission status on resume
+      _profileBloc.add(LoadProfile());
+      _walletBloc.add(LoadWalletData());
     }
   }
 
@@ -516,6 +522,87 @@ class _DriverDashboardState extends State<DriverDashboard>
     );
   }
 
+  Future<void> _showDocumentRequiredDialog(BuildContext context, String message) async {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogCtx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.white,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFEF2F2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.assignment_late_rounded,
+                  color: Color(0xFFDC2626),
+                  size: 32,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Document Verification Required',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                message.isNotEmpty
+                    ? message
+                    : 'One or more required documents must be updated or approved before you can go online.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF64748B),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF009048),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(dialogCtx);
+                    context.push('/documents');
+                  },
+                  child: const Text('Update Documents', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Not Now', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _toggleOnlineStatus(bool currentIsOnline) {
     if (currentIsOnline) {
       _driverStatusBloc.add(GoOfflineRequested());
@@ -550,6 +637,11 @@ class _DriverDashboardState extends State<DriverDashboard>
             if (state is DriverStatusError) {
               if (state.message.toLowerCase().contains('subscription')) {
                 _showSubscriptionRequiredDialog(context, state.message);
+              } else if (state.message.toLowerCase().contains('document') ||
+                  state.message.toLowerCase().contains('license') ||
+                  state.message.toLowerCase().contains('expired') ||
+                  state.message.toLowerCase().contains('verification')) {
+                _showDocumentRequiredDialog(context, state.message);
               } else {
                 CustomToast.show(context, state.message);
               }
@@ -616,22 +708,54 @@ class _DriverDashboardState extends State<DriverDashboard>
               // so the dashboard doesn't flash zeros during refresh/update.
               final DriverDashboardSummary? summary;
               final DriverProfile? profile;
+              final List<DriverDocumentItem> documents;
+              final CommissionStatusModel? commissionStatus;
               if (profileState is ProfileLoaded) {
                 summary = profileState.summary;
                 profile = profileState.profile;
+                documents = profileState.documents;
+                commissionStatus = profileState.commissionStatus;
               } else if (profileState is ProfileUpdateSuccess) {
                 summary = profileState.summary;
                 profile = profileState.profile;
+                documents = profileState.documents;
+                commissionStatus = profileState.commissionStatus;
               } else if (profileState is ProfileUpdating) {
                 summary = profileState.summary;
                 profile = profileState.profile;
+                documents = profileState.documents;
+                commissionStatus = profileState.commissionStatus;
               } else if (profileState is ProfileLoading) {
                 summary = profileState.previousSummary;
                 profile = profileState.previousProfile;
+                documents = profileState.previousDocuments ?? [];
+                commissionStatus = profileState.previousCommissionStatus;
+              } else if (profileState is ProfilePhotoUploading) {
+                summary = profileState.summary;
+                profile = profileState.profile;
+                documents = profileState.documents;
+                commissionStatus = profileState.commissionStatus;
+              } else if (profileState is ProfileDocumentUploadSuccess) {
+                summary = null;
+                profile = profileState.profile;
+                documents = profileState.documents;
+                commissionStatus = null;
+              } else if (profileState is ProfileDocumentUploading) {
+                summary = null;
+                profile = profileState.profile;
+                documents = profileState.documents;
+                commissionStatus = null;
               } else {
                 summary = null;
                 profile = null;
+                documents = [];
+                commissionStatus = null;
               }
+
+              final problematicDoc = documents.cast<DriverDocumentItem?>().firstWhere(
+                (d) => d != null && d.isRequired && (d.isExpired || d.isRejected),
+                orElse: () => null,
+              );
 
               final driverName =
                   summary?.name ??
@@ -759,6 +883,49 @@ class _DriverDashboardState extends State<DriverDashboard>
                                   children: [
                                     const SizedBox(height: 12),
 
+                                    // Alert Banner for Expired / Rejected Document
+                                    if (problematicDoc != null)
+                                      InkWell(
+                                        onTap: () => context.push('/documents'),
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          margin: const EdgeInsets.only(bottom: 14),
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFEF2F2),
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: const Color(0xFFFCA5A5)),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      problematicDoc.isExpired
+                                                          ? 'Action Required: ${problematicDoc.name} Expired'
+                                                          : 'Action Required: ${problematicDoc.name} Rejected',
+                                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF991B1B)),
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      problematicDoc.isExpired
+                                                          ? 'Your ${problematicDoc.name} has expired. Tap to renew and re-upload.'
+                                                          : 'Your ${problematicDoc.name} was rejected. Tap to view reason and re-upload.',
+                                                      style: const TextStyle(fontSize: 11, color: Color(0xFFB91C1C)),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              const Icon(Icons.chevron_right_rounded, color: Color(0xFFDC2626)),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+
                                     // 1. Top Header Profile / Status Card
                                     _buildHeaderSection(
                                       context: context,
@@ -776,7 +943,12 @@ class _DriverDashboardState extends State<DriverDashboard>
                                     // 2. Metrics Card: [Earnings] [Rides] [Working Hours]
                                     _buildMetricsSummaryCard(context, summary),
 
-                                    const SizedBox(height: 20),
+                                    const SizedBox(height: 12),
+
+                                    // 2.1 Commission & Performance Status Card
+                                    _buildCommissionSummaryCard(context, commissionStatus),
+
+                                    const SizedBox(height: 16),
 
                                     // 3. Dynamic State Section
                                     if (!isOnline)
@@ -1142,7 +1314,13 @@ class _DriverDashboardState extends State<DriverDashboard>
           // 1. Today's Earnings
           Expanded(
             child: InkWell(
-              onTap: () => context.push('/earnings'),
+              onTap: () {
+                if (DriverMainLayout.onSwitchTab != null) {
+                  DriverMainLayout.switchToTab(2);
+                } else {
+                  context.push('/earnings');
+                }
+              },
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -1279,7 +1457,13 @@ class _DriverDashboardState extends State<DriverDashboard>
           // 2. Rides Today
           Expanded(
             child: InkWell(
-              onTap: () => context.push('/ride-history'),
+              onTap: () {
+                if (DriverMainLayout.onSwitchTab != null) {
+                  DriverMainLayout.switchToTab(1);
+                } else {
+                  context.push('/ride-history');
+                }
+              },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Row(
@@ -1385,6 +1569,143 @@ class _DriverDashboardState extends State<DriverDashboard>
       ),
     );
   }
+
+  // ===========================================================================
+  // Commission & Plan Status Summary Card
+  // ===========================================================================
+  Widget _buildCommissionSummaryCard(
+    BuildContext context,
+    CommissionStatusModel? status,
+  ) {
+    final effectiveRate = status?.effectiveCommissionPercentage ?? '20%';
+    final isSubscriber = status?.isSubscriber ?? false;
+    final hasSavings = status?.hasSavings ?? false;
+    final savingsPct = status?.commissionSavingsPercentage ?? '0%';
+    final planName = status?.activePlan?.name ?? (isSubscriber ? 'Subscriber Plan' : 'Standard Plan');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: isSubscriber ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isSubscriber ? const Color(0xFFBBF7D0) : const Color(0xFFE2E8F0),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: InkWell(
+        onTap: () {
+          // Navigates directly to the subscription plans page
+          context.push('/subscription');
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isSubscriber ? const Color(0xFFDCFCE7) : const Color(0xFFE2E8F0),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                isSubscriber ? Icons.verified_rounded : Icons.card_membership_rounded,
+                color: isSubscriber ? AppColors.primary : AppColors.secondary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Commission: $effectiveRate',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isSubscriber ? AppColors.primary : AppColors.secondary,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          planName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    hasSavings
+                        ? 'Saving $savingsPct with $planName'
+                        : (isSubscriber
+                            ? 'Waived booking fee on all rides'
+                            : 'Tap to view subscription plans & save'),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isSubscriber ? const Color(0xFF15803D) : const Color(0xFF64748B),
+                      fontWeight: isSubscriber ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: isSubscriber
+                    ? AppColors.primary.withValues(alpha: 0.1)
+                    : AppColors.secondary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isSubscriber ? 'Plan' : 'Plans',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: isSubscriber ? AppColors.primary : AppColors.secondary,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: isSubscriber ? AppColors.primary : AppColors.secondary,
+                    size: 16,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   // ===========================================================================
   // State 1: ONLINE - OFFERS AVAILABLE

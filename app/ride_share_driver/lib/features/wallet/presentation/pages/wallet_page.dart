@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../common/widgets/custom_toast.dart';
+import '../../../../style/appcolors.dart';
 import '../../../../injection_container.dart' as di;
 import '../bloc/wallet_bloc.dart';
 import '../../../../presentation/screens/dashboard/driver_main_layout.dart';
@@ -467,6 +468,24 @@ class _WalletPageState extends State<WalletPage> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          context.push('/payout-history');
+                        },
+                        icon: const Icon(Icons.history_rounded, size: 16, color: AppColors.primary),
+                        label: const Text(
+                          'View Payout History',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -634,23 +653,88 @@ class _WalletPageState extends State<WalletPage> {
                     ),
                     const SizedBox(height: 16),
 
-                    // 2. Action Button: Cash Out
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _showInstantPayoutDialog(context, balance, bankDetails),
-                        icon: const Icon(Icons.account_balance_rounded, size: 20),
-                        label: const Text('Cash Out', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF009048),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          elevation: 0,
+                    // 2. Action Buttons: Cash Out & Payout History
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: SizedBox(
+                            height: 50,
+                            child: ElevatedButton.icon(
+                              onPressed: () => _showInstantPayoutDialog(context, balance, bankDetails),
+                              icon: const Icon(Icons.account_balance_rounded, size: 20),
+                              label: const Text('Cash Out', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                elevation: 0,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 2,
+                          child: SizedBox(
+                            height: 50,
+                            child: OutlinedButton.icon(
+                              onPressed: () => context.push('/payout-history'),
+                              icon: const Icon(Icons.history_rounded, size: 18),
+                              label: const Text('Payouts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.primary,
+                                side: const BorderSide(color: AppColors.primary, width: 1.2),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                backgroundColor: AppColors.primary.withValues(alpha: 0.05),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 2.1 Commission & Settlement Info Banner
+                    InkWell(
+                      onTap: () => context.push('/earnings'),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.shield_outlined, color: AppColors.secondary, size: 18),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Text(
+                                'Ride earnings settled net of platform commission deductions.',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF475569),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const Text(
+                              'View Rates',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.secondary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            const Icon(Icons.chevron_right_rounded, color: AppColors.secondary, size: 16),
+                          ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
                     // 3. Recent Transactions Header & View All
                     Row(

@@ -33,6 +33,19 @@ class ProfileRemoteDataSource {
     }
   }
 
+  Future<Map<String, dynamic>> getCommissionStatus() async {
+    try {
+      final response = await apiClient.dio.get('/drivers/commission-status');
+      final data = response.data as Map<String, dynamic>;
+      if (data['SUCCESS'] != true) {
+        throw ServerException(data['MESSAGE']?.toString() ?? 'Failed to load commission status');
+      }
+      return data['MESSAGE'] as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> updates) async {
     try {
       final response = await apiClient.dio.patch('/drivers/profile', data: updates);
@@ -48,12 +61,69 @@ class ProfileRemoteDataSource {
 
   Future<List<dynamic>> getDocuments() async {
     try {
-      final response = await apiClient.dio.get('/documents/mine');
-      final data = response.data as Map<String, dynamic>;
+      final results = await Future.wait([
+        apiClient.dio.get('/documents/mine'),
+        apiClient.dio.get('/onboarding/config').catchError(
+          (_) => Response(
+            requestOptions: RequestOptions(path: '/onboarding/config'),
+            data: {'SUCCESS': false},
+          ),
+        ),
+      ]);
+
+      final docsResponse = results[0];
+      final configResponse = results[1];
+
+      final data = docsResponse.data as Map<String, dynamic>;
       if (data['SUCCESS'] != true) {
         throw ServerException(data['MESSAGE']?.toString() ?? 'Failed to load documents');
       }
-      return data['MESSAGE'] as List<dynamic>? ?? [];
+      final docsList = data['MESSAGE'] as List<dynamic>? ?? [];
+
+      Map<String, dynamic>? reqMap;
+      if (configResponse.data is Map && configResponse.data['SUCCESS'] == true) {
+        final configMsg = configResponse.data['MESSAGE'] as Map<String, dynamic>?;
+        final reqsList = configMsg?['documentRequirements'] as List<dynamic>?;
+        if (reqsList != null) {
+          reqMap = {
+            for (final r in reqsList)
+              if (r is Map)
+                (r['id']?.toString() ?? r['code']?.toString() ?? ''): Map<String, dynamic>.from(r),
+          };
+        }
+      }
+
+      return docsList.map((doc) {
+        if (doc is Map<String, dynamic>) {
+          final docMap = Map<String, dynamic>.from(doc);
+          final docTypeId = docMap['documentTypeId']?.toString() ?? docMap['id']?.toString() ?? '';
+          final code = docMap['code']?.toString() ?? '';
+
+          if (reqMap != null) {
+            final req = reqMap[docTypeId] ?? reqMap[code];
+            if (req != null) {
+              docMap['isRequired'] = req['isRequired'] ?? true;
+              if (req['requiresFront'] != null) docMap['requiresFront'] = req['requiresFront'];
+              if (req['requiresBack'] != null) docMap['requiresBack'] = req['requiresBack'];
+              if (req['requiresPdf'] != null) docMap['requiresPdf'] = req['requiresPdf'];
+              if (req['requiresExpiry'] != null) docMap['requiresExpiry'] = req['requiresExpiry'];
+              if (req['requiresDocNumber'] != null) docMap['requiresDocNumber'] = req['requiresDocNumber'];
+            }
+          }
+
+          // Dynamic expiry detection: if document has an expiry date in the past, mark status as expired
+          final expiryStr = docMap['expiryDate']?.toString();
+          if (expiryStr != null) {
+            final expDate = DateTime.tryParse(expiryStr);
+            if (expDate != null && expDate.isBefore(DateTime.now())) {
+              docMap['status'] = 'expired';
+            }
+          }
+
+          return docMap;
+        }
+        return doc;
+      }).toList();
     } on DioException catch (e) {
       throw mapDioException(e);
     }
