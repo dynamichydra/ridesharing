@@ -172,11 +172,11 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
     growthPeriodText = 'vs Last Month';
     listTitle = monthOffset === 0 ? 'This Month' : 'Selected Month';
   } else {
-    currentStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    currentStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 6, 0, 0, 0, 0));
     currentEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
-    prevStart = new Date(currentStart.getTime() - 86400000);
+    prevStart = new Date(currentStart.getTime() - 7 * 86400000);
     prevEnd = new Date(currentStart.getTime() - 1);
-    growthPeriodText = 'vs Yesterday';
+    growthPeriodText = 'vs Prior 7 Days';
     listTitle = 'Last 7 Days';
   }
 
@@ -187,6 +187,7 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
     fareSnapshot: rides.fareSnapshot,
     paymentMethod: rides.paymentMethod,
     completedAt: rides.completedAt,
+    requestedAt: rides.requestedAt,
     startedAt: rides.startedAt,
     actualDurationMin: rides.actualDurationMin,
     durationMin: rides.durationMin,
@@ -198,8 +199,8 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
       and(
         eq(rides.driverId, driverId),
         eq(rides.status, 'completed'),
-        gte(rides.completedAt, currentStart),
-        sql`${rides.completedAt} <= ${currentEnd}`
+        sql`COALESCE(${rides.completedAt}, ${rides.requestedAt}) >= ${currentStart}`,
+        sql`COALESCE(${rides.completedAt}, ${rides.requestedAt}) <= ${currentEnd}`
       )
     );
 
@@ -213,8 +214,8 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
       and(
         eq(rides.driverId, driverId),
         eq(rides.status, 'completed'),
-        gte(rides.completedAt, prevStart),
-        sql`${rides.completedAt} <= ${prevEnd}`
+        sql`COALESCE(${rides.completedAt}, ${rides.requestedAt}) >= ${prevStart}`,
+        sql`COALESCE(${rides.completedAt}, ${rides.requestedAt}) <= ${prevEnd}`
       )
     );
 
@@ -274,13 +275,13 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
       walletPaymentsMinor += (gross - comm);
     }
 
-    if (r.actualDurationMin) {
-      totalMinutes += r.actualDurationMin;
-    } else if (r.startedAt && r.completedAt) {
-      const mins = Math.ceil((new Date(r.completedAt) - new Date(r.startedAt)) / 60000);
+    const rComp = r.completedAt || r.requestedAt;
+    const dur = r.actualDurationMin || r.durationMin || 0;
+    if (dur > 0) {
+      totalMinutes += dur;
+    } else if (r.startedAt && rComp) {
+      const mins = Math.ceil((new Date(rComp) - new Date(r.startedAt)) / 60000);
       totalMinutes += (mins > 0 ? mins : 0);
-    } else if (r.durationMin) {
-      totalMinutes += r.durationMin;
     }
   }
 
@@ -325,6 +326,15 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
     }
   };
 
+  const calculateRideNetMinor = (r) => {
+    if (r.netFareMinor != null) return r.netFareMinor;
+    const gross = r.fareSnapshot?.commission?.grossFareMinor || r.fareSnapshot?.grossFareMinor || r.finalFareMinor || r.estimatedFareMinor || 0;
+    const comm = r.platformCommissionMinor ?? r.fareSnapshot?.commission?.commissionMinor ?? Math.round(gross * 0.2);
+    return Math.max(0, gross - comm);
+  };
+
+  const getRideDate = (r) => r.completedAt || r.requestedAt;
+
   let historyItems = [];
 
   if (period === 'weekly') {
@@ -334,17 +344,20 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
       const dayEnd = new Date(Date.UTC(dayDate.getUTCFullYear(), dayDate.getUTCMonth(), dayDate.getUTCDate(), 23, 59, 59, 999));
 
       const dayRides = currentRides.filter(r => {
-        const cDate = new Date(r.completedAt);
+        const dStr = getRideDate(r);
+        if (!dStr) return false;
+        const cDate = new Date(dStr);
         return cDate >= dayStart && cDate <= dayEnd;
       });
 
-      let dayFareMinor = 0;
-      for (const r of dayRides) dayFareMinor += (r.finalFareMinor || r.estimatedFareMinor || 0);
-      const dayNetMinor = Math.round(dayFareMinor * 0.85);
+      let dayNetMinor = 0;
+      for (const r of dayRides) dayNetMinor += calculateRideNetMinor(r);
 
       const title = `${daysOfWeek[dayDate.getUTCDay()]}, ${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
+      const dateSubtitle = `${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
       historyItems.push({
         title,
+        dateSubtitle,
         trips: dayRides.length,
         amountMinor: dayNetMinor,
         amount: formatAmount(dayNetMinor),
@@ -352,67 +365,57 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
     }
   } else if (period === 'monthly') {
     const totalDaysInMonth = new Date(Date.UTC(currentStart.getUTCFullYear(), currentStart.getUTCMonth() + 1, 0)).getUTCDate();
-    for (let d = 1; d <= Math.min(totalDaysInMonth, 7); d++) {
+    for (let d = totalDaysInMonth; d >= 1; d--) {
       const dayDate = new Date(Date.UTC(currentStart.getUTCFullYear(), currentStart.getUTCMonth(), d, 0, 0, 0, 0));
       const dayStart = dayDate;
       const dayEnd = new Date(Date.UTC(currentStart.getUTCFullYear(), currentStart.getUTCMonth(), d, 23, 59, 59, 999));
 
       const dayRides = currentRides.filter(r => {
-        const cDate = new Date(r.completedAt);
+        const dStr = getRideDate(r);
+        if (!dStr) return false;
+        const cDate = new Date(dStr);
         return cDate >= dayStart && cDate <= dayEnd;
       });
 
-      let dayFareMinor = 0;
-      for (const r of dayRides) dayFareMinor += (r.finalFareMinor || r.estimatedFareMinor || 0);
-      const dayNetMinor = Math.round(dayFareMinor * 0.85);
+      let dayNetMinor = 0;
+      for (const r of dayRides) dayNetMinor += calculateRideNetMinor(r);
 
       const title = `${daysOfWeek[dayDate.getUTCDay()]}, ${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
+      const dateSubtitle = `${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
       historyItems.push({
         title,
+        dateSubtitle,
         trips: dayRides.length,
         amountMinor: dayNetMinor,
         amount: formatAmount(dayNetMinor),
       });
     }
   } else {
-    const sevenDaysAgo = new Date(currentStart.getTime() - 6 * 86400000);
-    const last7DaysRides = await db.select({
-      finalFareMinor: rides.finalFareMinor,
-      estimatedFareMinor: rides.estimatedFareMinor,
-      completedAt: rides.completedAt,
-    }).from(rides).where(
-      and(
-        eq(rides.driverId, driverId),
-        eq(rides.status, 'completed'),
-        gte(rides.completedAt, sevenDaysAgo)
-      )
-    );
-
+    const todayUTCDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
     for (let i = 0; i < 7; i++) {
-      const dayDate = new Date(currentStart.getTime() - i * 86400000);
+      const dayDate = new Date(todayUTCDate.getTime() - i * 86400000);
       const dayStart = new Date(Date.UTC(dayDate.getUTCFullYear(), dayDate.getUTCMonth(), dayDate.getUTCDate(), 0, 0, 0, 0));
       const dayEnd = new Date(Date.UTC(dayDate.getUTCFullYear(), dayDate.getUTCMonth(), dayDate.getUTCDate(), 23, 59, 59, 999));
 
-      const dayRides = last7DaysRides.filter(r => {
-        const cDate = new Date(r.completedAt);
+      const dayRides = currentRides.filter(r => {
+        const dStr = getRideDate(r);
+        if (!dStr) return false;
+        const cDate = new Date(dStr);
         return cDate >= dayStart && cDate <= dayEnd;
       });
 
-      let dayFareMinor = 0;
-      for (const r of dayRides) dayFareMinor += (r.finalFareMinor || r.estimatedFareMinor || 0);
-      const dayNetMinor = Math.round(dayFareMinor * 0.85);
+      let dayNetMinor = 0;
+      for (const r of dayRides) dayNetMinor += calculateRideNetMinor(r);
 
       let title = '';
-      let dateSubtitle = null;
+      let dateSubtitle = `${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
       let isToday = false;
 
       if (i === 0) {
         title = 'Today';
-        dateSubtitle = `${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
         isToday = true;
       } else if (i === 1) {
         title = 'Yesterday';
-        dateSubtitle = `${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
       } else {
         title = `${daysOfWeek[dayDate.getUTCDay()]}, ${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
       }
@@ -584,12 +587,12 @@ export async function updateProfile(driverId, data) {
   }
 
   updates.updatedAt = new Date();
-  const [updated] = await db.update(drivers).set(updates).where(eq(drivers.id, driverId)).returning();
+  await db.update(drivers).set(updates).where(eq(drivers.id, driverId));
 
   const touchedPersonalInfo = ['name', 'dateOfBirth', 'gender', 'referralCode'].some((f) => f in data);
   if (touchedPersonalInfo) await advanceRegistration(driverId, REGISTRATION_STEP.PERSONAL_INFO);
 
-  return updated;
+  return getProfile(driverId);
 }
 
 export async function updateDrivingLocation(driverId, { countryId, stateId, cityId }) {
@@ -619,10 +622,10 @@ export async function requestProfilePhotoUploadUrl(contentType) {
 
 export async function confirmProfilePhoto(driverId, key) {
   await verifyObjectExists(key, 5);
-  const [updated] = await db.update(drivers).set({ profilePhoto: key, updatedAt: new Date() })
-    .where(eq(drivers.id, driverId)).returning();
+  await db.update(drivers).set({ profilePhoto: key, updatedAt: new Date() })
+    .where(eq(drivers.id, driverId));
   await advanceRegistration(driverId, REGISTRATION_STEP.PHOTO);
-  return updated;
+  return getProfile(driverId);
 }
 
 // Legacy single-shot document submission — superseded by the documents module,
@@ -1133,7 +1136,8 @@ export async function getDriverCommissionStatus(driverId) {
     const [sub] = await db.select({
       id: subscriptions.id,
       planId: subscriptions.planId,
-      expiresAt: subscriptions.expiresAt,
+      endDate: subscriptions.endDate,
+      currentPeriodEnd: subscriptions.currentPeriodEnd,
       status: subscriptions.status,
       planName: subscriptionPlans.name,
       planType: subscriptionPlans.type,
@@ -1151,7 +1155,7 @@ export async function getDriverCommissionStatus(driverId) {
         id: sub.planId,
         name: sub.planName,
         type: sub.planType,
-        expiresAt: sub.expiresAt,
+        expiresAt: sub.endDate || sub.currentPeriodEnd,
       };
       if (sub.entitlements?.commissionRate !== undefined && sub.entitlements?.commissionRate !== null) {
         customRate = Number(sub.entitlements.commissionRate);

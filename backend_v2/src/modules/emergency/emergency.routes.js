@@ -32,7 +32,7 @@ export async function emergencyRoutes(app) {
 
   // ── Live Trip Sharing ────────────────────────────────────────────────────────
   // POST /api/v1/rides/:rideId/share-token
-  app.post('/rides/:rideId/share-token', { preHandler: [authenticateRider] }, async (request, reply) => {
+  app.post('/rides/:rideId/share-token', { preHandler: [authenticateAny] }, async (request, reply) => {
     const data = await emergencyService.generateShareToken(request.params.rideId, request.user.id);
     return sendSuccess(reply, data, 201);
   });

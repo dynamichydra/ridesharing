@@ -123,13 +123,15 @@ export async function triggerSosAlert(rideId, requester, { lat, lng } = {}) {
 
 // ── Live Trip Sharing ─────────────────────────────────────────────────────────
 
-export async function generateShareToken(rideId, riderId) {
+export async function generateShareToken(rideId, userId) {
   const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
   if (!ride) throw { statusCode: 404, message: 'Ride not found' };
-  if (ride.riderId !== riderId) throw { statusCode: 403, message: 'Only the primary rider can share live trip status' };
+  if (ride.riderId !== userId && ride.driverId !== userId) {
+    throw { statusCode: 403, message: 'Only ride participants can share live trip status' };
+  }
 
   const [existing] = await db.select().from(tripShareTokens)
-    .where(and(eq(tripShareTokens.rideId, rideId), eq(tripShareTokens.riderId, riderId)))
+    .where(eq(tripShareTokens.rideId, rideId))
     .limit(1);
 
   if (existing && moment(existing.expiresAt).isAfter(moment())) {
@@ -145,7 +147,7 @@ export async function generateShareToken(rideId, riderId) {
 
   const [created] = await db.insert(tripShareTokens).values({
     rideId,
-    riderId,
+    riderId: ride.riderId,
     token,
     expiresAt,
   }).returning();

@@ -1606,13 +1606,39 @@ export async function getDriverRideHistory(driverId, { page = 1, limit = 20, off
     .offset(offset);
 
   const rows = rawRows.map((r) => {
+    let reqDate = r.requestedAt ? new Date(r.requestedAt) : null;
+    let compDate = r.completedAt ? new Date(r.completedAt) : null;
+    let startDate = r.startedAt ? new Date(r.startedAt) : null;
+
+    // Fix legacy skew if requestedAt was saved in local time (+5.5h) while completedAt/startedAt was saved in UTC
+    if (reqDate && compDate && reqDate.getTime() > compDate.getTime()) {
+      const diffMs = reqDate.getTime() - compDate.getTime();
+      if (diffMs > 0 && diffMs <= 6 * 3600 * 1000) {
+        reqDate = new Date(compDate.getTime() - Math.max(1, (r.actualDurationMin || r.durationMin || 10)) * 60 * 1000);
+      }
+    }
+    if (reqDate && startDate && reqDate.getTime() > startDate.getTime()) {
+      const diffMs = reqDate.getTime() - startDate.getTime();
+      if (diffMs > 0 && diffMs <= 6 * 3600 * 1000) {
+        reqDate = new Date(startDate.getTime() - 2 * 60 * 1000);
+      }
+    }
+
+    let durMin = r.actualDurationMin ?? r.durationMin ?? 0;
+    if (durMin <= 0 && startDate && compDate && compDate > startDate) {
+      durMin = Math.ceil((compDate.getTime() - startDate.getTime()) / 60000);
+    }
+    durMin = Math.max(0, durMin);
+
     const fareMinor = r.finalFareMinor ?? r.estimatedFareMinor ?? 0;
     const fareMajor = fareMinor / 100;
     const distKm = r.actualDistanceKm ?? r.distanceKm ?? '0.0';
-    const durMin = r.actualDurationMin ?? r.durationMin ?? 0;
 
     return {
       ...r,
+      requestedAt: reqDate ? reqDate.toISOString() : null,
+      completedAt: compDate ? compDate.toISOString() : null,
+      startedAt: startDate ? startDate.toISOString() : null,
       fare: fareMajor,
       fareMinor,
       pickup: r.pickupAddress,
