@@ -273,6 +273,53 @@ class OnboardingRemoteDataSource {
     }
   }
 
+  Future<Map<String, dynamic>> updateVehicle(String vehicleId, Map<String, dynamic> data) async {
+    try {
+      final response = await apiClient.dio.patch('/vehicles/$vehicleId', data: data);
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to update vehicle');
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> activateVehicle(String vehicleId) async {
+    try {
+      final response = await apiClient.dio.post('/vehicles/$vehicleId/activate');
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'];
+      }
+      throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to activate vehicle');
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  Future<void> deleteVehicle(String vehicleId) async {
+    try {
+      final response = await apiClient.dio.delete('/vehicles/$vehicleId');
+      if (response.data['SUCCESS'] != true) {
+        throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to delete vehicle');
+      }
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  Future<List<dynamic>> getVehicleInspections(String vehicleId) async {
+    try {
+      final response = await apiClient.dio.get('/vehicles/$vehicleId/inspections');
+      if (response.data['SUCCESS'] == true) {
+        return response.data['MESSAGE'] as List<dynamic>? ?? [];
+      }
+      return [];
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
   Future<List<dynamic>> getMyAnswers() async {
     try {
       final response = await apiClient.dio.get('/onboarding/answers/mine');

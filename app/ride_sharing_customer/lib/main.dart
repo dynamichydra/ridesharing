@@ -21,7 +21,11 @@ import 'features/profile/presentation/bloc/profile_bloc.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await di.init();
-  await di.sl<FcmService>().initialize();
+  try {
+    await di.sl<FcmService>().initialize();
+  } catch (e) {
+    debugPrint('[FCM Customer] Initialization skipped/failed: $e');
+  }
 
   di.sl<FcmService>().onNotificationClicked = (route, data) {
     AppRoutes.router.push(route);

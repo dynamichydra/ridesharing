@@ -515,12 +515,21 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
               )
             else
               const SizedBox(width: 24),
-            if (isMandatory)
-              IconButton(
-                icon: const Icon(Icons.logout_rounded, color: Color(0xFF0F172A)),
-                onPressed: widget.onLogout,
-                tooltip: 'Logout',
-              ),
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.receipt_long_rounded, color: Color(0xFF0F172A)),
+                  onPressed: () => context.push('/subscription-history'),
+                  tooltip: 'Subscription Invoices & History',
+                ),
+                if (isMandatory)
+                  IconButton(
+                    icon: const Icon(Icons.logout_rounded, color: Color(0xFF0F172A)),
+                    onPressed: widget.onLogout,
+                    tooltip: 'Logout',
+                  ),
+              ],
+            ),
           ],
         ),
         const SizedBox(height: 10),

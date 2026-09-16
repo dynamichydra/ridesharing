@@ -6,6 +6,7 @@ import '../../../../style/appcolors.dart';
 import '../../data/datasources/earnings_remote_datasource.dart';
 import '../../data/models/earnings_model.dart';
 import '../../data/models/commission_status_model.dart';
+import '../widgets/active_incentive_quests_section.dart';
 
 class EarningsPage extends StatefulWidget {
   const EarningsPage({super.key});
@@ -59,7 +60,8 @@ class _EarningsPageState extends State<EarningsPage> {
           _isLoading = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Error fetching driver earnings: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -129,6 +131,11 @@ class _EarningsPageState extends State<EarningsPage> {
 
               // 2.1 Commission Structure & Savings Breakdown Card
               _buildCommissionBreakdownCard(_commissionStatus),
+
+              const SizedBox(height: 16),
+
+              // 2.2 Active Bonus Quests & Incentive Campaign Tracker
+              const ActiveIncentiveQuestsSection(),
 
               const SizedBox(height: 16),
 
@@ -1276,6 +1283,11 @@ class _EarningsPageState extends State<EarningsPage> {
           final item = items[index];
 
           if (isDaily) {
+            final tripsText = '${item.trips} ${item.trips == 1 ? 'trip' : 'trips'}';
+            final subtitle = (item.dateSubtitle != null && item.dateSubtitle!.isNotEmpty)
+                ? '${item.dateSubtitle}   •   $tripsText'
+                : tripsText;
+
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
@@ -1294,9 +1306,7 @@ class _EarningsPageState extends State<EarningsPage> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          item.dateSubtitle != null
-                              ? '${item.dateSubtitle}   •   ${item.trips} trips'
-                              : '${item.trips} trips',
+                          subtitle,
                           style: const TextStyle(
                             fontSize: 12,
                             color: Color(0xFF64748B),
@@ -1318,25 +1328,42 @@ class _EarningsPageState extends State<EarningsPage> {
               ),
             );
           } else {
+            final tripsText = '${item.trips} ${item.trips == 1 ? 'trip' : 'trips'}';
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
                   Expanded(
                     flex: 3,
-                    child: Text(
-                      item.title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.title,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                        if (item.dateSubtitle != null && item.dateSubtitle!.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            item.dateSubtitle!,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF64748B),
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   Expanded(
                     flex: 2,
                     child: Text(
-                      '${item.trips} trips',
+                      tripsText,
                       style: const TextStyle(
                         fontSize: 13,
                         color: Color(0xFF64748B),

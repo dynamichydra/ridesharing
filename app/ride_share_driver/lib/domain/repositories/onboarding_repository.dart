@@ -110,6 +110,17 @@ abstract class OnboardingRepository {
     String? color,
     String? image,
   });
+  Future<DriverVehicle> updateVehicle(
+    String vehicleId, {
+    String? model,
+    String? year,
+    String? registrationNumber,
+    String? color,
+    String? image,
+  });
+  Future<bool> activateVehicle(String vehicleId);
+  Future<void> deleteVehicle(String vehicleId);
+  Future<List<dynamic>> getVehicleInspections(String vehicleId);
   Future<List<DriverAnswer>> getMyAnswers();
   Future<bool> submitAnswers(List<Map<String, dynamic>> answers);
   Future<bool> submitBankDetails({

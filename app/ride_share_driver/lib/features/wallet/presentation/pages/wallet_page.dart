@@ -43,6 +43,45 @@ class _WalletPageState extends State<WalletPage> {
   }
 
   void _showInstantPayoutDialog(BuildContext context, double balance, BankDetails? bankDetails) {
+    if (bankDetails == null || (bankDetails.accountNumberLast4 == null && bankDetails.upiId == null)) {
+      showDialog(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.account_balance_outlined, color: Color(0xFFD97706)),
+              SizedBox(width: 8),
+              Text('Payout Account Required', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: const Text(
+            'You must add and verify a bank payout account before initiating instant cashout.',
+            style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogCtx);
+                context.push('/documents');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF009048),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Add Account'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     if (balance <= 0) {
       CustomToast.show(context, 'You need a positive wallet balance to cash out');
       return;
@@ -589,6 +628,40 @@ class _WalletPageState extends State<WalletPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Alert Banner for Frozen / Negative Balance Wallet
+                    if (isNegative)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 14),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFFCA5A5)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Wallet Restricted / Frozen',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF991B1B)),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Your balance is negative. Please settle platform commission dues to unfreeze payouts.',
+                                    style: TextStyle(fontSize: 11, color: Color(0xFFB91C1C)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
                     // 1. Hero Balance Card
                     Container(
                       width: double.infinity,

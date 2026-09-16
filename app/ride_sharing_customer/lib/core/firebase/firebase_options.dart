@@ -41,19 +41,19 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDummyKeyForRyvaRideCustomerAppFCM',
-    appId: '1:1046714936304:ios:customer992817263541',
+    appId: '1:1046714936304:ios:d41d8cd98f00b204e98009',
     messagingSenderId: '1046714936304',
     projectId: 'ryva-ride',
     storageBucket: 'ryva-ride.appspot.com',
-    iosBundleId: 'com.example.ride_sharing_customer',
+    iosBundleId: 'com.example.rideSharingCustomer',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyDummyKeyForRyvaRideCustomerAppFCM',
-    appId: '1:1046714936304:ios:customer992817263541',
+    appId: '1:1046714936304:ios:d41d8cd98f00b204e98009',
     messagingSenderId: '1046714936304',
     projectId: 'ryva-ride',
     storageBucket: 'ryva-ride.appspot.com',
-    iosBundleId: 'com.example.ride_sharing_customer',
+    iosBundleId: 'com.example.rideSharingCustomer',
   );
 }

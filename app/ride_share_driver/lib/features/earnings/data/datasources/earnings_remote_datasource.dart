@@ -49,6 +49,18 @@ class EarningsRemoteDataSource {
 
       final payload = data['MESSAGE'] as Map<String, dynamic>;
 
+      int parseInt(dynamic val) {
+        if (val == null) return 0;
+        if (val is num) return val.toInt();
+        return int.tryParse(val.toString()) ?? 0;
+      }
+
+      double parseDouble(dynamic val, double fallback) {
+        if (val == null) return fallback;
+        if (val is num) return val.toDouble();
+        return double.tryParse(val.toString()) ?? fallback;
+      }
+
       final rawHistory = payload['historyItems'] as List? ?? [];
       final historyItems = rawHistory.map((item) {
         final map = Map<String, dynamic>.from(item as Map);
@@ -56,7 +68,7 @@ class EarningsRemoteDataSource {
           title: map['title']?.toString() ?? '',
           dateSubtitle: map['dateSubtitle']?.toString(),
           isToday: map['isToday'] == true,
-          trips: (map['trips'] as num?)?.toInt() ?? 0,
+          trips: parseInt(map['trips']),
           amount: map['amount']?.toString() ?? '₹0.00',
         );
       }).toList();
@@ -67,11 +79,11 @@ class EarningsRemoteDataSource {
         growthPeriod: payload['growthPeriod']?.toString() ?? '',
         cashCollected: payload['cashCollected']?.toString() ?? '₹0.00',
         incentivesAmount: payload['incentivesAmount']?.toString() ?? '₹0.00',
-        trips: (payload['trips'] as num?)?.toInt() ?? 0,
+        trips: parseInt(payload['trips']),
         onlineHours: payload['onlineHours']?.toString() ?? '0m',
         avgPerTrip: payload['avgPerTrip']?.toString() ?? '₹0.00',
-        cashPercent: (payload['cashPercent'] as num?)?.toDouble() ?? 50.0,
-        walletPercent: (payload['walletPercent'] as num?)?.toDouble() ?? 50.0,
+        cashPercent: parseDouble(payload['cashPercent'], 50.0),
+        walletPercent: parseDouble(payload['walletPercent'], 50.0),
         fareAmount: payload['fareAmount']?.toString() ?? '₹0.00',
         incentives: payload['incentives']?.toString() ?? '₹0.00',
         otherEarnings: payload['otherEarnings']?.toString() ?? '₹0.00',
@@ -85,5 +97,45 @@ class EarningsRemoteDataSource {
       throw mapDioException(e);
     }
   }
-}
 
+  Future<Map<String, dynamic>> getIncentiveProgress() async {
+    try {
+      final response = await apiClient.dio.get('/drivers/incentives/progress');
+      final data = response.data as Map<String, dynamic>;
+      if (data['SUCCESS'] != true) {
+        throw ServerException(data['MESSAGE']?.toString() ?? 'Failed to load incentive progress');
+      }
+      return data['MESSAGE'] as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> claimIncentive(String campaignId, String ruleId) async {
+    try {
+      final response = await apiClient.dio.post('/drivers/incentives/$campaignId/claim', data: {
+        'ruleId': ruleId,
+      });
+      final data = response.data as Map<String, dynamic>;
+      if (data['SUCCESS'] != true) {
+        throw ServerException(data['MESSAGE']?.toString() ?? 'Failed to claim incentive');
+      }
+      return data['MESSAGE'] as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getDriverPerformance() async {
+    try {
+      final response = await apiClient.dio.get('/drivers/performance');
+      final data = response.data as Map<String, dynamic>;
+      if (data['SUCCESS'] != true) {
+        throw ServerException(data['MESSAGE']?.toString() ?? 'Failed to load performance metrics');
+      }
+      return data['MESSAGE'] as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+}

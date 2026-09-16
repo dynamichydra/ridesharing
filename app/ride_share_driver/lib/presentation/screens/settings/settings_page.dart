@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../style/appcolors.dart';
 import '../../../common/entities/driver_profile.dart';
+import '../../../common/widgets/custom_toast.dart';
+import '../../../core/storage/secure_storage.dart';
+import '../../../features/profile/data/datasources/profile_remote_datasource.dart';
+import '../../../injection_container.dart' as di;
 
 class SettingsPage extends StatefulWidget {
   final DriverProfile? driver;
@@ -100,7 +104,73 @@ class _SettingsPageState extends State<SettingsPage> {
             trailing: widget.driver?.subscriptionStatus == 'active' ? 'Active' : 'Get Plan',
             onTap: () => context.push('/subscription'),
           ),
+          _navTile(
+            icon: Icons.receipt_long_rounded,
+            iconColor: Colors.amber.shade800,
+            title: 'Subscription Invoices & History',
+            trailing: 'History',
+            onTap: () => context.push('/subscription-history'),
+          ),
 
+          const SizedBox(height: 8),
+          _sectionHeader('Preferences & Language'),
+          _navTile(
+            icon: Icons.language_rounded,
+            iconColor: Colors.blueAccent,
+            title: 'App Language',
+            trailing: 'English / Hindi',
+            onTap: () {
+              showModalBottomSheet(
+                context: context,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                builder: (ctx) => SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Text(
+                          'Select Preferred Language',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      ListTile(
+                        leading: const Text('🇬🇧', style: TextStyle(fontSize: 20)),
+                        title: const Text('English'),
+                        onTap: () async {
+                          Navigator.pop(ctx);
+                          await SecureStorage().saveLanguageCode('en');
+                          try {
+                            await di.sl<ProfileRemoteDataSource>().updateProfile({'preferred_language': 'en'});
+                          } catch (_) {}
+                          if (context.mounted) {
+                            CustomToast.show(context, 'Language set to English');
+                          }
+                        },
+                      ),
+                      ListTile(
+                        leading: const Text('🇮🇳', style: TextStyle(fontSize: 20)),
+                        title: const Text('हिंदी (Hindi)'),
+                        onTap: () async {
+                          Navigator.pop(ctx);
+                          await SecureStorage().saveLanguageCode('hi');
+                          try {
+                            await di.sl<ProfileRemoteDataSource>().updateProfile({'preferred_language': 'hi'});
+                          } catch (_) {}
+                          if (context.mounted) {
+                            CustomToast.show(context, 'भाषा हिंदी पर सेट की गई');
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
           const SizedBox(height: 8),
           _sectionHeader('Notifications'),
           _switchTile(

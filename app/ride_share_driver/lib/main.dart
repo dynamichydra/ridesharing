@@ -16,7 +16,11 @@ import 'presentation/bloc/onboarding/onboarding_bloc.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await di.init();
-  await di.sl<FcmService>().initialize();
+  try {
+    await di.sl<FcmService>().initialize();
+  } catch (e) {
+    debugPrint('[FCM] Initialization skipped/failed: $e');
+  }
   runApp(const MyApp());
 }
 

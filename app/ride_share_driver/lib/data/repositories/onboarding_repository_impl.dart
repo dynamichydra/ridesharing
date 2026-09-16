@@ -280,6 +280,42 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
   }
 
   @override
+  Future<DriverVehicle> updateVehicle(
+    String vehicleId, {
+    String? model,
+    String? year,
+    String? registrationNumber,
+    String? color,
+    String? image,
+  }) async {
+    final payload = <String, dynamic>{
+      if (model != null && model.isNotEmpty) 'model': model,
+      if (year != null && year.isNotEmpty) 'year': year,
+      if (registrationNumber != null && registrationNumber.isNotEmpty) 'registrationNumber': registrationNumber,
+      if (color != null) 'color': color,
+      if (image != null) 'image': image,
+    };
+    final data = await remoteDataSource.updateVehicle(vehicleId, payload);
+    return DriverVehicle.fromJson(data);
+  }
+
+  @override
+  Future<bool> activateVehicle(String vehicleId) async {
+    await remoteDataSource.activateVehicle(vehicleId);
+    return true;
+  }
+
+  @override
+  Future<void> deleteVehicle(String vehicleId) async {
+    await remoteDataSource.deleteVehicle(vehicleId);
+  }
+
+  @override
+  Future<List<dynamic>> getVehicleInspections(String vehicleId) async {
+    return await remoteDataSource.getVehicleInspections(vehicleId);
+  }
+
+  @override
   Future<List<DriverAnswer>> getMyAnswers() async {
     final list = await remoteDataSource.getMyAnswers();
     return list.map((a) => DriverAnswer.fromJson(a)).toList();

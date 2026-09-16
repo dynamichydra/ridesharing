@@ -926,6 +926,54 @@ class _DriverDashboardState extends State<DriverDashboard>
                                         ),
                                       ),
 
+                                     // Alert Banner for Subscription Lifecycle (past_due, paused, payment_failed)
+                                     if (authState is Authenticated &&
+                                         ['past_due', 'paused', 'payment_failed'].contains(authState.driver.subscriptionStatus.toLowerCase()))
+                                       InkWell(
+                                         onTap: () => context.push('/subscription'),
+                                         borderRadius: BorderRadius.circular(12),
+                                         child: Container(
+                                           margin: const EdgeInsets.only(bottom: 14),
+                                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                           decoration: BoxDecoration(
+                                             color: const Color(0xFFFFFBEB),
+                                             borderRadius: BorderRadius.circular(12),
+                                             border: Border.all(color: const Color(0xFFFCD34D)),
+                                           ),
+                                           child: Row(
+                                             children: [
+                                               const Icon(Icons.payment_rounded, color: Color(0xFFD97706), size: 24),
+                                               const SizedBox(width: 10),
+                                               Expanded(
+                                                 child: Column(
+                                                   crossAxisAlignment: CrossAxisAlignment.start,
+                                                   children: [
+                                                     Text(
+                                                       authState.driver.subscriptionStatus.toLowerCase() == 'past_due'
+                                                           ? 'Subscription Payment Past Due'
+                                                           : (authState.driver.subscriptionStatus.toLowerCase() == 'paused'
+                                                               ? 'Subscription Currently Paused'
+                                                               : 'Subscription Payment Failed'),
+                                                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF92400E)),
+                                                     ),
+                                                     const SizedBox(height: 2),
+                                                     Text(
+                                                       authState.driver.subscriptionStatus.toLowerCase() == 'past_due'
+                                                           ? 'Please update your payment method to avoid losing plan benefits.'
+                                                           : (authState.driver.subscriptionStatus.toLowerCase() == 'paused'
+                                                               ? 'Your plan is paused. Tap to resume and accept zero-commission rides.'
+                                                               : 'Payment authorization failed. Tap to update billing details.'),
+                                                       style: const TextStyle(fontSize: 11, color: Color(0xFFB45309)),
+                                                     ),
+                                                   ],
+                                                 ),
+                                               ),
+                                               const Icon(Icons.chevron_right_rounded, color: Color(0xFFD97706)),
+                                             ],
+                                           ),
+                                         ),
+                                       ),
+
                                     // 1. Top Header Profile / Status Card
                                     _buildHeaderSection(
                                       context: context,

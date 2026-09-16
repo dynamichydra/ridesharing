@@ -27,6 +27,8 @@ class RideSocketDataSource {
 
   RideSocketDataSource({required this.secureStorage});
 
+  bool get isConnected => _socket?.connected == true;
+
   Stream<RideOffer> get onRideOffer => _rideOfferController.stream;
   Stream<String> get onRideTaken => _rideTakenController.stream;
   Stream<String> get onRideCancelledByRider => _cancelledByRiderController.stream;

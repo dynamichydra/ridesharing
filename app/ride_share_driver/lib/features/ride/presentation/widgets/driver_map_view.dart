@@ -9,6 +9,7 @@ class DriverMapView extends StatefulWidget {
   final double driverBearing;
   final List<LatLng> traveledPath;
   final List<LatLng> routePoints;
+  final Set<Circle> circles;
   final Function(GoogleMapController)? onMapCreated;
 
   const DriverMapView({
@@ -19,6 +20,7 @@ class DriverMapView extends StatefulWidget {
     this.driverBearing = 0.0,
     this.traveledPath = const [],
     this.routePoints = const [],
+    this.circles = const {},
     this.onMapCreated,
   });
 
@@ -144,6 +146,7 @@ class _DriverMapViewState extends State<DriverMapView> {
             zIndex: 2,
           ),
       },
+      circles: widget.circles,
     );
   }
 }

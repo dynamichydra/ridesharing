@@ -65,6 +65,18 @@ class CommissionStatusModel {
     required this.ruleName,
   });
 
+  static double _parseDouble(dynamic val, double fallback) {
+    if (val == null) return fallback;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? fallback;
+  }
+
+  static int _parseInt(dynamic val) {
+    if (val == null) return 0;
+    if (val is num) return val.toInt();
+    return int.tryParse(val.toString()) ?? 0;
+  }
+
   factory CommissionStatusModel.fromJson(Map<String, dynamic> json) {
     return CommissionStatusModel(
       driverId: json['driverId']?.toString() ?? '',
@@ -73,14 +85,14 @@ class CommissionStatusModel {
       activePlan: json['activePlan'] != null && json['activePlan'] is Map<String, dynamic>
           ? ActivePlanSummary.fromJson(json['activePlan'] as Map<String, dynamic>)
           : null,
-      effectiveCommissionRate: (json['effectiveCommissionRate'] as num?)?.toDouble() ?? 0.20,
+      effectiveCommissionRate: _parseDouble(json['effectiveCommissionRate'], 0.20),
       effectiveCommissionPercentage: json['effectiveCommissionPercentage']?.toString() ?? '20%',
-      standardCommissionRate: (json['standardCommissionRate'] as num?)?.toDouble() ?? 0.20,
+      standardCommissionRate: _parseDouble(json['standardCommissionRate'], 0.20),
       standardCommissionPercentage: json['standardCommissionPercentage']?.toString() ?? '20%',
       commissionSavingsPercentage: json['commissionSavingsPercentage']?.toString() ?? '0%',
-      bookingFeeMinor: (json['bookingFeeMinor'] as num?)?.toInt() ?? 0,
+      bookingFeeMinor: _parseInt(json['bookingFeeMinor']),
       bookingFeeWaived: json['bookingFeeWaived'] == true,
-      priorityMatchingBonus: (json['priorityMatchingBonus'] as num?)?.toInt() ?? 0,
+      priorityMatchingBonus: _parseInt(json['priorityMatchingBonus']),
       resolutionTier: json['resolutionTier']?.toString() ?? 'default',
       ruleName: json['ruleName']?.toString() ?? 'Default Platform Commission',
     );

@@ -6,6 +6,7 @@ import '../../presentation/screens/dashboard/driver_main_layout.dart';
 import '../../presentation/screens/settings/settings_page.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/subscription/presentation/screens/subscription_plans_screen.dart';
+import '../../features/subscription/presentation/screens/subscription_history_page.dart';
 import '../../features/ride_history/presentation/pages/ride_history_page.dart';
 import '../../features/earnings/presentation/pages/earnings_page.dart';
 import '../../features/wallet/presentation/pages/wallet_page.dart';
@@ -113,6 +114,11 @@ class AppRouter {
             },
           );
         },
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/subscription-history',
+        builder: (context, state) => const SubscriptionHistoryPage(),
       ),
 
       // StatefulShellRoute.indexedStack preserves all 5 main index tabs in memory without recreating/reloading them

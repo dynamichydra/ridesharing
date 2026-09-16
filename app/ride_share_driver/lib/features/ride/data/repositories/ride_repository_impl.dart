@@ -45,14 +45,18 @@ class RideRepositoryImpl implements RideRepository {
     double? accuracy,
     double? speedKmh,
     int? recordedAt,
-  }) =>
-      socketDataSource.emitLocationUpdate(
-        lat,
-        lng,
-        accuracy: accuracy,
-        speedKmh: speedKmh,
-        recordedAt: recordedAt,
-      );
+  }) {
+    socketDataSource.emitLocationUpdate(
+      lat,
+      lng,
+      accuracy: accuracy,
+      speedKmh: speedKmh,
+      recordedAt: recordedAt,
+    );
+    if (!socketDataSource.isConnected) {
+      remoteDataSource.updateLocationPing(lat, lng);
+    }
+  }
 
   @override
   void goOnlineViaSocket(double lat, double lng) =>
@@ -88,6 +92,16 @@ class RideRepositoryImpl implements RideRepository {
   @override
   Future<void> cancelRideByDriver(String rideId, {String? reason}) {
     return remoteDataSource.cancelRideByDriver(rideId, reason: reason);
+  }
+
+  @override
+  Future<Map<String, dynamic>> cancelNoShow(String rideId, {String? reason}) {
+    return remoteDataSource.cancelNoShow(rideId, reason: reason);
+  }
+
+  @override
+  Future<Map<String, dynamic>> triggerSosAlert(String rideId, {double? lat, double? lng}) {
+    return remoteDataSource.triggerSosAlert(rideId, lat: lat, lng: lng);
   }
 
   @override

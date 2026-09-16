@@ -352,12 +352,13 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       }
 
       // 3. Confirm profile photo update on backend
-      await dataSource.confirmProfilePhoto(key);
+      final json = await dataSource.confirmProfilePhoto(key);
+      final updatedProfile = json.isNotEmpty ? DriverProfile.fromJson(json) : prevProfile!;
 
       // 4. Invalidate & refresh profile
       emit(ProfileUpdateSuccess(
         'Profile photo updated successfully!',
-        prevProfile!,
+        updatedProfile,
         summary: prevSummary,
         documents: prevDocs,
         commissionStatus: prevCommission,

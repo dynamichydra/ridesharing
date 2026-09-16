@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../domain/entities/ride_offer.dart';
 
 /// Floating multi-request offer overlay tile.
@@ -146,12 +147,21 @@ class _SingleOfferTileCardState extends State<_SingleOfferTileCard> {
   void initState() {
     super.initState();
     _secondsLeft = _initialSecondsLeft();
+    
+    // Play offer arrival sound & vibration
+    HapticFeedback.heavyImpact();
+    SystemSound.play(SystemSoundType.click);
+
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() {
         _secondsLeft--;
+        if (_secondsLeft <= 5 && _secondsLeft > 0) {
+          HapticFeedback.mediumImpact();
+        }
         if (_secondsLeft <= 0) {
           _timer?.cancel();
+          HapticFeedback.vibrate();
           widget.onExpired();
         }
       });

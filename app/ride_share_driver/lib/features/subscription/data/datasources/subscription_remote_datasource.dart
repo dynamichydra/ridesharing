@@ -64,13 +64,31 @@ class SubscriptionRemoteDataSource {
   /// Returns null when the driver has no active subscription — the backend
   /// itself returns `MESSAGE: null` in that case (see `getMySubscription` in
   /// `subscription.service.js`), it isn't an error.
-  Future<Map<String, dynamic>?> getMySubscription() async {
+  Future<Map<String, dynamic>> getMySubscription() async {
     try {
       final response = await apiClient.dio.get('/subscriptions/mine');
       if (response.data['SUCCESS'] != true) {
-        throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to load subscription');
+        throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to load active subscription');
       }
-      return response.data['MESSAGE'] as Map<String, dynamic>?;
+      return response.data['MESSAGE'] as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  Future<List<dynamic>> getSubscriptionHistory() async {
+    try {
+      final response = await apiClient.dio.get('/subscriptions/history');
+      if (response.data['SUCCESS'] != true) {
+        throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to load subscription history');
+      }
+      final data = response.data['MESSAGE'];
+      if (data is Map<String, dynamic> && data['rows'] != null) {
+        return data['rows'] as List<dynamic>;
+      } else if (data is List) {
+        return data;
+      }
+      return [];
     } on DioException catch (e) {
       throw mapDioException(e);
     }

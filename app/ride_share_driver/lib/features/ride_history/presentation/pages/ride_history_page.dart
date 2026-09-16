@@ -5,6 +5,9 @@ import '../../../../injection_container.dart' as di;
 import '../../../../presentation/screens/dashboard/driver_main_layout.dart';
 import '../../../../common/widgets/app_date_picker.dart';
 import '../bloc/ride_history_bloc.dart';
+import '../../../ride/presentation/widgets/ride_receipt_sheet.dart';
+import '../../../ride/presentation/widgets/report_lost_item_dialog.dart';
+import '../../../disputes/presentation/widgets/raise_dispute_dialog.dart';
 
 class RideHistoryPage extends StatefulWidget {
   const RideHistoryPage({super.key});
@@ -874,12 +877,15 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
       } catch (_) {}
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+    return InkWell(
+      onTap: () => _showRideDetailModal(context, ride),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFF1F5F9)),
         boxShadow: [
           BoxShadow(
@@ -1213,6 +1219,131 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
             ],
           ),
         ],
+      ),
+    ),
+  );
+}
+
+  void _showRideDetailModal(BuildContext context, Map<String, dynamic> ride) {
+    final rideId = ride['id']?.toString() ?? ride['rideId']?.toString() ?? '';
+    final fare = (ride['fare'] as num?)?.toDouble() ?? 0.0;
+    final status = (ride['status']?.toString() ?? 'completed').toUpperCase();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Ride Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: status == 'COMPLETED' ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    status,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: status == 'COMPLETED' ? const Color(0xFF15803D) : const Color(0xFFB91C1C),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text('Trip ID: $rideId', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Fare Amount', style: TextStyle(fontSize: 14, color: Color(0xFF64748B))),
+                Text('₹${fare.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF009048))),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      RideReceiptSheet.show(context, rideId);
+                    },
+                    icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                    label: const Text('Receipt'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF009048),
+                      side: const BorderSide(color: Color(0xFF009048)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      showDialog(
+                        context: context,
+                        builder: (_) => ReportLostItemDialog(rideId: rideId),
+                      );
+                    },
+                    icon: const Icon(Icons.find_in_page_rounded, size: 18),
+                    label: const Text('Lost Item'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF2563EB),
+                      side: const BorderSide(color: Color(0xFF2563EB)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  showDialog(
+                    context: context,
+                    builder: (_) => RaiseDisputeDialog(rideId: rideId),
+                  );
+                },
+                icon: const Icon(Icons.gavel_rounded, size: 18),
+                label: const Text('Raise Dispute / Feedback'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFDC2626),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
   }

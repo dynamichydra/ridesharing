@@ -41,19 +41,19 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDummyKeyForRyvaRideDriverAppFCM',
-    appId: '1:1046714936304:ios:driver992817263541',
+    appId: '1:1046714936304:ios:d41d8cd98f00b204e98009',
     messagingSenderId: '1046714936304',
     projectId: 'ryva-ride',
     storageBucket: 'ryva-ride.appspot.com',
-    iosBundleId: 'com.example.ride_share_driver',
+    iosBundleId: 'com.example.rideShareDriver',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyDummyKeyForRyvaRideDriverAppFCM',
-    appId: '1:1046714936304:ios:driver992817263541',
+    appId: '1:1046714936304:ios:d41d8cd98f00b204e98009',
     messagingSenderId: '1046714936304',
     projectId: 'ryva-ride',
     storageBucket: 'ryva-ride.appspot.com',
-    iosBundleId: 'com.example.ride_share_driver',
+    iosBundleId: 'com.example.rideShareDriver',
   );
 }

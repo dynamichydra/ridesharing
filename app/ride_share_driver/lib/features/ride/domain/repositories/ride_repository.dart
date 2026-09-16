@@ -39,5 +39,7 @@ abstract class RideRepository {
   Future<ActiveRide> startRide(String rideId, String otp);
   Future<ActiveRide> completeRide(String rideId);
   Future<void> cancelRideByDriver(String rideId, {String? reason});
+  Future<Map<String, dynamic>> cancelNoShow(String rideId, {String? reason});
+  Future<Map<String, dynamic>> triggerSosAlert(String rideId, {double? lat, double? lng});
   Future<ActiveRide?> getActiveRide();
 }

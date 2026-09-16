@@ -56,6 +56,17 @@ class DriverCancelRequested extends RideEvent {
   DriverCancelRequested({this.reason});
 }
 
+class DriverNoShowRequested extends RideEvent {
+  final String? reason;
+  DriverNoShowRequested({this.reason});
+}
+
+class DriverSosRequested extends RideEvent {
+  final double? lat;
+  final double? lng;
+  DriverSosRequested({this.lat, this.lng});
+}
+
 class AcknowledgeCompletionRequested extends RideEvent {}
 
 // Internal — bridge the repository's broadcast streams into the event queue.
@@ -170,6 +181,24 @@ class RideOperationFailed extends RideState {
   RideOperationFailed({required this.message});
 }
 
+class RideNoShowSuccess extends RideState {
+  final String message;
+  final int feeMinor;
+  final String rideId;
+  final Map<String, dynamic> rawData;
+  RideNoShowSuccess({
+    required this.message,
+    required this.feeMinor,
+    required this.rideId,
+    this.rawData = const {},
+  });
+}
+
+class RideSosSuccess extends RideState {
+  final String message;
+  RideSosSuccess({required this.message});
+}
+
 // ── BLoC ───────────────────────────────────────────────────────────────────
 class RideBloc extends Bloc<RideEvent, RideState> {
   final RideRepository rideRepository;
@@ -201,6 +230,8 @@ class RideBloc extends Bloc<RideEvent, RideState> {
     on<StartRideRequested>(_onStartRideRequested);
     on<CompleteRideRequested>(_onCompleteRideRequested);
     on<DriverCancelRequested>(_onDriverCancelRequested);
+    on<DriverNoShowRequested>(_onDriverNoShowRequested);
+    on<DriverSosRequested>(_onDriverSosRequested);
     on<_DriverLocationChanged>(_onDriverLocationChanged);
     on<AcknowledgeCompletionRequested>((event, emit) {
       _currentRide = null;
@@ -639,6 +670,66 @@ class RideBloc extends Bloc<RideEvent, RideState> {
       _currentRide = null;
       _traveledPath.clear();
       emit(RideIdle());
+    } catch (e) {
+      emit(RideOperationFailed(message: e.toString()));
+      emit(RideActive(
+        ride: ride,
+        driverPosition: _lastDriverPos,
+        driverBearing: _lastDriverBearing,
+        traveledPath: List.unmodifiable(_traveledPath),
+      ));
+    }
+  }
+
+  Future<void> _onDriverNoShowRequested(
+    DriverNoShowRequested event,
+    Emitter<RideState> emit,
+  ) async {
+    final ride = _currentRide;
+    if (ride == null) return;
+    emit(RideActionInProgress(ride: ride));
+    try {
+      final res = await rideRepository.cancelNoShow(ride.id, reason: event.reason);
+      final feeMinor = (res['noShowFeeMinor'] as num?)?.toInt() ??
+          (res['finalFareMinor'] as num?)?.toInt() ??
+          0;
+      _currentRide = null;
+      _traveledPath.clear();
+      emit(RideNoShowSuccess(
+        message: 'Trip cancelled due to passenger no-show.',
+        feeMinor: feeMinor,
+        rideId: ride.id,
+        rawData: res,
+      ));
+    } catch (e) {
+      emit(RideOperationFailed(message: e.toString()));
+      emit(RideActive(
+        ride: ride,
+        driverPosition: _lastDriverPos,
+        driverBearing: _lastDriverBearing,
+        traveledPath: List.unmodifiable(_traveledPath),
+      ));
+    }
+  }
+
+  Future<void> _onDriverSosRequested(
+    DriverSosRequested event,
+    Emitter<RideState> emit,
+  ) async {
+    final ride = _currentRide;
+    if (ride == null) return;
+    try {
+      final lat = event.lat ?? _lastDriverPos?.latitude ?? ride.pickupLat;
+      final lng = event.lng ?? _lastDriverPos?.longitude ?? ride.pickupLng;
+      final res = await rideRepository.triggerSosAlert(ride.id, lat: lat, lng: lng);
+      final msg = res['message']?.toString() ?? 'Emergency SOS dispatched to Safety Support.';
+      emit(RideSosSuccess(message: msg));
+      emit(RideActive(
+        ride: ride,
+        driverPosition: _lastDriverPos,
+        driverBearing: _lastDriverBearing,
+        traveledPath: List.unmodifiable(_traveledPath),
+      ));
     } catch (e) {
       emit(RideOperationFailed(message: e.toString()));
       emit(RideActive(

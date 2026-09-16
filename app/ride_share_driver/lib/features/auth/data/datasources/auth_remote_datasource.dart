@@ -105,4 +105,29 @@ class AuthRemoteDataSource {
       AppLogger.w('[AuthRemoteDataSource] logout request failed (continuing with local logout): ${mapDioException(e)}');
     }
   }
+
+  Future<List<dynamic>> getDevices() async {
+    try {
+      final response = await apiClient.dio.get('/auth/devices');
+      final data = response.data as Map<String, dynamic>;
+      if (data['SUCCESS'] != true) {
+        throw ServerException(data['MESSAGE']?.toString() ?? 'Failed to load device sessions');
+      }
+      return data['MESSAGE'] as List<dynamic>? ?? [];
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  Future<void> revokeDevice(String deviceId) async {
+    try {
+      final response = await apiClient.dio.delete('/auth/devices/$deviceId');
+      final data = response.data as Map<String, dynamic>;
+      if (data['SUCCESS'] != true) {
+        throw ServerException(data['MESSAGE']?.toString() ?? 'Failed to revoke device session');
+      }
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
 }
