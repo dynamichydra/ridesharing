@@ -13,6 +13,7 @@ class ChecklistScreen extends StatelessWidget {
   final bool isLoading;
   final Function(String itemCode) onItemTap;
   final VoidCallback onSubmit;
+  final VoidCallback? onLogout;
 
   const ChecklistScreen({
     super.key,
@@ -24,6 +25,7 @@ class ChecklistScreen extends StatelessWidget {
     this.isLoading = false,
     required this.onItemTap,
     required this.onSubmit,
+    this.onLogout,
   });
 
   @override
@@ -207,26 +209,68 @@ class ChecklistScreen extends StatelessWidget {
                   letterSpacing: -0.5,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.secondary.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppColors.secondary.withOpacity(0.2),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppColors.secondary.withOpacity(0.2),
+                      ),
+                    ),
+                    child: Text(
+                      '$completedCount / $totalCount items',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: AppColors.secondary,
+                      ),
+                    ),
                   ),
-                ),
-                child: Text(
-                  '$completedCount / $totalCount items',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                    color: AppColors.secondary,
-                  ),
-                ),
+                  if (onLogout != null) ...[
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: onLogout,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.redAccent.withOpacity(0.3),
+                          ),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(
+                              Icons.logout_rounded,
+                              size: 15,
+                              color: Colors.redAccent,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              'Logout',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.redAccent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),

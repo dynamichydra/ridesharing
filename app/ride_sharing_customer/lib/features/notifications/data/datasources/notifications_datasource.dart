@@ -4,9 +4,11 @@ import '../../../../core/constants/constants.dart';
 
 abstract class NotificationsDataSource {
   Future<List<Map<String, dynamic>>> getNotifications();
+  Future<int> getUnreadCount();
   Future<void> markAsRead(String notificationId);
   Future<void> deleteNotification(String notificationId);
 }
+
 
 class NotificationsDataSourceImpl implements NotificationsDataSource {
   final DioClient _dioClient;
@@ -67,4 +69,21 @@ class NotificationsDataSourceImpl implements NotificationsDataSource {
     final updated = current.where((e) => e['id'] != notificationId).toList();
     await _storageService.cacheData(_notificationsCacheKey, updated);
   }
+
+  @override
+  Future<int> getUnreadCount() async {
+    try {
+      final response = await _dioClient.dio.get('/api/v1/rider/notifications/unread-count');
+      if (response.data != null && (response.data['SUCCESS'] == true || response.data['success'] == true)) {
+        final data = response.data['DATA'] ?? response.data['data'] ?? response.data['MESSAGE'];
+        if (data is Map && data['unreadCount'] != null) {
+          return (data['unreadCount'] as num).toInt();
+        }
+      }
+    } catch (_) {}
+
+    final list = await getNotifications();
+    return list.where((e) => e['is_read'] != true && e['read'] != true).length;
+  }
 }
+

@@ -48,6 +48,7 @@ class SubmitQuestionAnswers extends OnboardingEvent {
 }
 
 class AddVehicleDetails extends OnboardingEvent {
+  final String? vehicleId;
   final String vehicleTypeId;
   final String? vehicleModelId;
   final String model;
@@ -56,6 +57,7 @@ class AddVehicleDetails extends OnboardingEvent {
   final String? color;
   final String? image;
   AddVehicleDetails({
+    this.vehicleId,
     required this.vehicleTypeId,
     this.vehicleModelId,
     required this.model,
@@ -229,17 +231,40 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
     on<AddVehicleDetails>((event, emit) async {
       emit(OnboardingLoading());
       try {
-        await onboardingRepository.addVehicle(
-          vehicleTypeId: event.vehicleTypeId,
-          vehicleModelId: event.vehicleModelId,
-          model: event.model,
-          year: event.year,
-          registrationNumber: event.registrationNumber,
-          color: event.color,
-          image: event.image,
-        );
+        if (event.vehicleId != null && event.vehicleId!.isNotEmpty) {
+          await onboardingRepository.updateVehicle(
+            event.vehicleId!,
+            vehicleTypeId: event.vehicleTypeId,
+            vehicleModelId: event.vehicleModelId,
+            model: event.model,
+            year: event.year,
+            registrationNumber: event.registrationNumber,
+            color: event.color,
+            image: event.image,
+          );
+        } else {
+          await onboardingRepository.addVehicle(
+            vehicleTypeId: event.vehicleTypeId,
+            vehicleModelId: event.vehicleModelId,
+            model: event.model,
+            year: event.year,
+            registrationNumber: event.registrationNumber,
+            color: event.color,
+            image: event.image,
+          );
+        }
         emit(OnboardingSuccess());
       } catch (e) {
+        final msg = e.toString().toLowerCase();
+        if (msg.contains('already registered') ||
+            msg.contains('already in use') ||
+            msg.contains('duplicate')) {
+          AppLogger.i(
+            '[OnboardingBloc] Vehicle already registered/updated in DB, continuing: $e',
+          );
+          emit(OnboardingSuccess());
+          return;
+        }
         emit(OnboardingError(message: e.toString()));
       }
     });

@@ -61,8 +61,8 @@ class SubscriptionPlan {
       maxRidesPerDay: (json['maxRidesPerDay'] ?? json['max_rides_per_day']) as int?,
       gateway: json['gateway'] as String?,
       priorityMatching: (json['priorityMatching'] ?? json['priority_matching']) as bool? ?? false,
-      specialOffer: json['specialOffer'] as Map<String, dynamic>?,
-      entitlements: json['entitlements'] as Map<String, dynamic>?,
+      specialOffer: json['specialOffer'] is Map ? Map<String, dynamic>.from(json['specialOffer'] as Map) : null,
+      entitlements: json['entitlements'] is Map ? Map<String, dynamic>.from(json['entitlements'] as Map) : null,
       vehicleTypeIds: rawVehicleTypes?.map((v) => v.toString()).toList(),
     );
   }

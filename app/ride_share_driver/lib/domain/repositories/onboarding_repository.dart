@@ -112,6 +112,8 @@ abstract class OnboardingRepository {
   });
   Future<DriverVehicle> updateVehicle(
     String vehicleId, {
+    String? vehicleTypeId,
+    String? vehicleModelId,
     String? model,
     String? year,
     String? registrationNumber,

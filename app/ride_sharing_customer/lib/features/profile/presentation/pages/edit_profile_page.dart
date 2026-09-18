@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/custom_toast.dart';
 import '../../../../core/widgets/loading_view.dart';
@@ -28,6 +30,59 @@ class _EditProfilePageState extends State<EditProfilePage> {
       _phoneController.dispose();
     }
     super.dispose();
+  }
+
+  void _showImageSourceBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded, color: Color(0xFF009048)),
+              title: const Text('Choose from Gallery', style: TextStyle(fontWeight: FontWeight.w600)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded, color: Color(0xFF009048)),
+              title: const Text('Take Photo', style: TextStyle(fontWeight: FontWeight.w600)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _pickImage(ImageSource.camera);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+      if (picked != null) {
+        if (mounted) {
+          context.read<ProfileBloc>().add(UploadProfilePhoto(File(picked.path)));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        CustomToast.show(context, 'Failed to select image');
+      }
+    }
   }
 
   void _submit() {
@@ -173,47 +228,80 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       Center(
                         child: Column(
                           children: [
-                            Stack(
-                              children: [
-                                Container(
-                                  width: 90,
-                                  height: 90,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFFE6F4ED),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Center(
-                                    child: Icon(
-                                      Icons.person_rounded,
-                                      size: 56,
-                                      color: Color(0xFF009048),
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  bottom: 0,
-                                  right: 0,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(6),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      shape: BoxShape.circle,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.1),
-                                          blurRadius: 4,
-                                          offset: const Offset(0, 2),
+                            GestureDetector(
+                              onTap: () => _showImageSourceBottomSheet(context),
+                              child: Stack(
+                                children: [
+                                  Builder(
+                                    builder: (context) {
+                                      final rawUrl = (state.userProfile['avatar'] ?? state.userProfile['profilePhoto']) as String?;
+                                      if (rawUrl != null && rawUrl.trim().isNotEmpty) {
+                                        return Container(
+                                          width: 90,
+                                          height: 90,
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFFE6F4ED),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: ClipOval(
+                                            child: Image.network(
+                                              rawUrl,
+                                              width: 90,
+                                              height: 90,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error, stackTrace) => const Center(
+                                                child: Icon(
+                                                  Icons.person_rounded,
+                                                  size: 56,
+                                                  color: Color(0xFF009048),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                      return Container(
+                                        width: 90,
+                                        height: 90,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFFE6F4ED),
+                                          shape: BoxShape.circle,
                                         ),
-                                      ],
-                                    ),
-                                    child: const Icon(
-                                      Icons.camera_alt_rounded,
-                                      color: Color(0xFF009048),
-                                      size: 16,
+                                        child: const Center(
+                                          child: Icon(
+                                            Icons.person_rounded,
+                                            size: 56,
+                                            color: Color(0xFF009048),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.1),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.camera_alt_rounded,
+                                        color: Color(0xFF009048),
+                                        size: 16,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 12),
                             ValueListenableBuilder<TextEditingValue>(

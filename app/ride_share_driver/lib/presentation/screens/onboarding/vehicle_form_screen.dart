@@ -13,10 +13,12 @@ import 'widgets/three_dots_loader.dart';
 class VehicleFormScreen extends StatefulWidget {
   final List<VehicleType> vehicleTypes;
   final String? initialVehicleTypeId;
+  final String? initialVehicleModelId;
   final String? initialModel;
   final String? initialYear;
   final String? initialRegistrationNumber;
   final String? initialColor;
+  final String? initialImageUrl;
   final bool isLoading;
   final Function({
     required String vehicleTypeId,
@@ -26,16 +28,19 @@ class VehicleFormScreen extends StatefulWidget {
     required String registrationNumber,
     String? color,
     String? image,
-  }) onSave;
+  })
+  onSave;
 
   const VehicleFormScreen({
     super.key,
     required this.vehicleTypes,
     this.initialVehicleTypeId,
+    this.initialVehicleModelId,
     this.initialModel,
     this.initialYear,
     this.initialRegistrationNumber,
     this.initialColor,
+    this.initialImageUrl,
     this.isLoading = false,
     required this.onSave,
   });
@@ -67,6 +72,7 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
   String? _vehiclePhotoContentType;
   bool _isUploadingPhoto = false;
   final ImagePicker _imagePicker = ImagePicker();
+  bool _isPhotoRemoved = false;
 
   final List<String> _colors = [
     'White',
@@ -98,6 +104,7 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
     _selectedYear = widget.initialYear ?? '2025';
     _selectedColor = widget.initialColor ?? 'White';
     _selectedVehicleTypeId = widget.initialVehicleTypeId;
+    _selectedVehicleModelId = widget.initialVehicleModelId;
 
     _modelFocusNode.addListener(() {
       if (_modelFocusNode.hasFocus) {
@@ -115,7 +122,30 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
     });
 
     // Preload models in background without opening dropdown
-    _searchModels('', showDropdown: false);
+    _searchModels(_modelController.text, showDropdown: false);
+  }
+
+  @override
+  void didUpdateWidget(VehicleFormScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialModel != oldWidget.initialModel) {
+      _modelController.text = widget.initialModel ?? '';
+    }
+    if (widget.initialRegistrationNumber != oldWidget.initialRegistrationNumber) {
+      _regNumberController.text = widget.initialRegistrationNumber ?? '';
+    }
+    if (widget.initialYear != oldWidget.initialYear) {
+      _selectedYear = widget.initialYear ?? '2025';
+    }
+    if (widget.initialColor != oldWidget.initialColor) {
+      _selectedColor = widget.initialColor ?? 'White';
+    }
+    if (widget.initialVehicleTypeId != oldWidget.initialVehicleTypeId) {
+      _selectedVehicleTypeId = widget.initialVehicleTypeId;
+    }
+    if (widget.initialVehicleModelId != oldWidget.initialVehicleModelId) {
+      _selectedVehicleModelId = widget.initialVehicleModelId;
+    }
   }
 
   @override
@@ -128,6 +158,11 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
   }
 
   void _onModelChanged(String query) {
+    if (_selectedVehicleModelId != null) {
+      setState(() {
+        _selectedVehicleModelId = null;
+      });
+    }
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 300), () {
       _searchModels(query, showDropdown: _modelFocusNode.hasFocus);
@@ -251,7 +286,7 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                   _pickVehiclePhoto(ImageSource.gallery);
                 },
               ),
-              if (_vehiclePhotoBytes != null)
+              if (_vehiclePhotoBytes != null || (widget.initialImageUrl != null && !_isPhotoRemoved))
                 ListTile(
                   leading: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
                   title: const Text('Remove Photo', style: TextStyle(color: Colors.redAccent)),
@@ -260,6 +295,7 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                     setState(() {
                       _vehiclePhotoBytes = null;
                       _vehiclePhotoContentType = null;
+                      _isPhotoRemoved = true;
                     });
                   },
                 ),
@@ -280,7 +316,10 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
     }
 
     if (_formKey.currentState!.validate()) {
-      String? uploadedImageUrl;
+      String? uploadedImageUrl = widget.initialImageUrl;
+      if (_isPhotoRemoved) {
+        uploadedImageUrl = null;
+      }
 
       if (_vehiclePhotoBytes != null && _vehiclePhotoContentType != null) {
         setState(() {
@@ -413,28 +452,41 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: _vehiclePhotoBytes != null
+                  color: (_vehiclePhotoBytes != null || (widget.initialImageUrl != null && !_isPhotoRemoved))
                       ? Colors.white
                       : AppColors.surface,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: _vehiclePhotoBytes != null
+                    color: (_vehiclePhotoBytes != null || (widget.initialImageUrl != null && !_isPhotoRemoved))
                         ? AppColors.primary
                         : AppColors.border,
-                    width: _vehiclePhotoBytes != null ? 1.5 : 1,
+                    width: (_vehiclePhotoBytes != null || (widget.initialImageUrl != null && !_isPhotoRemoved)) ? 1.5 : 1,
                   ),
                 ),
-                child: _vehiclePhotoBytes != null
+                child: (_vehiclePhotoBytes != null || (widget.initialImageUrl != null && !_isPhotoRemoved))
                     ? Row(
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: Image.memory(
-                              _vehiclePhotoBytes!,
-                              width: 80,
-                              height: 60,
-                              fit: BoxFit.cover,
-                            ),
+                            child: _vehiclePhotoBytes != null
+                                ? Image.memory(
+                                    _vehiclePhotoBytes!,
+                                    width: 80,
+                                    height: 60,
+                                    fit: BoxFit.cover,
+                                  )
+                                : Image.network(
+                                    widget.initialImageUrl!,
+                                    width: 80,
+                                    height: 60,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      width: 80,
+                                      height: 60,
+                                      color: AppColors.surface,
+                                      child: const Icon(Icons.broken_image_rounded, color: AppColors.textSecondary),
+                                    ),
+                                  ),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -708,22 +760,37 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Vehicle Category (Auto-Detected)',
-                          style: TextStyle(
+                        Text(
+                          _selectedVehicleTypeId != null
+                              ? 'Verified Vehicle Details'
+                              : 'Vehicle Category',
+                          style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                             color: AppColors.textSecondary,
                           ),
                         ),
                         const SizedBox(height: 2),
+                        if (_selectedVehicleTypeId != null && _modelController.text.isNotEmpty)
+                          Text(
+                            _modelController.text,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        if (_selectedVehicleTypeId != null && _modelController.text.isNotEmpty)
+                          const SizedBox(height: 4),
                         Text(
-                          currentType?.name ?? 'Select vehicle model above',
+                          _selectedVehicleTypeId != null
+                              ? 'Type: ${currentType?.name ?? 'Unknown'} • Capacity: ${currentType?.capacity ?? 4} Seats'
+                              : 'Select vehicle model above',
                           style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            fontWeight: _selectedVehicleTypeId != null ? FontWeight.w500 : FontWeight.bold,
                             color: _selectedVehicleTypeId != null
-                                ? AppColors.textPrimary
+                                ? AppColors.textSecondary
                                 : AppColors.textSecondary,
                           ),
                         ),

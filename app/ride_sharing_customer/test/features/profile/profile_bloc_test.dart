@@ -3,6 +3,8 @@ import 'package:bloc_test/bloc_test.dart';
 import 'package:ride_sharing_customer/features/profile/domain/repositories/profile_repository.dart';
 import 'package:ride_sharing_customer/features/profile/presentation/bloc/profile_bloc.dart';
 
+import 'dart:io';
+
 class MockProfileRepository implements ProfileRepository {
   Map<String, dynamic> mockProfile = {
     'name': 'Alex Morgan',
@@ -65,6 +67,14 @@ class MockProfileRepository implements ProfileRepository {
   @override
   Future<void> updatePaymentMethods(List<Map<String, dynamic>> methods) async {
     mockProfile['payment_methods'] = methods;
+  }
+
+  @override
+  Future<String> uploadProfilePhoto(File imageFile) async {
+    const photoUrl = 'http://localhost:3000/api/v1/dev-storage/avatars/test.jpg';
+    mockProfile['avatar'] = photoUrl;
+    mockProfile['profilePhoto'] = photoUrl;
+    return photoUrl;
   }
 }
 

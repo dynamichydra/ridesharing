@@ -31,6 +31,8 @@ import 'features/profile/presentation/pages/ride_history_page.dart';
 import 'features/subscription/presentation/pages/subscription_management_page.dart';
 import 'features/wallet/presentation/pages/transactions_page.dart';
 import 'features/chat/presentation/pages/ride_chat_page.dart';
+import 'features/safety/presentation/pages/trusted_contacts_page.dart';
+import 'features/profile/presentation/pages/ride_details_page.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -59,6 +61,9 @@ class AppRoutes {
   static const String rideHistory = '/ride-history';
   static const String transactions = '/transactions';
   static const String rideChat = '/ride-chat';
+  static const String trustedContacts = '/trusted-contacts';
+  static const String rideDetails = '/ride-details/:id';
+
 
   // Root navigator key — sub-pages use this to push on top of the shell
   static final GlobalKey<NavigatorState> _rootNavigatorKey =
@@ -260,6 +265,21 @@ class AppRoutes {
           );
         },
       ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: trustedContacts,
+        builder: (context, state) => const TrustedContactsPage(),
+      ),
+
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/ride-details/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          return RideDetailsPage(rideId: id);
+        },
+      ),
     ],
   );
 }
+

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+
 import '../../../../core/utils/location_helper.dart';
 import '../../../../core/widgets/app_map_view.dart';
 import '../../../../core/widgets/custom_toast.dart';
@@ -1118,21 +1120,32 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                     fontSize: 16,
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFDE8E8),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'SOS',
-                    style: TextStyle(
-                      color: Color(0xFFE53935),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                GestureDetector(
+                  onTap: () {
+                    final currState = state;
+                    final rideId = currState is RideTrackingActive
+                        ? currState.rideId
+                        : (currState is RideTrackingSearching ? currState.rideId : '');
+                    _showSosConfirmationSheet(context, rideId);
+                  },
+
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFDE8E8),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'SOS',
+                      style: TextStyle(
+                        color: Color(0xFFE53935),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ),
+
               ],
             ),
           ),
@@ -1263,7 +1276,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                       icon: Icons.shield_rounded,
                       color: const Color(0xFFE53935),
                       label: 'SOS',
-                      onTap: () {},
+                      onTap: () => _showSosConfirmationSheet(context, state.rideId, userPosition: state.driverPosition),
                     ),
                     _buildCircularAction(
                       icon: Icons.share_location_rounded,
@@ -1840,4 +1853,106 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
       },
     );
   }
+
+  void _showSosConfirmationSheet(BuildContext context, String rideId, {LatLng? userPosition}) {
+    if (rideId.isEmpty) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFDE8E8),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.shield_rounded,
+                  color: Color(0xFFE53935),
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Trigger Emergency SOS?',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'This will alert our 24/7 Safety Command Center and transmit your live location and trip details to emergency contacts immediately.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE53935),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        context.read<RideTrackingBloc>().add(
+                              TriggerSosAlert(
+                                rideId: rideId,
+                                lat: userPosition?.latitude,
+                                lng: userPosition?.longitude,
+                                reason: 'Rider emergency SOS triggered from active trip',
+                              ),
+                            );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('🚨 SOS Alert Triggered! Safety command notified.'),
+                            backgroundColor: Color(0xFFE53935),
+                            duration: Duration(seconds: 4),
+                          ),
+                        );
+                      },
+                      child: const Text(
+                        'SEND SOS',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
+

@@ -20,4 +20,9 @@ abstract class RideTrackingRepository {
     AppTravelMode travelMode = AppTravelMode.drive,
   });
   Future<void> cancelRide(String rideId, [String reason = 'Cancelled by rider']);
+  Future<bool> triggerSosAlert(String rideId, {double? lat, double? lng, String? reason});
+  Future<bool> tipDriver(String rideId, double tipAmount);
+  Future<Map<String, dynamic>?> getRideReceipt(String rideId);
 }
+
+

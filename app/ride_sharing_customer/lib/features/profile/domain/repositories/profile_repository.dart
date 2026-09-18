@@ -1,3 +1,5 @@
+import 'dart:io';
+
 abstract class ProfileRepository {
   Future<Map<String, dynamic>> getUserProfile();
   Future<void> updateUserProfile(String name, String email, String phone);
@@ -7,4 +9,5 @@ abstract class ProfileRepository {
   Future<Map<String, dynamic>> updateSavedPlace(String id, Map<String, dynamic> place);
   Future<void> deleteSavedPlace(String id);
   Future<void> updatePaymentMethods(List<Map<String, dynamic>> methods);
+  Future<String> uploadProfilePhoto(File imageFile);
 }

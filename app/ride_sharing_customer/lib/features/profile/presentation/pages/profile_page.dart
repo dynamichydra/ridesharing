@@ -61,21 +61,52 @@ class _ProfilePageState extends State<ProfilePage> {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Row(
                       children: [
-                        Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(0xFFF1F5F9),
-                            border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
-                          ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.person_rounded,
-                              size: 38,
-                              color: Color(0xFF94A3B8),
-                            ),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final rawUrl = (profile['avatar'] ?? profile['profilePhoto']) as String?;
+                            if (rawUrl != null && rawUrl.trim().isNotEmpty) {
+                              return Container(
+                                width: 64,
+                                height: 64,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0xFFF1F5F9),
+                                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                                ),
+                                child: ClipOval(
+                                  child: Image.network(
+                                    rawUrl,
+                                    width: 64,
+                                    height: 64,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => const Center(
+                                      child: Icon(
+                                        Icons.person_rounded,
+                                        size: 38,
+                                        color: Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            return Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0xFFF1F5F9),
+                                border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                              ),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.person_rounded,
+                                  size: 38,
+                                  color: Color(0xFF94A3B8),
+                                ),
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(width: 16),
                         Expanded(

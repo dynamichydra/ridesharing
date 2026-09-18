@@ -282,13 +282,46 @@ class OnboardingRepositoryImpl implements OnboardingRepository {
   @override
   Future<DriverVehicle> updateVehicle(
     String vehicleId, {
+    String? vehicleTypeId,
+    String? vehicleModelId,
     String? model,
     String? year,
     String? registrationNumber,
     String? color,
     String? image,
   }) async {
+    String? resolvedModelId = vehicleModelId;
+    if ((resolvedModelId == null || resolvedModelId.isEmpty) && model != null && model.isNotEmpty) {
+      try {
+        final list = await remoteDataSource.getVehicleModels(
+          vehicleTypeId: vehicleTypeId,
+          search: model,
+        );
+        if (list.isNotEmpty) {
+          final query = model.toLowerCase().trim();
+          final matched = list.firstWhere(
+            (m) {
+              final name = (m['name'] as String?)?.toLowerCase() ?? '';
+              final brand = (m['brand'] as String?)?.toLowerCase() ?? '';
+              final full = '$brand $name'.trim().toLowerCase();
+              final slug = (m['slug'] as String?)?.toLowerCase() ?? '';
+              return full == query ||
+                  name == query ||
+                  slug.contains(query) ||
+                  query.contains(name);
+            },
+            orElse: () => list.first,
+          );
+          resolvedModelId = matched['id']?.toString();
+        }
+      } catch (_) {
+        // Fallback
+      }
+    }
+
     final payload = <String, dynamic>{
+      if (vehicleTypeId != null && vehicleTypeId.isNotEmpty) 'vehicleTypeId': vehicleTypeId,
+      if (resolvedModelId != null && resolvedModelId.isNotEmpty) 'vehicleModelId': resolvedModelId,
       if (model != null && model.isNotEmpty) 'model': model,
       if (year != null && year.isNotEmpty) 'year': year,
       if (registrationNumber != null && registrationNumber.isNotEmpty) 'registrationNumber': registrationNumber,

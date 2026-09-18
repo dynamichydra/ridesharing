@@ -63,6 +63,7 @@ dependencies:
   firebase_core: ^4.15.0
   firebase_messaging: ^16.7.0
   flutter_local_notifications: ^22.3.1
+  image_picker: ^1.2.3
 
 dependency_overrides:
   flutter_google_places_sdk_android: ^0.3.0

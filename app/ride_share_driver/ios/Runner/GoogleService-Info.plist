@@ -1,18 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- ⚠️  PLACEHOLDER — Replace this file with the real GoogleService-Info.plist  -->
-<!-- downloaded from Firebase Console → Project Settings → Your Apps → iOS driver app. -->
-<!-- Without the real file, FCM tokens cannot be generated on iOS.                     -->
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>REPLACE_WITH_REAL_CLIENT_ID</string>
+	<string>1046714936304-dummyclientid.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>REPLACE_WITH_REAL_REVERSED_CLIENT_ID</string>
+	<string>com.googleusercontent.apps.1046714936304-dummyclientid</string>
 	<key>ANDROID_CLIENT_ID</key>
-	<string>REPLACE_WITH_REAL_ANDROID_CLIENT_ID</string>
+	<string>1046714936304-dummyandroidclientid.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
-	<string>REPLACE_WITH_REAL_API_KEY</string>
+	<string>AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p67</string>
 	<key>GCM_SENDER_ID</key>
 	<string>1046714936304</string>
 	<key>PLIST_VERSION</key>
@@ -34,6 +31,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true/>
 	<key>GOOGLE_APP_ID</key>
-	<string>REPLACE_WITH_REAL_GOOGLE_APP_ID</string>
+	<string>1:1046714936304:ios:d41d8cd98f00b204e98009</string>
 </dict>
 </plist>

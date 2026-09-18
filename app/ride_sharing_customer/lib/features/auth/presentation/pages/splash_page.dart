@@ -116,9 +116,25 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
             context.go('/ride-tracking');
           }
         } else {
+          // Check backend active ride if local cache is empty
+          try {
+            final dioClient = sl<DioClient>();
+            final res = await dioClient.dio.get('/api/v1/rides/rider/active');
+            if (res.data != null && (res.data['SUCCESS'] == true || res.data['success'] == true)) {
+              final activeData = res.data['DATA'] ?? res.data['data'] ?? res.data['MESSAGE'];
+              if (activeData != null && activeData['id'] != null) {
+                if (mounted) {
+                  context.read<RideTrackingBloc>().add(RestoreActiveRide());
+                  context.go('/ride-tracking');
+                  return;
+                }
+              }
+            }
+          } catch (_) {}
           if (mounted) context.go('/home');
         }
       });
+
     } else if (_pendingState is AuthUnauthenticated) {
       Future.delayed(const Duration(milliseconds: 1000), () {
         if (mounted) context.go('/login');

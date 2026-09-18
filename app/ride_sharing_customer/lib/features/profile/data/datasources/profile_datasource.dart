@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/services/storage_service.dart';
@@ -11,7 +12,10 @@ abstract class ProfileDataSource {
   Future<Map<String, dynamic>> updateSavedPlace(String id, Map<String, dynamic> place);
   Future<void> deleteSavedPlace(String id);
   Future<void> updatePaymentMethods(List<Map<String, dynamic>> methods);
+  Future<void> updateProfilePhoto(String photoUrl);
+  Future<String> uploadProfilePhoto(File imageFile);
 }
+
 
 class ProfileDataSourceImpl implements ProfileDataSource {
   final DioClient _dioClient;
@@ -275,5 +279,60 @@ class ProfileDataSourceImpl implements ProfileDataSource {
     };
     await _storageService.cacheData(_profileCacheKey, updated);
   }
+
+  @override
+  Future<void> updateProfilePhoto(String photoUrl) async {
+    await _dioClient.dio.patch('/api/v1/riders/profile', data: {
+      'avatar': photoUrl,
+      'profilePhoto': photoUrl,
+    });
+    final current = await getUserProfile();
+    final updated = {
+      ...current,
+      'avatar': photoUrl,
+      'profilePhoto': photoUrl,
+    };
+    await _storageService.cacheData(_profileCacheKey, updated);
+  }
+
+  @override
+  Future<String> uploadProfilePhoto(File imageFile) async {
+    try {
+      final ext = imageFile.path.split('.').last.toLowerCase();
+      final cleanExt = ['png', 'jpg', 'jpeg', 'webp'].contains(ext) ? ext : 'jpg';
+      final mimeType = cleanExt == 'png' ? 'image/png' : 'image/jpeg';
+      final filename = 'avatar_${DateTime.now().millisecondsSinceEpoch}.$cleanExt';
+      final uploadPath = '/api/v1/dev-storage/avatars/$filename';
+
+      final bytes = await imageFile.readAsBytes();
+      await _dioClient.dio.put(
+        uploadPath,
+        data: bytes,
+        options: Options(
+          headers: {
+            'Content-Type': mimeType,
+          },
+        ),
+      );
+
+      final String photoUrl = '${DioClient.baseUrl}$uploadPath';
+      await updateProfilePhoto(photoUrl);
+      return photoUrl;
+    } catch (e) {
+      if (e is DioException) {
+        if (e.response != null && e.response?.data is Map) {
+          final msg = e.response?.data['MESSAGE'] ?? e.response?.data['message'];
+          if (msg != null && msg.toString().isNotEmpty) {
+            throw Exception(msg.toString());
+          }
+        }
+      }
+      if (e is Exception) {
+        rethrow;
+      }
+      throw Exception('Failed to upload photo: $e');
+    }
+  }
 }
+
 

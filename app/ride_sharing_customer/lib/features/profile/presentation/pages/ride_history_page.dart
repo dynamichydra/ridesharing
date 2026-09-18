@@ -430,9 +430,18 @@ class _RideHistoryPageState extends State<RideHistoryPage>
       vehicleIcon = Icons.local_taxi_rounded;
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(16),
+    return InkWell(
+      onTap: () {
+        final rideId = ride['id']?.toString() ?? '';
+        if (rideId.isNotEmpty) {
+          context.push('/ride-details/$rideId');
+        }
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(16),
+
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -682,6 +691,8 @@ class _RideHistoryPageState extends State<RideHistoryPage>
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
+
 }

@@ -14,7 +14,11 @@ class SubscriptionRemoteDataSource {
       if (response.data['SUCCESS'] != true) {
         throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to load plans');
       }
-      return (response.data['MESSAGE'] as List).cast<Map<String, dynamic>>();
+      final data = response.data['MESSAGE'];
+      if (data is List) {
+        return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+      return [];
     } on DioException catch (e) {
       throw mapDioException(e);
     }
@@ -30,10 +34,10 @@ class SubscriptionRemoteDataSource {
           headers: {'Idempotency-Key': idempotencyKey},
         ),
       );
-      if (response.data['SUCCESS'] != true) {
+      if (response.data['SUCCESS'] != true || response.data['MESSAGE'] == null) {
         throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to start subscription purchase');
       }
-      return response.data['MESSAGE'] as Map<String, dynamic>;
+      return Map<String, dynamic>.from(response.data['MESSAGE'] as Map);
     } on DioException catch (e) {
       throw mapDioException(e);
     }
@@ -52,10 +56,10 @@ class SubscriptionRemoteDataSource {
         'paymentRef': paymentRef,
         if (signature != null) 'signature': signature,
       });
-      if (response.data['SUCCESS'] != true) {
+      if (response.data['SUCCESS'] != true || response.data['MESSAGE'] == null) {
         throw ServerException(response.data['MESSAGE']?.toString() ?? 'Payment verification failed');
       }
-      return response.data['MESSAGE'] as Map<String, dynamic>;
+      return Map<String, dynamic>.from(response.data['MESSAGE'] as Map);
     } on DioException catch (e) {
       throw mapDioException(e);
     }
@@ -64,13 +68,18 @@ class SubscriptionRemoteDataSource {
   /// Returns null when the driver has no active subscription — the backend
   /// itself returns `MESSAGE: null` in that case (see `getMySubscription` in
   /// `subscription.service.js`), it isn't an error.
-  Future<Map<String, dynamic>> getMySubscription() async {
+  Future<Map<String, dynamic>?> getMySubscription() async {
     try {
       final response = await apiClient.dio.get('/subscriptions/mine');
       if (response.data['SUCCESS'] != true) {
         throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to load active subscription');
       }
-      return response.data['MESSAGE'] as Map<String, dynamic>;
+      final data = response.data['MESSAGE'];
+      if (data == null) return null;
+      if (data is Map) {
+        return Map<String, dynamic>.from(data);
+      }
+      return null;
     } on DioException catch (e) {
       throw mapDioException(e);
     }
@@ -83,7 +92,7 @@ class SubscriptionRemoteDataSource {
         throw ServerException(response.data['MESSAGE']?.toString() ?? 'Failed to load subscription history');
       }
       final data = response.data['MESSAGE'];
-      if (data is Map<String, dynamic> && data['rows'] != null) {
+      if (data is Map && data['rows'] != null) {
         return data['rows'] as List<dynamic>;
       } else if (data is List) {
         return data;

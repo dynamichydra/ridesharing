@@ -6,7 +6,9 @@ import '../../../../core/utils/location_helper.dart';
 import '../../../../core/models/route_model.dart';
 import '../../domain/repositories/ride_tracking_repository.dart';
 import '../../../../core/services/storage_service.dart';
+import '../../../../core/services/app_logger.dart';
 import '../../../../core/network/dio_client.dart';
+
 import '../../../../injection_container.dart';
 import '../../../booking/domain/entities/passenger_info.dart';
 
@@ -100,6 +102,24 @@ class CancelRide extends RideTrackingEvent {
 }
 
 class RestoreActiveRide extends RideTrackingEvent {}
+
+class TriggerSosAlert extends RideTrackingEvent {
+  final String rideId;
+  final double? lat;
+  final double? lng;
+  final String? reason;
+
+  const TriggerSosAlert({
+    required this.rideId,
+    this.lat,
+    this.lng,
+    this.reason,
+  });
+
+  @override
+  List<Object?> get props => [rideId, lat, lng, reason];
+}
+
 
 class UpdateRoutePoints extends RideTrackingEvent {
   final List<LatLng> routePoints;
@@ -294,7 +314,9 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     on<RideCompleted>(_onRideCompleted);
     on<CancelRide>(_onCancelRide);
     on<RestoreActiveRide>(_onRestoreActiveRide);
+    on<TriggerSosAlert>(_onTriggerSosAlert);
   }
+
 
   void _subscribeSocketEvents() {
     _driverAssignedSub?.cancel();
@@ -401,15 +423,68 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     _subscribeSocketEvents();
   }
 
+  Future<void> _onTriggerSosAlert(TriggerSosAlert event, Emitter<RideTrackingState> emit) async {
+    final success = await _rideTrackingRepository.triggerSosAlert(
+      event.rideId,
+      lat: event.lat,
+      lng: event.lng,
+      reason: event.reason,
+    );
+    AppLogger.i('[RideTrackingBloc] SOS alert trigger result: success=$success');
+  }
+
   Future<void> _onRestoreActiveRide(RestoreActiveRide event, Emitter<RideTrackingState> emit) async {
     try {
       final storage = sl<StorageService>();
       final cached = storage.getCachedData('active_ride_tracking');
-      if (cached == null) return;
-      final map = Map<String, dynamic>.from(cached as Map);
+      Map<String, dynamic>? map;
+
+      if (cached != null && cached is Map) {
+        map = Map<String, dynamic>.from(cached);
+      } else {
+        // Query backend for active ride if local cache is empty
+        try {
+          final dioClient = sl<DioClient>();
+          final res = await dioClient.dio.get('/api/v1/rides/rider/active');
+          if (res.data != null && (res.data['SUCCESS'] == true || res.data['success'] == true)) {
+            final activeObj = (res.data['DATA'] ?? res.data['data'] ?? res.data['MESSAGE']) as Map<String, dynamic>?;
+            if (activeObj != null && activeObj['id'] != null) {
+              final driverObj = activeObj['driver'] as Map<String, dynamic>?;
+              map = {
+                'rideId': activeObj['id'].toString(),
+                'pickupLat': (activeObj['pickupLat'] as num?)?.toDouble() ?? 0.0,
+                'pickupLng': (activeObj['pickupLng'] as num?)?.toDouble() ?? 0.0,
+                'dropLat': (activeObj['dropLat'] as num?)?.toDouble() ?? 0.0,
+                'dropLng': (activeObj['dropLng'] as num?)?.toDouble() ?? 0.0,
+                'pickupName': activeObj['pickupAddress']?.toString() ?? 'Pickup Location',
+                'destinationName': activeObj['dropoffAddress']?.toString() ?? 'Destination',
+                'vehicleName': activeObj['vehicleType']?['name']?.toString() ?? 'Vehicle',
+                'fare': (activeObj['estimatedFare'] as num?)?.toDouble() ?? (activeObj['finalFare'] as num?)?.toDouble() ?? 0.0,
+                'paymentMethod': activeObj['paymentMethod']?.toString() ?? 'cash',
+                'trackingState': (activeObj['status']?.toString().toLowerCase() == 'searching') ? 'searching' : 'rideInProgress',
+                'otp': activeObj['startOtp']?.toString() ?? '',
+                if (driverObj != null) 'driver': {
+                  'name': driverObj['name'] ?? 'Driver',
+                  'rating': (driverObj['rating'] as num?)?.toDouble() ?? 4.9,
+                  'avatar': driverObj['profilePhoto'] ?? '',
+                  'vehicle': driverObj['vehicleModel'] ?? '',
+                  'plate_number': driverObj['vehicleNumber'] ?? '',
+                  'phone': driverObj['phone'] ?? '',
+                }
+              };
+              await storage.cacheData('active_ride_tracking', map);
+            }
+          }
+        } catch (e) {
+          AppLogger.w('[RideTrackingBloc] Error querying active ride from backend: $e');
+        }
+      }
+
+      if (map == null) return;
 
       final String rideId = map['rideId']?.toString() ?? '';
       if (rideId.isEmpty) return;
+
 
       // ── Live status verification with server ──
       try {

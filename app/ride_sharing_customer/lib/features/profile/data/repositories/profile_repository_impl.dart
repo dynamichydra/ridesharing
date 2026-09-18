@@ -1,3 +1,4 @@
+import 'dart:io';
 import '../../domain/repositories/profile_repository.dart';
 import '../datasources/profile_datasource.dart';
 import '../../../../core/errors/failures.dart';
@@ -74,6 +75,15 @@ class ProfileRepositoryImpl implements ProfileRepository {
   Future<void> updatePaymentMethods(List<Map<String, dynamic>> methods) async {
     try {
       await _profileDataSource.updatePaymentMethods(methods);
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<String> uploadProfilePhoto(File imageFile) async {
+    try {
+      return await _profileDataSource.uploadProfilePhoto(imageFile);
     } catch (e) {
       throw ServerFailure(e.toString());
     }

@@ -106,7 +106,24 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: AppSpacing.xl),
 
             Text(
+              'Safety & Emergency',
+              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: AppSpacing.m),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.shield_rounded, color: Color(0xFFE53935)),
+                title: const Text('Trusted Contacts', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Manage emergency contacts for live sharing & SOS'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => context.push('/trusted-contacts'),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+
+            Text(
               'System Actions',
+
               style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: AppSpacing.m),

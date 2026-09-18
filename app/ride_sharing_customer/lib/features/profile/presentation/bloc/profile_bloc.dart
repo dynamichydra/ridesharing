@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../domain/repositories/profile_repository.dart';
@@ -13,6 +14,15 @@ abstract class ProfileEvent extends Equatable {
 }
 
 class LoadProfile extends ProfileEvent {}
+
+class UploadProfilePhoto extends ProfileEvent {
+  final File imageFile;
+
+  const UploadProfilePhoto(this.imageFile);
+
+  @override
+  List<Object?> get props => [imageFile];
+}
 
 class UpdateProfileDetails extends ProfileEvent {
   final String name;
@@ -120,6 +130,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
   ProfileBloc(this._profileRepository) : super(ProfileInitial()) {
     on<LoadProfile>(_onLoadProfile);
+    on<UploadProfilePhoto>(_onUploadProfilePhoto);
     on<UpdateProfileDetails>(_onUpdateProfileDetails);
     on<LoadRideHistoryEvent>(_onLoadRideHistory);
     on<UpdatePlaces>(_onUpdatePlaces);
@@ -137,6 +148,32 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       emit(ProfileLoaded(userProfile: profile, rideHistory: history));
     } catch (e) {
       emit(ProfileError(e.toString()));
+    }
+  }
+
+  Future<void> _onUploadProfilePhoto(UploadProfilePhoto event, Emitter<ProfileState> emit) async {
+    final currentState = state;
+    emit(ProfileLoading());
+    try {
+      final newPhotoUrl = await _profileRepository.uploadProfilePhoto(event.imageFile);
+      final profile = await _profileRepository.getUserProfile();
+      final history = currentState is ProfileLoaded ? currentState.rideHistory : await _profileRepository.getRideHistory();
+      
+      final updatedProfile = Map<String, dynamic>.from(profile);
+      updatedProfile['avatar'] = newPhotoUrl;
+      updatedProfile['profilePhoto'] = newPhotoUrl;
+
+      emit(ProfileLoaded(userProfile: updatedProfile, rideHistory: history));
+      emit(ProfileUpdateSuccess());
+    } catch (e) {
+      String msg = e.toString();
+      if (msg.startsWith('Exception: ')) {
+        msg = msg.substring(11);
+      }
+      if (currentState is ProfileLoaded) {
+        emit(currentState);
+      }
+      emit(ProfileError(msg));
     }
   }
 

@@ -108,4 +108,59 @@ class RideTrackingRepositoryImpl implements RideTrackingRepository {
       AppLogger.w('[RideTrackingRepo] Cancel ride error: $e');
     }
   }
+
+  @override
+  Future<bool> triggerSosAlert(String rideId, {double? lat, double? lng, String? reason}) async {
+    if (dioClient == null) return false;
+    try {
+      AppLogger.i('[RideTrackingRepo] Triggering SOS alert for ride $rideId...');
+      final response = await dioClient!.dio.post(
+        '/api/v1/rides/$rideId/sos',
+        data: {
+          if (lat != null) 'latitude': lat,
+          if (lng != null) 'longitude': lng,
+          if (reason != null && reason.isNotEmpty) 'reason': reason,
+        },
+      );
+      AppLogger.i('[RideTrackingRepo] SOS alert response: ${response.statusCode} - ${response.data}');
+      return response.statusCode == 200 || response.statusCode == 201 || response.data?['SUCCESS'] == true;
+    } catch (e) {
+      AppLogger.e('[RideTrackingRepo] Error triggering SOS alert: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> tipDriver(String rideId, double tipAmount) async {
+    if (dioClient == null || tipAmount <= 0) return false;
+    try {
+      final tipAmountMinor = (tipAmount * 100).toInt();
+      AppLogger.i('[RideTrackingRepo] Tipping driver $tipAmount ($tipAmountMinor minor) for ride $rideId...');
+      final response = await dioClient!.dio.post(
+        '/api/v1/rides/$rideId/tip',
+        data: {'tipAmountMinor': tipAmountMinor},
+      );
+      return response.statusCode == 200 || response.data?['SUCCESS'] == true;
+    } catch (e) {
+      AppLogger.w('[RideTrackingRepo] Tip driver error: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getRideReceipt(String rideId) async {
+    if (dioClient == null) return null;
+    try {
+      AppLogger.i('[RideTrackingRepo] Fetching receipt for ride $rideId...');
+      final response = await dioClient!.dio.get('/api/v1/rides/$rideId/receipt');
+      if (response.data != null && (response.data['SUCCESS'] == true || response.data['success'] == true)) {
+        return (response.data['DATA'] ?? response.data['data'] ?? response.data['MESSAGE']) as Map<String, dynamic>?;
+      }
+    } catch (e) {
+      AppLogger.w('[RideTrackingRepo] Fetch receipt error: $e');
+    }
+    return null;
+  }
 }
+
+

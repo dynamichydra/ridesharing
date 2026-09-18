@@ -306,7 +306,6 @@ class _OnboardingWizardState extends State<OnboardingWizard>
               setState(() {
                 _transitionOnSummaryLoad = true;
               });
-              context.read<OnboardingBloc>().add(LoadOnboardingConfig());
               context.read<OnboardingBloc>().add(LoadRegistrationSummary());
             } else if (state is ApplicationSubmitted) {
               showDialog(
@@ -394,35 +393,94 @@ class _OnboardingWizardState extends State<OnboardingWizard>
                 ),
               );
             } else if (state is OnboardingError) {
-              final isEmailDuplicate =
-                  state.message.toLowerCase().contains('email') ||
-                  state.message.toLowerCase().contains('duplicate') ||
-                  state.message.toLowerCase().contains('already in use') ||
-                  state.message.toLowerCase().contains('already registered');
-              if (isEmailDuplicate) {
+              final msg = state.message.toLowerCase();
+              final isEmailError = _currentStep == 3 &&
+                  (msg.contains('email') ||
+                   msg.contains('already in use') ||
+                   msg.contains('already registered') ||
+                   msg.contains('duplicate'));
+
+              final isVehicleError = _currentStep == 7 &&
+                  (msg.contains('vehicle') ||
+                   msg.contains('plate') ||
+                   msg.contains('registration') ||
+                   msg.contains('already in use') ||
+                   msg.contains('already registered') ||
+                   msg.contains('duplicate'));
+
+              if (isEmailError) {
                 showDialog(
                   context: context,
                   builder: (context) => AlertDialog(
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(24),
                     ),
-                    title: Row(
+                    title: const Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.warning_amber_rounded,
                           color: AppColors.error,
                           size: 28,
                         ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Email in Use',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Email in Use',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ],
                     ),
                     content: const Text(
                       'This email address is already in use by another account. Please use a different email address.',
                       style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 15,
+                        height: 1.4,
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text(
+                          'OK',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              } else if (isVehicleError) {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    title: const Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          color: AppColors.error,
+                          size: 28,
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Vehicle Registration Error',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                    content: Text(
+                      state.message.isNotEmpty
+                          ? state.message
+                          : 'This vehicle registration number is already registered to another account. Please use a different vehicle.',
+                      style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 15,
                         height: 1.4,
@@ -531,6 +589,7 @@ class _OnboardingWizardState extends State<OnboardingWizard>
                               : AppColors.textSecondary,
                         ),
                       ),
+                      actions: null,
                     )
                   : null,
               body: _currentStep <= 2 && !_isLocationUnsupported
@@ -807,13 +866,21 @@ class _OnboardingWizardState extends State<OnboardingWizard>
         final existingVehicle = _summary?.vehicles.isNotEmpty == true
             ? _summary!.vehicles.first
             : null;
+        final existingModelStr = existingVehicle != null
+            ? (existingVehicle.brand != null && existingVehicle.brand!.isNotEmpty
+                ? '${existingVehicle.brand} ${existingVehicle.model}'
+                : existingVehicle.model)
+            : null;
+
         return VehicleFormScreen(
           vehicleTypes: _config!.vehicleTypes,
           initialVehicleTypeId: existingVehicle?.vehicleTypeId,
-          initialModel: existingVehicle?.model,
+          initialVehicleModelId: existingVehicle?.vehicleModelId,
+          initialModel: existingModelStr,
           initialYear: existingVehicle?.year,
           initialRegistrationNumber: existingVehicle?.registrationNumber,
           initialColor: existingVehicle?.color,
+          initialImageUrl: existingVehicle?.image,
           isLoading: isOnboardingLoading,
           onSave:
               ({
@@ -825,8 +892,32 @@ class _OnboardingWizardState extends State<OnboardingWizard>
                 required year,
                 String? image,
               }) {
+                // If vehicle details are completely unchanged, bypass API call and advance directly
+                final isUnchanged = existingVehicle != null &&
+                    existingModelStr?.trim().toLowerCase() == model.trim().toLowerCase() &&
+                    existingVehicle.year.trim() == year.trim() &&
+                    existingVehicle.registrationNumber.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase() ==
+                        registrationNumber.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase() &&
+                    (color == null || existingVehicle.color == null || existingVehicle.color?.trim().toLowerCase() == color.trim().toLowerCase()) &&
+                    image == null;
+
+                if (isUnchanged) {
+                  debugPrint('[OnboardingWizard] Vehicle details unchanged. Advancing directly to checklist.');
+                  context.read<OnboardingBloc>().add(LoadRegistrationSummary());
+                  setState(() {
+                    if (_enteredFromChecklist) {
+                      _currentStep = 8;
+                      _enteredFromChecklist = false;
+                    } else {
+                      _nextStep();
+                    }
+                  });
+                  return;
+                }
+
                 context.read<OnboardingBloc>().add(
                   AddVehicleDetails(
+                    vehicleId: existingVehicle?.id,
                     vehicleTypeId: vehicleTypeId,
                     vehicleModelId: vehicleModelId,
                     model: model,
@@ -858,6 +949,20 @@ class _OnboardingWizardState extends State<OnboardingWizard>
           isBankDetailsCompleted: isBankComplete,
           isEmergencyContactCompleted: true,
           isLoading: isOnboardingLoading,
+          onLogout: () {
+            context.read<AuthBloc>().add(LogoutRequested());
+            setState(() {
+              _currentStep = 0;
+              _phoneNumber = '';
+              _isLogin = false;
+              _config = null;
+              _summary = null;
+              _needsVehicleRental = false;
+              _enteredFromChecklist = false;
+              _isEditingRejectedApplication = false;
+              _simulatedCompletedItems.clear();
+            });
+          },
           onItemTap: (code) {
             setState(() {
               _enteredFromChecklist = true;

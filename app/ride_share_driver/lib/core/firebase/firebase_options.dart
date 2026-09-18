@@ -23,7 +23,7 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDummyKeyForRyvaRideDriverAppFCM',
+    apiKey: 'AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p67',
     appId: '1:1046714936304:web:driver992817263541',
     messagingSenderId: '1046714936304',
     projectId: 'ryva-ride',
@@ -32,7 +32,7 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDummyKeyForRyvaRideDriverAppFCM',
+    apiKey: 'AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p67',
     appId: '1:1046714936304:android:driver992817263541',
     messagingSenderId: '1046714936304',
     projectId: 'ryva-ride',
@@ -40,7 +40,7 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDummyKeyForRyvaRideDriverAppFCM',
+    apiKey: 'AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p67',
     appId: '1:1046714936304:ios:d41d8cd98f00b204e98009',
     messagingSenderId: '1046714936304',
     projectId: 'ryva-ride',
@@ -49,7 +49,7 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyDummyKeyForRyvaRideDriverAppFCM',
+    apiKey: 'AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p67',
     appId: '1:1046714936304:ios:d41d8cd98f00b204e98009',
     messagingSenderId: '1046714936304',
     projectId: 'ryva-ride',
