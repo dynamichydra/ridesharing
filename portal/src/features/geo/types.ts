@@ -44,7 +44,13 @@ export interface City {
   countryId: string;
   cityTypeId?: string | null;
   name: string;
+  code?: string | null;
+  currencyCode?: string | null;
   timezone: string | null;
+  boundary?: string | null;
+  polygon?: GeoJSONPolygon | null;
+  hexCells?: string[] | null;
+  resolution?: number | null;
   isActive: boolean;
   sortOrder: number;
   createdBy: string | null;
@@ -55,24 +61,6 @@ export interface City {
 export interface GeoJSONPolygon {
   type: "Polygon";
   coordinates: number[][][];
-}
-
-export interface CityServiceArea {
-  id: string;
-  cityId: string;
-  countryId?: string | null;
-  name: string;
-  status: "ACTIVE" | "INACTIVE" | "RESTRICTED";
-  polygon: GeoJSONPolygon;
-  hexCells?: string[] | null;
-  resolution?: number | null;
-  isActive: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-  city?: {
-    id: string;
-    name: string;
-  } | null;
 }
 
 export interface Pagination {
@@ -104,15 +92,6 @@ export interface CityListParams {
 
 export interface CityTypeListParams {
   search?: string;
-  page?: number;
-  limit?: number;
-}
-
-export interface CityServiceAreaListParams {
-  cityId?: string;
-  countryId?: string;
-  status?: string;
-  isActive?: boolean | string;
   page?: number;
   limit?: number;
 }
@@ -157,8 +136,14 @@ export interface CreateCityPayload {
   countryId: string;
   cityTypeId?: string | null;
   name: string;
+  code?: string;
+  currencyCode?: string;
   timezone?: string;
+  boundary?: string;
+  polygon?: GeoJSONPolygon;
+  resolution?: number;
   sortOrder?: number;
+  isActive?: boolean;
 }
 
 export type UpdateCityPayload = Partial<CreateCityPayload>;
@@ -189,18 +174,5 @@ export interface CreateCurrencyPayload {
 }
 
 export type UpdateCurrencyPayload = Partial<CreateCurrencyPayload>;
-
-export interface CityServiceAreaPayload {
-  cityId: string;
-  countryId?: string | null;
-  name: string;
-  status?: "ACTIVE" | "INACTIVE" | "RESTRICTED";
-  polygon: GeoJSONPolygon;
-  resolution?: number;
-}
-
-export type UpdateCityServiceAreaPayload = Partial<CityServiceAreaPayload> & {
-  isActive?: boolean;
-};
 
 

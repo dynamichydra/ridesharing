@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rider Socket.IO Portal</title>
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card: #121826;
+      --card-alt: #1a2234;
+      --border: #232f48;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border); }
+    h1 { font-size: 22px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 10px; }
+    .status-badge { font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 999px; text-transform: uppercase; }
+    .status-disconnected { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
+    .status-connected { background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid var(--success); }
+    .grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 20px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 18px; }
+    .card-title { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+    label { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; display: block; margin-bottom: 5px; }
+    input, textarea, select { width: 100%; background: var(--card-alt); border: 1px solid var(--border); color: #fff; padding: 9px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+    input:focus, textarea:focus { outline: none; border-color: var(--primary); }
+    .btn { background: var(--primary); color: #fff; border: none; padding: 9px 16px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: 0.15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn:hover { background: var(--primary-hover); }
+    .btn-success { background: #059669; }
+    .btn-success:hover { background: #047857; }
+    .btn-danger { background: #dc2626; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-warning { background: #d97706; }
+    .btn-warning:hover { background: #b45309; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-outline:hover { background: var(--card-alt); }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+    .tracking-card { background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(16, 185, 129, 0.12)); border: 1px solid var(--primary); border-radius: 12px; padding: 16px; margin-bottom: 18px; }
+    .log-box { height: 420px; overflow-y: auto; background: #06090e; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; }
+    .log-entry { margin-bottom: 8px; padding: 6px 8px; border-radius: 4px; border-left: 3px solid var(--border); word-break: break-all; }
+    .log-in { border-left-color: var(--success); background: rgba(16, 185, 129, 0.05); }
+    .log-out { border-left-color: var(--primary); background: rgba(59, 130, 246, 0.05); }
+    .log-err { border-left-color: var(--danger); background: rgba(239, 68, 68, 0.08); }
+    .log-time { color: var(--text-muted); font-size: 11px; margin-right: 6px; }
+    .badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; margin-right: 6px; }
+    .badge-in { background: #059669; color: #fff; }
+    .badge-out { background: #2563eb; color: #fff; }
+    .badge-sys { background: #475569; color: #fff; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>👤 Rider Socket.IO Portal</h1>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span id="socketStatus" class="status-badge status-disconnected">Disconnected</span>
+      <button class="btn btn-outline" onclick="toggleConnect()" id="btnConnect">Connect</button>
+    </div>
+  </header>
+
+  <!-- Live Ride Tracking Banner -->
+  <div id="liveTrackingCard" class="tracking-card" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <h3 style="color:#60a5fa;font-size:16px;display:flex;align-items:center;gap:8px;">
+        🚕 LIVE RIDE TRACKING: <span id="trackStatusBadge" style="background:#2563eb;color:#fff;padding:2px 8px;border-radius:6px;font-size:12px;">SEARCHING</span>
+      </h3>
+      <span id="trackOtpBadge" style="background:#059669;color:#fff;padding:4px 10px;border-radius:6px;font-size:13px;font-weight:700;">OTP: ----</span>
+    </div>
+    <div id="driverAssignedInfo" style="font-size:13px;margin-bottom:8px;line-height:1.6;">
+      Waiting for driver match...
+    </div>
+    <div id="driverGpsStream" style="font-size:12px;color:var(--text-muted);background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;">
+      📍 Driver GPS: Waiting for live stream...
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Left Column: Controls -->
+    <div>
+      <!-- Connection & Auth -->
+      <div class="card">
+        <div class="card-title">1. Connection & Credentials</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label>Socket URL</label>
+            <input type="text" id="socketUrl" value="http://localhost:3000" />
+          </div>
+          <div>
+            <label>Namespace</label>
+            <input type="text" id="namespace" value="/rider" readonly />
+          </div>
+        </div>
+        <label>Rider JWT Token</label>
+        <textarea id="jwtToken" rows="2" placeholder="Paste rider JWT token or click auto-fetch"></textarea>
+        <div class="btn-group">
+          <button class="btn btn-outline" onclick="fetchDevToken()">🔑 Auto-Fetch Dev Token</button>
+          <button class="btn btn-danger" onclick="disconnectSocket()">Disconnect</button>
+        </div>
+      </div>
+
+      <!-- Ride Booking & Subscription -->
+      <div class="card">
+        <div class="card-title">2. Request Ride & Live Subscription</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label>Pickup Lat/Lng</label>
+            <input type="text" id="pickupCoords" value="22.572646, 88.363895" />
+          </div>
+          <div>
+            <label>Drop Lat/Lng</label>
+            <input type="text" id="dropCoords" value="22.585000, 88.375000" />
+          </div>
+        </div>
+        <label>Ride ID (Active)</label>
+        <input type="text" id="rideId" placeholder="Ride UUID (Auto-filled on Request Ride)" />
+        <div class="btn-group">
+          <button class="btn btn-success" onclick="requestNewRide()">🚕 1-Click Request Ride (REST)</button>
+          <button class="btn" onclick="emitSubscribeRide()">📡 Subscribe (ride:subscribe)</button>
+          <button class="btn btn-outline" onclick="emitUnsubscribeRide()">Unsubscribe</button>
+          <button class="btn btn-danger" onclick="cancelRide()">❌ Cancel Ride</button>
+        </div>
+      </div>
+
+      <!-- In-Trip Chat -->
+      <div class="card">
+        <div class="card-title">3. In-Trip Chat with Driver</div>
+        <label>Chat Message Content</label>
+        <input type="text" id="chatContent" placeholder="e.g. I am standing near the entrance." />
+        <div class="btn-group">
+          <button class="btn" onclick="emitSendChat()">💬 Send Chat (chat:send)</button>
+          <button class="btn btn-outline" onclick="emitMarkChatRead()">👁️ Mark Chat Read</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column: Live Event Log -->
+    <div>
+      <div class="card" style="height: 100%;">
+        <div class="card-title">
+          <span>Live Socket Events</span>
+          <button class="btn btn-outline" style="padding:4px 8px;font-size:11px;" onclick="clearLogs()">Clear</button>
+        </div>
+        <div id="logBox" class="log-box">
+          <div class="log-entry" style="color:var(--text-muted);">Ready. Click Connect to start receiving events.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let socket = null;
+
+  function log(type, eventName, data) {
+    const box = document.getElementById('logBox');
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type === 'in' ? 'log-in' : type === 'out' ? 'log-out' : 'log-err'}`;
+    const time = new Date().toLocaleTimeString();
+    const badgeClass = type === 'in' ? 'badge-in' : type === 'out' ? 'badge-out' : 'badge-sys';
+    entry.innerHTML = `<span class="log-time">${time}</span><span class="badge ${badgeClass}">${type.toUpperCase()}</span> <strong>${eventName}</strong> <pre style="margin-top:4px;white-space:pre-wrap;color:#e2e8f0;">${JSON.stringify(data, null, 2)}</pre>`;
+    box.appendChild(entry);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function clearLogs() {
+    document.getElementById('logBox').innerHTML = '';
+  }
+
+  async function fetchDevToken() {
+    try {
+      const url = document.getElementById('socketUrl').value;
+      const res = await fetch(`${url}/socket-test/quick-auth?role=rider`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.DATA?.token) {
+          document.getElementById('jwtToken').value = json.DATA.token;
+          log('sys', 'TOKEN_LOADED', { riderId: json.DATA.user?.id, name: json.DATA.user?.name });
+          return;
+        }
+      }
+    } catch (e) {
+      log('err', 'AUTH_ERROR', 'Could not auto-fetch rider token. You can paste manually.');
+    }
+  }
+
+  function toggleConnect() {
+    if (socket && socket.connected) disconnectSocket();
+    else connectSocket();
+  }
+
+  function connectSocket() {
+    const url = document.getElementById('socketUrl').value.replace(/\/$/, '');
+    const token = document.getElementById('jwtToken').value.trim();
+    if (!token) { alert('Please enter or fetch a rider JWT token'); return; }
+
+    const statusBadge = document.getElementById('socketStatus');
+    statusBadge.className = 'status-badge status-disconnected';
+    statusBadge.innerText = 'Connecting...';
+
+    socket = io(`${url}/rider`, {
+      auth: { token },
+      query: { token },
+      transports: ['websocket', 'polling'],
+    });
+
+    socket.on('connect', () => {
+      statusBadge.className = 'status-badge status-connected';
+      statusBadge.innerText = 'Connected';
+      document.getElementById('btnConnect').innerText = 'Disconnect';
+      log('sys', 'CONNECTED', { socketId: socket.id, namespace: '/rider' });
+    });
+
+    socket.on('disconnect', (reason) => {
+      statusBadge.className = 'status-badge status-disconnected';
+      statusBadge.innerText = 'Disconnected';
+      document.getElementById('btnConnect').innerText = 'Connect';
+      log('sys', 'DISCONNECTED', { reason });
+    });
+
+    socket.on('connect_error', (err) => {
+      statusBadge.className = 'status-badge status-disconnected';
+      statusBadge.innerText = 'Error';
+      log('err', 'CONNECT_ERROR', err.message);
+    });
+
+    // ── Inbound Rider Events ──────────────────────────────────────────
+    socket.on('ride:subscribed', (data) => log('in', 'ride:subscribed', data));
+
+    socket.on('ride:driver_assigned', (data) => {
+      log('in', 'ride:driver_assigned', data);
+      document.getElementById('liveTrackingCard').style.display = 'block';
+      document.getElementById('trackStatusBadge').innerText = 'DRIVER ASSIGNED';
+      document.getElementById('trackStatusBadge').style.background = '#10b981';
+      document.getElementById('trackOtpBadge').innerText = `OTP: ${data.startOtp || '****'}`;
+      document.getElementById('driverAssignedInfo').innerHTML = `
+        <strong>Assigned Driver:</strong> ${data.driver?.name || 'Driver'} | <strong>Vehicle:</strong> ${data.driver?.vehicleModel || ''} (${data.driver?.vehicleNumber || ''})<br/>
+        <strong>Rating:</strong> ⭐ ${data.driver?.rating || '5.0'}
+      `;
+      alert(`🎉 Driver Assigned! Driver: ${data.driver?.name || 'Driver'} | Start OTP: ${data.startOtp}`);
+    });
+
+    socket.on('driver:location', (loc) => {
+      log('in', 'driver:location', loc);
+      document.getElementById('liveTrackingCard').style.display = 'block';
+      document.getElementById('driverGpsStream').innerHTML = `
+        📍 <strong>Live Driver GPS:</strong> Lat: ${loc.lat}, Lng: ${loc.lng} | <strong>Phase:</strong> ${loc.phase || 'approach'}<br/>
+        ${loc.approachProgress ? `⏱️ <strong>ETA:</strong> ${loc.approachProgress.etaMinutes || '0'} min | <strong>Remaining:</strong> ${loc.approachProgress.distanceRemainingKm || '0'} km` : ''}
+        ${loc.tripProgress ? `⏱️ <strong>Trip Progress:</strong> ${loc.tripProgress.distanceCoveredKm || '0'} km completed` : ''}
+      `;
+    });
+
+    socket.on('ride:started', (data) => {
+      log('in', 'ride:started', data);
+      document.getElementById('trackStatusBadge').innerText = 'ON TRIP (STARTED)';
+      document.getElementById('trackStatusBadge').style.background = '#8b5cf6';
+      alert('🚗 Ride has started!');
+    });
+
+    socket.on('ride:completed', (data) => {
+      log('in', 'ride:completed', data);
+      document.getElementById('trackStatusBadge').innerText = 'COMPLETED';
+      document.getElementById('trackStatusBadge').style.background = '#059669';
+      alert(`🏁 Ride Completed! Total Fare: ${data.currency} ${data.finalFare}`);
+    });
+
+    socket.on('ride:cancelled', (data) => {
+      log('in', 'ride:cancelled', data);
+      document.getElementById('trackStatusBadge').innerText = 'CANCELLED';
+      document.getElementById('trackStatusBadge').style.background = '#dc2626';
+      alert(`⚠️ Ride Cancelled: ${data.reason || 'No reason provided'}`);
+    });
+
+    // Chat
+    socket.on('chat:message', (msg) => {
+      log('in', 'chat:message', msg);
+      alert(`💬 Driver: ${msg.content}`);
+    });
+    socket.on('chat:send_ok', (data) => log('in', 'chat:send_ok', data));
+    socket.on('chat:error', (err) => log('err', 'chat:error', err));
+  }
+
+  function disconnectSocket() {
+    if (socket) {
+      socket.disconnect();
+      socket = null;
+    }
+  }
+
+  async function requestNewRide() {
+    const url = document.getElementById('socketUrl').value.replace(/\/$/, '');
+    const token = document.getElementById('jwtToken').value.trim();
+    if (!token) return alert('Connect / enter rider token first');
+
+    const pickupStr = document.getElementById('pickupCoords').value.split(',');
+    const dropStr = document.getElementById('dropCoords').value.split(',');
+    const pickupLat = parseFloat(pickupStr[0].trim());
+    const pickupLng = parseFloat(pickupStr[1].trim());
+    const dropLat = parseFloat(dropStr[0].trim());
+    const dropLng = parseFloat(dropStr[1].trim());
+
+    try {
+      log('out', 'REST: POST /api/v1/ride/request', { pickupLat, pickupLng, dropLat, dropLng });
+      const res = await fetch(`${url}/api/v1/ride/request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          pickupLat, pickupLng,
+          pickupAddress: 'Pickup Location, Salt Lake',
+          dropLat, dropLng,
+          dropAddress: 'Drop Location, Kolkata Airport',
+          passengerCount: 1,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && (data.DATA?.ride || data.ride || data.id)) {
+        const ride = data.DATA?.ride || data.ride || data;
+        document.getElementById('rideId').value = ride.id;
+        document.getElementById('liveTrackingCard').style.display = 'block';
+        document.getElementById('trackStatusBadge').innerText = 'SEARCHING FOR DRIVER...';
+        document.getElementById('trackStatusBadge').style.background = '#d97706';
+        log('in', 'REST: RIDE_CREATED', ride);
+        emitSubscribeRide();
+        alert(`🎉 Ride requested successfully! Ride ID: ${ride.id}. Dispatching to nearby drivers...`);
+      } else {
+        log('err', 'REST_ERROR', data);
+        alert(`Error requesting ride: ${data.MESSAGE || data.message || JSON.stringify(data)}`);
+      }
+    } catch (err) {
+      log('err', 'REST_FETCH_ERROR', err.message);
+    }
+  }
+
+  function emitSubscribeRide() {
+    const rideId = document.getElementById('rideId').value.trim();
+    if (!rideId) return alert('Enter a Ride ID');
+    if (!socket || !socket.connected) return alert('Connect socket first!');
+    socket.emit('ride:subscribe', { rideId });
+    log('out', 'ride:subscribe', { rideId });
+  }
+
+  function emitUnsubscribeRide() {
+    const rideId = document.getElementById('rideId').value.trim();
+    if (!rideId) return;
+    if (socket && socket.connected) {
+      socket.emit('ride:unsubscribe', { rideId });
+      log('out', 'ride:unsubscribe', { rideId });
+    }
+  }
+
+  async function cancelRide() {
+    const url = document.getElementById('socketUrl').value.replace(/\/$/, '');
+    const token = document.getElementById('jwtToken').value.trim();
+    const rideId = document.getElementById('rideId').value.trim();
+    if (!rideId) return alert('Enter a Ride ID');
+    try {
+      const res = await fetch(`${url}/api/v1/ride/${rideId}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason: 'Cancelled from test portal' }),
+      });
+      const data = await res.json();
+      log('out', 'REST: CANCEL_RIDE', data);
+      alert('Ride cancellation request sent');
+    } catch (e) {
+      log('err', 'CANCEL_ERROR', e.message);
+    }
+  }
+
+  function emitSendChat() {
+    const rideId = document.getElementById('rideId').value.trim();
+    const content = document.getElementById('chatContent').value.trim();
+    if (!rideId || !content) return alert('Enter Ride ID and message');
+    socket.emit('chat:send', { rideId, content, messageType: 'text' });
+    log('out', 'chat:send', { rideId, content });
+    document.getElementById('chatContent').value = '';
+  }
+
+  function emitMarkChatRead() {
+    const rideId = document.getElementById('rideId').value.trim();
+    if (!rideId) return alert('Enter Ride ID');
+    socket.emit('chat:read', { rideId });
+    log('out', 'chat:read', { rideId });
+  }
+
+  window.onload = () => { fetchDevToken(); };
+</script>
+</body>
+</html>

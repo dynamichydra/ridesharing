@@ -136,7 +136,6 @@ export interface CommissionRule {
   countryId: string | null; // null = global default
   cityId?: string | null; // null = all cities in country / global
   vehicleTypeId: string | null; // null = all vehicle types
-  serviceTypeId?: string | null;
   planTierId?: string | null;
   bookingFeeMinor: number;
   platformFeeMinor?: number;
@@ -170,7 +169,6 @@ export interface CommissionRulePayload {
   countryId?: string;
   cityId?: string;
   vehicleTypeId?: string;
-  serviceTypeId?: string;
   planTierId?: string;
   bookingFeeMinor: number;
   platformFeeMinor?: number;

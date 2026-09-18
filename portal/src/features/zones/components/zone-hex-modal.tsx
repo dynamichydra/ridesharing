@@ -535,7 +535,7 @@ export function ZoneHexModal({
                   <span>•</span>
                 </>
               )}
-              <span className="font-mono">Multiplier: {zone?.multiplier}x</span>
+              <span className="font-mono">Priority: {zone?.priority ?? 0}</span>
               <span>•</span>
               <span className="font-mono">Resolution: {resolution}</span>
               <span>•</span>

@@ -70,9 +70,16 @@ export const citySchema = z.object({
   stateId: z.string().min(1, "State is required"),
   cityTypeId: z.string().optional(),
   name: z.string().trim().min(1, "City name is required"),
+  code: z.string().trim().min(1, "City code is required"),
+  currencyCode: z.string().trim(),
   timezone: z.string().trim(),
-  // See the comment on countrySchema.sortOrder — kept as a validated string, not z.coerce.number().
+  polygon: z.string().optional(),
+  resolution: z
+    .string()
+    .optional()
+    .refine((val) => !val || /^(8|9|10)$/.test(val), "Resolution must be 8, 9, or 10"),
   sortOrder: z.string().trim().regex(/^\d+$/, "Must be a whole number"),
+  isActive: z.boolean(),
 });
 
 export type CityFormValues = z.infer<typeof citySchema>;
@@ -82,8 +89,13 @@ export const emptyCityFormValues: CityFormValues = {
   stateId: "",
   cityTypeId: "",
   name: "",
-  timezone: "",
+  code: "",
+  currencyCode: "INR",
+  timezone: "UTC",
+  polygon: "",
+  resolution: "8",
   sortOrder: "0",
+  isActive: true,
 };
 
 export const cityTypeSchema = z.object({
@@ -120,27 +132,6 @@ export const emptyCityTypeFormValues: CityTypeFormValues = {
   defaultSurgeCap: "3.00",
   waitingFeeEnabled: true,
   sortOrder: "0",
-};
-
-export const serviceAreaSchema = z.object({
-  cityId: z.string().min(1, "City is required"),
-  name: z.string().trim().min(1, "Area name is required"),
-  status: z.enum(["ACTIVE", "INACTIVE", "RESTRICTED"]),
-  polygon: z.string().min(1, "Polygon coordinates are required"),
-  resolution: z
-    .string()
-    .optional()
-    .refine((val) => !val || /^(8|9|10)$/.test(val), "Resolution must be 8, 9, or 10"),
-});
-
-export type ServiceAreaFormValues = z.infer<typeof serviceAreaSchema>;
-
-export const emptyServiceAreaFormValues: ServiceAreaFormValues = {
-  cityId: "",
-  name: "",
-  status: "ACTIVE",
-  polygon: "",
-  resolution: "9",
 };
 
 export const currencySchema = z.object({

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { countriesApi, statesApi, citiesApi, cityTypesApi, serviceAreasApi, currenciesApi, geoLookupApi } from "./api";
+import { countriesApi, statesApi, citiesApi, cityTypesApi, currenciesApi, geoLookupApi } from "./api";
 import type {
   CountryListParams,
   CreateCountryPayload,
@@ -14,9 +14,6 @@ import type {
   CityTypeListParams,
   CreateCityTypePayload,
   UpdateCityTypePayload,
-  CityServiceAreaListParams,
-  CityServiceAreaPayload,
-  UpdateCityServiceAreaPayload,
   CurrencyListParams,
   CreateCurrencyPayload,
   UpdateCurrencyPayload,
@@ -289,75 +286,6 @@ export function useSeedCityTypeDefaults() {
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to seed default city tiers");
-    },
-  });
-}
-
-// ── Service Areas ────────────────────────────────────────────────────────────
-
-const SERVICE_AREAS_KEY = "geo-service-areas";
-
-export function useServiceAreas(params: CityServiceAreaListParams = {}) {
-  return useQuery({
-    queryKey: [SERVICE_AREAS_KEY, params],
-    queryFn: () => serviceAreasApi.list(params),
-  });
-}
-
-export function useCreateServiceArea() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: CityServiceAreaPayload) => serviceAreasApi.create(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [SERVICE_AREAS_KEY], refetchType: "active" });
-      toast.success("Service area created successfully!");
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to create service area");
-    },
-  });
-}
-
-export function useUpdateServiceArea() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: UpdateCityServiceAreaPayload }) =>
-      serviceAreasApi.update(id, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [SERVICE_AREAS_KEY], refetchType: "active" });
-      toast.success("Service area updated successfully!");
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to update service area");
-    },
-  });
-}
-
-export function useSetServiceAreaActive() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      serviceAreasApi.setActive(id, isActive),
-    onSuccess: (_, { isActive }) => {
-      queryClient.invalidateQueries({ queryKey: [SERVICE_AREAS_KEY], refetchType: "active" });
-      toast.success(`Service area ${isActive ? "enabled" : "disabled"} successfully!`);
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to update service area status");
-    },
-  });
-}
-
-export function useDeleteServiceArea() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => serviceAreasApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [SERVICE_AREAS_KEY], refetchType: "active" });
-      toast.success("Service area deleted successfully!");
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to delete service area");
     },
   });
 }

@@ -16,10 +16,6 @@ import type {
   CityTypeListParams,
   CreateCityTypePayload,
   UpdateCityTypePayload,
-  CityServiceArea,
-  CityServiceAreaListParams,
-  CityServiceAreaPayload,
-  UpdateCityServiceAreaPayload,
   Currency,
   CurrencyListParams,
   CreateCurrencyPayload,
@@ -57,19 +53,6 @@ function buildCityQuery(params: CityListParams) {
 function buildCityTypeQuery(params: CityTypeListParams) {
   const query = new URLSearchParams();
   if (params.search) query.set("search", params.search);
-  query.set("page", String(params.page ?? 1));
-  query.set("limit", String(params.limit ?? 20));
-  return query.toString();
-}
-
-function buildServiceAreaQuery(params: CityServiceAreaListParams) {
-  const query = new URLSearchParams();
-  if (params.cityId) query.set("cityId", params.cityId);
-  if (params.countryId) query.set("countryId", params.countryId);
-  if (params.status) query.set("status", params.status);
-  if (params.isActive !== undefined && params.isActive !== "") {
-    query.set("isActive", String(params.isActive));
-  }
   query.set("page", String(params.page ?? 1));
   query.set("limit", String(params.limit ?? 20));
   return query.toString();
@@ -174,41 +157,6 @@ export const citiesApi = {
       `${BASE_URL}/admin/cities/${id}/${isActive ? "enable" : "disable"}`,
       {},
     ),
-};
-
-export const serviceAreasApi = {
-  // GET /geo/admin/service-areas?cityId=&status=&page=&limit= (Admin)
-  list: async (params: CityServiceAreaListParams) => {
-    const res = await apiClient.get<Array<{ serviceArea?: CityServiceArea; city?: any } | CityServiceArea>>(
-      `${BASE_URL}/admin/service-areas?${buildServiceAreaQuery(params)}`,
-    );
-    const unwrapped: CityServiceArea[] = (res.MESSAGE ?? []).map((item: any) => {
-      if (item.serviceArea) {
-        return {
-          ...item.serviceArea,
-          city: item.city ?? item.serviceArea.city ?? null,
-        };
-      }
-      return item as CityServiceArea;
-    });
-    return { ...res, MESSAGE: unwrapped };
-  },
-
-  getById: (id: string) => apiClient.get<CityServiceArea>(`${BASE_URL}/admin/service-areas/${id}`),
-
-  create: (payload: CityServiceAreaPayload) =>
-    apiClient.post<CityServiceArea>(`${BASE_URL}/admin/service-areas`, payload),
-
-  update: (id: string, payload: UpdateCityServiceAreaPayload) =>
-    apiClient.patch<CityServiceArea>(`${BASE_URL}/admin/service-areas/${id}`, payload),
-
-  setActive: (id: string, isActive: boolean) =>
-    apiClient.patch<CityServiceArea>(
-      `${BASE_URL}/admin/service-areas/${id}/${isActive ? "enable" : "disable"}`,
-      {},
-    ),
-
-  delete: (id: string) => apiClient.delete<{ success: boolean }>(`${BASE_URL}/admin/service-areas/${id}`),
 };
 
 export const currenciesApi = {

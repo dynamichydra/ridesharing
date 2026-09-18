@@ -8,6 +8,7 @@ import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getCityColumns } from "../components/city-column";
 import { CityFormDialog } from "../components/city-dialog";
+import { CityHexModal } from "../components/city-hex-modal";
 import { useCountries, useStates, useCities, useSetCityActive, useCityTypeOptions } from "../hooks";
 import type { City } from "../types";
 
@@ -15,6 +16,7 @@ export default function CitiesTab() {
   const controller = useFilterController();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCity, setEditingCity] = useState<City | null>(null);
+  const [hexModalCity, setHexModalCity] = useState<City | null>(null);
 
   const page = Number(controller.applied.page) || 1;
   const countryId = (controller.applied.countryId as string) || undefined;
@@ -106,6 +108,10 @@ export default function CitiesTab() {
     setIsDialogOpen(true);
   }, []);
 
+  const handleViewHex = useCallback((city: City) => {
+    setHexModalCity(city);
+  }, []);
+
   const handleToggleActive = useCallback(
     (city: City) => {
       setActiveMutation.mutate({ id: city.id, isActive: !city.isActive });
@@ -121,8 +127,9 @@ export default function CitiesTab() {
         cityTypesMap,
         onEdit: handleEdit,
         onToggleActive: handleToggleActive,
+        onViewHex: handleViewHex,
       }),
-    [countriesMap, statesMap, cityTypesMap, handleEdit, handleToggleActive],
+    [countriesMap, statesMap, cityTypesMap, handleEdit, handleToggleActive, handleViewHex],
   );
 
   const handlePageChange = (pageIndex: number) => {
@@ -167,6 +174,16 @@ export default function CitiesTab() {
         cityTypes={cityTypes}
         defaultCountryId={countryId}
         defaultStateId={stateId}
+      />
+
+      <CityHexModal
+        open={Boolean(hexModalCity)}
+        onOpenChange={(open) => {
+          if (!open) setHexModalCity(null);
+        }}
+        city={hexModalCity}
+        stateName={hexModalCity ? statesMap.get(hexModalCity.stateId) : undefined}
+        countryName={hexModalCity ? countriesMap.get(hexModalCity.countryId) : undefined}
       />
     </div>
   );

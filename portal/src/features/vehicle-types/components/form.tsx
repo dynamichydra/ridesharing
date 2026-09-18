@@ -15,7 +15,6 @@ interface VehicleTypeFormProps {
   isPending: boolean;
 }
 
-
 export default function VehicleTypeForm({
   mode,
   values,
@@ -35,26 +34,24 @@ export default function VehicleTypeForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-4 py-3">
-      {mode === "create" && (
-        <div className="space-y-2">
-          <Label htmlFor="name">
-            Vehicle Type Name <span className="text-red-500">*</span>
-          </Label>
-          <Input
-            id="name"
-            placeholder="e.g. Cab Prime"
-            value={values.name}
-            onChange={(e) => update("name", e.target.value)}
-            required
-          />
-          {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
-        </div>
-      )}
+      <div className="space-y-2">
+        <Label htmlFor="name">
+          Vehicle Type Name <span className="text-red-500">*</span>
+        </Label>
+        <Input
+          id="name"
+          placeholder="e.g. Cab Prime, Bike, Sedan"
+          value={values.name}
+          onChange={(e) => update("name", e.target.value)}
+          required
+        />
+        {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
+      </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="capacity">
-            Capacity <span className="text-red-500">*</span>
+            Capacity (Passengers) <span className="text-red-500">*</span>
           </Label>
           <Input
             id="capacity"
@@ -69,103 +66,38 @@ export default function VehicleTypeForm({
           {errors.capacity && <p className="text-xs text-destructive">{errors.capacity}</p>}
         </div>
 
-        {mode === "create" && (
-          <div className="space-y-2">
-            <Label htmlFor="sortOrder">
-              Sort Order <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="sortOrder"
-              type="number"
-              placeholder="1"
-              value={values.sortOrder}
-              onChange={(e) =>
-                update("sortOrder", e.target.value === "" ? "" : Number(e.target.value))
-              }
-              required
-            />
-            {errors.sortOrder && <p className="text-xs text-destructive">{errors.sortOrder}</p>}
-          </div>
-        )}
-
-        {mode === "edit" && (
-          <div className="flex items-center gap-2 self-end h-10">
-            <input
-              id="isActive"
-              type="checkbox"
-              checked={values.isActive}
-              onChange={(e) => update("isActive", e.target.checked)}
-              className="h-4 w-4 accent-primary rounded border-border cursor-pointer"
-            />
-            <Label htmlFor="isActive" className="cursor-pointer">
-              Active dispatch class
-            </Label>
-          </div>
-        )}
-      </div>
-
-      <div className="border-t border-border pt-3 space-y-3">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          Rate (flat, same in every country)
-        </p>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="baseRate">
-              Base Fare <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="baseRate"
-              placeholder="15.00"
-              value={values.baseRate}
-              onChange={(e) => update("baseRate", e.target.value)}
-              required
-            />
-            {errors.baseRate && <p className="text-xs text-destructive">{errors.baseRate}</p>}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="perKmRate">
-              Per KM Rate <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="perKmRate"
-              placeholder="6.00"
-              value={values.perKmRate}
-              onChange={(e) => update("perKmRate", e.target.value)}
-              required
-            />
-            {errors.perKmRate && <p className="text-xs text-destructive">{errors.perKmRate}</p>}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="perMinRate">
-              Per Minute Rate <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="perMinRate"
-              placeholder="0.50"
-              value={values.perMinRate}
-              onChange={(e) => update("perMinRate", e.target.value)}
-              required
-            />
-            {errors.perMinRate && <p className="text-xs text-destructive">{errors.perMinRate}</p>}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="minFare">
-              Minimum Fare <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="minFare"
-              placeholder="30.00"
-              value={values.minFare}
-              onChange={(e) => update("minFare", e.target.value)}
-              required
-            />
-            {errors.minFare && <p className="text-xs text-destructive">{errors.minFare}</p>}
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="sortOrder">
+            Sort Order <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="sortOrder"
+            type="number"
+            placeholder="1"
+            value={values.sortOrder}
+            onChange={(e) =>
+              update("sortOrder", e.target.value === "" ? "" : Number(e.target.value))
+            }
+            required
+          />
+          {errors.sortOrder && <p className="text-xs text-destructive">{errors.sortOrder}</p>}
         </div>
       </div>
+
+      {mode === "edit" && (
+        <div className="flex items-center gap-2 pt-2">
+          <input
+            id="isActive"
+            type="checkbox"
+            checked={values.isActive}
+            onChange={(e) => update("isActive", e.target.checked)}
+            className="h-4 w-4 accent-primary rounded border-border cursor-pointer"
+          />
+          <Label htmlFor="isActive" className="cursor-pointer">
+            Active dispatch class
+          </Label>
+        </div>
+      )}
 
       <DialogFooter className="pt-4">
         <Button type="button" variant="outline" onClick={onCancel} className="cursor-pointer">

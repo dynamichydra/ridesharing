@@ -5,19 +5,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DialogFooter } from "@/components/ui/dialog";
-import { CheckCircle2, AlertCircle, Wand2, MapPin, Sparkles, ShieldAlert, Info } from "lucide-react";
+import { CheckCircle2, AlertCircle, Wand2, MapPin, Sparkles, ShieldAlert, Info, Map, Code2 } from "lucide-react";
 import { parseGeoJSONPolygonInput } from "@/features/geo/utils";
-import type { Country, City, CityServiceArea, Zone } from "../types";
+import type { Country, City, Zone } from "../types";
+import { ServiceAreaMapDrawer, type ContextOverlay } from "@/features/geo/components/service-area-map-drawer";
 
 export interface ZoneFormState {
   countryId: string;
   cityId: string;
   name: string;
+  code: string;
   type: string;
-  multiplier: string;
-  airportFee: string;
-  pickupFee: string;
-  dropoffFee: string;
   polygon: string;
   description: string;
   resolution: string;
@@ -28,9 +26,7 @@ interface ZoneFormProps {
   values: ZoneFormState;
   countries: Country[];
   cities?: City[];
-  serviceAreas?: CityServiceArea[];
   isLoadingCities?: boolean;
-  isLoadingServiceAreas?: boolean;
   onChange: (values: ZoneFormState) => void;
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
@@ -41,11 +37,11 @@ interface ZoneFormProps {
 }
 
 const SPECIAL_ZONE_PRESETS = [
-  { value: "airport", label: "✈️ Airport Hub (Flight arrival/departure surcharges & surge)" },
+  { value: "airport", label: "✈️ Airport Hub (Terminal / Pick-up points)" },
   { value: "college", label: "🎓 College / University Campus (Student transit area)" },
   { value: "station", label: "🚆 Transit Station (Railway / Metro / Central bus terminal)" },
-  { value: "tech_park", label: "🏢 Tech Park / Business District (Peak office commute corridor)" },
-  { value: "surge", label: "⚡ High-Demand Surge Hub (Localized surge pricing)" },
+  { value: "tech_park", label: "🏢 Tech Park / Business District (Office commute corridor)" },
+  { value: "surge", label: "⚡ High-Demand Corridor (Surge snapshot tracking)" },
   { value: "restricted", label: "🚫 Restricted Geofence (Prohibited zone — blocks rides entirely)" },
   { value: "custom", label: "🏷️ Custom Special Area" },
 ];
@@ -54,15 +50,15 @@ export default function ZoneForm({
   values,
   countries,
   cities = [],
-  serviceAreas = [],
   isLoadingCities = false,
-  isLoadingServiceAreas = false,
   onChange,
   onSubmit,
   onCancel,
   isPending,
   submitLabel,
 }: ZoneFormProps) {
+  const [boundaryTab, setBoundaryTab] = useState<"map" | "json">("map");
+
   const [geoJsonInfo, setGeoJsonInfo] = useState<{
     valid: boolean;
     message?: string;
@@ -79,9 +75,22 @@ export default function ZoneForm({
     return cities.filter((c) => c.countryId === values.countryId);
   }, [cities, values.countryId]);
 
-  const activeServiceArea = useMemo(() => {
-    return serviceAreas.find((sa) => sa.status === "ACTIVE" || sa.isActive) || serviceAreas[0] || null;
-  }, [serviceAreas]);
+  const selectedCity = useMemo(() => {
+    if (!values.cityId) return null;
+    return cities.find((c) => c.id === values.cityId) || null;
+  }, [cities, values.cityId]);
+
+  const contextOverlays = useMemo<ContextOverlay[]>(() => {
+    const overlays: ContextOverlay[] = [];
+    if (selectedCity?.polygon) {
+      overlays.push({
+        polygon: selectedCity.polygon,
+        label: `City Perimeter: ${selectedCity.name}`,
+        color: "#10b981",
+      });
+    }
+    return overlays;
+  }, [selectedCity]);
 
   useEffect(() => {
     if (!values.polygon || !values.polygon.trim()) {
@@ -125,11 +134,11 @@ export default function ZoneForm({
     onChange({ ...values, polygon: JSON.stringify(sample, null, 2) });
   };
 
-  const handleUseServiceAreaTemplate = () => {
-    if (!activeServiceArea?.polygon) return;
+  const handleUseCityBoundaryTemplate = () => {
+    if (!selectedCity?.polygon) return;
     onChange({
       ...values,
-      polygon: JSON.stringify(activeServiceArea.polygon, null, 2),
+      polygon: JSON.stringify(selectedCity.polygon, null, 2),
     });
   };
 
@@ -141,12 +150,12 @@ export default function ZoneForm({
       <div className="rounded-lg border border-border/80 bg-muted/40 p-3 space-y-1.5 text-xs">
         <div className="flex items-center gap-1.5 font-semibold text-foreground">
           <Info className="h-4 w-4 text-primary shrink-0" />
-          <span>Special Zone Architecture (2-Tier Spatial Model)</span>
+          <span>Spatial Zone Architecture (Country → State → City → Zone)</span>
         </div>
         <p className="text-muted-foreground leading-relaxed">
-          <strong>1. City Service Area</strong> defines the macro operational perimeter where riders request rides and drivers go online (configured in <em>Geo &gt; Service Areas</em>).
+          <strong>1. City Boundary</strong> acts as the operating service area.
           <br />
-          <strong>2. Special Zones</strong> (Airport, College, Station, Tech Park) sit <em>inside</em> the City Service Area for localized <strong>Fare Multipliers &amp; Surcharges</strong>. If a city has no special zones, standard baseline fares apply automatically based on city economic tier.
+          <strong>2. Zones</strong> are geographic sub-divisions inside a city. Pricing plans and surcharge rules can be scoped to specific zones in the <strong>Pricing Plans</strong> module.
         </p>
       </div>
 
@@ -204,64 +213,74 @@ export default function ZoneForm({
         </div>
       </div>
 
-      {/* City Service Area Status for the Selected City */}
-      {values.cityId && (
+      {/* City Perimeter Status for the Selected City */}
+      {values.cityId && selectedCity && (
         <div>
-          {isLoadingServiceAreas ? (
-            <p className="text-xs text-muted-foreground italic">Checking active City Service Area...</p>
-          ) : activeServiceArea ? (
+          {selectedCity.polygon ? (
             <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 flex items-center justify-between gap-2 text-xs">
               <span className="font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
-                Active City Service Area: <strong>{activeServiceArea.name}</strong> ({activeServiceArea.status})
+                City Perimeter Configured: <strong>{selectedCity.name}</strong>
               </span>
-              {activeServiceArea.polygon && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleUseServiceAreaTemplate}
-                  className="h-7 text-[11px] bg-background hover:bg-muted font-normal cursor-pointer gap-1 shrink-0"
-                >
-                  <Sparkles className="h-3 w-3 text-primary" />
-                  Use Boundary as Template
-                </Button>
-              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleUseCityBoundaryTemplate}
+                className="h-7 text-[11px] bg-background hover:bg-muted font-normal cursor-pointer gap-1 shrink-0"
+              >
+                <Sparkles className="h-3 w-3 text-primary" />
+                Use City Boundary as Template
+              </Button>
             </div>
           ) : (
-            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 flex items-start gap-2 text-xs">
-              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-              <div className="space-y-0.5">
-                <span className="font-semibold text-amber-800 dark:text-amber-300">
-                  No Active City Service Area Found
-                </span>
-                <p className="text-muted-foreground text-[11px]">
-                  Special zones must be located inside an active City Service Area. Please create an operational service area in <strong>Geo &gt; Service Areas</strong> before saving this zone.
-                </p>
-              </div>
-            </div>
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Note: This city does not have an operational boundary polygon set yet in the Cities tab.
+            </p>
           )}
         </div>
       )}
 
-      {/* Zone Name & Preset Type */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Zone Name, Code & Preset Type */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="z-name">
-            Special Zone Name <span className="text-red-500">*</span>
+            Zone Name <span className="text-red-500">*</span>
           </Label>
           <Input
             id="z-name"
-            placeholder="e.g. Kempegowda Intl Airport / IIT Campus"
+            placeholder="e.g. Kempegowda Intl Airport / Downtown Core"
             value={values.name}
-            onChange={(e) => onChange({ ...values, name: e.target.value })}
+            onChange={(e) => {
+              const name = e.target.value;
+              const autoCode = name.toUpperCase().replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_').slice(0, 30);
+              onChange({
+                ...values,
+                name,
+                code: !values.code || values.code === values.name.toUpperCase().replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_').slice(0, 30) ? autoCode : values.code,
+              });
+            }}
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="z-code">
+            Zone Code <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="z-code"
+            placeholder="e.g. BLR_AIRPORT"
+            className="font-mono uppercase text-xs"
+            value={values.code}
+            onChange={(e) => onChange({ ...values, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 30) })}
             required
           />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="z-type-select">
-            Special Zone Category <span className="text-red-500">*</span>
+            Zone Category <span className="text-red-500">*</span>
           </Label>
           <select
             id="z-type-select"
@@ -304,81 +323,21 @@ export default function ZoneForm({
       )}
 
       {/* Restricted Geofence Notice */}
-      {isRestricted ? (
+      {isRestricted && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 flex items-center gap-2 text-xs text-destructive">
           <ShieldAlert className="h-4 w-4 shrink-0" />
           <span>
-            <strong>Restricted Zone Selected:</strong> Pickup and drop-off requests inside this perimeter are strictly rejected. Pricing multipliers and fees do not apply.
+            <strong>Restricted Zone Selected:</strong> Pickup and drop-off requests inside this perimeter are strictly prohibited.
           </span>
         </div>
-      ) : (
-        <>
-          {/* Pricing Multiplier */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="z-multiplier">
-                Zone Pricing Multiplier <span className="text-red-500">*</span>
-              </Label>
-              <span className="text-[11px] text-muted-foreground">
-                Base fare factor (e.g. 1.25 = +25% surge)
-              </span>
-            </div>
-            <Input
-              id="z-multiplier"
-              placeholder="1.0"
-              value={values.multiplier}
-              onChange={(e) => onChange({ ...values, multiplier: e.target.value })}
-              required
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Applied to metered ride fare inside this zone. If no special zone exists at a location, the multiplier automatically falls back to the city type economic index.
-            </p>
-          </div>
-
-          {/* Surcharges */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className={`space-y-2 ${values.type === "airport" ? "rounded-md p-2 bg-primary/5 border border-primary/20" : ""}`}>
-              <Label htmlFor="z-airportFee" className="text-xs">
-                Airport Fee (₹ / $)
-              </Label>
-              <Input
-                id="z-airportFee"
-                placeholder="0"
-                value={values.airportFee}
-                onChange={(e) => onChange({ ...values, airportFee: e.target.value })}
-              />
-              {values.type === "airport" && (
-                <span className="text-[10px] text-primary block">Fixed airport access charge</span>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="z-pickupFee" className="text-xs">Pickup Surcharge</Label>
-              <Input
-                id="z-pickupFee"
-                placeholder="0"
-                value={values.pickupFee}
-                onChange={(e) => onChange({ ...values, pickupFee: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="z-dropoffFee" className="text-xs">Dropoff Surcharge</Label>
-              <Input
-                id="z-dropoffFee"
-                placeholder="0"
-                value={values.dropoffFee}
-                onChange={(e) => onChange({ ...values, dropoffFee: e.target.value })}
-              />
-            </div>
-          </div>
-        </>
       )}
 
       {/* GeoJSON Polygon Coordinates Section */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <Label htmlFor="z-polygon">
-              Special Zone Polygon Coordinates <span className="text-red-500">*</span>
+            <Label className="text-sm font-semibold">
+              Special Zone Boundary <span className="text-red-500">*</span>
             </Label>
             {geoJsonInfo && (
               geoJsonInfo.valid ? (
@@ -402,46 +361,104 @@ export default function ZoneForm({
               )
             )}
           </div>
-          <div className="flex items-center gap-3">
-            {geoJsonInfo?.valid && geoJsonInfo.sourceType && geoJsonInfo.sourceType !== "Polygon" && (
-              <button
-                type="button"
-                onClick={handleNormalize}
-                className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1 font-medium"
-              >
-                <Wand2 className="h-3 w-3" /> Extract &amp; Clean Polygon
-              </button>
-            )}
+
+          {/* Map vs JSON tab switcher */}
+          <div className="flex items-center gap-0.5 bg-muted rounded-lg p-0.5">
             <button
               type="button"
-              onClick={handleInsertSample}
-              className="text-xs text-muted-foreground hover:text-foreground cursor-pointer flex items-center gap-1"
+              onClick={() => setBoundaryTab("map")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                boundaryTab === "map"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
-              <Sparkles className="h-3 w-3" /> Insert Sample
+              <Map className="h-3.5 w-3.5" />
+              Draw on Map
+            </button>
+            <button
+              type="button"
+              onClick={() => setBoundaryTab("json")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                boundaryTab === "json"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Code2 className="h-3.5 w-3.5" />
+              Paste JSON
             </button>
           </div>
         </div>
 
-        <Textarea
-          id="z-polygon"
-          rows={5}
-          className="font-mono text-xs max-h-40 resize-y border-border bg-background"
-          placeholder='Paste Polygon, Feature, or FeatureCollection GeoJSON here...'
-          value={values.polygon}
-          onChange={(e) => onChange({ ...values, polygon: e.target.value })}
-          required
-        />
-
-        {geoJsonInfo && !geoJsonInfo.valid && (
-          <p className="text-xs text-destructive flex items-center gap-1">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            {geoJsonInfo.message}
-          </p>
+        {/* Map tab */}
+        {boundaryTab === "map" && (
+          <ServiceAreaMapDrawer
+            polygonJson={values.polygon || ""}
+            onPolygonChange={(json) => onChange({ ...values, polygon: json })}
+            contextOverlays={contextOverlays}
+            hint="Use the polygon tool above the map to draw the special zone boundary inside the city service area"
+          />
         )}
 
-        <p className="text-[11px] text-muted-foreground">
-          Must be enclosed entirely within the selected city's active City Service Area. Supports direct <code>Polygon</code>, <code>Feature</code>, or <code>FeatureCollection</code>.
-        </p>
+        {/* JSON tab */}
+        {boundaryTab === "json" && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-end gap-3">
+              {geoJsonInfo?.valid && geoJsonInfo.sourceType && geoJsonInfo.sourceType !== "Polygon" && (
+                <button
+                  type="button"
+                  onClick={handleNormalize}
+                  className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1 font-medium"
+                >
+                  <Wand2 className="h-3 w-3" /> Extract &amp; Clean Polygon
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleInsertSample}
+                className="text-xs text-muted-foreground hover:text-foreground cursor-pointer flex items-center gap-1"
+              >
+                <Sparkles className="h-3 w-3" /> Insert Sample
+              </button>
+            </div>
+
+            <Textarea
+              id="z-polygon"
+              rows={6}
+              className="font-mono text-xs max-h-48 resize-y border-border bg-background"
+              placeholder='Paste Polygon, Feature, or FeatureCollection GeoJSON here...'
+              value={values.polygon}
+              onChange={(e) => onChange({ ...values, polygon: e.target.value })}
+            />
+
+            {geoJsonInfo && !geoJsonInfo.valid && (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                {geoJsonInfo.message}
+              </p>
+            )}
+
+            <p className="text-[11px] text-muted-foreground">
+              Must be enclosed entirely within the selected city's active City Service Area. Supports direct <code>Polygon</code>, <code>Feature</code>, or <code>FeatureCollection</code>.
+            </p>
+          </div>
+        )}
+
+        {/* Sync notice when map drawing is active */}
+        {boundaryTab === "map" && geoJsonInfo?.valid && (
+          <p className="text-[11px] text-muted-foreground">
+            Boundary synced to JSON automatically. Switch to the{" "}
+            <button
+              type="button"
+              onClick={() => setBoundaryTab("json")}
+              className="underline cursor-pointer hover:text-foreground font-medium"
+            >
+              JSON tab
+            </button>{" "}
+            to review or fine-tune coordinate points.
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">

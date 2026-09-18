@@ -5,11 +5,6 @@ export interface VehicleType {
   icon: string | null;
   capacity: number;
   sortOrder: number;
-  // Flat, global rate — same in every country, no per-country rate card.
-  baseRateMinor: number;
-  perKmRateMinor: number;
-  perMinRateMinor: number;
-  minFareMinor: number;
   isActive: boolean;
   createdBy?: string | null;
   createdAt: string;
@@ -33,17 +28,11 @@ export interface CreateVehicleTypePayload {
   name: string;
   capacity: number;
   sortOrder: number;
-  baseRateMinor: number;
-  perKmRateMinor: number;
-  perMinRateMinor: number;
-  minFareMinor: number;
 }
 
 export interface UpdateVehicleTypePayload {
+  name?: string;
   capacity?: number;
+  sortOrder?: number;
   isActive?: boolean;
-  baseRateMinor?: number;
-  perKmRateMinor?: number;
-  perMinRateMinor?: number;
-  minFareMinor?: number;
 }

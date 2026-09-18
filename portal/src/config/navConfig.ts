@@ -127,6 +127,14 @@ export const navItem: NavType[] = [
     roles: ["super_admin"],
   },
   {
+    title: "Pricing Versions",
+    url: "/pricing-versions",
+    icon: DollarSign,
+    isActive: true,
+    type: "regular",
+    roles: ["super_admin"],
+  },
+  {
     title: "Vehicle Models",
     url: "/vehicle-models",
     icon: Tag,

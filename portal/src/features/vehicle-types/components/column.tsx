@@ -8,9 +8,6 @@ interface Props {
   onToggleActive: (vt: VehicleType) => void;
 }
 
-function formatMinor(amountMinor: number) {
-  return (amountMinor / 100).toFixed(2); // assumes a 2-decimal currency, see schema.ts note
-}
 
 export function getVehicleTypeColumns({ onEdit, onToggleActive }: Props): ColumnDef<VehicleType>[] {
   return [
@@ -40,26 +37,7 @@ export function getVehicleTypeColumns({ onEdit, onToggleActive }: Props): Column
         <span className="text-muted-foreground">{row.original.capacity} Pax</span>
       ),
     },
-    {
-      id: "baseRate",
-      header: "Base Rate",
-      cell: ({ row }) => <span className="text-muted-foreground">{formatMinor(row.original.baseRateMinor)}</span>,
-    },
-    {
-      id: "perKmRate",
-      header: "Per KM Rate",
-      cell: ({ row }) => <span className="text-muted-foreground">{formatMinor(row.original.perKmRateMinor)}</span>,
-    },
-    {
-      id: "perMinRate",
-      header: "Per Min Rate",
-      cell: ({ row }) => <span className="text-muted-foreground">{formatMinor(row.original.perMinRateMinor)}</span>,
-    },
-    {
-      id: "minFare",
-      header: "Min Fare",
-      cell: ({ row }) => <span className="text-muted-foreground">{formatMinor(row.original.minFareMinor)}</span>,
-    },
+
     {
       accessorKey: "isActive",
       header: "Status",

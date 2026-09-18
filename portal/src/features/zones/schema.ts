@@ -4,24 +4,8 @@ export const zoneSchema = z.object({
   countryId: z.string().min(1, "Country is required"),
   cityId: z.string().min(1, "City is required. Special zones must be inside an active City Service Area"),
   name: z.string().min(1, "Zone name is required"),
+  code: z.string().min(1, "Zone code is required"),
   type: z.string().min(1, "Zone type is required"),
-  multiplier: z
-    .string()
-    .min(1, "Multiplier is required")
-    .regex(/^\d+(\.\d+)?$/, "Enter a valid decimal number")
-    .transform((val) => parseFloat(val)),
-  airportFee: z
-    .string()
-    .optional()
-    .refine((val) => !val || /^\d+(\.\d+)?$/.test(val), "Enter a valid fee amount"),
-  pickupFee: z
-    .string()
-    .optional()
-    .refine((val) => !val || /^\d+(\.\d+)?$/.test(val), "Enter a valid fee amount"),
-  dropoffFee: z
-    .string()
-    .optional()
-    .refine((val) => !val || /^\d+(\.\d+)?$/.test(val), "Enter a valid fee amount"),
   description: z.string().optional(),
   polygon: z.string().min(1, "Polygon coordinates are required"),
   // H3 resolution (8-10) — optional; leaving it blank leaves hex indexing untouched.
