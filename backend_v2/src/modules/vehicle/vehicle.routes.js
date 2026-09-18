@@ -90,8 +90,13 @@ export async function vehicleRoutes(app) {
 
   // ── Unified Add Vehicle Endpoint (Driver & Admin) ───────────────────────────
   app.post('/', { preHandler: [authenticateAny] }, async (request, reply) => {
-    const missing = REQUIRED_FIELDS.filter((f) => !request.body[f]);
-    if (missing.length) return sendError(reply, `${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required`);
+    const { vehicleModelId, model, year, registrationNumber } = request.body || {};
+    if (!vehicleModelId && !model) {
+      return sendError(reply, 'vehicleModelId or model is required', 400);
+    }
+    if (!year || !registrationNumber) {
+      return sendError(reply, 'year and registrationNumber are required', 400);
+    }
 
     const role = request.user.role;
 

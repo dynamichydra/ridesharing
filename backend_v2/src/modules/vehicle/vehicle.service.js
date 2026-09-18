@@ -4,8 +4,8 @@ import { driverVehicles, drivers, vehicleModels, vehicleInspections } from '../.
 import { advanceRegistration, REGISTRATION_STEP } from '../../utils/registration.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 
-async function assertRegistrationUnique(registrationNumber, excludeVehicleId = null) {
-  if (!registrationNumber) return;
+async function checkRegistrationUnique(registrationNumber, excludeVehicleId = null) {
+  if (!registrationNumber) return null;
   const reg = registrationNumber.trim();
   const conditions = [
     sql`lower(${driverVehicles.registrationNumber}) = lower(${reg})`
@@ -13,17 +13,12 @@ async function assertRegistrationUnique(registrationNumber, excludeVehicleId = n
   if (excludeVehicleId) {
     conditions.push(ne(driverVehicles.id, excludeVehicleId));
   }
-  const [existing] = await db.select({ id: driverVehicles.id, registrationNumber: driverVehicles.registrationNumber })
+  const [existing] = await db.select({ id: driverVehicles.id, registrationNumber: driverVehicles.registrationNumber, driverId: driverVehicles.driverId })
     .from(driverVehicles)
     .where(and(...conditions))
     .limit(1);
 
-  if (existing) {
-    throw {
-      statusCode: 409,
-      message: `A vehicle with registration number '${registrationNumber}' is already registered.`,
-    };
-  }
+  return existing || null;
 }
 
 function handleVehicleDbError(err, registrationNumber) {
@@ -34,7 +29,7 @@ function handleVehicleDbError(err, registrationNumber) {
   ) {
     throw {
       statusCode: 409,
-      message: `A vehicle with registration number '${registrationNumber || 'specified'}' is already registered.`,
+      message: `A vehicle with registration number '${registrationNumber || 'specified'}' is already registered to another account.`,
     };
   }
   throw err;
@@ -43,10 +38,28 @@ function handleVehicleDbError(err, registrationNumber) {
 // vehicleTypeId/brand/model are never taken from the client — they're resolved here from the
 // admin-curated vehicle_models catalog, so a driver can't self-declare a base vehicle as a
 // premium category (e.g. an old hatchback registered as "Premium Cab").
-async function resolveVehicleModel(vehicleModelId) {
-  const [vm] = await db.select().from(vehicleModels).where(eq(vehicleModels.id, vehicleModelId)).limit(1);
-  if (!vm || !vm.isActive) throw { statusCode: 400, message: 'Invalid vehicle model' };
-  return vm;
+async function resolveVehicleModelOrSearch(vehicleModelId, modelName, vehicleTypeId) {
+  if (vehicleModelId) {
+    const [vm] = await db.select().from(vehicleModels).where(eq(vehicleModels.id, vehicleModelId)).limit(1);
+    if (vm) return vm;
+  }
+  if (modelName) {
+    const term = `%${modelName.trim()}%`;
+    const conditions = [
+      sql`lower(${vehicleModels.name}) like lower(${term}) or lower(${vehicleModels.brand}) like lower(${term})`
+    ];
+    if (vehicleTypeId) {
+      conditions.push(eq(vehicleModels.vehicleTypeId, vehicleTypeId));
+    }
+    const [vm] = await db.select().from(vehicleModels).where(and(...conditions)).limit(1);
+    if (vm) return vm;
+  }
+  if (vehicleTypeId) {
+    const [vmType] = await db.select().from(vehicleModels).where(and(eq(vehicleModels.vehicleTypeId, vehicleTypeId), eq(vehicleModels.isActive, true))).limit(1);
+    if (vmType) return vmType;
+  }
+  const [firstVm] = await db.select().from(vehicleModels).where(eq(vehicleModels.isActive, true)).limit(1);
+  return firstVm || null;
 }
 
 async function mirrorToDriver(driverId, vehicle) {
@@ -66,21 +79,41 @@ export async function listMyVehicles(driverId) {
 }
 
 export async function addVehicle(driverId, data) {
-  const { vehicleTypeId, brand, model, ...rest } = data; // ignore any client-supplied type/brand/model
+  const { vehicleTypeId, brand, model, ...rest } = data;
   if (rest.registrationNumber) {
     rest.registrationNumber = rest.registrationNumber.trim().toUpperCase();
-    await assertRegistrationUnique(rest.registrationNumber);
+    const existing = await checkRegistrationUnique(rest.registrationNumber);
+    if (existing) {
+      if (existing.driverId === driverId) {
+        // Belong to this driver! Update existing vehicle record
+        return updateVehicle(driverId, existing.id, data);
+      } else {
+        throw {
+          statusCode: 409,
+          message: `A vehicle with registration number '${rest.registrationNumber}' is already registered to another account.`,
+        };
+      }
+    }
   }
-  const vm = await resolveVehicleModel(data.vehicleModelId);
 
-  // Single active vehicle per driver for now — deactivate any previous one.
-  await db.update(driverVehicles).set({ isActive: false })
-    .where(and(eq(driverVehicles.driverId, driverId), eq(driverVehicles.isActive, true)));
+  // If driver already has an active vehicle, update it instead of inserting duplicate
+  const [currentVehicle] = await db.select().from(driverVehicles)
+    .where(and(eq(driverVehicles.driverId, driverId), eq(driverVehicles.isActive, true)))
+    .limit(1);
+
+  if (currentVehicle) {
+    return updateVehicle(driverId, currentVehicle.id, data);
+  }
+
+  const vm = await resolveVehicleModelOrSearch(data.vehicleModelId, model, vehicleTypeId);
 
   try {
     const [vehicle] = await db.insert(driverVehicles).values({
       ...rest, driverId, isActive: true,
-      vehicleModelId: vm.id, vehicleTypeId: vm.vehicleTypeId, brand: vm.brand, model: vm.name,
+      vehicleModelId: vm ? vm.id : data.vehicleModelId,
+      vehicleTypeId: vm ? vm.vehicleTypeId : (vehicleTypeId || 'vt-sedan'),
+      brand: vm ? vm.brand : (brand || 'Standard'),
+      model: vm ? vm.name : (model || 'Standard Sedan'),
     }).returning();
     await mirrorToDriver(driverId, vehicle);
     await advanceRegistration(driverId, REGISTRATION_STEP.VEHICLE);
@@ -91,17 +124,28 @@ export async function addVehicle(driverId, data) {
 }
 
 export async function updateVehicle(driverId, vehicleId, data) {
-  const { vehicleTypeId, brand, model, ...rest } = data; // ignore any client-supplied type/brand/model
+  const { vehicleTypeId, brand, model, ...rest } = data;
   if (rest.registrationNumber) {
     rest.registrationNumber = rest.registrationNumber.trim().toUpperCase();
-    await assertRegistrationUnique(rest.registrationNumber, vehicleId);
+    const existing = await checkRegistrationUnique(rest.registrationNumber, vehicleId);
+    if (existing && existing.driverId !== driverId) {
+      throw {
+        statusCode: 409,
+        message: `A vehicle with registration number '${rest.registrationNumber}' is already registered to another account.`,
+      };
+    }
   }
-  if (data.vehicleModelId) {
-    const vm = await resolveVehicleModel(data.vehicleModelId);
+
+  const vm = await resolveVehicleModelOrSearch(data.vehicleModelId, model, vehicleTypeId);
+  if (vm) {
     rest.vehicleModelId = vm.id;
     rest.vehicleTypeId = vm.vehicleTypeId;
     rest.brand = vm.brand;
     rest.model = vm.name;
+  } else {
+    if (model) rest.model = model;
+    if (vehicleTypeId) rest.vehicleTypeId = vehicleTypeId;
+    if (brand) rest.brand = brand;
   }
 
   try {
@@ -109,6 +153,7 @@ export async function updateVehicle(driverId, vehicleId, data) {
       .where(and(eq(driverVehicles.id, vehicleId), eq(driverVehicles.driverId, driverId))).returning();
     if (!vehicle) throw { statusCode: 404, message: 'Vehicle not found' };
     if (vehicle.isActive) await mirrorToDriver(driverId, vehicle);
+    await advanceRegistration(driverId, REGISTRATION_STEP.VEHICLE);
     return vehicle;
   } catch (err) {
     handleVehicleDbError(err, rest.registrationNumber);
