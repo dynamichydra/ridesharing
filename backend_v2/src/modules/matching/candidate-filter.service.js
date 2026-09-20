@@ -34,8 +34,8 @@ export const EXCLUSION_REASONS = Object.freeze({
 export function validateLocationFreshness(driver, maxAgeSec = 900) {
   const now = Date.now();
   let updatedAtMs = null;
-  // Only evaluate genuine GPS location timestamps (avoid generic profile row updatedAt)
-  const locationTimestamp = driver.lastSeenAt || driver.lastLocationAt || driver.recordedAt || driver.locationUpdatedAt;
+  // Evaluate GPS location timestamp or fallback to updatedAt
+  const locationTimestamp = driver.lastSeenAt || driver.lastLocationAt || driver.recordedAt || driver.locationUpdatedAt || driver.updatedAt;
 
   if (locationTimestamp) {
     updatedAtMs = new Date(locationTimestamp).getTime();
@@ -49,7 +49,7 @@ export function validateLocationFreshness(driver, maxAgeSec = 900) {
   const ageSec = Math.max(0, Math.floor((now - updatedAtMs) / 1000));
 
   if (ageSec > maxAgeSec) {
-    if (driver.isOnline) {
+    if (driver.isOnline === true) {
       console.log(`[CandidateFilter:LocationFreshness] Driver ${driver.id} (${driver.name || 'Unknown'}): Location is ${ageSec}s old but driver is online -> accepted as stationary`);
       return { valid: true, ageSec, quality: 'acceptable' };
     }

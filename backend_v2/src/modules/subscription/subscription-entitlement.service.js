@@ -21,10 +21,11 @@ import {
  * @param {{effectiveAt?: Date}} [options={}]
  * @returns {Promise<object|null>}
  */
-export async function getDriverActiveSubscription(driverId, { effectiveAt = new Date() } = {}) {
+export async function getDriverActiveSubscription(driverId, { effectiveAt = new Date(), tx = null } = {}) {
   if (!driverId) return null;
+  const dbClient = tx || db;
 
-  const [sub] = await db
+  const [sub] = await dbClient
     .select({
       subscription: subscriptions,
       plan: subscriptionPlans,
@@ -59,25 +60,10 @@ export async function getDriverActiveSubscription(driverId, { effectiveAt = new 
  * Resolves driver entitlement profile for ride dispatch, matching boost, and commission calculation.
  *
  * @param {string} driverId
- * @param {{vehicleTypeId?: string, serviceTypeId?: string, effectiveAt?: Date}} [options={}]
- * @returns {Promise<{
- *   isSubscriber: boolean,
- *   subscriptionId: string|null,
- *   planId: string|null,
- *   planVersionId: string|null,
- *   planVersion: number,
- *   priorityMatchingBonus: number,
- *   maxRidesPerDay: number|null,
- *   canAcceptMoreRides: boolean,
- *   commissionDiscountRate: number|null,
- *   waiveBookingFee: boolean,
- *   customBookingFeeMinor: number|null,
- *   freeInstantPayouts: boolean,
- *   isVehicleAllowed: boolean,
- *   supportLevel: string
- * }>}
+ * @param {{vehicleTypeId?: string, serviceTypeId?: string, effectiveAt?: Date, tx?: object}} [options={}]
+ * @returns {Promise<object>}
  */
-export async function resolveDriverEntitlements(driverId, { vehicleTypeId = null, serviceTypeId = null, effectiveAt = new Date() } = {}) {
+export async function resolveDriverEntitlements(driverId, { vehicleTypeId = null, serviceTypeId = null, effectiveAt = new Date(), tx = null } = {}) {
   const defaultProfile = {
     isSubscriber: false,
     subscriptionId: null,
@@ -96,8 +82,9 @@ export async function resolveDriverEntitlements(driverId, { vehicleTypeId = null
   };
 
   if (!driverId) return defaultProfile;
+  const dbClient = tx || db;
 
-  const activeSub = await getDriverActiveSubscription(driverId, { effectiveAt });
+  const activeSub = await getDriverActiveSubscription(driverId, { effectiveAt, tx });
   if (!activeSub) return defaultProfile;
 
   const { subscription, plan, planVersion, entitlementRow } = activeSub;
@@ -105,7 +92,7 @@ export async function resolveDriverEntitlements(driverId, { vehicleTypeId = null
   // 1. Resolve normalized vehicle type permissions
   let isVehicleAllowed = true;
   if (vehicleTypeId) {
-    const allowedVehicleTypes = await db
+    const allowedVehicleTypes = await dbClient
       .select({ vehicleTypeId: subscriptionPlanVehicleTypes.vehicleTypeId })
       .from(subscriptionPlanVehicleTypes)
       .where(
@@ -131,7 +118,7 @@ export async function resolveDriverEntitlements(driverId, { vehicleTypeId = null
     const startOfDay = new Date(effectiveAt);
     startOfDay.setHours(0, 0, 0, 0);
 
-    const [{ count: todayRideCount }] = await db
+    const [{ count: todayRideCount }] = await dbClient
       .select({ count: sql`count(*)` })
       .from(rides)
       .where(

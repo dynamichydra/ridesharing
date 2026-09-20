@@ -181,6 +181,57 @@ export async function executeDispatchWave(ride, candidates, waveParams) {
     console.error('[DispatchWave] publishEvent(RIDE_MATCHED) error:', err.message);
   }
 
+  // 4b. Direct Socket.IO broadcast to candidate drivers (guarantees delivery if Kafka is inactive)
+  try {
+    const { getSocketIO } = await import('../../kafka/consumers/index.js');
+    const io = getSocketIO();
+    if (io) {
+      const grossFareMinor = ride.fareSnapshot?.originalEstimatedFareMinor || ride.estimatedFareMinor || 0;
+      const promoDiscountMinor = ride.fareSnapshot?.discountAmountMinor
+        || ride.fareSnapshot?.breakdown?.promo?.discountAmountMinor
+        || 0;
+      const riderEstimatedFareMinor = ride.estimatedFareMinor || (grossFareMinor - promoDiscountMinor);
+      const grossFare = fromMinor(grossFareMinor, ride.currencyCode);
+      const riderFare = fromMinor(riderEstimatedFareMinor, ride.currencyCode);
+      const promoIncentive = fromMinor(promoDiscountMinor, ride.currencyCode);
+      const expiresAtMs = Date.now() + timeoutMs;
+
+      for (const c of offerPayload) {
+        const room = `driver:${c.driverId}`;
+        const roomSize = io.of('/driver').adapter.rooms.get(room)?.size || 0;
+        console.log(`[DispatchWave] Direct Socket emit 'ride:new_request' to "${room}" (${roomSize} socket(s))`);
+        io.of('/driver').to(room).emit('ride:new_request', {
+          rideId: ride.id,
+          ring: ringNumber || waveNumber,
+          radiusKm,
+          pickupAddress: ride.pickupAddress,
+          dropAddress: ride.dropAddress,
+          estimatedFare: grossFare,
+          grossEstimatedFare: grossFare,
+          riderEstimatedFare: riderFare,
+          promoIncentive,
+          hasPromo: promoDiscountMinor > 0,
+          currency: ride.currencyCode,
+          distanceKm: ride.distanceKm,
+          polyline: ride.polyline,
+          pickupLat: ride.pickupLat,
+          pickupLng: ride.pickupLng,
+          dropLat: ride.dropLat,
+          dropLng: ride.dropLng,
+          myDistanceKm: c.distanceKm,
+          paymentMethod: ride.paymentMethod || 'cash',
+          expiresAt: expiresAtMs,
+        });
+
+        io.of('/driver').in(room).fetchSockets().then((sockets) => {
+          for (const s of sockets) s.join(`ride:candidates:${ride.id}`);
+        }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.error('[DispatchWave] Direct socket emit error:', err.message);
+  }
+
   // 5. Wait for pub/sub acceptance signal
   const accepted = await waitForAcceptanceSignal(ride.id, timeoutMs);
 

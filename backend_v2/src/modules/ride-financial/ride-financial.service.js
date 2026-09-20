@@ -156,9 +156,10 @@ export function calculateRideFinancialBreakdown({
  * @param {Date} [options.evaluatedAt]
  * @returns {Promise<object>} Persisted ride_financials row
  */
-export async function getOrCalculateRideFinancials(rideId, { evaluatedAt = null } = {}) {
+export async function getOrCalculateRideFinancials(rideId, { evaluatedAt = null, tx = null } = {}) {
+  const dbClient = tx || db;
   // Check if immutable snapshot already exists
-  const [existing] = await db
+  const [existing] = await dbClient
     .select()
     .from(rideFinancials)
     .where(eq(rideFinancials.rideId, rideId))
@@ -168,7 +169,7 @@ export async function getOrCalculateRideFinancials(rideId, { evaluatedAt = null 
     return existing;
   }
 
-  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  const [ride] = await dbClient.select().from(rides).where(eq(rides.id, rideId)).limit(1);
   if (!ride) throw { statusCode: 404, message: `Ride ${rideId} not found` };
 
   const calculationTimestamp = evaluatedAt || ride.completedAt || ride.requestedAt || new Date();
@@ -188,6 +189,7 @@ export async function getOrCalculateRideFinancials(rideId, { evaluatedAt = null 
     countryId: ride.countryId,
     cityId: resolvedCityId,
     evaluatedAt: calculationTimestamp,
+    tx,
   });
 
   // 3. Extract Gross Fare and Modifiers
@@ -220,7 +222,7 @@ export async function getOrCalculateRideFinancials(rideId, { evaluatedAt = null 
   });
 
   // 5. Persist Immutable Snapshot into ride_financials
-  const [persisted] = await db
+  const [persisted] = await dbClient
     .insert(rideFinancials)
     .values({
       rideId: ride.id,

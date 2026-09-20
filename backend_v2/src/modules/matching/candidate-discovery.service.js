@@ -120,33 +120,25 @@ export async function discoverCandidatesInRadius(pickupLat, pickupLng, radiusKm,
   }
 
   // 3. Fetch driver details with spatial distance calculation from Postgres
-  // If candidateIds has matches, prioritize them; otherwise query all online active drivers directly within the radius
-  const whereClause = candidateIds.length > 0
-    ? sql`
-        d.id IN (${sql.join(candidateIds.map((id) => sql`${id}::uuid`), sql`, `)})
-        AND d.current_lat IS NOT NULL
-        AND (6371 * acos(
-          LEAST(1.0,
-            cos(radians(${pickupLat})) * cos(radians(d.current_lat::float))
-            * cos(radians(d.current_lng::float) - radians(${pickupLng}))
-            + sin(radians(${pickupLat})) * sin(radians(d.current_lat::float))
-          )
-        )) <= ${radiusKm}
-      `
-    : sql`
-        d.is_online = true
-        AND d.status != 'suspended'
-        AND d.is_blocked = false
-        AND d.current_lat IS NOT NULL
-        ${excludedDriverIds.length > 0 ? sql`AND d.id NOT IN (${sql.join(excludedDriverIds.map((id) => sql`${id}::uuid`), sql`, `)})` : sql``}
-        AND (6371 * acos(
-          LEAST(1.0,
-            cos(radians(${pickupLat})) * cos(radians(d.current_lat::float))
-            * cos(radians(d.current_lng::float) - radians(${pickupLng}))
-            + sin(radians(${pickupLat})) * sin(radians(d.current_lat::float))
-          )
-        )) <= ${radiusKm}
-      `;
+  // Fast path: use candidateIds if available, but always include online drivers within radius
+  const candidateCondition = candidateIds.length > 0
+    ? sql`(d.id IN (${sql.join(candidateIds.map((id) => sql`${id}::uuid`), sql`, `)}) OR d.is_online = true)`
+    : sql`d.is_online = true`;
+
+  const whereClause = sql`
+    ${candidateCondition}
+    AND d.status != 'suspended'
+    AND d.is_blocked = false
+    AND d.current_lat IS NOT NULL
+    ${excludedDriverIds.length > 0 ? sql`AND d.id NOT IN (${sql.join(excludedDriverIds.map((id) => sql`${id}::uuid`), sql`, `)})` : sql``}
+    AND (6371 * acos(
+      LEAST(1.0,
+        cos(radians(${pickupLat})) * cos(radians(d.current_lat::float))
+        * cos(radians(d.current_lng::float) - radians(${pickupLng}))
+        + sin(radians(${pickupLat})) * sin(radians(d.current_lat::float))
+      )
+    )) <= ${radiusKm}
+  `;
 
   const rows = await db.execute(sql`
     SELECT

@@ -152,32 +152,30 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
   let currentStart, currentEnd, prevStart, prevEnd, growthPeriodText, listTitle;
 
   if (period === 'weekly') {
-    const dayOfWeek = (now.getUTCDay() + 6) % 7; // 0=Mon, 6=Sun
-    const startOfWeek = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dayOfWeek + (weekOffset * 7), 0, 0, 0, 0));
-    const endOfWeek = new Date(startOfWeek.getTime() + 7 * 86400000 - 1);
-
-    currentStart = startOfWeek;
-    currentEnd = endOfWeek;
-    prevStart = new Date(startOfWeek.getTime() - 7 * 86400000);
-    prevEnd = new Date(startOfWeek.getTime() - 1);
-    growthPeriodText = 'vs Last Week';
-    listTitle = weekOffset === 0 ? 'This Week' : 'Selected Week';
-  } else if (period === 'monthly') {
-    const targetMonthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + monthOffset, 1, 0, 0, 0, 0));
-    currentStart = targetMonthDate;
-    currentEnd = new Date(Date.UTC(targetMonthDate.getUTCFullYear(), targetMonthDate.getUTCMonth() + 1, 0, 23, 59, 59, 999));
-
-    prevStart = new Date(Date.UTC(targetMonthDate.getUTCFullYear(), targetMonthDate.getUTCMonth() - 1, 1, 0, 0, 0, 0));
-    prevEnd = new Date(Date.UTC(targetMonthDate.getUTCFullYear(), targetMonthDate.getUTCMonth(), 0, 23, 59, 59, 999));
-    growthPeriodText = 'vs Last Month';
-    listTitle = monthOffset === 0 ? 'This Month' : 'Selected Month';
-  } else {
+    // Last 7 days: from 7 days ago (midnight) to end of today
     currentStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 6, 0, 0, 0, 0));
     currentEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
     prevStart = new Date(currentStart.getTime() - 7 * 86400000);
     prevEnd = new Date(currentStart.getTime() - 1);
     growthPeriodText = 'vs Prior 7 Days';
     listTitle = 'Last 7 Days';
+  } else if (period === 'monthly') {
+    // Last 30 days: from 30 days ago (midnight) to end of today
+    currentStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 29, 0, 0, 0, 0));
+    currentEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+    prevStart = new Date(currentStart.getTime() - 30 * 86400000);
+    prevEnd = new Date(currentStart.getTime() - 1);
+    growthPeriodText = 'vs Prior 30 Days';
+    listTitle = 'Last 30 Days';
+  } else {
+    // Daily: today only (midnight to end of day)
+    currentStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    currentEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+    // Previous = yesterday
+    prevStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0, 0));
+    prevEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 23, 59, 59, 999));
+    growthPeriodText = 'vs Yesterday';
+    listTitle = 'Today';
   }
 
   const currentRides = await db.select({
@@ -338,62 +336,10 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
   let historyItems = [];
 
   if (period === 'weekly') {
+    // Last 7 days, newest first
+    const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
     for (let i = 0; i < 7; i++) {
-      const dayDate = new Date(currentStart.getTime() + i * 86400000);
-      const dayStart = new Date(Date.UTC(dayDate.getUTCFullYear(), dayDate.getUTCMonth(), dayDate.getUTCDate(), 0, 0, 0, 0));
-      const dayEnd = new Date(Date.UTC(dayDate.getUTCFullYear(), dayDate.getUTCMonth(), dayDate.getUTCDate(), 23, 59, 59, 999));
-
-      const dayRides = currentRides.filter(r => {
-        const dStr = getRideDate(r);
-        if (!dStr) return false;
-        const cDate = new Date(dStr);
-        return cDate >= dayStart && cDate <= dayEnd;
-      });
-
-      let dayNetMinor = 0;
-      for (const r of dayRides) dayNetMinor += calculateRideNetMinor(r);
-
-      const title = `${daysOfWeek[dayDate.getUTCDay()]}, ${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
-      const dateSubtitle = `${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
-      historyItems.push({
-        title,
-        dateSubtitle,
-        trips: dayRides.length,
-        amountMinor: dayNetMinor,
-        amount: formatAmount(dayNetMinor),
-      });
-    }
-  } else if (period === 'monthly') {
-    const totalDaysInMonth = new Date(Date.UTC(currentStart.getUTCFullYear(), currentStart.getUTCMonth() + 1, 0)).getUTCDate();
-    for (let d = totalDaysInMonth; d >= 1; d--) {
-      const dayDate = new Date(Date.UTC(currentStart.getUTCFullYear(), currentStart.getUTCMonth(), d, 0, 0, 0, 0));
-      const dayStart = dayDate;
-      const dayEnd = new Date(Date.UTC(currentStart.getUTCFullYear(), currentStart.getUTCMonth(), d, 23, 59, 59, 999));
-
-      const dayRides = currentRides.filter(r => {
-        const dStr = getRideDate(r);
-        if (!dStr) return false;
-        const cDate = new Date(dStr);
-        return cDate >= dayStart && cDate <= dayEnd;
-      });
-
-      let dayNetMinor = 0;
-      for (const r of dayRides) dayNetMinor += calculateRideNetMinor(r);
-
-      const title = `${daysOfWeek[dayDate.getUTCDay()]}, ${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
-      const dateSubtitle = `${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
-      historyItems.push({
-        title,
-        dateSubtitle,
-        trips: dayRides.length,
-        amountMinor: dayNetMinor,
-        amount: formatAmount(dayNetMinor),
-      });
-    }
-  } else {
-    const todayUTCDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
-    for (let i = 0; i < 7; i++) {
-      const dayDate = new Date(todayUTCDate.getTime() - i * 86400000);
+      const dayDate = new Date(todayUTC.getTime() - i * 86400000);
       const dayStart = new Date(Date.UTC(dayDate.getUTCFullYear(), dayDate.getUTCMonth(), dayDate.getUTCDate(), 0, 0, 0, 0));
       const dayEnd = new Date(Date.UTC(dayDate.getUTCFullYear(), dayDate.getUTCMonth(), dayDate.getUTCDate(), 23, 59, 59, 999));
 
@@ -408,18 +354,12 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
       for (const r of dayRides) dayNetMinor += calculateRideNetMinor(r);
 
       let title = '';
-      let dateSubtitle = `${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
       let isToday = false;
+      if (i === 0) { title = 'Today'; isToday = true; }
+      else if (i === 1) { title = 'Yesterday'; }
+      else { title = `${daysOfWeek[dayDate.getUTCDay()]}, ${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`; }
 
-      if (i === 0) {
-        title = 'Today';
-        isToday = true;
-      } else if (i === 1) {
-        title = 'Yesterday';
-      } else {
-        title = `${daysOfWeek[dayDate.getUTCDay()]}, ${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
-      }
-
+      const dateSubtitle = `${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
       historyItems.push({
         title,
         dateSubtitle,
@@ -429,6 +369,61 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
         amount: formatAmount(dayNetMinor),
       });
     }
+  } else if (period === 'monthly') {
+    // Last 30 days, newest first
+    const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    for (let i = 0; i < 30; i++) {
+      const dayDate = new Date(todayUTC.getTime() - i * 86400000);
+      const dayStart = new Date(Date.UTC(dayDate.getUTCFullYear(), dayDate.getUTCMonth(), dayDate.getUTCDate(), 0, 0, 0, 0));
+      const dayEnd = new Date(Date.UTC(dayDate.getUTCFullYear(), dayDate.getUTCMonth(), dayDate.getUTCDate(), 23, 59, 59, 999));
+
+      const dayRides = currentRides.filter(r => {
+        const dStr = getRideDate(r);
+        if (!dStr) return false;
+        const cDate = new Date(dStr);
+        return cDate >= dayStart && cDate <= dayEnd;
+      });
+
+      let dayNetMinor = 0;
+      for (const r of dayRides) dayNetMinor += calculateRideNetMinor(r);
+
+      let title = '';
+      let isToday = false;
+      if (i === 0) { title = 'Today'; isToday = true; }
+      else if (i === 1) { title = 'Yesterday'; }
+      else { title = `${daysOfWeek[dayDate.getUTCDay()]}, ${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`; }
+
+      const dateSubtitle = `${dayDate.getUTCDate()} ${monthsOfYear[dayDate.getUTCMonth()]}`;
+      historyItems.push({
+        title,
+        dateSubtitle,
+        isToday,
+        trips: dayRides.length,
+        amountMinor: dayNetMinor,
+        amount: formatAmount(dayNetMinor),
+      });
+    }
+  } else {
+    // Daily: show only today's rides (single entry)
+    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    const dayEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+    const todayRides = currentRides.filter(r => {
+      const dStr = getRideDate(r);
+      if (!dStr) return false;
+      const cDate = new Date(dStr);
+      return cDate >= dayStart && cDate <= dayEnd;
+    });
+    let todayNetMinor = 0;
+    for (const r of todayRides) todayNetMinor += calculateRideNetMinor(r);
+    const dateSubtitle = `${now.getUTCDate()} ${monthsOfYear[now.getUTCMonth()]}`;
+    historyItems.push({
+      title: 'Today',
+      dateSubtitle,
+      isToday: true,
+      trips: todayRides.length,
+      amountMinor: todayNetMinor,
+      amount: formatAmount(todayNetMinor),
+    });
   }
 
   return {

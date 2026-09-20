@@ -43,7 +43,9 @@ export async function resolveDeterministicCommissionRule({
   serviceTypeId = null,
   planTierId = null,
   evaluatedAt = new Date(),
+  tx = null,
 } = {}) {
+  const dbClient = tx || db;
   const effectiveDate = evaluatedAt instanceof Date ? evaluatedAt : new Date(evaluatedAt);
 
   // Helper condition builder for effective dating and active status
@@ -55,7 +57,7 @@ export async function resolveDeterministicCommissionRule({
 
   // ── Tier 1: City + Vehicle Type + Service Type + Plan Tier ──
   if (cityId && vehicleTypeId && serviceTypeId && planTierId) {
-    const [match] = await db
+    const [match] = await dbClient
       .select()
       .from(commissionRules)
       .where(
@@ -75,7 +77,7 @@ export async function resolveDeterministicCommissionRule({
 
   // ── Tier 2: City + Vehicle Type + Service Type ──
   if (cityId && vehicleTypeId && serviceTypeId) {
-    const [match] = await db
+    const [match] = await dbClient
       .select()
       .from(commissionRules)
       .where(
@@ -95,7 +97,7 @@ export async function resolveDeterministicCommissionRule({
 
   // ── Tier 3: City + Vehicle Type (Exact Local) ──
   if (cityId && vehicleTypeId) {
-    const [match] = await db
+    const [match] = await dbClient
       .select()
       .from(commissionRules)
       .where(
@@ -115,7 +117,7 @@ export async function resolveDeterministicCommissionRule({
 
   // ── Tier 4: City Default (cityId set, vehicleTypeId is NULL) ──
   if (cityId) {
-    const [match] = await db
+    const [match] = await dbClient
       .select()
       .from(commissionRules)
       .where(
@@ -135,7 +137,7 @@ export async function resolveDeterministicCommissionRule({
 
   // ── Tier 5: Country + Vehicle Type + Service Type ──
   if (countryId && vehicleTypeId && serviceTypeId) {
-    const [match] = await db
+    const [match] = await dbClient
       .select()
       .from(commissionRules)
       .where(
@@ -156,7 +158,7 @@ export async function resolveDeterministicCommissionRule({
 
   // ── Tier 6: Country + Vehicle Type ──
   if (countryId && vehicleTypeId) {
-    const [match] = await db
+    const [match] = await dbClient
       .select()
       .from(commissionRules)
       .where(
@@ -177,7 +179,7 @@ export async function resolveDeterministicCommissionRule({
 
   // ── Tier 7: Country Default (both cityId & vehicleTypeId are null) ──
   if (countryId) {
-    const [match] = await db
+    const [match] = await dbClient
       .select()
       .from(commissionRules)
       .where(
@@ -197,7 +199,7 @@ export async function resolveDeterministicCommissionRule({
   }
 
   // ── Tier 8: Global Default (cityId, countryId, and vehicleTypeId all null) ──
-  const [globalMatch] = await db
+  const [globalMatch] = await dbClient
     .select()
     .from(commissionRules)
     .where(

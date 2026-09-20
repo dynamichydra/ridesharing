@@ -990,7 +990,7 @@ export async function completeRide(rideId, driverId) {
     finalFareMinor = Math.max(0, grossFareMinor - promoDiscountMinor);
 
     try {
-      commission = await resolveRideCommission({ ...ride, grossFareMinor, finalFareMinor }, { skipDbUpdate: true });
+      commission = await resolveRideCommission({ ...ride, grossFareMinor, finalFareMinor }, { skipDbUpdate: true, tx });
     } catch (err) {
       console.error('[Ride] resolveRideCommission failed:', err.message);
     }

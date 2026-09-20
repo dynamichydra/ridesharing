@@ -36,28 +36,42 @@ export const TOPICS = {
 };
 
 let _producer = null;
+let _producerFailed = false;
 
 export async function getProducer() {
+  if (_producerFailed) return null;
   if (_producer) return _producer;
-  _producer = kafka.producer({
-    allowAutoTopicCreation: false,
-    createPartitioner: Partitioners.DefaultPartitioner,
-  });
-  await _producer.connect();
-  console.log('✅ Kafka producer connected');
-  return _producer;
+  try {
+    _producer = kafka.producer({
+      allowAutoTopicCreation: false,
+      createPartitioner: Partitioners.DefaultPartitioner,
+    });
+    await _producer.connect();
+    console.log('✅ Kafka producer connected');
+    return _producer;
+  } catch (err) {
+    _producerFailed = true;
+    _producer = null;
+    console.warn(`[Kafka] Producer connection failed (non-fatal): ${err.message}`);
+    return null;
+  }
 }
 
 export async function publishEvent(topic, payload, key) {
-  const producer = await getProducer();
-  await producer.send({
-    topic,
-    messages: [{
-      key: key ? String(key) : String(payload.id || Date.now()),
-      value: JSON.stringify({
-        ...payload,
-        _meta: { ts: Date.now(), topic, v: 1 },
-      }),
-    }],
-  });
+  try {
+    const producer = await getProducer();
+    if (!producer) return;
+    await producer.send({
+      topic,
+      messages: [{
+        key: key ? String(key) : String(payload.id || Date.now()),
+        value: JSON.stringify({
+          ...payload,
+          _meta: { ts: Date.now(), topic, v: 1 },
+        }),
+      }],
+    });
+  } catch (err) {
+    console.warn(`[Kafka] Failed to publish event to topic ${topic}: ${err.message}`);
+  }
 }
