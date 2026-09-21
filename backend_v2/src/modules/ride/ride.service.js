@@ -59,6 +59,17 @@ async function reAddToGeoIndexIfOnline(driverId) {
   if (driver?.isOnline && driver.currentLat != null && driver.currentLng != null) {
     const lat = parseFloat(driver.currentLat);
     const lng = parseFloat(driver.currentLng);
+
+    // If driver ended up outside operational boundary, switch them offline
+    const locationCheck = await isLocationInServiceArea(lat, lng);
+    if (!locationCheck.inServiceArea) {
+      await db.update(drivers).set({ isOnline: false }).where(eq(drivers.id, driverId));
+      await redis.del(REDIS_KEYS.driverLocation(driverId));
+      await removeDriverFromIndex(driverId);
+      await publishEvent(TOPICS.DRIVER_STATUS_CHANGED, { driverId, isOnline: false, reason: 'OUT_OF_SERVICE_AREA' });
+      return;
+    }
+
     const nowMs = Date.now();
     await redis.setex(REDIS_KEYS.driverLocation(driverId), 300, JSON.stringify({ lat, lng, updatedAt: nowMs }));
     await upsertDriverCell(driverId, lat, lng, undefined, nowMs);

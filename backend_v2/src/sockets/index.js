@@ -140,27 +140,29 @@ export function initSocketIO(fastifyServer, app) {
     // ── go_online ──────────────────────────────────────────────────────────
     socket.on('go_online', async ({ lat, lng }) => {
       try {
-        await db.update(drivers).set({
-          isOnline: true, currentLat: String(lat), currentLng: String(lng),
-          lastLocationAt: new Date(),
-        }).where(eq(drivers.id, driverId));
-        await redis.setex(REDIS_KEYS.driverLocation(driverId), 30, JSON.stringify({ lat, lng }));
-        await upsertDriverCell(driverId, lat, lng);
-        await publishEvent(TOPICS.DRIVER_STATUS_CHANGED, { driverId, isOnline: true, lat, lng });
-        socket.emit('status', { isOnline: true });
+        const { goOnline } = await import('../modules/driver/driver.service.js');
+        const res = await goOnline(driverId, lat, lng);
+        socket.emit('status', { isOnline: true, city: res.city, zone: res.zone });
       } catch (err) {
-        console.error('[Socket/driver] go_online error:', err);
-        socket.emit('error', { message: err.message });
+        console.error('[Socket/driver] go_online error:', err.message || err);
+        socket.emit('error', {
+          code: err.code || 'GO_ONLINE_FAILED',
+          message: err.message || 'Failed to go online',
+        });
+        socket.emit('status', { isOnline: false, reason: err.code || err.message });
       }
     });
 
     // ── go_offline ─────────────────────────────────────────────────────────
     socket.on('go_offline', async () => {
-      await db.update(drivers).set({ isOnline: false }).where(eq(drivers.id, driverId));
-      await redis.del(REDIS_KEYS.driverLocation(driverId));
-      await removeDriverFromIndex(driverId);
-      await publishEvent(TOPICS.DRIVER_STATUS_CHANGED, { driverId, isOnline: false });
-      socket.emit('status', { isOnline: false });
+      try {
+        const { goOffline } = await import('../modules/driver/driver.service.js');
+        await goOffline(driverId);
+        socket.emit('status', { isOnline: false });
+      } catch (err) {
+        console.error('[Socket/driver] go_offline error:', err.message || err);
+        socket.emit('error', { message: err.message });
+      }
     });
 
     // ── location_update ────────────────────────────────────────────────────

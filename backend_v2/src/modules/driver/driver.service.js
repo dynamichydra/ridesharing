@@ -11,6 +11,8 @@ import * as documentsService from '../documents/documents.service.js';
 import * as onboardingService from '../onboarding/onboarding.service.js';
 import { isLocationInServiceArea } from '../zone/zone.service.js';
 import { validateDriverPhoneCountryMatch } from '../auth/auth.service.js';
+import { upsertDriverCell, removeDriverFromIndex } from '../matching/driver-geo-index.service.js';
+import { getOrCreateWallet } from '../wallet/wallet.service.js';
 
 function getStartOfTodayInTimezone(timeZone = 'UTC') {
   const now = new Date();
@@ -712,33 +714,34 @@ export async function goOnline(driverId, lat, lng) {
   if (!locationCheck.inServiceArea) {
     throw {
       statusCode: 400,
-      code: locationCheck.reason,
-      message: 'You cannot go online outside the operational service area',
+      code: locationCheck.reason || 'OUT_OF_SERVICE_AREA',
+      message: locationCheck.message || 'You cannot go online outside the operational service area',
     };
   }
 
-  // A subscription is no longer required to go online (see commission.service.js) — but a
-  // driver still needs somewhere for the platform to actually pay them, so an approved payout
-  // account (Stripe Connect or RazorpayX, see payout-account/bank-account modules) is now the
-  // gate instead of subscriptionStatus.
-  const [payoutAccount] = await db.select({ status: driverPayoutAccounts.status })
-    .from(driverPayoutAccounts).where(eq(driverPayoutAccounts.driverId, driverId)).limit(1);
-  if (!payoutAccount || payoutAccount.status !== 'approved') {
-    throw { statusCode: 403, message: 'Add and verify your payout bank details before going online' };
-  }
+  // Auto-provision driver in-app wallet so they can immediately accumulate trip earnings,
+  // tips, and incentives. Payout bank details are only required when withdrawing funds to a personal bank account.
+  await getOrCreateWallet('driver', driverId);
+
+  const parsedLat = parseFloat(lat);
+  const parsedLng = parseFloat(lng);
+  const now = new Date();
+  const nowMs = now.getTime();
 
   await db.update(drivers).set({
-    isOnline: true, currentLat: String(lat), currentLng: String(lng), lastLocationAt: new Date(),
+    isOnline: true, currentLat: String(parsedLat), currentLng: String(parsedLng), lastLocationAt: now,
   }).where(eq(drivers.id, driverId));
 
-  await redis.setex(REDIS_KEYS.driverLocation(driverId), 30, JSON.stringify({ lat, lng }));
-  await publishEvent(TOPICS.DRIVER_STATUS_CHANGED, { driverId, isOnline: true, lat, lng });
-  return { isOnline: true };
+  await redis.setex(REDIS_KEYS.driverLocation(driverId), 30, JSON.stringify({ lat: parsedLat, lng: parsedLng, updatedAt: nowMs }));
+  await upsertDriverCell(driverId, parsedLat, parsedLng, undefined, nowMs);
+  await publishEvent(TOPICS.DRIVER_STATUS_CHANGED, { driverId, isOnline: true, lat: parsedLat, lng: parsedLng });
+  return { isOnline: true, city: locationCheck.city, zone: locationCheck.zone };
 }
 
 export async function goOffline(driverId) {
   await db.update(drivers).set({ isOnline: false }).where(eq(drivers.id, driverId));
   await redis.del(REDIS_KEYS.driverLocation(driverId));
+  await removeDriverFromIndex(driverId);
   await publishEvent(TOPICS.DRIVER_STATUS_CHANGED, { driverId, isOnline: false });
   return { isOnline: false };
 }

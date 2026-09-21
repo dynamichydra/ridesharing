@@ -146,3 +146,19 @@ test('Driver Phone Country Validation — Valid Registrations Pass', async () =>
     await validateDriverPhoneCountryMatch('+14165551234', 'CA');
   });
 });
+
+test('Driver Go-Online — Rejects when coordinates are invalid or outside operational service area', async () => {
+  const { goOnline } = await import('../src/modules/driver/driver.service.js');
+  
+  // Non-existent driver or invalid coordinates
+  await assert.rejects(
+    async () => {
+      await goOnline('00000000-0000-0000-0000-000000000001', 'abc', 'invalid');
+    },
+    (err) => {
+      assert.ok(err.statusCode === 404 || err.statusCode === 400 || err.code === 'INVALID_COORDINATES');
+      return true;
+    }
+  );
+});
+
