@@ -1,6 +1,7 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
 import { authenticateAdmin, authenticateRider } from '../../middleware/authenticate.js';
 import { calculateFare, estimateAllTypes } from './fare.service.js';
+import { createFareQuote, getQuoteById } from './quotes/quote.service.js';
 import { listAll } from '../vehicle-type/vehicle-type.service.js';
 import { getAvailableVehicleTypeIds } from '../matching/matching.service.js';
 import * as fareRulesService from './fare-rules.service.js';
@@ -23,9 +24,13 @@ export async function fareRoutes(app) {
 
     const pickupCheck = await isLocationInServiceArea(lat, lng);
     if (!pickupCheck.inServiceArea) {
-      return sendError(reply, pickupCheck.message, 400, pickupCheck.reason);
+      return sendError(reply, `Pickup location error: ${pickupCheck.message}`, 400, pickupCheck.reason);
     }
-    const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
+    const dropCheck = await isLocationInServiceArea(parseFloat(dropLat), parseFloat(dropLng));
+    if (!dropCheck.inServiceArea) {
+      return sendError(reply, `Drop-off location error: ${dropCheck.message}`, 400, dropCheck.reason === 'OUT_OF_SERVICE_AREA' ? 'DROP_OUT_OF_SERVICE_AREA' : dropCheck.reason);
+    }
+    const dropZone = dropCheck.zone;
     if (dropZone?.type === 'restricted') {
       return sendError(reply, 'Drop-off is in a restricted geofenced area', 400, 'RESTRICTED_ZONE');
     }
@@ -50,9 +55,13 @@ export async function fareRoutes(app) {
 
     const pickupCheck = await isLocationInServiceArea(lat, lng);
     if (!pickupCheck.inServiceArea) {
-      return sendError(reply, pickupCheck.message, 400, pickupCheck.reason);
+      return sendError(reply, `Pickup location error: ${pickupCheck.message}`, 400, pickupCheck.reason);
     }
-    const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
+    const dropCheck = await isLocationInServiceArea(parseFloat(dropLat), parseFloat(dropLng));
+    if (!dropCheck.inServiceArea) {
+      return sendError(reply, `Drop-off location error: ${dropCheck.message}`, 400, dropCheck.reason === 'OUT_OF_SERVICE_AREA' ? 'DROP_OUT_OF_SERVICE_AREA' : dropCheck.reason);
+    }
+    const dropZone = dropCheck.zone;
     if (dropZone?.type === 'restricted') {
       return sendError(reply, 'Drop-off is in a restricted geofenced area', 400, 'RESTRICTED_ZONE');
     }
@@ -79,12 +88,16 @@ export async function fareRoutes(app) {
     const lat = parseFloat(pickupLat);
     const lng = parseFloat(pickupLng);
 
-    // 1. Service area & geofence validation
+    // 1. Service area & geofence validation (pickup and dropoff)
     const pickupCheck = await isLocationInServiceArea(lat, lng);
     if (!pickupCheck.inServiceArea) {
-      return sendError(reply, pickupCheck.message, 400, pickupCheck.reason);
+      return sendError(reply, `Pickup location error: ${pickupCheck.message}`, 400, pickupCheck.reason);
     }
-    const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
+    const dropCheck = await isLocationInServiceArea(parseFloat(dropLat), parseFloat(dropLng));
+    if (!dropCheck.inServiceArea) {
+      return sendError(reply, `Drop-off location error: ${dropCheck.message}`, 400, dropCheck.reason === 'OUT_OF_SERVICE_AREA' ? 'DROP_OUT_OF_SERVICE_AREA' : dropCheck.reason);
+    }
+    const dropZone = dropCheck.zone;
     if (dropZone?.type === 'restricted') {
       return sendError(reply, 'Drop-off is in a restricted geofenced area', 400, 'RESTRICTED_ZONE');
     }

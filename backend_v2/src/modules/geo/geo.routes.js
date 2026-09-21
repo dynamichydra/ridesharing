@@ -7,7 +7,7 @@ import * as currencyService from './currency.service.js';
 
 export async function geoRoutes(app) {
 
-  // ── Public — cascading picker for the driver app ────────────────────────────
+  // ── Public — cascading picker for riders & drivers ──────────────────────────
 
   app.get('/currencies', async (request, reply) => {
     const data = await currencyService.listCurrencies(true);
@@ -29,17 +29,22 @@ export async function geoRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  app.get('/cities/active-services', async (request, reply) => {
+    const data = await serviceAreaService.listActiveServiceCities(request.query.countryId);
+    return sendSuccess(reply, data);
+  });
+
   app.get('/city-types', async (request, reply) => {
     const data = await cityTypeService.listCityTypes(true);
     return sendSuccess(reply, data);
   });
 
-  app.get('/service-areas', async (request, reply) => {
-    const data = await serviceAreaService.listServiceAreas(request.query.cityId);
+  app.get('/city-types/:id/fares', async (request, reply) => {
+    const data = await cityTypeService.listCityTypeFares(request.params.id);
     return sendSuccess(reply, data);
   });
 
-  // ── Admin — city types / tiers ───────────────────────────────────────────────
+  // ── Admin — city types / tiers & vehicle rate cards ──────────────────────────
 
   app.get('/admin/city-types', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);
@@ -76,6 +81,34 @@ export async function geoRoutes(app) {
 
   app.patch('/admin/city-types/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const data = await cityTypeService.setCityTypeActive(request.params.id, false);
+    return sendSuccess(reply, data);
+  });
+
+  // ── Admin — city type vehicle fares & commissions ───────────────────────────
+
+  app.get('/admin/city-types/:id/fares', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await cityTypeService.listCityTypeFares(request.params.id);
+    return sendSuccess(reply, data);
+  });
+
+  app.post('/admin/city-types/:id/fares', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await cityTypeService.createCityTypeFare(request.params.id, request.body);
+    return sendSuccess(reply, data, 201);
+  });
+
+  app.put('/admin/city-types/:id/fares/:vehicleTypeId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { id: cityTypeId, vehicleTypeId } = request.params;
+    const data = await cityTypeService.upsertCityTypeFare(cityTypeId, vehicleTypeId, request.body);
+    return sendSuccess(reply, data);
+  });
+
+  app.patch('/admin/city-types/fares/:fareId/activate', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await cityTypeService.activateCityTypeFare(request.params.fareId);
+    return sendSuccess(reply, data);
+  });
+
+  app.delete('/admin/city-types/fares/:fareId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await cityTypeService.deleteCityTypeFare(request.params.fareId);
     return sendSuccess(reply, data);
   });
 
@@ -141,7 +174,7 @@ export async function geoRoutes(app) {
     return sendSuccess(reply, data);
   });
 
-  // ── Admin — cities ───────────────────────────────────────────────────────────
+  // ── Admin — cities (Direct Service Area Boundaries) ──────────────────────────
 
   app.get('/admin/cities', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);
@@ -149,10 +182,17 @@ export async function geoRoutes(app) {
       countryId:  request.query.countryId,
       stateId:    request.query.stateId,
       cityTypeId: request.query.cityTypeId,
+      status:     request.query.status,
+      isActive:   request.query.isActive,
       search:     request.query.search,
     };
     const { rows, pagination } = await geoService.listCitiesPaginated(filters, page, limit, offset);
     return sendList(reply, rows, pagination);
+  });
+
+  app.get('/admin/cities/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await geoService.getCityById(request.params.id);
+    return sendSuccess(reply, data);
   });
 
   app.post('/admin/cities', { preHandler: [authenticateAdmin] }, async (request, reply) => {
@@ -177,49 +217,8 @@ export async function geoRoutes(app) {
     return sendSuccess(reply, data);
   });
 
-  // ── Admin — service areas ────────────────────────────────────────────────────
-
-  app.get('/admin/service-areas', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const { page, limit, offset } = parsePagination(request.query);
-    const filters = {
-      cityId:    request.query.cityId,
-      countryId: request.query.countryId,
-      status:    request.query.status,
-      isActive:  request.query.isActive !== undefined ? request.query.isActive === 'true' : undefined,
-    };
-    const { rows, pagination } = await serviceAreaService.listServiceAreasPaginated(page, limit, offset, filters);
-    return sendList(reply, rows, pagination);
-  });
-
-  app.get('/admin/service-areas/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await serviceAreaService.getServiceAreaById(request.params.id);
-    return sendSuccess(reply, data);
-  });
-
-  app.post('/admin/service-areas', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const { cityId, name, polygon } = request.body;
-    if (!cityId || !name || !polygon) return sendError(reply, 'cityId, name and polygon are required');
-    const data = await serviceAreaService.createServiceArea(request.body);
-    return sendSuccess(reply, data, 201);
-  });
-
-  app.patch('/admin/service-areas/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await serviceAreaService.updateServiceArea(request.params.id, request.body);
-    return sendSuccess(reply, data);
-  });
-
-  app.patch('/admin/service-areas/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await serviceAreaService.setServiceAreaActive(request.params.id, true);
-    return sendSuccess(reply, data);
-  });
-
-  app.patch('/admin/service-areas/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await serviceAreaService.setServiceAreaActive(request.params.id, false);
-    return sendSuccess(reply, data);
-  });
-
-  app.delete('/admin/service-areas/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await serviceAreaService.deleteServiceArea(request.params.id);
+  app.delete('/admin/cities/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await geoService.deleteCity(request.params.id);
     return sendSuccess(reply, data);
   });
 

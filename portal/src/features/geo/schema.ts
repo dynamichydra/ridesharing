@@ -24,9 +24,6 @@ export const countrySchema = z.object({
   defaultLanguageCode: z.string().trim(),
   timezone: z.string().trim(),
 
-  // Kept as validated strings (not z.coerce.number()) — react-hook-form's zodResolver
-  // needs the schema's input and output types to match, which z.coerce breaks. Converted
-  // to a number in the dialog right before it's sent to the API.
   roundingIncrementMinor: z
     .string()
     .trim()
@@ -70,9 +67,17 @@ export const citySchema = z.object({
   stateId: z.string().min(1, "State is required"),
   cityTypeId: z.string().optional(),
   name: z.string().trim().min(1, "City name is required"),
+  code: z.string().trim().min(1, "City code is required"),
+  currencyCode: z.string().trim(),
   timezone: z.string().trim(),
-  // See the comment on countrySchema.sortOrder — kept as a validated string, not z.coerce.number().
+  polygon: z.string().optional(),
+  resolution: z
+    .string()
+    .optional()
+    .refine((val) => !val || /^(8|9|10)$/.test(val), "Resolution must be 8, 9, or 10"),
+  status: z.enum(["ACTIVE", "INACTIVE", "RESTRICTED"]).optional(),
   sortOrder: z.string().trim().regex(/^\d+$/, "Must be a whole number"),
+  isActive: z.boolean(),
 });
 
 export type CityFormValues = z.infer<typeof citySchema>;
@@ -82,8 +87,14 @@ export const emptyCityFormValues: CityFormValues = {
   stateId: "",
   cityTypeId: "",
   name: "",
-  timezone: "",
+  code: "",
+  currencyCode: "INR",
+  timezone: "UTC",
+  polygon: "",
+  resolution: "8",
+  status: "ACTIVE",
   sortOrder: "0",
+  isActive: true,
 };
 
 export const cityTypeSchema = z.object({
@@ -94,11 +105,6 @@ export const cityTypeSchema = z.object({
     .regex(/^[A-Z0-9_-]+$/, "Code must be uppercase letters, numbers, dashes, or underscores"),
   name: z.string().trim().min(1, "Type name is required"),
   description: z.string().trim().optional(),
-  costIndex: z
-    .string()
-    .trim()
-    .min(1, "Cost index is required")
-    .regex(/^\d+(\.\d+)?$/, "Enter a valid decimal (e.g. 1.00)"),
   densityLevel: z.enum(["high", "medium", "low", "rural"]),
   defaultSurgeCap: z
     .string()
@@ -115,32 +121,40 @@ export const emptyCityTypeFormValues: CityTypeFormValues = {
   code: "",
   name: "",
   description: "",
-  costIndex: "1.00",
   densityLevel: "medium",
   defaultSurgeCap: "3.00",
   waitingFeeEnabled: true,
   sortOrder: "0",
 };
 
-export const serviceAreaSchema = z.object({
-  cityId: z.string().min(1, "City is required"),
-  name: z.string().trim().min(1, "Area name is required"),
-  status: z.enum(["ACTIVE", "INACTIVE", "RESTRICTED"]),
-  polygon: z.string().min(1, "Polygon coordinates are required"),
-  resolution: z
-    .string()
-    .optional()
-    .refine((val) => !val || /^(8|9|10)$/.test(val), "Resolution must be 8, 9, or 10"),
+export const cityTypeFareSchema = z.object({
+  vehicleTypeId: z.string().min(1, "Vehicle type is required"),
+  baseFare: z.string().trim().regex(/^\d+(\.\d+)?$/, "Enter a valid amount"),
+  costPerKm: z.string().trim().regex(/^\d+(\.\d+)?$/, "Enter a valid amount"),
+  costPerMin: z.string().trim().regex(/^\d+(\.\d+)?$/, "Enter a valid amount"),
+  waitingCostPerMin: z.string().trim().regex(/^\d+(\.\d+)?$/, "Enter a valid amount"),
+  freeWaitingMinutes: z.string().trim().regex(/^\d+$/, "Must be a whole number"),
+  minFare: z.string().trim().regex(/^\d+(\.\d+)?$/, "Enter a valid amount"),
+  cancellationFee: z.string().trim().regex(/^\d+(\.\d+)?$/, "Enter a valid amount"),
+  commissionPercentage: z.string().trim().regex(/^\d+(\.\d+)?$/, "Enter a valid percentage"),
+  flatCommission: z.string().trim().regex(/^\d+(\.\d+)?$/, "Enter a valid amount"),
+  isActive: z.boolean(),
 });
 
-export type ServiceAreaFormValues = z.infer<typeof serviceAreaSchema>;
+export type CityTypeFareFormValues = z.infer<typeof cityTypeFareSchema>;
 
-export const emptyServiceAreaFormValues: ServiceAreaFormValues = {
-  cityId: "",
-  name: "",
-  status: "ACTIVE",
-  polygon: "",
-  resolution: "9",
+export const emptyCityTypeFareFormValues: CityTypeFareFormValues = {
+  vehicleTypeId: "",
+  baseFare: "50",
+  costPerKm: "12",
+  costPerMin: "1.5",
+  waitingCostPerMin: "2",
+  freeWaitingMinutes: "3",
+  minFare: "60",
+  cancellationFee: "30",
+  commissionPercentage: "15",
+  flatCommission: "0",
+  isActive: true,
 };
 
 export const currencySchema = z.object({
@@ -165,5 +179,3 @@ export const emptyCurrencyFormValues: CurrencyFormValues = {
   symbol: "",
   minorUnitExponent: "2",
 };
-
-

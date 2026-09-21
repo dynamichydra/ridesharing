@@ -28,8 +28,33 @@ export function getTaxRuleColumns({ onEdit, onToggleActive, countries }: Props):
     },
     {
       accessorKey: "countryId",
-      header: "Country",
-      cell: ({ row }) => <span className="text-foreground">{nameFromId(countries, row.original.countryId)}</span>,
+      header: "Geographic Scope",
+      cell: ({ row }) => {
+        const r = row.original;
+        const countryLabel = r.countryName || nameFromId(countries, r.countryId);
+        if (r.cityName) {
+          return (
+            <div className="flex flex-col">
+              <span className="font-medium text-foreground">{r.cityName}</span>
+              <span className="text-[11px] text-muted-foreground">{r.stateName ? `${r.stateName}, ` : ""}{countryLabel}</span>
+            </div>
+          );
+        }
+        if (r.stateName) {
+          return (
+            <div className="flex flex-col">
+              <span className="font-medium text-foreground">{r.stateName} (State-wide)</span>
+              <span className="text-[11px] text-muted-foreground">{countryLabel}</span>
+            </div>
+          );
+        }
+        return (
+          <div className="flex flex-col">
+            <span className="font-medium text-foreground">{countryLabel}</span>
+            <span className="text-[11px] text-muted-foreground">Country-wide</span>
+          </div>
+        );
+      },
     },
     {
       accessorKey: "appliesTo",

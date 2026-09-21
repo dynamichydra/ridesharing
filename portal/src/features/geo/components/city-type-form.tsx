@@ -48,7 +48,7 @@ export function CityTypeForm({ form, isEditing }: CityTypeFormProps) {
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="ct-density">Density Level</Label>
           <NativeSelect id="ct-density" {...register("densityLevel")}>
@@ -60,20 +60,7 @@ export function CityTypeForm({ form, isEditing }: CityTypeFormProps) {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="ct-costIndex">Cost Index Multiplier</Label>
-          <Input
-            id="ct-costIndex"
-            step="0.05"
-            placeholder="e.g. 1.00"
-            {...register("costIndex")}
-          />
-          {errors.costIndex && (
-            <p className="text-xs text-destructive">{errors.costIndex.message}</p>
-          )}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="ct-surgeCap">Max Surge Cap</Label>
+          <Label htmlFor="ct-surgeCap">Max Surge Cap Multiplier</Label>
           <Input
             id="ct-surgeCap"
             step="0.1"

@@ -1,15 +1,17 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Power, Edit } from "lucide-react";
+import { Power, Edit, DollarSign } from "lucide-react";
 import type { CityType } from "../types";
 
 export function getCityTypeColumns({
   onEdit,
   onToggleActive,
+  onManageFares,
 }: {
   onEdit: (type: CityType) => void;
   onToggleActive: (type: CityType) => void;
+  onManageFares?: (type: CityType) => void;
 }): ColumnDef<CityType>[] {
   return [
     {
@@ -39,15 +41,6 @@ export function getCityTypeColumns({
           </Badge>
         );
       },
-    },
-    {
-      accessorKey: "costIndex",
-      header: "Cost Index",
-      cell: ({ row }) => (
-        <span className="font-mono text-sm font-medium">
-          {Number(row.original.costIndex).toFixed(2)}x
-        </span>
-      ),
     },
     {
       accessorKey: "defaultSurgeCap",
@@ -87,6 +80,18 @@ export function getCityTypeColumns({
       header: "Actions",
       cell: ({ row }) => (
         <div className="flex items-center gap-1.5">
+          {onManageFares && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1 cursor-pointer font-medium border-primary/30 text-primary hover:bg-primary/10"
+              onClick={() => onManageFares(row.original)}
+              title="Manage vehicle fare rate versions and commissions on full page"
+            >
+              <DollarSign className="h-3.5 w-3.5" />
+              Fare Rates &amp; History
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"

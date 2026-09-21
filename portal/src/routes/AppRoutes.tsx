@@ -20,6 +20,7 @@ const VehicleTypeList = lazy(() => import("@/features/vehicle-types/pages"));
 const VehicleModelList = lazy(() => import("@/features/vehicle-models/pages"));
 const ZoneList = lazy(() => import("@/features/zones/pages"));
 const GeoList = lazy(() => import("@/features/geo/pages"));
+const CityTypeFaresPage = lazy(() => import("@/features/geo/pages/city-type-fares"));
 const FareRuleList = lazy(() => import("@/features/fare-rules/pages"));
 const SubscriptionPlanList = lazy(() => import("@/features/subscriptions/pages"));
 const DriverGroupList = lazy(() => import("@/features/driver-groups/pages"));
@@ -170,6 +171,26 @@ const router = createBrowserRouter([
           <ProtectedRoute allowedRoles={["super_admin"]}>
             <Suspense fallback={<Loader />}>
               <GeoList />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "locations/city-types/:cityTypeId/fares",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <CityTypeFaresPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "geo/city-types/:cityTypeId/fares",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <Suspense fallback={<Loader />}>
+              <CityTypeFaresPage />
             </Suspense>
           </ProtectedRoute>
         ),

@@ -20,17 +20,18 @@ import {
   Info,
   ShieldCheck,
   RefreshCw,
+  Building2,
 } from "lucide-react";
-import type { CityServiceArea } from "../types";
-
+import type { City } from "../types";
 import { loadGoogleMapsScript } from "@/lib/google-maps";
 
-interface ServiceAreaHexModalProps {
+interface CityHexModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  area: CityServiceArea | null;
+  city: City | null;
+  stateName?: string;
+  countryName?: string;
 }
-
 
 const darkMapStyles = [
   { elementType: "geometry", stylers: [{ color: "#1e293b" }] },
@@ -134,11 +135,13 @@ function getGeoJsonRingsForH3(points: { lat: number; lng: number }[]): number[][
   return [ring];
 }
 
-export function ServiceAreaHexModal({
+export function CityHexModal({
   open,
   onOpenChange,
-  area,
-}: ServiceAreaHexModalProps) {
+  city,
+  stateName,
+  countryName,
+}: CityHexModalProps) {
   const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
   const hexPolygonsRef = useRef<any[]>([]);
@@ -172,20 +175,19 @@ export function ServiceAreaHexModal({
       });
   }, []);
 
-
   const { boundaryCoords, hexCells, resolution } = useMemo(() => {
-    if (!area) return { boundaryCoords: [], hexCells: [], resolution: 9 };
+    if (!city) return { boundaryCoords: [], hexCells: [], resolution: 8 };
 
-    const res = area.resolution ?? 9;
-    const parsedCoords = extractPolygonPoints(area.polygon);
+    const res = city.resolution ?? 8;
+    const parsedCoords = extractPolygonPoints(city.polygon || city.boundary);
 
     let cells: string[] = [];
 
-    if (Array.isArray(area.hexCells) && area.hexCells.length > 0) {
-      cells = area.hexCells;
-    } else if (typeof area.hexCells === "string") {
+    if (Array.isArray(city.hexCells) && city.hexCells.length > 0) {
+      cells = city.hexCells;
+    } else if (typeof city.hexCells === "string") {
       try {
-        const parsed = JSON.parse(area.hexCells);
+        const parsed = JSON.parse(city.hexCells);
         if (Array.isArray(parsed)) cells = parsed;
       } catch {
         // ignore
@@ -208,7 +210,7 @@ export function ServiceAreaHexModal({
       hexCells: cells,
       resolution: res,
     };
-  }, [area]);
+  }, [city]);
 
   const clearMapObjects = useCallback(() => {
     hexPolygonsRef.current.forEach((p) => {
@@ -239,7 +241,7 @@ export function ServiceAreaHexModal({
       }
 
       if (hexCells.length > 0) {
-        const sampleLimit = Math.min(hexCells.length, 100);
+        const sampleLimit = Math.min(hexCells.length, 120);
         for (let i = 0; i < sampleLimit; i++) {
           try {
             const boundary = cellToBoundary(hexCells[i]);
@@ -259,7 +261,7 @@ export function ServiceAreaHexModal({
         const div = map.getDiv?.();
         const width = div?.clientWidth || 0;
         const height = div?.clientHeight || 0;
-        const padding = width > 200 && height > 200 ? 50 : 10;
+        const padding = width > 200 && height > 200 ? 40 : 10;
         try {
           map.fitBounds(bounds, padding);
         } catch {
@@ -282,11 +284,11 @@ export function ServiceAreaHexModal({
       if (showBoundary && boundaryCoords.length >= 3) {
         const boundaryPoly = new window.google.maps.Polygon({
           paths: boundaryCoords,
-          strokeColor: "#4f46e5",
+          strokeColor: "#2563eb",
           strokeOpacity: 1.0,
           strokeWeight: 3.5,
-          fillColor: "#6366f1",
-          fillOpacity: 0.06,
+          fillColor: "#3b82f6",
+          fillOpacity: 0.08,
           map: map,
           zIndex: 5,
         });
@@ -294,7 +296,7 @@ export function ServiceAreaHexModal({
         boundaryPolygonRef.current = boundaryPoly;
       }
 
-      // 2. H3 Hexagons with prominent visual contrast
+      // 2. H3 Hexagons
       if (showHexCells && hexCells.length > 0) {
         const hexStrokeColor = isDarkMode ? "#38bdf8" : "#0284c7";
         const hexFillColor = isDarkMode ? "#0284c7" : "#0ea5e9";
@@ -318,7 +320,7 @@ export function ServiceAreaHexModal({
               strokeOpacity: 0.85,
               strokeWeight: 1.5,
               fillColor: hexFillColor,
-              fillOpacity: 0.32,
+              fillOpacity: 0.28,
               map: map,
               zIndex: 15,
               clickable: true,
@@ -345,13 +347,12 @@ export function ServiceAreaHexModal({
               hexPoly.setOptions({
                 fillColor: hexFillColor,
                 strokeColor: hexStrokeColor,
-                fillOpacity: 0.32,
+                fillOpacity: 0.28,
                 strokeWeight: 1.5,
                 zIndex: 15,
               });
             });
 
-            // Click triggers detailed info and React state
             hexPoly.addListener("click", (event: any) => {
               try {
                 const center = cellToLatLng(cellId);
@@ -360,9 +361,10 @@ export function ServiceAreaHexModal({
                 infoWindow.setContent(`
                   <div style="padding: 8px 12px; font-family: system-ui, sans-serif; font-size: 12px; color: #0f172a; min-width: 170px;">
                     <div style="font-weight: 700; color: #0284c7; margin-bottom: 4px; display: flex; align-items: center; gap: 4px;">
-                      ⬡ H3 Hex Cell
+                      ⬡ Operational H3 Cell
                     </div>
-                    <div style="margin-bottom: 3px;"><strong>Index:</strong> <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px; font-size: 11px;">${cellId}</code></div>
+                    <div style="margin-bottom: 3px;"><strong>City:</strong> ${city?.name}</div>
+                    <div style="margin-bottom: 3px;"><strong>H3 Index:</strong> <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px; font-size: 11px;">${cellId}</code></div>
                     <div style="margin-bottom: 3px;"><strong>Resolution:</strong> Res ${resolution}</div>
                     <div><strong>Center:</strong> ${center[0].toFixed(5)}, ${center[1].toFixed(5)}</div>
                   </div>
@@ -383,10 +385,9 @@ export function ServiceAreaHexModal({
         hexPolygonsRef.current = polygons;
       }
     },
-    [clearMapObjects, showBoundary, boundaryCoords, showHexCells, hexCells, resolution]
+    [clearMapObjects, showBoundary, boundaryCoords, showHexCells, hexCells, resolution, city?.name]
   );
 
-  // Clean up map objects when modal closes
   useEffect(() => {
     if (!open) {
       clearMapObjects();
@@ -395,7 +396,6 @@ export function ServiceAreaHexModal({
     }
   }, [open, clearMapObjects]);
 
-  // Initialize or re-fit Map when container element is ready and has non-zero size
   useEffect(() => {
     if (!open || !mapLoaded || !containerEl || !window.google?.maps?.Map) {
       return;
@@ -409,10 +409,10 @@ export function ServiceAreaHexModal({
       const isDarkMode = document.documentElement.classList.contains("dark");
 
       if (!mapInstanceRef.current) {
-        const initialCenter = boundaryCoords[0] || { lat: 22.5726, lng: 88.3639 };
+        const initialCenter = boundaryCoords[0] || { lat: 20.5937, lng: 78.9629 };
         const map = new window.google.maps.Map(containerEl, {
           center: initialCenter,
-          zoom: 13,
+          zoom: 12,
           disableDefaultUI: false,
           zoomControl: true,
           mapTypeControl: true,
@@ -436,13 +436,11 @@ export function ServiceAreaHexModal({
       }
     };
 
-    // Immediate check if element already has non-zero size
     const rect = containerEl.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
       setupOrResizeMap(rect.width, rect.height);
     }
 
-    // ResizeObserver watches for modal animation completion and layout changes
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
@@ -454,7 +452,6 @@ export function ServiceAreaHexModal({
 
     resizeObserver.observe(containerEl);
 
-    // Fallback animation frame & timeouts during Radix Dialog entrance transition
     const raf = requestAnimationFrame(() => {
       const r = containerEl.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) {
@@ -483,51 +480,48 @@ export function ServiceAreaHexModal({
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, [open, mapLoaded, containerEl, area?.id, boundaryCoords, fitBoundsToArea, renderOverlays]);
+  }, [open, mapLoaded, containerEl, city?.id, boundaryCoords, fitBoundsToArea, renderOverlays]);
 
-  // Re-render overlays when visibility toggles change
   useEffect(() => {
     if (open && mapInstanceRef.current && infoWindowRef.current) {
       renderOverlays(mapInstanceRef.current, infoWindowRef.current);
     }
   }, [open, showHexCells, showBoundary, renderOverlays]);
 
-  const statusColors: Record<string, string> = {
-    ACTIVE: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
-    INACTIVE: "bg-muted text-muted-foreground border-border",
-    RESTRICTED: "bg-amber-500/10 text-amber-600 border-amber-500/20",
-  };
-
   const hasValidBoundary = boundaryCoords.length >= 3;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[950px] w-[95vw] h-[88vh] max-h-[850px] flex flex-col p-0 gap-0 overflow-hidden bg-card border-border shadow-2xl">
-        {/* Modal Header */}
         <DialogHeader className="px-6 py-3.5 border-b border-border bg-card/90 backdrop-blur-xs shrink-0 flex flex-row items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2.5">
               <div className="p-1.5 rounded-md bg-primary/10 text-primary">
-                <Hexagon className="h-4 w-4" />
+                <Building2 className="h-4 w-4" />
               </div>
               <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
-                {area?.name || "Service Area"}
-                {area?.status && (
-                  <Badge
-                    variant="outline"
-                    className={`font-mono text-[11px] font-medium ${
-                      statusColors[area.status] || ""
-                    }`}
-                  >
-                    {area.status}
-                  </Badge>
+                {city?.name || "City Region"}
+                {city?.code && (
+                  <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground uppercase font-bold">
+                    {city.code}
+                  </span>
                 )}
+                <Badge
+                  variant="outline"
+                  className={`font-mono text-[11px] font-medium ${
+                    city?.isActive
+                      ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                      : "bg-muted text-muted-foreground border-border"
+                  }`}
+                >
+                  {city?.isActive ? "ACTIVE" : "DISABLED"}
+                </Badge>
               </DialogTitle>
             </div>
             <div className="flex items-center gap-3 text-xs text-muted-foreground pl-8">
               <span className="flex items-center gap-1">
                 <MapPin className="h-3 w-3 text-primary" />
-                {area?.city?.name || "City Region"}
+                {[stateName, countryName].filter(Boolean).join(", ") || "Operational Perimeter"}
               </span>
               <span>•</span>
               <span className="font-mono">Resolution: {resolution}</span>
@@ -542,7 +536,6 @@ export function ServiceAreaHexModal({
             </div>
           </div>
 
-          {/* Quick Map Controls Toolbar */}
           <div className="flex items-center gap-2 pr-6">
             <Button
               variant={showHexCells ? "default" : "outline"}
@@ -582,13 +575,12 @@ export function ServiceAreaHexModal({
           </div>
         </DialogHeader>
 
-        {/* Map Container Area */}
         <div className="relative flex-1 min-h-[420px] w-full bg-muted/30 overflow-hidden">
           {!mapLoaded && !loadError && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-xs z-20 gap-3">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="text-sm font-medium text-muted-foreground">
-                Loading Google Maps & Service Area Boundary...
+                Loading Google Maps & Operational Perimeter...
               </p>
             </div>
           )}
@@ -616,18 +608,16 @@ export function ServiceAreaHexModal({
           {!hasValidBoundary && mapLoaded && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 rounded-md px-3 py-1.5 text-xs flex items-center gap-2 shadow-md">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>No valid polygon boundary coordinates found for this service area.</span>
+              <span>No valid polygon boundary coordinates found for this city.</span>
             </div>
           )}
 
-          {/* Absolute Positioned Google Maps DOM Container */}
           <div
             ref={setContainerEl}
             className="absolute inset-0 w-full h-full"
             style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, width: "100%", height: "100%" }}
           />
 
-          {/* Floating Info Overlay (Bottom Left) */}
           <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2 max-w-xs pointer-events-none">
             {selectedCell ? (
               <div className="bg-card/95 backdrop-blur-md border border-border rounded-lg p-3 shadow-lg text-xs space-y-1.5 pointer-events-auto">
@@ -654,15 +644,14 @@ export function ServiceAreaHexModal({
             )}
           </div>
 
-          {/* Floating Stats Summary (Bottom Right) */}
           <div className="absolute bottom-4 right-4 z-10 bg-card/95 backdrop-blur-md border border-border rounded-lg px-3 py-2 shadow-lg text-xs flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400 font-medium">
               <span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block"></span>
               {hexCells.length} Hexagons
             </div>
             <div className="h-3 w-[1px] bg-border" />
-            <div className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-medium">
-              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block"></span>
+            <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-medium">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span>
               Boundary ({boundaryCoords.length} pts)
             </div>
             <div className="h-3 w-[1px] bg-border" />

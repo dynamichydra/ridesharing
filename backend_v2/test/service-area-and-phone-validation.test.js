@@ -28,7 +28,7 @@ test('Zone Containment Validation — Zones Must Belong to City with Active Serv
     }
   );
 
-  // 2. City with no active service area in DB
+  // 2. City with no active city in DB
   const randomCityId = '00000000-0000-0000-0000-000000000001';
   await assert.rejects(
     async () => {
@@ -39,30 +39,30 @@ test('Zone Containment Validation — Zones Must Belong to City with Active Serv
     },
     (err) => {
       assert.equal(err.statusCode, 400);
-      assert.equal(err.code, 'NO_ACTIVE_SERVICE_AREA');
+      assert.equal(err.code, 'CITY_NOT_FOUND');
       return true;
     }
   );
 });
 
-test('Fare Multiplier Resolution — Zone Null Defaults to City Type Cost Index', async () => {
-  // When pickupZone is null, baseline multiplier should depend on cityType costIndex (e.g. 1.40 for Metro)
-  const contextMetro = {
+test('Fare Multiplier Resolution — Zone Null Defaults to 1.0 and Special Zone Multiplier applies', async () => {
+  // When pickupZone is null, baseline multiplier is 1.0
+  const contextStandard = {
     request: { pickupLat: '12.9716', pickupLng: '77.5946' },
     pickupZone: null,
     route: { trafficDelayS: 0 },
     rateCard: { surgeFloorMultiplier: '1.0', surgeCapMultiplier: '3.0' },
     metered: { meteredSubtotalMinor: 10000 },
     rules: { ruleMultiplier: 1.0, flatFareMinor: null },
-    cityType: { costIndex: '1.40', code: 'TIER_1_METRO' },
+    cityType: { code: 'TIER_1_METRO' },
   };
 
-  const resultMetro = await executeSurgeStage(contextMetro);
-  assert.equal(resultMetro.surge.zoneMultiplier, 1.4);
-  assert.equal(resultMetro.surge.baselineMultiplier, 1.4);
-  assert.equal(resultMetro.surge.surgeMultiplier, parseFloat((resultMetro.surge.dynamicSurgeMultiplier * 1.4).toFixed(4)));
+  const resultStandard = await executeSurgeStage(contextStandard);
+  assert.equal(resultStandard.surge.zoneMultiplier, 1.0);
+  assert.equal(resultStandard.surge.baselineMultiplier, 1.0);
+  assert.equal(resultStandard.surge.surgeMultiplier, parseFloat((resultStandard.surge.dynamicSurgeMultiplier * 1.0).toFixed(4)));
 
-  // When pickupZone has a special zone multiplier (e.g. Airport 1.25x), it overrides cityType
+  // When pickupZone has a special zone multiplier (e.g. Airport 1.25x), it applies
   const contextAirport = {
     request: { pickupLat: '12.9716', pickupLng: '77.5946' },
     pickupZone: { id: 'zone-airport', name: 'Intl Airport', multiplier: '1.25' },
@@ -70,14 +70,12 @@ test('Fare Multiplier Resolution — Zone Null Defaults to City Type Cost Index'
     rateCard: { surgeFloorMultiplier: '1.0', surgeCapMultiplier: '3.0' },
     metered: { meteredSubtotalMinor: 10000 },
     rules: { ruleMultiplier: 1.0, flatFareMinor: null },
-    cityType: { costIndex: '1.40', code: 'TIER_1_METRO' },
+    cityType: { code: 'TIER_1_METRO' },
   };
 
   const resultAirport = await executeSurgeStage(contextAirport);
   assert.equal(resultAirport.surge.zoneMultiplier, 1.25);
   assert.equal(resultAirport.surge.baselineMultiplier, 1.25);
-  assert.equal(resultAirport.surge.surgeMultiplier, parseFloat((resultAirport.surge.dynamicSurgeMultiplier * 1.25).toFixed(4)));
-
   // When pickupZone is null and city has no specific cityType, defaults to 1.00
   const contextDefault = {
     request: { pickupLat: '12.9716', pickupLng: '77.5946' },

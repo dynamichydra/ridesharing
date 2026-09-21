@@ -8,13 +8,15 @@ import { useFilterController } from "@/components/filters/useFilterController";
 
 import { getCityColumns } from "../components/city-column";
 import { CityFormDialog } from "../components/city-dialog";
-import { useCountries, useStates, useCities, useSetCityActive, useCityTypeOptions } from "../hooks";
+import { CityHexModal } from "../components/city-hex-modal";
+import { useCountries, useStates, useCities, useSetCityActive, useDeleteCity, useCityTypes } from "../hooks";
 import type { City } from "../types";
 
 export default function CitiesTab() {
   const controller = useFilterController();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCity, setEditingCity] = useState<City | null>(null);
+  const [hexModalCity, setHexModalCity] = useState<City | null>(null);
 
   const page = Number(controller.applied.page) || 1;
   const countryId = (controller.applied.countryId as string) || undefined;
@@ -28,7 +30,7 @@ export default function CitiesTab() {
   const { data: statesData } = useStates({ countryId, limit: 100 });
   const states = statesData?.MESSAGE ?? [];
 
-  const { data: cityTypesData } = useCityTypeOptions();
+  const { data: cityTypesData } = useCityTypes({ limit: 100 });
   const cityTypes = cityTypesData?.MESSAGE ?? [];
 
   const { data, isLoading, isFetching } = useCities({
@@ -40,6 +42,7 @@ export default function CitiesTab() {
     limit: 20,
   });
   const setActiveMutation = useSetCityActive();
+  const deleteMutation = useDeleteCity();
 
   const countriesMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -52,12 +55,6 @@ export default function CitiesTab() {
     states.forEach((s) => map.set(s.id, s.name));
     return map;
   }, [states]);
-
-  const cityTypesMap = useMemo(() => {
-    const map = new Map<string, string>();
-    cityTypes.forEach((t) => map.set(t.id, t.name));
-    return map;
-  }, [cityTypes]);
 
   const filterSchema: FilterSchema = useMemo(
     () => ({
@@ -85,7 +82,7 @@ export default function CitiesTab() {
         options: states.map((s) => ({ label: s.name, value: s.id })),
       },
       cityTypeId: {
-        label: "City Tier / Type",
+        label: "City Tier",
         operator: "equals",
         type: "select",
         field: "cityTypeId",
@@ -106,6 +103,10 @@ export default function CitiesTab() {
     setIsDialogOpen(true);
   }, []);
 
+  const handleViewHex = useCallback((city: City) => {
+    setHexModalCity(city);
+  }, []);
+
   const handleToggleActive = useCallback(
     (city: City) => {
       setActiveMutation.mutate({ id: city.id, isActive: !city.isActive });
@@ -113,16 +114,24 @@ export default function CitiesTab() {
     [setActiveMutation],
   );
 
+  const handleDelete = useCallback(
+    (city: City) => {
+      deleteMutation.mutate(city.id);
+    },
+    [deleteMutation],
+  );
+
   const columns = useMemo(
     () =>
       getCityColumns({
         countriesMap,
         statesMap,
-        cityTypesMap,
         onEdit: handleEdit,
         onToggleActive: handleToggleActive,
+        onViewHex: handleViewHex,
+        onDelete: handleDelete,
       }),
-    [countriesMap, statesMap, cityTypesMap, handleEdit, handleToggleActive],
+    [countriesMap, statesMap, handleEdit, handleToggleActive, handleViewHex, handleDelete],
   );
 
   const handlePageChange = (pageIndex: number) => {
@@ -133,11 +142,11 @@ export default function CitiesTab() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">Cities</h3>
-          <p className="text-xs text-muted-foreground">{data?.COUNT ?? 0} cities configured.</p>
+          <h3 className="text-sm font-semibold text-foreground">Operational Cities &amp; Service Areas</h3>
+          <p className="text-xs text-muted-foreground">{data?.COUNT ?? (data?.MESSAGE ?? []).length} operational cities configured with geographic boundaries and H3 coverage.</p>
         </div>
         <Button onClick={handleAdd} size="sm" className="gap-2 cursor-pointer">
-          <Plus className="h-4 w-4" /> Add City
+          <Plus className="h-4 w-4" /> Add Operational City
         </Button>
       </div>
 
@@ -164,11 +173,19 @@ export default function CitiesTab() {
         onOpenChange={setIsDialogOpen}
         city={editingCity}
         countries={countries}
-        cityTypes={cityTypes}
         defaultCountryId={countryId}
         defaultStateId={stateId}
+      />
+
+      <CityHexModal
+        open={Boolean(hexModalCity)}
+        onOpenChange={(open) => {
+          if (!open) setHexModalCity(null);
+        }}
+        city={hexModalCity}
+        stateName={hexModalCity ? statesMap.get(hexModalCity.stateId) : undefined}
+        countryName={hexModalCity ? countriesMap.get(hexModalCity.countryId) : undefined}
       />
     </div>
   );
 }
-

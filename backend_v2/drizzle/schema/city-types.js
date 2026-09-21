@@ -7,7 +7,6 @@ export const cityTypes = pgTable('city_types', {
   description: text('description'),
 
   // Fare Calculation & Economic Parameters
-  costIndex: decimal('cost_index', { precision: 4, scale: 2 }).default('1.00'), // Economic factor multiplier baseline
   densityLevel: varchar('density_level', { length: 30 }).default('medium'),        // high | medium | low | rural (used for candidate search radius)
   defaultSurgeCap: decimal('default_surge_cap', { precision: 4, scale: 2 }).default('3.00'), // Max surge multiplier allowed in this tier
   waitingFeeEnabled: boolean('waiting_fee_enabled').default(true),                      // Whether traffic wait time fees apply

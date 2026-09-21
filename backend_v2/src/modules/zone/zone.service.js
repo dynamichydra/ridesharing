@@ -1,6 +1,6 @@
 import { eq, and, count } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { zones, cities, cityServiceAreas } from '../../../drizzle/schema/index.js';
+import { zones, cities, cityTypes } from '../../../drizzle/schema/index.js';
 import { isPointInPolygon } from '../../utils/geo.js';
 import { paginate } from '../../utils/response.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
@@ -61,17 +61,14 @@ export async function detectZone(lat, lng, cityId = null) {
 }
 
 /**
- * Checks whether a given (lat, lng) coordinate is within our active operational service area.
+ * Checks whether a given (lat, lng) coordinate is within our active operational city boundary.
  * 2-Tier Spatial Hierarchy:
- * 1. Tier 1 - City Service Area (Macro Boundary):
- *    Validates that the point is inside an active city_service_area (and the parent city is active).
- *    This is where riders can create rides and drivers can go online.
+ * 1. Tier 1 - City Boundary (Macro Boundary):
+ *    Validates that the point is inside an active city polygon.
  * 2. Tier 2 - Special Zones (Micro Pricing & Restriction Hubs):
- *    Special zones (airport, college, station, tech park, surge, restricted) exist inside city service areas.
- *    Used for fare multipliers and surcharges. If a city has no special zones, that is completely normal
- *    and operations proceed with zone: null (baseline multiplier depends on city type).
+ *    Special zones (airport, college, station, tech park, surge, restricted) exist inside city boundaries.
  *
- * Returns { inServiceArea: boolean, serviceArea?: Object, city?: Object, zone: Object|null, reason?: string, message?: string }
+ * Returns { inServiceArea: boolean, city?: Object, zone: Object|null, reason?: string, message?: string }
  */
 export async function isLocationInServiceArea(lat, lng) {
   const parsedLat = parseFloat(lat);
@@ -85,32 +82,29 @@ export async function isLocationInServiceArea(lat, lng) {
     };
   }
 
-  // 1. Fetch active city service areas joined with parent city status
-  const activeServiceAreas = await db.select({
-    serviceArea: cityServiceAreas,
-    cityName: cities.name,
-    cityIsActive: cities.isActive,
-    cityTypeId: cities.cityTypeId,
-    timezone: cities.timezone,
+  // 1. Fetch active cities with polygons
+  const activeCities = await db.select({
+    city: cities,
+    cityTypeName: cityTypes.name,
   })
-    .from(cityServiceAreas)
-    .leftJoin(cities, eq(cityServiceAreas.cityId, cities.id))
+    .from(cities)
+    .leftJoin(cityTypes, eq(cities.cityTypeId, cityTypes.id))
     .where(and(
-      eq(cityServiceAreas.isActive, true),
-      eq(cityServiceAreas.status, 'ACTIVE')
+      eq(cities.isActive, true),
+      eq(cities.status, 'ACTIVE')
     ));
 
-  if (!activeServiceAreas.length) {
-    // If no service areas configured in DB at all (fresh dev/test env), allow fallback
-    return { inServiceArea: true, serviceArea: null, isFallback: true, zone: null };
+  if (!activeCities.length) {
+    // If no city boundaries configured in DB at all (fresh dev/test env), allow fallback
+    return { inServiceArea: true, city: null, isFallback: true, zone: null };
   }
 
-  // Find the matching city service area containing this coordinate
-  const matchingServiceArea = activeServiceAreas.find(m =>
-    m.serviceArea.polygon?.coordinates && isPointInPolygon(parsedLat, parsedLng, m.serviceArea.polygon.coordinates)
+  // Find the matching city containing this coordinate
+  const matched = activeCities.find(m =>
+    m.city.polygon?.coordinates && isPointInPolygon(parsedLat, parsedLng, m.city.polygon.coordinates)
   ) || null;
 
-  if (!matchingServiceArea) {
+  if (!matched) {
     return {
       inServiceArea: false,
       reason: 'OUT_OF_SERVICE_AREA',
@@ -118,66 +112,71 @@ export async function isLocationInServiceArea(lat, lng) {
     };
   }
 
-  // 2. City-level activation gate (e.g. city not launched yet or temporarily paused)
-  if (matchingServiceArea.cityIsActive === false) {
+  const matchingCity = matched.city;
+
+  if (matchingCity.isActive === false || matchingCity.status !== 'ACTIVE') {
     return {
       inServiceArea: false,
       reason: 'CITY_INACTIVE',
-      message: `Service in ${matchingServiceArea.cityName || 'this city'} is currently unavailable or not launched yet.`,
+      message: `Service in ${matchingCity.name || 'this city'} is currently unavailable or paused.`,
     };
   }
 
-  // 3. Special Zone detection inside the City Service Area (Airport, College, Station, Surge, Restricted)
-  const matchedZone = await detectZone(parsedLat, parsedLng, matchingServiceArea.serviceArea.cityId);
+  // 2. Special Zone detection inside the City (Airport, College, Station, Surge, Restricted)
+  const matchedZone = await detectZone(parsedLat, parsedLng, matchingCity.id);
 
-  // 4. Restricted geofence gate (e.g. military/security zone inside city)
+  // 3. Restricted geofence gate (e.g. military/security zone inside city)
   if (matchedZone?.type === 'restricted') {
     return {
       inServiceArea: false,
       reason: 'RESTRICTED_ZONE',
       message: 'This location is in a restricted geofenced area.',
-      serviceArea: matchingServiceArea.serviceArea,
+      city: matchingCity,
       zone: matchedZone,
     };
   }
 
-  // 5. Valid location inside City Service Area!
-  // If matchedZone is null, that is completely normal (city has no special zones or point is outside special zones)
+  // 4. Valid location inside City Service Area!
   return {
     inServiceArea: true,
-    serviceArea: matchingServiceArea.serviceArea,
     city: {
-      id: matchingServiceArea.serviceArea.cityId,
-      name: matchingServiceArea.cityName,
-      cityTypeId: matchingServiceArea.cityTypeId,
-      timezone: matchingServiceArea.timezone,
+      id: matchingCity.id,
+      name: matchingCity.name,
+      countryId: matchingCity.countryId,
+      cityTypeId: matchingCity.cityTypeId,
+      timezone: matchingCity.timezone,
     },
     zone: matchedZone,
   };
 }
 
 /**
- * Validates that a special zone's polygon vertices are contained within an active City Service Area.
+ * Validates that a special zone's polygon vertices are contained within the parent City polygon.
  */
 export async function validateZoneInsideServiceArea(polygon, cityId) {
   if (!cityId) {
     throw { statusCode: 400, message: 'cityId is required for zone creation' };
   }
 
-  const serviceAreas = await db.select()
-    .from(cityServiceAreas)
+  const [parentCity] = await db.select()
+    .from(cities)
     .where(and(
-      eq(cityServiceAreas.cityId, cityId),
-      eq(cityServiceAreas.isActive, true),
-      eq(cityServiceAreas.status, 'ACTIVE')
-    ));
+      eq(cities.id, cityId),
+      eq(cities.isActive, true)
+    ))
+    .limit(1);
 
-  if (!serviceAreas.length) {
+  if (!parentCity) {
     throw {
       statusCode: 400,
-      code: 'NO_ACTIVE_SERVICE_AREA',
-      message: 'Cannot create zone: No active city service area exists for this city. Create a city service area first.',
+      code: 'CITY_NOT_FOUND',
+      message: 'Cannot create zone: Parent city does not exist or is inactive.',
     };
+  }
+
+  if (!parentCity.polygon?.coordinates) {
+    // If parent city has no polygon defined yet, skip geometric boundary validation
+    return;
   }
 
   const coords = polygon?.coordinates?.[0];
@@ -186,14 +185,14 @@ export async function validateZoneInsideServiceArea(polygon, cityId) {
   }
 
   const isInside = coords.every(([lng, lat]) =>
-    serviceAreas.some(sa => sa.polygon?.coordinates && isPointInPolygon(lat, lng, sa.polygon.coordinates))
+    isPointInPolygon(lat, lng, parentCity.polygon.coordinates)
   );
 
   if (!isInside) {
     throw {
       statusCode: 400,
       code: 'ZONE_OUTSIDE_SERVICE_AREA',
-      message: 'Special zone must be located entirely inside an active city service area',
+      message: 'Special zone must be located entirely inside the parent city boundary',
     };
   }
 }

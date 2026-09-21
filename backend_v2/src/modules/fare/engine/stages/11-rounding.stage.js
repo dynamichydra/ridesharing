@@ -78,6 +78,21 @@ export async function executeRoundingStage(context) {
       flatFareMinor: rules.flatFareMinor,
       appliedRules: rules.appliedRules,
     },
+    commission: {
+      commissionRate: rateCard.nonSubscriberCommissionRate || '0.2000',
+      commissionPercentage: ((parseFloat(rateCard.nonSubscriberCommissionRate || '0.2000')) * 100).toFixed(1),
+      platformFeeMinor: rateCard.platformFeeMinor || 0,
+      platformCommissionMinor: Math.round(
+        (metered.meteredSubtotalMinor + (surge.surgeAmountMinor || 0)) *
+        parseFloat(rateCard.nonSubscriberCommissionRate || '0.2000')
+      ) + (rateCard.platformFeeMinor || 0),
+      driverEarningMinor: Math.max(
+        0,
+        roundedFinalFareMinor -
+        (Math.round((metered.meteredSubtotalMinor + (surge.surgeAmountMinor || 0)) * parseFloat(rateCard.nonSubscriberCommissionRate || '0.2000')) + (rateCard.platformFeeMinor || 0)) -
+        (taxes.totalTaxMinor || 0)
+      ),
+    },
     promo: promo.promoDetails,
   };
 

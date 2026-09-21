@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { countriesApi, statesApi, citiesApi, cityTypesApi, serviceAreasApi, currenciesApi, geoLookupApi } from "./api";
+import { countriesApi, statesApi, citiesApi, cityTypesApi, currenciesApi, geoLookupApi } from "./api";
 import type {
   CountryListParams,
   CreateCountryPayload,
@@ -14,9 +14,7 @@ import type {
   CityTypeListParams,
   CreateCityTypePayload,
   UpdateCityTypePayload,
-  CityServiceAreaListParams,
-  CityServiceAreaPayload,
-  UpdateCityServiceAreaPayload,
+  UpsertCityTypeFarePayload,
   CurrencyListParams,
   CreateCurrencyPayload,
   UpdateCurrencyPayload,
@@ -26,11 +24,53 @@ import type { FilterSchema } from "@/components/filters/AutoFilters";
 const COUNTRIES_KEY = "geo-countries";
 const STATES_KEY = "geo-states";
 const CITIES_KEY = "geo-cities";
+const CITY_TYPES_KEY = "geo-city-types";
+const CITY_TYPE_FARES_KEY = "geo-city-type-fares";
+const CURRENCIES_KEY = "geo-currencies";
 
 // "none" is AutoFilters' literal value for "nothing selected" (see AutoFilters.tsx) — treat
 // it the same as unset everywhere a draft geo value is read.
 function selected(value: unknown): string | undefined {
   return value && value !== "none" ? String(value) : undefined;
+}
+
+// ── Option / Lookup Hooks ───────────────────────────────────────────────────
+
+export function useCountryOptions() {
+  return useQuery({
+    queryKey: [COUNTRIES_KEY, "lookup"],
+    queryFn: () => geoLookupApi.listCountries(),
+  });
+}
+
+export function useStateOptions(countryId: string | undefined) {
+  return useQuery({
+    queryKey: [STATES_KEY, "lookup", countryId],
+    queryFn: () => geoLookupApi.listStates(countryId!),
+    enabled: !!countryId,
+  });
+}
+
+export function useCityOptions(stateId: string | undefined) {
+  return useQuery({
+    queryKey: [CITIES_KEY, "lookup", stateId],
+    queryFn: () => geoLookupApi.listCities(stateId!),
+    enabled: !!stateId,
+  });
+}
+
+export function useCityTypeOptions() {
+  return useQuery({
+    queryKey: [CITY_TYPES_KEY, "lookup"],
+    queryFn: () => geoLookupApi.listCityTypes(),
+  });
+}
+
+export function useCurrencyOptions() {
+  return useQuery({
+    queryKey: [CURRENCIES_KEY, "lookup"],
+    queryFn: () => geoLookupApi.listCurrencies(),
+  });
 }
 
 // ── Countries ────────────────────────────────────────────────────────────────
@@ -148,6 +188,14 @@ export function useCities(params: CityListParams) {
   });
 }
 
+export function useCity(id: string | null) {
+  return useQuery({
+    queryKey: [CITIES_KEY, id],
+    queryFn: () => (id ? citiesApi.getById(id) : null),
+    enabled: !!id,
+  });
+}
+
 export function useCreateCity() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -192,41 +240,21 @@ export function useSetCityActive() {
   });
 }
 
-// ── Public lookups (cascading picker, used by forms + filters) ─────────────────
-
-export function useCountryOptions() {
-  return useQuery({
-    queryKey: [COUNTRIES_KEY, "lookup"],
-    queryFn: () => geoLookupApi.listCountries(),
+export function useDeleteCity() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => citiesApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CITIES_KEY], refetchType: "active" });
+      toast.success("City deleted successfully!");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to delete city");
+    },
   });
 }
 
-export function useStateOptions(countryId?: string) {
-  return useQuery({
-    queryKey: [STATES_KEY, "lookup", countryId],
-    queryFn: () => geoLookupApi.listStates(countryId as string),
-    enabled: !!countryId,
-  });
-}
-
-export function useCityOptions(stateId?: string) {
-  return useQuery({
-    queryKey: [CITIES_KEY, "lookup", stateId],
-    queryFn: () => geoLookupApi.listCities(stateId as string),
-    enabled: !!stateId,
-  });
-}
-
-export function useCityTypeOptions() {
-  return useQuery({
-    queryKey: [CITY_TYPES_KEY, "lookup"],
-    queryFn: () => geoLookupApi.listCityTypes(),
-  });
-}
-
-// ── City Types / Tiers ───────────────────────────────────────────────────────
-
-const CITY_TYPES_KEY = "geo-city-types";
+// ── City Types ───────────────────────────────────────────────────────────────
 
 export function useCityTypes(params: CityTypeListParams = {}) {
   return useQuery({
@@ -269,9 +297,9 @@ export function useSetCityTypeActive() {
   return useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       cityTypesApi.setActive(id, isActive),
-    onSuccess: (_, { isActive }) => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [CITY_TYPES_KEY], refetchType: "active" });
-      toast.success(`City type ${isActive ? "enabled" : "disabled"} successfully!`);
+      toast.success(variables.isActive ? "City type enabled" : "City type disabled");
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to update city type status");
@@ -285,98 +313,123 @@ export function useSeedCityTypeDefaults() {
     mutationFn: () => cityTypesApi.seedDefaults(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CITY_TYPES_KEY], refetchType: "active" });
-      toast.success("Default city tiers seeded successfully!");
+      toast.success("Default city tiers created successfully!");
     },
     onError: (err: any) => {
-      toast.error(err.message || "Failed to seed default city tiers");
+      toast.error(err.message || "Failed to seed default city types");
     },
   });
 }
 
-// ── Service Areas ────────────────────────────────────────────────────────────
+// ── City Type Fares ─────────────────────────────────────────────────────────
 
-const SERVICE_AREAS_KEY = "geo-service-areas";
-
-export function useServiceAreas(params: CityServiceAreaListParams = {}) {
+export function useCityTypeFares(cityTypeId: string | null) {
   return useQuery({
-    queryKey: [SERVICE_AREAS_KEY, params],
-    queryFn: () => serviceAreasApi.list(params),
+    queryKey: [CITY_TYPE_FARES_KEY, cityTypeId],
+    queryFn: () => (cityTypeId ? cityTypesApi.listFares(cityTypeId) : null),
+    enabled: !!cityTypeId,
   });
 }
 
-export function useCreateServiceArea() {
+export function useUpsertCityTypeFare() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: CityServiceAreaPayload) => serviceAreasApi.create(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [SERVICE_AREAS_KEY], refetchType: "active" });
-      toast.success("Service area created successfully!");
+    mutationFn: ({
+      cityTypeId,
+      vehicleTypeId,
+      payload,
+    }: {
+      cityTypeId: string;
+      vehicleTypeId: string;
+      payload: UpsertCityTypeFarePayload;
+    }) => cityTypesApi.upsertFare(cityTypeId, vehicleTypeId, payload),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [CITY_TYPE_FARES_KEY, variables.cityTypeId],
+        refetchType: "active",
+      });
+      toast.success("Fare rate card updated successfully!");
     },
     onError: (err: any) => {
-      toast.error(err.message || "Failed to create service area");
-    },
-  });
-}
-
-export function useUpdateServiceArea() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: UpdateCityServiceAreaPayload }) =>
-      serviceAreasApi.update(id, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [SERVICE_AREAS_KEY], refetchType: "active" });
-      toast.success("Service area updated successfully!");
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to update service area");
-    },
-  });
-}
-
-export function useSetServiceAreaActive() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      serviceAreasApi.setActive(id, isActive),
-    onSuccess: (_, { isActive }) => {
-      queryClient.invalidateQueries({ queryKey: [SERVICE_AREAS_KEY], refetchType: "active" });
-      toast.success(`Service area ${isActive ? "enabled" : "disabled"} successfully!`);
-    },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to update service area status");
+      toast.error(err.message || "Failed to update fare rate");
     },
   });
 }
 
-export function useDeleteServiceArea() {
+export function useCreateCityTypeFareVersion() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => serviceAreasApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [SERVICE_AREAS_KEY], refetchType: "active" });
-      toast.success("Service area deleted successfully!");
+    mutationFn: ({
+      cityTypeId,
+      payload,
+    }: {
+      cityTypeId: string;
+      payload: UpsertCityTypeFarePayload;
+    }) => cityTypesApi.createFare(cityTypeId, payload),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [CITY_TYPE_FARES_KEY, variables.cityTypeId],
+        refetchType: "active",
+      });
+      toast.success("New fare rate version created and activated!");
     },
     onError: (err: any) => {
-      toast.error(err.message || "Failed to delete service area");
+      toast.error(err.message || "Failed to create fare rate version");
     },
+  });
+}
+
+export function useActivateCityTypeFare() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { fareId: string; cityTypeId: string }) =>
+      cityTypesApi.activateFare(vars.fareId),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [CITY_TYPE_FARES_KEY, variables.cityTypeId],
+        refetchType: "active",
+      });
+      toast.success("Fare rate version activated! Other versions disabled.");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to activate fare rate version");
+    },
+  });
+}
+
+export function useDeleteCityTypeFare() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { fareId: string; cityTypeId?: string }) =>
+      cityTypesApi.deleteFare(vars.fareId),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [CITY_TYPE_FARES_KEY, variables.cityTypeId],
+        refetchType: "active",
+      });
+      toast.success("Fare rate removed!");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to delete fare rate");
+    },
+  });
+}
+
+// ── Service Areas (Mapped to Cities for backwards compatibility) ─────────────
+
+export function useServiceAreas(params: any = {}) {
+  return useQuery({
+    queryKey: [CITIES_KEY, "service-areas", params],
+    queryFn: () => citiesApi.list(params),
   });
 }
 
 // ── Currencies ───────────────────────────────────────────────────────────────
 
-const CURRENCIES_KEY = "geo-currencies";
-
 export function useCurrencies(params: CurrencyListParams = {}) {
   return useQuery({
     queryKey: [CURRENCIES_KEY, params],
     queryFn: () => currenciesApi.list(params),
-  });
-}
-
-export function useCurrencyOptions() {
-  return useQuery({
-    queryKey: [CURRENCIES_KEY, "lookup"],
-    queryFn: () => geoLookupApi.listCurrencies(),
   });
 }
 
@@ -414,9 +467,9 @@ export function useSetCurrencyActive() {
   return useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       currenciesApi.setActive(id, isActive),
-    onSuccess: (_, { isActive }) => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [CURRENCIES_KEY], refetchType: "active" });
-      toast.success(`Currency ${isActive ? "enabled" : "disabled"} successfully!`);
+      toast.success(variables.isActive ? "Currency enabled" : "Currency disabled");
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to update currency status");
@@ -438,9 +491,12 @@ export function useSeedCurrencies() {
   });
 }
 
-/**
- * Shared country/state/city FilterSchema fragment
- */
+export function useSeedCurrencyDefaults() {
+  return useSeedCurrencies();
+}
+
+// ── Shared country/state/city FilterSchema fragment ─────────────────────────
+
 export function useGeoFilterSchema(controller: { draft: Record<string, any> }): FilterSchema {
   const countryId = selected(controller.draft.countryId);
   const stateId = selected(controller.draft.stateId);
@@ -456,7 +512,7 @@ export function useGeoFilterSchema(controller: { draft: Record<string, any> }): 
       type: "select",
       field: "countryId",
       placeholder: "All Countries",
-      options: (countriesData?.MESSAGE ?? []).map((c) => ({ label: c.name, value: c.id })),
+      options: (countriesData?.MESSAGE ?? []).map((c: any) => ({ label: c.name, value: c.id })),
     },
     stateId: {
       label: "State",
@@ -464,7 +520,7 @@ export function useGeoFilterSchema(controller: { draft: Record<string, any> }): 
       type: "select",
       field: "stateId",
       placeholder: countryId ? "All States" : "Select a country first",
-      options: (statesData?.MESSAGE ?? []).map((s) => ({ label: s.name, value: s.id })),
+      options: (statesData?.MESSAGE ?? []).map((s: any) => ({ label: s.name, value: s.id })),
     },
     cityId: {
       label: "City",
@@ -472,7 +528,119 @@ export function useGeoFilterSchema(controller: { draft: Record<string, any> }): 
       type: "select",
       field: "cityId",
       placeholder: stateId ? "All Cities" : "Select a state first",
-      options: (citiesData?.MESSAGE ?? []).map((c) => ({ label: c.name, value: c.id })),
+      options: (citiesData?.MESSAGE ?? []).map((c: any) => ({ label: c.name, value: c.id })),
     },
   };
+}
+
+// ── Cascading Geo Filters Hook ───────────────────────────────────────────────
+
+export function useGeoFilters({
+  controller,
+  showCountry = true,
+  showState = true,
+  showCity = true,
+  showCityType = true,
+}: {
+  controller: {
+    draft: Record<string, unknown>;
+    apply: (filters: Record<string, unknown>) => void;
+  };
+  showCountry?: boolean;
+  showState?: boolean;
+  showCity?: boolean;
+  showCityType?: boolean;
+}) {
+  const draftCountryId = selected(controller.draft.countryId);
+  const draftStateId = selected(controller.draft.stateId);
+
+  const { data: countriesData } = useQuery({
+    queryKey: ["geo-lookup-countries"],
+    queryFn: () => geoLookupApi.listCountries(),
+    enabled: showCountry,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: statesData, isFetching: isStatesLoading } = useQuery({
+    queryKey: ["geo-lookup-states", draftCountryId],
+    queryFn: () => geoLookupApi.listStates(draftCountryId!),
+    enabled: showState && !!draftCountryId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: citiesData, isFetching: isCitiesLoading } = useQuery({
+    queryKey: ["geo-lookup-cities", draftStateId],
+    queryFn: () => geoLookupApi.listCities(draftStateId!),
+    enabled: showCity && !!draftStateId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: cityTypesData } = useQuery({
+    queryKey: ["geo-lookup-city-types"],
+    queryFn: () => geoLookupApi.listCityTypes(),
+    enabled: showCityType,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const countries = countriesData?.MESSAGE ?? [];
+  const states = statesData?.MESSAGE ?? [];
+  const cities = citiesData?.MESSAGE ?? [];
+  const cityTypes = cityTypesData?.MESSAGE ?? [];
+
+  const filterSchema: FilterSchema = {
+    ...(showCountry && {
+      countryId: {
+        label: "Country",
+        operator: "equals",
+        type: "select",
+        field: "countryId",
+        placeholder: "Select country",
+        options: countries.map((c: any) => ({ label: c.name, value: c.id })),
+      },
+    }),
+    ...(showState && {
+      stateId: {
+        label: "State",
+        operator: "equals",
+        type: "select",
+        field: "stateId",
+        placeholder: !draftCountryId
+          ? "Select country first"
+          : isStatesLoading
+          ? "Loading states..."
+          : states.length === 0
+          ? "No states available"
+          : "Select state",
+        options: states.map((s: any) => ({ label: s.name, value: s.id })),
+      },
+    }),
+    ...(showCity && {
+      cityId: {
+        label: "City",
+        operator: "equals",
+        type: "select",
+        field: "cityId",
+        placeholder: !draftStateId
+          ? "Select state first"
+          : isCitiesLoading
+          ? "Loading cities..."
+          : cities.length === 0
+          ? "No cities available"
+          : "Select city",
+        options: cities.map((c: any) => ({ label: c.name, value: c.id })),
+      },
+    }),
+    ...(showCityType && {
+      cityTypeId: {
+        label: "City Tier",
+        operator: "equals",
+        type: "select",
+        field: "cityTypeId",
+        placeholder: "All city tiers",
+        options: cityTypes.map((t: any) => ({ label: `${t.name} (${t.code})`, value: t.id })),
+      },
+    }),
+  };
+
+  return { filterSchema, countries, states, cities, cityTypes };
 }

@@ -28,7 +28,6 @@ export interface CityType {
   code: string;
   name: string;
   description?: string | null;
-  costIndex: string | number; // e.g. "1.00"
   densityLevel: string; // high | medium | low | rural
   defaultSurgeCap: string | number; // e.g. "3.00"
   waitingFeeEnabled: boolean;
@@ -38,18 +37,42 @@ export interface CityType {
   updatedAt?: string;
 }
 
-export interface City {
+export interface CityTypeFare {
   id: string;
-  stateId: string;
-  countryId: string;
-  cityTypeId?: string | null;
-  name: string;
-  timezone: string | null;
+  cityTypeId: string;
+  vehicleTypeId: string;
+  vehicleTypeName?: string;
+  vehicleTypeSlug?: string;
+  vehicleTypeCapacity?: number;
+  baseFareMinor: number;
+  minFareMinor: number;
+  perKmRateMinor?: number;
+  costPerKmMinor?: number;
+  perMinRateMinor?: number;
+  costPerMinMinor?: number;
+  waitingPricePerMinMinor?: number;
+  waitingCostPerMinMinor?: number;
+  waitingGracePeriodMin?: number;
+  freeWaitingMinutes?: number;
+  bookingFeeMinor?: number;
+  serviceFeeMinor?: number;
+  cancellationFeeMinor?: number;
+  noShowFeeMinor?: number;
+  surgeFloorMultiplier?: string | number;
+  surgeCapMultiplier?: string | number;
+  nonSubscriberCommissionRate?: string | number;
+  subscriberCommissionRate?: string | number;
+  commissionPercentage?: string | number;
+  platformFeeMinor?: number;
+  flatCommissionMinor?: number;
   isActive: boolean;
-  sortOrder: number;
-  createdBy: string | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
+  vehicleType?: {
+    id: string;
+    name: string;
+    code: string;
+  } | null;
 }
 
 export interface GeoJSONPolygon {
@@ -57,23 +80,30 @@ export interface GeoJSONPolygon {
   coordinates: number[][][];
 }
 
-export interface CityServiceArea {
+export interface City {
   id: string;
-  cityId: string;
-  countryId?: string | null;
+  stateId: string;
+  countryId: string;
+  cityTypeId?: string | null;
   name: string;
-  status: "ACTIVE" | "INACTIVE" | "RESTRICTED";
-  polygon: GeoJSONPolygon;
+  code?: string | null;
+  currencyCode?: string | null;
+  timezone: string | null;
+  boundary?: string | null;
+  polygon?: GeoJSONPolygon | null;
   hexCells?: string[] | null;
   resolution?: number | null;
+  status?: "ACTIVE" | "INACTIVE" | "RESTRICTED";
   isActive: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-  city?: {
-    id: string;
-    name: string;
-  } | null;
+  sortOrder: number;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  cityType?: CityType | null;
 }
+
+// Alias for backwards-compatibility with zone modules
+export type CityServiceArea = City;
 
 export interface Pagination {
   currentPage: number;
@@ -98,6 +128,8 @@ export interface CityListParams {
   stateId?: string;
   cityTypeId?: string;
   search?: string;
+  status?: string;
+  isActive?: boolean | string;
   page?: number;
   limit?: number;
 }
@@ -108,13 +140,8 @@ export interface CityTypeListParams {
   limit?: number;
 }
 
-export interface CityServiceAreaListParams {
+export interface CityServiceAreaListParams extends CityListParams {
   cityId?: string;
-  countryId?: string;
-  status?: string;
-  isActive?: boolean | string;
-  page?: number;
-  limit?: number;
 }
 
 export interface CreateCountryPayload {
@@ -143,7 +170,6 @@ export interface CreateCityTypePayload {
   code: string;
   name: string;
   description?: string;
-  costIndex?: number;
   densityLevel?: "high" | "medium" | "low" | "rural";
   defaultSurgeCap?: number;
   waitingFeeEnabled?: boolean;
@@ -157,11 +183,41 @@ export interface CreateCityPayload {
   countryId: string;
   cityTypeId?: string | null;
   name: string;
+  code?: string;
+  currencyCode?: string;
   timezone?: string;
+  boundary?: string;
+  polygon?: GeoJSONPolygon;
+  resolution?: number;
+  status?: "ACTIVE" | "INACTIVE" | "RESTRICTED";
   sortOrder?: number;
+  isActive?: boolean;
 }
 
 export type UpdateCityPayload = Partial<CreateCityPayload>;
+
+export interface UpsertCityTypeFarePayload {
+  vehicleTypeId: string;
+  baseFareMinor: number;
+  perKmRateMinor?: number;
+  costPerKmMinor?: number;
+  perMinRateMinor?: number;
+  costPerMinMinor?: number;
+  waitingPricePerMinMinor?: number;
+  waitingCostPerMinMinor?: number;
+  waitingGracePeriodMin?: number;
+  freeWaitingMinutes?: number;
+  minFareMinor?: number;
+  bookingFeeMinor?: number;
+  serviceFeeMinor?: number;
+  cancellationFeeMinor?: number;
+  noShowFeeMinor?: number;
+  nonSubscriberCommissionRate?: number | string;
+  commissionPercentage?: number | string;
+  platformFeeMinor?: number;
+  flatCommissionMinor?: number;
+  isActive?: boolean;
+}
 
 export interface Currency {
   id: string;
@@ -189,18 +245,3 @@ export interface CreateCurrencyPayload {
 }
 
 export type UpdateCurrencyPayload = Partial<CreateCurrencyPayload>;
-
-export interface CityServiceAreaPayload {
-  cityId: string;
-  countryId?: string | null;
-  name: string;
-  status?: "ACTIVE" | "INACTIVE" | "RESTRICTED";
-  polygon: GeoJSONPolygon;
-  resolution?: number;
-}
-
-export type UpdateCityServiceAreaPayload = Partial<CityServiceAreaPayload> & {
-  isActive?: boolean;
-};
-
-

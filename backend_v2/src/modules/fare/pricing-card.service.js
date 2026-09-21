@@ -1,67 +1,63 @@
-import { eq, and, desc, isNull, or } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { pricingVersions, vehicleTypes } from '../../../drizzle/schema/index.js';
+import { cityTypeFares, vehicleTypes, cityTypes } from '../../../drizzle/schema/index.js';
 
 /**
- * Resolves the active immutable rate card / pricing version.
- * Checks for zone-specific overrides first, then city-specific, then global vehicle type baseline.
+ * Resolves the active Fare Rate Card for a vehicle type from the City Type.
+ *
+ * Fallback Hierarchy:
+ * 1. Specific rate configured in `city_type_fares` for `(cityTypeId, vehicleTypeId)`
+ * 2. Baseline rates from `vehicle_types` table.
  */
-export async function resolvePricingVersion({ vehicleTypeId, cityId = null, zoneId = null, cityTypeId = null }) {
-  // 1. Try to find explicit pricing version
-  const conditions = [
-    eq(pricingVersions.isActive, true),
-    eq(pricingVersions.vehicleTypeId, vehicleTypeId),
-  ];
-
-  // Level 1: Specific Zone Override (e.g. Airport)
-  if (zoneId) {
-    const [zoneVersion] = await db.select().from(pricingVersions)
-      .where(and(...conditions, eq(pricingVersions.zoneId, zoneId)))
-      .orderBy(desc(pricingVersions.version))
-      .limit(1);
-
-    if (zoneVersion) return { version: zoneVersion, source: 'zone_version' };
-  }
-
-  // Level 2: Specific City Override
-  if (cityId) {
-    const [cityVersion] = await db.select().from(pricingVersions)
-      .where(and(...conditions, eq(pricingVersions.cityId, cityId), isNull(pricingVersions.zoneId)))
-      .orderBy(desc(pricingVersions.version))
-      .limit(1);
-
-    if (cityVersion) return { version: cityVersion, source: 'city_version' };
-  }
-
-  // Level 3: City Type / Tier Card (e.g. TIER_1_METRO, TIER_2_URBAN)
+export async function resolvePricingVersion({ vehicleTypeId, cityTypeId = null, cityId = null }) {
   if (cityTypeId) {
-    const [tierVersion] = await db.select().from(pricingVersions)
-      .where(and(
-        ...conditions,
-        eq(pricingVersions.cityTypeId, cityTypeId),
-        isNull(pricingVersions.cityId),
-        isNull(pricingVersions.zoneId)
-      ))
-      .orderBy(desc(pricingVersions.version))
-      .limit(1);
-
-    if (tierVersion) return { version: tierVersion, source: 'city_type_tier_version' };
-  }
-
-  // Level 4: Global version for this vehicle type
-  const [globalVersion] = await db.select().from(pricingVersions)
+    const [tierFare] = await db.select({
+      fare: cityTypeFares,
+      vehicleTypeName: vehicleTypes.name,
+      cityTypeName: cityTypes.name,
+    })
+    .from(cityTypeFares)
+    .leftJoin(vehicleTypes, eq(cityTypeFares.vehicleTypeId, vehicleTypes.id))
+    .leftJoin(cityTypes, eq(cityTypeFares.cityTypeId, cityTypes.id))
     .where(and(
-      ...conditions,
-      isNull(pricingVersions.cityTypeId),
-      isNull(pricingVersions.cityId),
-      isNull(pricingVersions.zoneId)
+      eq(cityTypeFares.isActive, true),
+      eq(cityTypeFares.cityTypeId, cityTypeId),
+      eq(cityTypeFares.vehicleTypeId, vehicleTypeId)
     ))
-    .orderBy(desc(pricingVersions.version))
     .limit(1);
 
-  if (globalVersion) return { version: globalVersion, source: 'global_version' };
+    if (tierFare) {
+      return {
+        version: {
+          id: tierFare.fare.id,
+          cityTypeId: tierFare.fare.cityTypeId,
+          vehicleTypeId: tierFare.fare.vehicleTypeId,
+          baseFareMinor: tierFare.fare.baseFareMinor,
+          minFareMinor: tierFare.fare.minFareMinor,
+          perKmRateMinor: tierFare.fare.perKmRateMinor,
+          perMinRateMinor: tierFare.fare.perMinRateMinor,
+          waitingPricePerMinMinor: tierFare.fare.waitingPricePerMinMinor || 0,
+          waitingGracePeriodMin: tierFare.fare.waitingGracePeriodMin ?? 3,
+          bookingFeeMinor: tierFare.fare.bookingFeeMinor || 0,
+          serviceFeeMinor: tierFare.fare.serviceFeeMinor || 0,
+          cancellationFeeMinor: tierFare.fare.cancellationFeeMinor || 0,
+          noShowFeeMinor: tierFare.fare.noShowFeeMinor || 0,
+          surgeFloorMultiplier: tierFare.fare.surgeFloorMultiplier || '1.00',
+          surgeCapMultiplier: tierFare.fare.surgeCapMultiplier || '3.00',
+          nonSubscriberCommissionRate: tierFare.fare.nonSubscriberCommissionRate || '0.2000',
+          subscriberCommissionRate: tierFare.fare.subscriberCommissionRate || '0.0500',
+          platformFeeMinor: tierFare.fare.platformFeeMinor || 0,
+          minCommissionMinor: tierFare.fare.minCommissionMinor || 0,
+          maxCommissionMinor: tierFare.fare.maxCommissionMinor || null,
+          vehicleTypeName: tierFare.vehicleTypeName || 'Standard',
+          cityTypeName: tierFare.cityTypeName || null,
+        },
+        source: 'city_type_fare',
+      };
+    }
+  }
 
-  // 2. Fallback to vehicleTypes table baseline if no version rows configured yet
+  // Fallback to vehicleTypes table baseline if no explicit city-type rate is configured
   const [vt] = await db.select().from(vehicleTypes)
     .where(eq(vehicleTypes.id, vehicleTypeId)).limit(1);
 
@@ -71,8 +67,8 @@ export async function resolvePricingVersion({ vehicleTypeId, cityId = null, zone
 
   const baselineVersion = {
     id: null,
+    cityTypeId: null,
     vehicleTypeId: vt.id,
-    version: 1,
     baseFareMinor: vt.baseRateMinor,
     minFareMinor: vt.minFareMinor,
     perKmRateMinor: vt.perKmRateMinor,
@@ -85,6 +81,11 @@ export async function resolvePricingVersion({ vehicleTypeId, cityId = null, zone
     noShowFeeMinor: vt.minFareMinor,
     surgeFloorMultiplier: '1.00',
     surgeCapMultiplier: '3.00',
+    nonSubscriberCommissionRate: '0.2000',
+    subscriberCommissionRate: '0.0500',
+    platformFeeMinor: 0,
+    minCommissionMinor: 0,
+    maxCommissionMinor: null,
     vehicleTypeName: vt.name,
   };
 

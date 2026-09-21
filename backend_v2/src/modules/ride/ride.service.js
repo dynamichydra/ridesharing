@@ -112,16 +112,20 @@ export async function requestRide({
     isScheduled = true;
   }
 
-  // Geofence & Service Area check
+  // Geofence & Service Area check (Pickup and Dropoff)
   const pickupCheck = await isLocationInServiceArea(pickupLat, pickupLng);
   if (!pickupCheck.inServiceArea) {
-    throw { statusCode: 400, code: pickupCheck.reason, message: pickupCheck.message };
+    throw { statusCode: 400, code: pickupCheck.reason, message: `Pickup location error: ${pickupCheck.message}` };
   }
   const pickupZone = pickupCheck.zone;
 
-  const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
+  const dropCheck = await isLocationInServiceArea(dropLat, dropLng);
+  if (!dropCheck.inServiceArea) {
+    throw { statusCode: 400, code: dropCheck.reason === 'OUT_OF_SERVICE_AREA' ? 'DROP_OUT_OF_SERVICE_AREA' : dropCheck.reason, message: `Drop-off location error: ${dropCheck.message}` };
+  }
+  const dropZone = dropCheck.zone;
   if (dropZone?.type === 'restricted') {
-    throw { statusCode: 400, message: 'Pickup or drop-off is in a restricted geofenced area' };
+    throw { statusCode: 400, message: 'Drop-off is in a restricted geofenced area' };
   }
 
   // Fare snapshot / Quote resolution

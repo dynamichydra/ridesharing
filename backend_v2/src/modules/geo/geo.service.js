@@ -2,6 +2,27 @@ import { eq, and, asc, count, ilike } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { countries, states, cities, cityTypes } from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
+import { polygonToHexCells, DEFAULT_RESOLUTION } from '../../utils/h3.js';
+
+function normalizeGeoJsonPolygon(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  if (raw.type === 'Polygon' && Array.isArray(raw.coordinates)) {
+    return raw;
+  }
+  if (raw.type === 'Feature' && raw.geometry) {
+    return normalizeGeoJsonPolygon(raw.geometry);
+  }
+  if (raw.type === 'FeatureCollection' && Array.isArray(raw.features) && raw.features.length > 0) {
+    for (const f of raw.features) {
+      const extracted = normalizeGeoJsonPolygon(f);
+      if (extracted) return extracted;
+    }
+  }
+  if (raw.type === 'MultiPolygon' && Array.isArray(raw.coordinates) && raw.coordinates.length > 0) {
+    return { type: 'Polygon', coordinates: raw.coordinates[0] };
+  }
+  return raw;
+}
 
 // ── Countries ────────────────────────────────────────────────────────────────
 
@@ -41,11 +62,6 @@ export async function getCountryById(id) {
   return row;
 }
 
-/**
- * Fallback country for pickup points that don't fall inside any drawn zone
- * (e.g. a market that hasn't finished zone setup yet). Every deployment must
- * have exactly one country flagged isDefault — admin-configurable, not hardcoded.
- */
 export async function getDefaultCountry() {
   const [row] = await db.select().from(countries)
     .where(and(eq(countries.isDefault, true), eq(countries.isActive, true))).limit(1);
@@ -89,10 +105,11 @@ export async function setStateActive(id, isActive) {
   return row;
 }
 
-// ── Cities ───────────────────────────────────────────────────────────────────
+// ── Cities (Direct Service Area Boundaries) ──────────────────────────────────
 
 export async function listCities(stateId, onlyActive = true) {
-  const conditions = [eq(cities.stateId, stateId)];
+  const conditions = [];
+  if (stateId) conditions.push(eq(cities.stateId, stateId));
   if (onlyActive) conditions.push(eq(cities.isActive, true));
   const rows = await db
     .select({
@@ -101,7 +118,7 @@ export async function listCities(stateId, onlyActive = true) {
     })
     .from(cities)
     .leftJoin(cityTypes, eq(cities.cityTypeId, cityTypes.id))
-    .where(and(...conditions))
+    .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(asc(cities.sortOrder));
 
   return rows.map((r) => ({
@@ -115,6 +132,10 @@ export async function listCitiesPaginated(filters, page, limit, offset) {
   if (filters.countryId)  conditions.push(eq(cities.countryId, filters.countryId));
   if (filters.stateId)    conditions.push(eq(cities.stateId, filters.stateId));
   if (filters.cityTypeId) conditions.push(eq(cities.cityTypeId, filters.cityTypeId));
+  if (filters.status)     conditions.push(eq(cities.status, filters.status));
+  if (filters.isActive !== undefined && filters.isActive !== '') {
+    conditions.push(eq(cities.isActive, String(filters.isActive) === 'true'));
+  }
   if (filters.search)     conditions.push(ilike(cities.name, `%${filters.search}%`));
   const where = conditions.length ? and(...conditions) : undefined;
 
@@ -155,20 +176,67 @@ export async function getCityById(id) {
 }
 
 export async function createCity(data, adminId) {
-  const [row] = await db.insert(cities).values({ ...data, createdBy: adminId }).returning();
+  let hexCells = null;
+  const resolution = data.resolution || DEFAULT_RESOLUTION;
+  let polygon = data.polygon ? normalizeGeoJsonPolygon(data.polygon) : null;
+
+  if (polygon) {
+    try {
+      hexCells = polygonToHexCells(polygon, resolution);
+      if (Array.isArray(hexCells) && hexCells.length > 10000) {
+        hexCells = hexCells.slice(0, 10000);
+      }
+    } catch (err) {
+      console.warn('H3 hex generation warning for city:', err?.message);
+    }
+  }
+
+  const [row] = await db.insert(cities).values({
+    ...data,
+    polygon,
+    hexCells,
+    resolution,
+    status: data.status || 'ACTIVE',
+    createdBy: adminId || null,
+  }).returning();
+
   return row;
 }
 
 export async function updateCity(id, data) {
   data.updatedAt = new Date();
+
+  if (data.polygon) {
+    const resolution = data.resolution || DEFAULT_RESOLUTION;
+    const polygon = normalizeGeoJsonPolygon(data.polygon);
+    data.polygon = polygon;
+    try {
+      const hexCells = polygonToHexCells(polygon, resolution);
+      data.hexCells = Array.isArray(hexCells) && hexCells.length > 10000 ? hexCells.slice(0, 10000) : hexCells;
+    } catch (err) {
+      console.warn('H3 hex generation warning for city update:', err?.message);
+    }
+    data.resolution = resolution;
+  }
+
   const [row] = await db.update(cities).set(data).where(eq(cities.id, id)).returning();
   if (!row) throw { statusCode: 404, message: 'City not found' };
   return row;
 }
 
 export async function setCityActive(id, isActive) {
-  const [row] = await db.update(cities).set({ isActive, updatedAt: new Date() })
-    .where(eq(cities.id, id)).returning();
+  const [row] = await db.update(cities).set({
+    isActive,
+    status: isActive ? 'ACTIVE' : 'INACTIVE',
+    updatedAt: new Date(),
+  }).where(eq(cities.id, id)).returning();
+
+  if (!row) throw { statusCode: 404, message: 'City not found' };
+  return row;
+}
+
+export async function deleteCity(id) {
+  const [row] = await db.delete(cities).where(eq(cities.id, id)).returning();
   if (!row) throw { statusCode: 404, message: 'City not found' };
   return row;
 }

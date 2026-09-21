@@ -16,10 +16,8 @@ import type {
   CityTypeListParams,
   CreateCityTypePayload,
   UpdateCityTypePayload,
-  CityServiceArea,
-  CityServiceAreaListParams,
-  CityServiceAreaPayload,
-  UpdateCityServiceAreaPayload,
+  CityTypeFare,
+  UpsertCityTypeFarePayload,
   Currency,
   CurrencyListParams,
   CreateCurrencyPayload,
@@ -48,6 +46,10 @@ function buildCityQuery(params: CityListParams) {
   if (params.countryId) query.set("countryId", params.countryId);
   if (params.stateId) query.set("stateId", params.stateId);
   if (params.cityTypeId) query.set("cityTypeId", params.cityTypeId);
+  if (params.status) query.set("status", params.status);
+  if (params.isActive !== undefined && params.isActive !== "") {
+    query.set("isActive", String(params.isActive));
+  }
   if (params.search) query.set("search", params.search);
   query.set("page", String(params.page ?? 1));
   query.set("limit", String(params.limit ?? 20));
@@ -57,19 +59,6 @@ function buildCityQuery(params: CityListParams) {
 function buildCityTypeQuery(params: CityTypeListParams) {
   const query = new URLSearchParams();
   if (params.search) query.set("search", params.search);
-  query.set("page", String(params.page ?? 1));
-  query.set("limit", String(params.limit ?? 20));
-  return query.toString();
-}
-
-function buildServiceAreaQuery(params: CityServiceAreaListParams) {
-  const query = new URLSearchParams();
-  if (params.cityId) query.set("cityId", params.cityId);
-  if (params.countryId) query.set("countryId", params.countryId);
-  if (params.status) query.set("status", params.status);
-  if (params.isActive !== undefined && params.isActive !== "") {
-    query.set("isActive", String(params.isActive));
-  }
   query.set("page", String(params.page ?? 1));
   query.set("limit", String(params.limit ?? 20));
   return query.toString();
@@ -140,10 +129,29 @@ export const cityTypesApi = {
     ),
 
   seedDefaults: () => apiClient.post<CityType[]>(`${BASE_URL}/admin/city-types/seed-defaults`, {}),
+
+  // City Type Fares
+  listFares: (cityTypeId: string) =>
+    apiClient.get<CityTypeFare[]>(`${BASE_URL}/admin/city-types/${cityTypeId}/fares`),
+
+  createFare: (cityTypeId: string, payload: UpsertCityTypeFarePayload) =>
+    apiClient.post<CityTypeFare>(`${BASE_URL}/admin/city-types/${cityTypeId}/fares`, payload),
+
+  upsertFare: (cityTypeId: string, vehicleTypeId: string, payload: UpsertCityTypeFarePayload) =>
+    apiClient.put<CityTypeFare>(
+      `${BASE_URL}/admin/city-types/${cityTypeId}/fares/${vehicleTypeId}`,
+      payload,
+    ),
+
+  activateFare: (fareId: string) =>
+    apiClient.patch<CityTypeFare>(`${BASE_URL}/admin/city-types/fares/${fareId}/activate`, {}),
+
+  deleteFare: (fareId: string) =>
+    apiClient.delete<{ success: boolean }>(`${BASE_URL}/admin/city-types/fares/${fareId}`),
 };
 
 export const citiesApi = {
-  // GET /geo/admin/cities?countryId=&stateId=&cityTypeId=&search=&page=&limit=  (Admin)
+  // GET /geo/admin/cities?countryId=&stateId=&cityTypeId=&status=&isActive=&search=&page=&limit=  (Admin)
   list: async (params: CityListParams) => {
     const res = await apiClient.get<Array<{ city?: City; cityType?: any } | City>>(
       `${BASE_URL}/admin/cities?${buildCityQuery(params)}`,
@@ -160,6 +168,8 @@ export const citiesApi = {
     return { ...res, MESSAGE: unwrapped };
   },
 
+  getById: (id: string) => apiClient.get<City>(`${BASE_URL}/admin/cities/${id}`),
+
   // POST /geo/admin/cities  (Admin)
   create: (payload: CreateCityPayload) =>
     apiClient.post<City>(`${BASE_URL}/admin/cities`, payload),
@@ -174,41 +184,8 @@ export const citiesApi = {
       `${BASE_URL}/admin/cities/${id}/${isActive ? "enable" : "disable"}`,
       {},
     ),
-};
 
-export const serviceAreasApi = {
-  // GET /geo/admin/service-areas?cityId=&status=&page=&limit= (Admin)
-  list: async (params: CityServiceAreaListParams) => {
-    const res = await apiClient.get<Array<{ serviceArea?: CityServiceArea; city?: any } | CityServiceArea>>(
-      `${BASE_URL}/admin/service-areas?${buildServiceAreaQuery(params)}`,
-    );
-    const unwrapped: CityServiceArea[] = (res.MESSAGE ?? []).map((item: any) => {
-      if (item.serviceArea) {
-        return {
-          ...item.serviceArea,
-          city: item.city ?? item.serviceArea.city ?? null,
-        };
-      }
-      return item as CityServiceArea;
-    });
-    return { ...res, MESSAGE: unwrapped };
-  },
-
-  getById: (id: string) => apiClient.get<CityServiceArea>(`${BASE_URL}/admin/service-areas/${id}`),
-
-  create: (payload: CityServiceAreaPayload) =>
-    apiClient.post<CityServiceArea>(`${BASE_URL}/admin/service-areas`, payload),
-
-  update: (id: string, payload: UpdateCityServiceAreaPayload) =>
-    apiClient.patch<CityServiceArea>(`${BASE_URL}/admin/service-areas/${id}`, payload),
-
-  setActive: (id: string, isActive: boolean) =>
-    apiClient.patch<CityServiceArea>(
-      `${BASE_URL}/admin/service-areas/${id}/${isActive ? "enable" : "disable"}`,
-      {},
-    ),
-
-  delete: (id: string) => apiClient.delete<{ success: boolean }>(`${BASE_URL}/admin/service-areas/${id}`),
+  delete: (id: string) => apiClient.delete<{ success: boolean }>(`${BASE_URL}/admin/cities/${id}`),
 };
 
 export const currenciesApi = {
@@ -263,6 +240,3 @@ export const geoLookupApi = {
   listCityTypes: () => apiClient.get<CityType[]>(`${BASE_URL}/city-types`),
   listCurrencies: () => apiClient.get<Currency[]>(`${BASE_URL}/currencies`),
 };
-
-
-

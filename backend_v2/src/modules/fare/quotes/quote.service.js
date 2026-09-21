@@ -14,7 +14,14 @@ export async function createFareQuote(request) {
   if (request.pickupLat != null && request.pickupLng != null) {
     const pickupCheck = await isLocationInServiceArea(request.pickupLat, request.pickupLng);
     if (!pickupCheck.inServiceArea) {
-      throw { statusCode: 400, code: pickupCheck.reason, message: pickupCheck.message };
+      throw { statusCode: 400, code: pickupCheck.reason, message: `Pickup location error: ${pickupCheck.message}` };
+    }
+  }
+
+  if (request.dropLat != null && request.dropLng != null) {
+    const dropCheck = await isLocationInServiceArea(request.dropLat, request.dropLng);
+    if (!dropCheck.inServiceArea) {
+      throw { statusCode: 400, code: dropCheck.reason === 'OUT_OF_SERVICE_AREA' ? 'DROP_OUT_OF_SERVICE_AREA' : dropCheck.reason, message: `Drop-off location error: ${dropCheck.message}` };
     }
   }
 
@@ -25,7 +32,8 @@ export async function createFareQuote(request) {
   const [quote] = await db.insert(fareQuotes).values({
     riderId: request.userId || null,
     vehicleTypeId: request.vehicleTypeId,
-    pricingVersionId: fareResult.pricingVersionId || null,
+    cityTypeId: fareResult.breakdown?.cityTypeId || null,
+    cityTypeFareId: fareResult.breakdown?.cityTypeFareId || null,
     pickupLat: String(request.pickupLat),
     pickupLng: String(request.pickupLng),
     dropLat: String(request.dropLat),
@@ -33,7 +41,7 @@ export async function createFareQuote(request) {
     distanceKm: String(fareResult.distanceKm),
     durationMin: fareResult.durationMin,
     durationInTrafficMin: fareResult.durationInTrafficMin,
-    surgeMultiplier: String(fareResult.breakdown.surge.surgeMultiplier || 1.0),
+    surgeMultiplier: String(fareResult.breakdown.surge?.surgeMultiplier || 1.0),
     estimatedFareMinor: fareResult.originalEstimatedFareMinor,
     discountAmountMinor: fareResult.discountAmountMinor || 0,
     finalFareMinor: fareResult.estimatedFareMinor,
@@ -62,35 +70,34 @@ export async function validateAndLockQuote(quoteId, riderId) {
       eq(fareQuotes.id, quoteId),
       eq(fareQuotes.status, 'QUOTED'),
       gt(fareQuotes.expiresAt, new Date())
-    ))
-    .limit(1);
+    )).limit(1);
 
   if (!quote) {
-    throw {
-      statusCode: 400,
-      code: 'QUOTE_EXPIRED_OR_INVALID',
-      message: 'Fare quote is invalid or has expired. Please request a new estimate.',
-    };
+    throw { statusCode: 400, code: 'INVALID_OR_EXPIRED_QUOTE', message: 'Fare quote is invalid, expired, or already used' };
   }
 
   if (quote.riderId && riderId && quote.riderId !== riderId) {
-    throw {
-      statusCode: 403,
-      code: 'QUOTE_UNAUTHORIZED',
-      message: 'This fare quote belongs to a different user session',
-    };
+    throw { statusCode: 403, code: 'QUOTE_FORBIDDEN', message: 'This fare quote belongs to a different rider' };
   }
 
-  // Mark quote as BOOKED
-  await db.update(fareQuotes)
+  const [locked] = await db.update(fareQuotes)
     .set({ status: 'BOOKED', updatedAt: new Date() })
-    .where(eq(fareQuotes.id, quoteId));
+    .where(eq(fareQuotes.id, quoteId))
+    .returning();
 
-  return quote;
+  return locked;
 }
 
 export async function getQuoteById(quoteId) {
-  const [quote] = await db.select().from(fareQuotes).where(eq(fareQuotes.id, quoteId)).limit(1);
-  if (!quote) throw { statusCode: 404, message: 'Quote not found' };
+  const [quote] = await db.select().from(fareQuotes)
+    .where(eq(fareQuotes.id, quoteId)).limit(1);
+
+  if (!quote) {
+    throw { statusCode: 404, message: 'Fare quote not found' };
+  }
+
   return quote;
 }
+
+export const getFareQuoteById = getQuoteById;
+

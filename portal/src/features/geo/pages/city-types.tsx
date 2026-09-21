@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { DataTable } from "@/components/data-table/data-table";
 import { Button } from "@/components/ui/button";
 import { Plus, Sparkles } from "lucide-react";
@@ -21,6 +22,7 @@ const FILTER_SCHEMA: FilterSchema = {
 };
 
 export default function CityTypesTab() {
+  const navigate = useNavigate();
   const controller = useFilterController();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingType, setEditingType] = useState<CityType | null>(null);
@@ -43,6 +45,10 @@ export default function CityTypesTab() {
     setIsDialogOpen(true);
   }, []);
 
+  const handleManageFares = useCallback((type: CityType) => {
+    navigate(`/geo/city-types/${type.id}/fares`);
+  }, [navigate]);
+
   const handleToggleActive = useCallback(
     (type: CityType) => {
       setActiveMutation.mutate({ id: type.id, isActive: !type.isActive });
@@ -51,8 +57,13 @@ export default function CityTypesTab() {
   );
 
   const columns = useMemo(
-    () => getCityTypeColumns({ onEdit: handleEdit, onToggleActive: handleToggleActive }),
-    [handleEdit, handleToggleActive],
+    () =>
+      getCityTypeColumns({
+        onEdit: handleEdit,
+        onToggleActive: handleToggleActive,
+        onManageFares: handleManageFares,
+      }),
+    [handleEdit, handleToggleActive, handleManageFares],
   );
 
   const types = data?.MESSAGE ?? [];
@@ -63,9 +74,9 @@ export default function CityTypesTab() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">City Types & Economic Tiers</h3>
+          <h3 className="text-sm font-semibold text-foreground">City Types, Tiers &amp; Vehicle Rate Cards</h3>
           <p className="text-xs text-muted-foreground">
-            {totalRecords} city tiers configured. Sets baseline cost index, density search radius, and surge caps.
+            {totalRecords} city tiers configured. Connect cities to tiers for automated base fare, per km rate, and commission calculation per vehicle type.
           </p>
         </div>
         <div className="flex items-center gap-2">

@@ -5,8 +5,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DialogFooter } from "@/components/ui/dialog";
-import { CheckCircle2, AlertCircle, Wand2, MapPin, Sparkles, ShieldAlert, Info } from "lucide-react";
+import { CheckCircle2, AlertCircle, Wand2, MapPin, Sparkles, ShieldAlert, Info, Map, Code2 } from "lucide-react";
 import { parseGeoJSONPolygonInput } from "@/features/geo/utils";
+import { ServiceAreaMapDrawer } from "@/features/geo/components/service-area-map-drawer";
 import type { Country, City, CityServiceArea, Zone } from "../types";
 
 export interface ZoneFormState {
@@ -63,6 +64,7 @@ export default function ZoneForm({
   isPending,
   submitLabel,
 }: ZoneFormProps) {
+  const [boundaryTab, setBoundaryTab] = useState<"map" | "json">("map");
   const [geoJsonInfo, setGeoJsonInfo] = useState<{
     valid: boolean;
     message?: string;
@@ -374,10 +376,10 @@ export default function ZoneForm({
       )}
 
       {/* GeoJSON Polygon Coordinates Section */}
-      <div className="space-y-2">
+      <div className="space-y-3 pt-1 border-t border-border/50">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <Label htmlFor="z-polygon">
+            <Label htmlFor="z-polygon" className="font-semibold text-xs">
               Special Zone Polygon Coordinates <span className="text-red-500">*</span>
             </Label>
             {geoJsonInfo && (
@@ -387,9 +389,9 @@ export default function ZoneForm({
                   className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[11px] py-0 gap-1 font-normal"
                 >
                   <CheckCircle2 className="h-3 w-3" />
-                  {geoJsonInfo.pointsCount} points{" "}
+                  {geoJsonInfo.pointsCount} vertices{" "}
                   {geoJsonInfo.sourceType && geoJsonInfo.sourceType !== "Polygon"
-                    ? `(${geoJsonInfo.sourceType} detected)`
+                    ? `(${geoJsonInfo.sourceType})`
                     : ""}
                 </Badge>
               ) : (
@@ -402,45 +404,87 @@ export default function ZoneForm({
               )
             )}
           </div>
-          <div className="flex items-center gap-3">
-            {geoJsonInfo?.valid && geoJsonInfo.sourceType && geoJsonInfo.sourceType !== "Polygon" && (
-              <button
-                type="button"
-                onClick={handleNormalize}
-                className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1 font-medium"
-              >
-                <Wand2 className="h-3 w-3" /> Extract &amp; Clean Polygon
-              </button>
-            )}
+
+          <div className="flex items-center gap-0.5 bg-muted rounded-lg p-0.5">
             <button
               type="button"
-              onClick={handleInsertSample}
-              className="text-xs text-muted-foreground hover:text-foreground cursor-pointer flex items-center gap-1"
+              onClick={() => setBoundaryTab("map")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                boundaryTab === "map"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
-              <Sparkles className="h-3 w-3" /> Insert Sample
+              <Map className="h-3.5 w-3.5" />
+              Draw on Map
+            </button>
+            <button
+              type="button"
+              onClick={() => setBoundaryTab("json")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                boundaryTab === "json"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Code2 className="h-3.5 w-3.5" />
+              Paste JSON
             </button>
           </div>
         </div>
 
-        <Textarea
-          id="z-polygon"
-          rows={5}
-          className="font-mono text-xs max-h-40 resize-y border-border bg-background"
-          placeholder='Paste Polygon, Feature, or FeatureCollection GeoJSON here...'
-          value={values.polygon}
-          onChange={(e) => onChange({ ...values, polygon: e.target.value })}
-          required
-        />
+        {/* Map tab */}
+        {boundaryTab === "map" && (
+          <ServiceAreaMapDrawer
+            polygonJson={values.polygon}
+            onPolygonChange={(json) => onChange({ ...values, polygon: json })}
+            hint="Draw the special zone perimeter (airport, railway station, IT park, or restricted zone) on Google Maps."
+          />
+        )}
 
-        {geoJsonInfo && !geoJsonInfo.valid && (
-          <p className="text-xs text-destructive flex items-center gap-1">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            {geoJsonInfo.message}
-          </p>
+        {/* JSON tab */}
+        {boundaryTab === "json" && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-end gap-3">
+              {geoJsonInfo?.valid && geoJsonInfo.sourceType && geoJsonInfo.sourceType !== "Polygon" && (
+                <button
+                  type="button"
+                  onClick={handleNormalize}
+                  className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1 font-medium"
+                >
+                  <Wand2 className="h-3 w-3" /> Extract &amp; Clean Polygon
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleInsertSample}
+                className="text-xs text-muted-foreground hover:text-foreground cursor-pointer flex items-center gap-1"
+              >
+                <Sparkles className="h-3 w-3" /> Insert Sample
+              </button>
+            </div>
+
+            <Textarea
+              id="z-polygon"
+              rows={5}
+              className="font-mono text-xs max-h-40 resize-y border-border bg-background"
+              placeholder='Paste Polygon, Feature, or FeatureCollection GeoJSON here...'
+              value={values.polygon}
+              onChange={(e) => onChange({ ...values, polygon: e.target.value })}
+              required
+            />
+
+            {geoJsonInfo && !geoJsonInfo.valid && (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                {geoJsonInfo.message}
+              </p>
+            )}
+          </div>
         )}
 
         <p className="text-[11px] text-muted-foreground">
-          Must be enclosed entirely within the selected city's active City Service Area. Supports direct <code>Polygon</code>, <code>Feature</code>, or <code>FeatureCollection</code>.
+          Must be enclosed entirely within the selected city's active City Service Area boundary.
         </p>
       </div>
 

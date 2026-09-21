@@ -69,8 +69,17 @@ export const fareRulesApi = {
 const TAX_RULES_BASE_URL = "/fare/tax-rules";
 
 export const taxRulesApi = {
-  list: (params: TaxRuleListParams = {}) =>
-    apiClient.get<TaxRule[]>(`${TAX_RULES_BASE_URL}?page=${params.page ?? 1}&limit=${params.limit ?? 10}`),
+  list: (params: TaxRuleListParams = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.limit) q.set("limit", String(params.limit));
+    if (params.countryId) q.set("countryId", params.countryId);
+    if (params.stateId) q.set("stateId", params.stateId);
+    if (params.cityId) q.set("cityId", params.cityId);
+    if (params.appliesTo) q.set("appliesTo", params.appliesTo);
+    if (params.isActive !== undefined) q.set("isActive", String(params.isActive));
+    return apiClient.get<TaxRule[]>(`${TAX_RULES_BASE_URL}?${q.toString()}`);
+  },
 
   create: (payload: TaxRulePayload) => apiClient.post<TaxRule>(TAX_RULES_BASE_URL, payload),
 
@@ -117,3 +126,83 @@ export const lookupsApi = {
   // GET /zones  (Public)
   listZones: () => apiClient.get<LookupOption[]>("/zones"),
 };
+
+// ── Pricing Plans & Versions (Core Rate Engine) ───────────────────────────
+
+export const pricingPlansApi = {
+  list: (params: { page?: number; limit?: number; cityId?: string; zoneId?: string; vehicleTypeId?: string; isActive?: boolean } = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.limit) q.set("limit", String(params.limit));
+    if (params.cityId) q.set("cityId", params.cityId);
+    if (params.zoneId) q.set("zoneId", params.zoneId);
+    if (params.vehicleTypeId) q.set("vehicleTypeId", params.vehicleTypeId);
+    if (params.isActive !== undefined) q.set("isActive", String(params.isActive));
+    return apiClient.get<any>(`/fare/plans?${q.toString()}`);
+  },
+
+  getById: (id: string) => apiClient.get<any>(`/fare/plans/${id}`),
+
+  create: (payload: any) => apiClient.post<any>("/fare/plans", payload),
+
+  update: (id: string, payload: any) => apiClient.patch<any>(`/fare/plans/${id}`, payload),
+
+  createVersion: (planId: string, payload: any) => apiClient.post<any>(`/fare/plans/${planId}/versions`, payload),
+
+  updateVersion: (planId: string, versionId: string, payload: any) =>
+    apiClient.patch<any>(`/fare/plans/${planId}/versions/${versionId}`, payload),
+};
+
+// ── Pricing Rules (Night, Peak, Surge, Toll, Airport) ─────────────────────
+
+export const pricingRulesAdminApi = {
+  listNightRules: (params: { pricingPlanId?: string; isActive?: boolean } = {}) => {
+    const q = new URLSearchParams();
+    if (params.pricingPlanId) q.set("pricingPlanId", params.pricingPlanId);
+    if (params.isActive !== undefined) q.set("isActive", String(params.isActive));
+    return apiClient.get<any>(`/fare/night-rules?limit=100&${q.toString()}`);
+  },
+  createNightRule: (payload: any) => apiClient.post<any>("/fare/night-rules", payload),
+
+  listPeakRules: (params: { pricingPlanId?: string; isActive?: boolean } = {}) => {
+    const q = new URLSearchParams();
+    if (params.pricingPlanId) q.set("pricingPlanId", params.pricingPlanId);
+    if (params.isActive !== undefined) q.set("isActive", String(params.isActive));
+    return apiClient.get<any>(`/fare/peak-rules?limit=100&${q.toString()}`);
+  },
+  createPeakRule: (payload: any) => apiClient.post<any>("/fare/peak-rules", payload),
+
+  listSurgeRules: (params: { cityId?: string; isActive?: boolean } = {}) => {
+    const q = new URLSearchParams();
+    if (params.cityId) q.set("cityId", params.cityId);
+    if (params.isActive !== undefined) q.set("isActive", String(params.isActive));
+    return apiClient.get<any>(`/fare/surge-rules?limit=100&${q.toString()}`);
+  },
+  createSurgeRule: (payload: any) => apiClient.post<any>("/fare/surge-rules", payload),
+
+  listTollRules: (params: { cityId?: string; isActive?: boolean } = {}) => {
+    const q = new URLSearchParams();
+    if (params.cityId) q.set("cityId", params.cityId);
+    if (params.isActive !== undefined) q.set("isActive", String(params.isActive));
+    return apiClient.get<any>(`/fare/toll-rules?limit=100&${q.toString()}`);
+  },
+  createTollRule: (payload: any) => apiClient.post<any>("/fare/toll-rules", payload),
+
+  listAirports: (params: { cityId?: string; isActive?: boolean } = {}) => {
+    const q = new URLSearchParams();
+    if (params.cityId) q.set("cityId", params.cityId);
+    if (params.isActive !== undefined) q.set("isActive", String(params.isActive));
+    return apiClient.get<any>(`/fare/airports?limit=100&${q.toString()}`);
+  },
+  createAirport: (payload: any) => apiClient.post<any>("/fare/airports", payload),
+  updateAirport: (id: string, payload: any) => apiClient.patch<any>(`/fare/airports/${id}`, payload),
+
+  listAirportRules: (params: { airportId?: string; isActive?: boolean } = {}) => {
+    const q = new URLSearchParams();
+    if (params.airportId) q.set("airportId", params.airportId);
+    if (params.isActive !== undefined) q.set("isActive", String(params.isActive));
+    return apiClient.get<any>(`/fare/airport-rules?limit=100&${q.toString()}`);
+  },
+  createAirportRule: (payload: any) => apiClient.post<any>("/fare/airport-rules", payload),
+};
+
