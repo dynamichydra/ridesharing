@@ -17,125 +17,155 @@ export async function fareRoutes(app) {
 
   // POST /api/v1/fare/estimate
   app.post('/estimate', async (request, reply) => {
-    const { pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId } = request.body;
-    if (!pickupLat || !pickupLng || !dropLat || !dropLng || !vehicleTypeId) {
-      return sendError(reply, 'pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId are required');
-    }
-    const lat = parseFloat(pickupLat);
-    const lng = parseFloat(pickupLng);
+    try {
+      const { pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId } = request.body || {};
+      if (!pickupLat || !pickupLng || !dropLat || !dropLng || !vehicleTypeId) {
+        return sendError(reply, 'pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId are required');
+      }
+      const lat = parseFloat(pickupLat);
+      const lng = parseFloat(pickupLng);
 
-    const pickupCheck = await isLocationInServiceArea(lat, lng);
-    if (!pickupCheck.inServiceArea) {
-      return sendError(reply, pickupCheck.message, 400, pickupCheck.reason);
-    }
-    const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
-    if (dropZone?.type === 'restricted') {
-      return sendError(reply, 'Drop-off is in a restricted geofenced area', 400, 'RESTRICTED_ZONE');
-    }
+      const pickupCheck = await isLocationInServiceArea(lat, lng);
+      if (!pickupCheck.inServiceArea) {
+        return sendError(reply, pickupCheck.message, 400, pickupCheck.reason);
+      }
+      const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
+      if (dropZone?.type === 'restricted') {
+        return sendError(reply, 'Drop-off is in a restricted geofenced area', 400, 'RESTRICTED_ZONE');
+      }
 
-    const data = await calculateFare({
-      pickupLat: lat, pickupLng: lng,
-      dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
-      vehicleTypeId,
-    });
-    return sendSuccess(reply, data);
+      const data = await calculateFare({
+        pickupLat: lat, pickupLng: lng,
+        dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
+        vehicleTypeId,
+      });
+      return sendSuccess(reply, data);
+    } catch (err) {
+      const status = err.statusCode || 400;
+      return sendError(reply, err.message || 'Fare estimation failed', status);
+    }
   });
 
   // POST /api/v1/fare/estimate-all
   app.post('/estimate-all', async (request, reply) => {
-    const { pickupLat, pickupLng, dropLat, dropLng } = request.body;
-    if (!pickupLat || !pickupLng || !dropLat || !dropLng) {
-      return sendError(reply, 'pickupLat, pickupLng, dropLat, dropLng are required');
-    }
-    const lat = parseFloat(pickupLat);
-    const lng = parseFloat(pickupLng);
+    try {
+      const { pickupLat, pickupLng, dropLat, dropLng } = request.body || {};
+      if (!pickupLat || !pickupLng || !dropLat || !dropLng) {
+        return sendError(reply, 'pickupLat, pickupLng, dropLat, dropLng are required');
+      }
+      const lat = parseFloat(pickupLat);
+      const lng = parseFloat(pickupLng);
 
-    const pickupCheck = await isLocationInServiceArea(lat, lng);
-    if (!pickupCheck.inServiceArea) {
-      return sendError(reply, pickupCheck.message, 400, pickupCheck.reason);
-    }
-    const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
-    if (dropZone?.type === 'restricted') {
-      return sendError(reply, 'Drop-off is in a restricted geofenced area', 400, 'RESTRICTED_ZONE');
-    }
+      const pickupCheck = await isLocationInServiceArea(lat, lng);
+      if (!pickupCheck.inServiceArea) {
+        return sendError(reply, pickupCheck.message, 400, pickupCheck.reason);
+      }
+      const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
+      if (dropZone?.type === 'restricted') {
+        return sendError(reply, 'Drop-off is in a restricted geofenced area', 400, 'RESTRICTED_ZONE');
+      }
 
-    const activeTypes = await listAll(true);
-    const data = await estimateAllTypes({
-      pickupLat: lat, pickupLng: lng,
-      dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
-      activeVehicleTypes: activeTypes,
-    });
-    return sendSuccess(reply, data);
+      const activeTypes = await listAll(true);
+      const data = await estimateAllTypes({
+        pickupLat: lat, pickupLng: lng,
+        dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
+        activeVehicleTypes: activeTypes,
+      });
+      return sendSuccess(reply, data);
+    } catch (err) {
+      const status = err.statusCode || 400;
+      return sendError(reply, err.message || 'Fare estimation failed', status);
+    }
   });
 
   // POST /api/v1/fare/available
   app.post('/available', { preHandler: [authenticateRider] }, async (request, reply) => {
-    const { pickupLat, pickupLng, dropLat, dropLng } = request.body;
-    if (!pickupLat || !pickupLng || !dropLat || !dropLng) {
-      return sendError(reply, 'pickupLat, pickupLng, dropLat, dropLng are required');
-    }
-    const lat = parseFloat(pickupLat);
-    const lng = parseFloat(pickupLng);
+    try {
+      const { pickupLat, pickupLng, dropLat, dropLng } = request.body || {};
+      if (!pickupLat || !pickupLng || !dropLat || !dropLng) {
+        return sendError(reply, 'pickupLat, pickupLng, dropLat, dropLng are required');
+      }
+      const lat = parseFloat(pickupLat);
+      const lng = parseFloat(pickupLng);
 
-    const pickupCheck = await isLocationInServiceArea(lat, lng);
-    if (!pickupCheck.inServiceArea) {
-      return sendError(reply, pickupCheck.message, 400, pickupCheck.reason);
-    }
-    const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
-    if (dropZone?.type === 'restricted') {
-      return sendError(reply, 'Drop-off is in a restricted geofenced area', 400, 'RESTRICTED_ZONE');
-    }
+      const pickupCheck = await isLocationInServiceArea(lat, lng);
+      if (!pickupCheck.inServiceArea) {
+        return sendError(reply, pickupCheck.message, 400, pickupCheck.reason);
+      }
+      const dropZone = await detectZone(parseFloat(dropLat), parseFloat(dropLng));
+      if (dropZone?.type === 'restricted') {
+        return sendError(reply, 'Drop-off is in a restricted geofenced area', 400, 'RESTRICTED_ZONE');
+      }
 
-    const [activeTypes, availableIds] = await Promise.all([
-      listAll(true),
-      getAvailableVehicleTypeIds(lat, lng, request.user.id),
-    ]);
-    const availableIdSet = new Set(availableIds);
-    const availableTypes = activeTypes.filter((vt) => availableIdSet.has(vt.id));
+      const [activeTypes, availableIds] = await Promise.all([
+        listAll(true),
+        getAvailableVehicleTypeIds(lat, lng, request.user.id),
+      ]);
+      const availableIdSet = new Set(availableIds);
+      const availableTypes = activeTypes.filter((vt) => availableIdSet.has(vt.id));
 
-    const data = await estimateAllTypes({
-      pickupLat: lat, pickupLng: lng,
-      dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
-      activeVehicleTypes: availableTypes,
-    });
-    return sendSuccess(reply, data);
+      const data = await estimateAllTypes({
+        pickupLat: lat, pickupLng: lng,
+        dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
+        activeVehicleTypes: availableTypes,
+      });
+      return sendSuccess(reply, data);
+    } catch (err) {
+      const status = err.statusCode || 400;
+      return sendError(reply, err.message || 'Failed to fetch available vehicles and fares', status);
+    }
   });
 
   // POST /api/v1/fare/quote
   app.post('/quote', async (request, reply) => {
-    const { pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId, promoCode } = request.body;
-    if (!pickupLat || !pickupLng || !dropLat || !dropLng || !vehicleTypeId) {
-      return sendError(reply, 'pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId are required');
+    try {
+      const { pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId, promoCode } = request.body || {};
+      if (!pickupLat || !pickupLng || !dropLat || !dropLng || !vehicleTypeId) {
+        return sendError(reply, 'pickupLat, pickupLng, dropLat, dropLng, vehicleTypeId are required');
+      }
+      const data = await createFareQuote({
+        pickupLat: parseFloat(pickupLat), pickupLng: parseFloat(pickupLng),
+        dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
+        vehicleTypeId,
+        promoCode,
+        userId: request.user?.id || null,
+      });
+      return sendSuccess(reply, data, 201);
+    } catch (err) {
+      const status = err.statusCode || 400;
+      return sendError(reply, err.message || 'Failed to create fare quote', status);
     }
-    const data = await createFareQuote({
-      pickupLat: parseFloat(pickupLat), pickupLng: parseFloat(pickupLng),
-      dropLat: parseFloat(dropLat), dropLng: parseFloat(dropLng),
-      vehicleTypeId,
-      promoCode,
-      userId: request.user?.id || null,
-    });
-    return sendSuccess(reply, data, 201);
   });
 
   // GET /api/v1/fare/quote/:id
   app.get('/quote/:id', async (request, reply) => {
-    const data = await getQuoteById(request.params.id);
-    return sendSuccess(reply, data);
+    try {
+      const data = await getQuoteById(request.params.id);
+      return sendSuccess(reply, data);
+    } catch (err) {
+      const status = err.statusCode || 404;
+      return sendError(reply, err.message || 'Fare quote not found', status);
+    }
   });
 
   // POST /api/v1/fare/recalculate (admin or system worker)
   app.post('/recalculate', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const { rideId, actualDistanceKm, actualDurationMin, waitingDurationMin, extraTollsMinor, parkingFeeMinor } = request.body;
-    if (!rideId) return sendError(reply, 'rideId is required');
-    const data = await recalculateTripFare({
-      rideId,
-      actualDistanceKm,
-      actualDurationMin,
-      waitingDurationMin,
-      extraTollsMinor,
-      parkingFeeMinor,
-    });
-    return sendSuccess(reply, data);
+    try {
+      const { rideId, actualDistanceKm, actualDurationMin, waitingDurationMin, extraTollsMinor, parkingFeeMinor } = request.body || {};
+      if (!rideId) return sendError(reply, 'rideId is required');
+      const data = await recalculateTripFare({
+        rideId,
+        actualDistanceKm,
+        actualDurationMin,
+        waitingDurationMin,
+        extraTollsMinor,
+        parkingFeeMinor,
+      });
+      return sendSuccess(reply, data);
+    } catch (err) {
+      const status = err.statusCode || 400;
+      return sendError(reply, err.message || 'Failed to recalculate fare', status);
+    }
   });
 
   // ── Pricing Plans CRUD (admin) ───────────────────────────────────────────
@@ -162,9 +192,19 @@ export async function fareRoutes(app) {
     return sendSuccess(reply, data, 201);
   });
 
+  app.patch('/plans/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await pricingPlansService.updatePricingPlan(request.params.id, request.body);
+    return sendSuccess(reply, data);
+  });
+
   app.post('/plans/:id/versions', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const data = await pricingPlansService.createPricingPlanVersion(request.params.id, request.body);
     return sendSuccess(reply, data, 201);
+  });
+
+  app.patch('/plans/:id/versions/:versionId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const data = await pricingPlansService.updatePricingPlanVersion(request.params.id, request.params.versionId, request.body);
+    return sendSuccess(reply, data);
   });
 
   // ── Airports & Airport Rules CRUD (admin) ────────────────────────────────
@@ -294,7 +334,14 @@ export async function fareRoutes(app) {
 
   app.get('/tax-rules', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const { page, limit, offset } = parsePagination(request.query);
-    const { rows, pagination } = await taxRulesService.listPaginated(page, limit, offset);
+    const filters = {
+      countryId: request.query.countryId,
+      stateId: request.query.stateId,
+      cityId: request.query.cityId,
+      appliesTo: request.query.appliesTo,
+      isActive: request.query.isActive !== undefined ? request.query.isActive === 'true' : undefined,
+    };
+    const { rows, pagination } = await taxRulesService.listPaginated(page, limit, offset, filters);
     return sendList(reply, rows, pagination);
   });
 

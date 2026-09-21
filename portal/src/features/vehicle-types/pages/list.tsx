@@ -28,6 +28,10 @@ const EMPTY_FORM: VehicleTypeFormValues = {
   capacity: "",
   sortOrder: "",
   isActive: true,
+  baseRate: "",
+  perKmRate: "",
+  perMinRate: "",
+  minFare: "",
 };
 
 export default function VehicleTypeList() {
@@ -82,6 +86,10 @@ export default function VehicleTypeList() {
       capacity: vt.capacity,
       sortOrder: vt.sortOrder,
       isActive: vt.isActive,
+      baseRate: (vt.baseRateMinor / 100).toFixed(2),
+      perKmRate: (vt.perKmRateMinor / 100).toFixed(2),
+      perMinRate: (vt.perMinRateMinor / 100).toFixed(2),
+      minFare: (vt.minFareMinor / 100).toFixed(2),
     });
     setFormErrors({});
     setIsFormOpen(true);
@@ -110,6 +118,10 @@ export default function VehicleTypeList() {
           name: result.data.name,
           capacity: result.data.capacity,
           sortOrder: result.data.sortOrder,
+          baseRateMinor: Math.round(Number(result.data.baseRate) * 100),
+          perKmRateMinor: Math.round(Number(result.data.perKmRate) * 100),
+          perMinRateMinor: Math.round(Number(result.data.perMinRate) * 100),
+          minFareMinor: Math.round(Number(result.data.minFare) * 100),
         },
         {
           onSuccess: () => {
@@ -120,10 +132,12 @@ export default function VehicleTypeList() {
       );
     } else if (selectedVehicleType) {
       const result = vehicleTypeEditSchema.safeParse({
-        name: formValues.name,
         capacity: formValues.capacity,
-        sortOrder: formValues.sortOrder,
         isActive: formValues.isActive,
+        baseRate: formValues.baseRate,
+        perKmRate: formValues.perKmRate,
+        perMinRate: formValues.perMinRate,
+        minFare: formValues.minFare,
       });
       if (!result.success) {
         const fieldErrors: Partial<Record<keyof VehicleTypeFormValues, string>> = {};
@@ -138,10 +152,12 @@ export default function VehicleTypeList() {
         {
           id: selectedVehicleType.id,
           payload: {
-            name: result.data.name,
             capacity: result.data.capacity,
-            sortOrder: result.data.sortOrder,
             isActive: result.data.isActive,
+            baseRateMinor: Math.round(Number(result.data.baseRate) * 100),
+            perKmRateMinor: Math.round(Number(result.data.perKmRate) * 100),
+            perMinRateMinor: Math.round(Number(result.data.perMinRate) * 100),
+            minFareMinor: Math.round(Number(result.data.minFare) * 100),
           },
         },
         {

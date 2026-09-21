@@ -40,13 +40,11 @@ export async function executeSurgeStage(context) {
     maxMultiplier,
   });
 
-  // 4. Zone / CityType baseline cost index (applies to ALL fares, not just surge)
-  //    e.g. Airport zone may have multiplier=1.20, Metro cityType.costIndex=1.10
+  // 4. Zone baseline multiplier (applies to ALL fares, not just surge)
+  //    e.g. Airport zone may have multiplier=1.20
   let baselineMultiplier = 1.0;
   if (pickupZone?.multiplier) {
     baselineMultiplier = parseFloat(pickupZone.multiplier);
-  } else if (context.cityType?.costIndex) {
-    baselineMultiplier = parseFloat(context.cityType.costIndex);
   }
 
   // 5. Compute dynamic surge amount (on rule-adjusted fare × baseline)

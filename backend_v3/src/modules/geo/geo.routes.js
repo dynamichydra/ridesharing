@@ -1,7 +1,6 @@
 import { sendSuccess, sendError, sendList, parsePagination } from '../../utils/response.js';
 import { authenticateAdmin } from '../../middleware/authenticate.js';
 import * as geoService from './geo.service.js';
-import * as cityTypeService from './city-type.service.js';
 import * as currencyService from './currency.service.js';
 
 export async function geoRoutes(app) {
@@ -25,51 +24,6 @@ export async function geoRoutes(app) {
 
   app.get('/states/:stateId/cities', async (request, reply) => {
     const data = await geoService.listCities(request.params.stateId, true);
-    return sendSuccess(reply, data);
-  });
-
-  app.get('/city-types', async (request, reply) => {
-    const data = await cityTypeService.listCityTypes(true);
-    return sendSuccess(reply, data);
-  });
-
-  // ── Admin — city types / tiers ───────────────────────────────────────────────
-
-  app.get('/admin/city-types', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const { page, limit, offset } = parsePagination(request.query);
-    const { rows, pagination } = await cityTypeService.listCityTypesPaginated(page, limit, offset, request.query.search);
-    return sendList(reply, rows, pagination);
-  });
-
-  app.get('/admin/city-types/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await cityTypeService.getCityTypeById(request.params.id);
-    return sendSuccess(reply, data);
-  });
-
-  app.post('/admin/city-types', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const { code, name } = request.body;
-    if (!code || !name) return sendError(reply, 'code and name are required');
-    const data = await cityTypeService.createCityType(request.body);
-    return sendSuccess(reply, data, 201);
-  });
-
-  app.post('/admin/city-types/seed-defaults', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await cityTypeService.seedDefaultCityTypesIfEmpty();
-    return sendSuccess(reply, data);
-  });
-
-  app.patch('/admin/city-types/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await cityTypeService.updateCityType(request.params.id, request.body);
-    return sendSuccess(reply, data);
-  });
-
-  app.patch('/admin/city-types/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await cityTypeService.setCityTypeActive(request.params.id, true);
-    return sendSuccess(reply, data);
-  });
-
-  app.patch('/admin/city-types/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await cityTypeService.setCityTypeActive(request.params.id, false);
     return sendSuccess(reply, data);
   });
 
@@ -142,7 +96,6 @@ export async function geoRoutes(app) {
     const filters = {
       countryId:  request.query.countryId,
       stateId:    request.query.stateId,
-      cityTypeId: request.query.cityTypeId,
       search:     request.query.search,
     };
     const { rows, pagination } = await geoService.listCitiesPaginated(filters, page, limit, offset);

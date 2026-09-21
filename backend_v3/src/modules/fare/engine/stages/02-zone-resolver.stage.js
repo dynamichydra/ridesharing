@@ -38,31 +38,12 @@ export async function executeZoneResolverStage(context) {
   const hexZones = await resolveHexZones(parseFloat(pickupLat), parseFloat(pickupLng));
   const hexZoneIds = new Set(hexZones.map((z) => z.id));
 
-  // 4. Resolve City & City Type / Tier if mapped
+  // 4. Resolve City if mapped
   const resolvedCityId = context.cityId || pickupZone?.cityId || null;
-  let cityTypeId = context.cityTypeId || null;
-  let cityDensity = 'medium';
-  let resolvedCityType = null;
-
-  if (resolvedCityId) {
-    try {
-      const cityData = await getCityById(resolvedCityId);
-      cityTypeId = cityData?.cityTypeId || cityData?.city?.cityTypeId || null;
-      resolvedCityType = cityData?.cityType || null;
-      if (resolvedCityType?.densityLevel) {
-        cityDensity = resolvedCityType.densityLevel;
-      }
-    } catch {
-      // Non-blocking fallback
-    }
-  }
 
   context.pickupZone = pickupZone;
   context.dropZone = dropZone;
   context.cityId = resolvedCityId;
-  context.cityTypeId = cityTypeId;
-  context.cityType = resolvedCityType;
-  context.cityDensity = cityDensity;
   context.country = country;
   context.currencyCode = country.currencyCode;
   context.hexZones = hexZones;

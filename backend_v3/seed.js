@@ -21,7 +21,6 @@ import {
   currencies,
   countries,
   states,
-  cityTypes,
   cities,
   languages,
   translations,
@@ -37,7 +36,6 @@ import {
   pricingPlans,
   pricingPlanVersions,
   pricingVersions,
-  pricingRules,
   airportPricingRules,
   nightPricingRules,
   peakPricingRules,
@@ -200,8 +198,8 @@ async function seed() {
   log.ok(`Currencies: INR (₹), CAD ($), USD ($)`);
   log.ok(`Languages: English (Default), Hindi, Bengali`);
 
-  // ── 3. Geography Hierarchy: Country → State → City Type → City ─────────────
-  log.section('3. Geography (Countries, States, City Types, Cities)');
+  // ── 3. Geography Hierarchy: Country → State → City ──────────────────────────
+  log.section('3. Geography (Countries, States, Cities)');
 
   const india = await findOrInsert(
     countries,
@@ -241,18 +239,12 @@ async function seed() {
     { countryId: canada.id, name: 'Ontario', code: 'ON', isActive: true }
   );
 
-  const tier1Metro = await findOrInsert(
-    cityTypes,
-    eq(cityTypes.code, 'TIER_1_METRO'),
-    { countryId: india.id, name: 'Tier 1 Metro', code: 'TIER_1_METRO', description: 'Major Metropolitan Urban Centers', isActive: true }
-  );
-
   const kolkata = await findOrInsert(
     cities,
     and(eq(cities.countryId, india.id), eq(cities.name, 'Kolkata')),
     {
       stateId: westBengal.id, countryId: india.id, name: 'Kolkata',
-      cityTypeId: tier1Metro.id, timezone: 'Asia/Kolkata', isActive: true, sortOrder: 1,
+      timezone: 'Asia/Kolkata', isActive: true, sortOrder: 1,
     }
   );
 
@@ -261,7 +253,7 @@ async function seed() {
     and(eq(cities.countryId, india.id), eq(cities.name, 'Mumbai')),
     {
       stateId: maharashtra.id, countryId: india.id, name: 'Mumbai',
-      cityTypeId: tier1Metro.id, timezone: 'Asia/Kolkata', isActive: true, sortOrder: 2,
+      timezone: 'Asia/Kolkata', isActive: true, sortOrder: 2,
     }
   );
 
@@ -789,8 +781,14 @@ async function seed() {
 
   await findOrInsert(
     taxRules,
+    and(eq(taxRules.cityId, kolkata.id), eq(taxRules.name, 'Kolkata Green Transport Cess (1%)')),
+    { countryId: india.id, stateId: westBengal.id, cityId: kolkata.id, name: 'Kolkata Green Transport Cess (1%)', appliesTo: 'fare', rate: '0.0100', isInclusive: false, isActive: true }
+  );
+
+  await findOrInsert(
+    taxRules,
     and(eq(taxRules.countryId, canada.id), eq(taxRules.name, 'Canada HST (13%)')),
-    { countryId: canada.id, name: 'Canada HST (13%)', appliesTo: 'both', rate: '0.1300', isInclusive: false, isActive: true }
+    { countryId: canada.id, stateId: ontario.id, name: 'Canada HST (13%)', appliesTo: 'both', rate: '0.1300', isInclusive: false, isActive: true }
   );
 
   // Tier 1: City + Vehicle Type Local Rule

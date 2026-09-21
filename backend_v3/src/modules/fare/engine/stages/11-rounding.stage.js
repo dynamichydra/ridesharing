@@ -141,6 +141,14 @@ export async function executeRoundingStage(context) {
     estimatedFareMinor: roundedFinalFareMinor,
     estimatedFare: fromMinor(roundedFinalFareMinor, currencyCode),
     currency: currencyCode,
+    currencySymbol: (() => {
+      try {
+        const parts = new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode }).formatToParts(0);
+        return parts.find((p) => p.type === 'currency')?.value || currencyCode;
+      } catch {
+        return currencyCode;
+      }
+    })(),
   };
 
   return context;

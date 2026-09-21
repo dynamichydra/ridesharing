@@ -1,6 +1,7 @@
 import { eq, and, or, ilike, asc, count } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { vehicleModels, vehicleTypes } from '../../../drizzle/schema/index.js';
+import { vehicleModels } from '../../../drizzle/schema/vehicle-models.js';
+import { vehicleTypes } from '../../../drizzle/schema/vehicle-types.js';
 import { paginate } from '../../utils/response.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 
@@ -30,7 +31,7 @@ export async function listAll(onlyActive = true, vehicleTypeId, search = null) {
       vehicleType: {
         id: vehicleTypes.id,
         name: vehicleTypes.name,
-        icon: vehicleTypes.icon,
+        code: vehicleTypes.code,
         capacity: vehicleTypes.capacity,
       },
     })
@@ -62,7 +63,7 @@ export async function listPaginated(page, limit, offset, vehicleTypeId, search =
       vehicleType: {
         id: vehicleTypes.id,
         name: vehicleTypes.name,
-        icon: vehicleTypes.icon,
+        code: vehicleTypes.code,
         capacity: vehicleTypes.capacity,
       },
     })
@@ -89,7 +90,7 @@ export async function getById(id) {
       vehicleType: {
         id: vehicleTypes.id,
         name: vehicleTypes.name,
-        icon: vehicleTypes.icon,
+        code: vehicleTypes.code,
         capacity: vehicleTypes.capacity,
       },
     })

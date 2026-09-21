@@ -10,6 +10,7 @@ export async function calculateAndSnapshotTax({
   referenceId,
   countryId = null,
   stateId = null,
+  cityId = null,
   taxableAmountMinor,
   currencyCode = 'INR',
 }) {
@@ -18,17 +19,33 @@ export async function calculateAndSnapshotTax({
   let taxRegion = 'standard';
   let taxBreakdown = { vat: 5.0 };
 
-  if (countryId) {
-    const [rule] = await db.select().from(taxRules)
+  // 1. Try city-specific rule
+  let rule = null;
+  if (cityId) {
+    [rule] = await db.select().from(taxRules)
+      .where(and(eq(taxRules.cityId, cityId), eq(taxRules.isActive, true)))
+      .limit(1);
+  }
+
+  // 2. Try state-specific rule
+  if (!rule && stateId) {
+    [rule] = await db.select().from(taxRules)
+      .where(and(eq(taxRules.stateId, stateId), eq(taxRules.isActive, true)))
+      .limit(1);
+  }
+
+  // 3. Try country-wide rule
+  if (!rule && countryId) {
+    [rule] = await db.select().from(taxRules)
       .where(and(eq(taxRules.countryId, countryId), eq(taxRules.isActive, true)))
       .limit(1);
+  }
 
-    if (rule) {
-      taxRate = rule.taxRate / 100;
-      taxRuleId = rule.id;
-      taxRegion = rule.name || 'standard';
-      taxBreakdown = { ratePercent: rule.taxRate };
-    }
+  if (rule) {
+    taxRate = parseFloat(rule.rate || 0.05);
+    taxRuleId = rule.id;
+    taxRegion = rule.name || 'standard';
+    taxBreakdown = { name: rule.name, rate: rule.rate, isInclusive: rule.isInclusive };
   }
 
   const taxAmountMinor = Math.round(taxableAmountMinor * taxRate);

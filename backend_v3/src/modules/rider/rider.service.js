@@ -153,7 +153,6 @@ export async function getRideHistory(riderId, page, limit, offset, status = null
     cancelledAt: rides.cancelledAt,
     vehicleTypeName: vehicleTypes.name,
     vehicleTypeSlug: vehicleTypes.slug,
-    vehicleTypeIcon: vehicleTypes.icon,
     driverName: drivers.name,
     driverPhone: drivers.phone,
     driverRating: drivers.rating,

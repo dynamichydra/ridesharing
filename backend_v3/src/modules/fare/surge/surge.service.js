@@ -30,7 +30,7 @@ export async function getDynamicSurge({
     }
 
     // 2. Query available drivers count via Redis geospatial index (e.g. drivers within 3 km)
-    let supply = 5;
+    let supply = 0;
     try {
       const geoResults = await redis.georadius(
         REDIS_KEYS.driversGeo,
@@ -45,12 +45,11 @@ export async function getDynamicSurge({
         supply = geoResults.length;
       }
     } catch (_) {
-      // If georadius fails or key empty, default supply
-      supply = 5;
+      supply = 0;
     }
 
     // 3. Query recent ride requests count in Redis (if tracked)
-    let demand = 3;
+    let demand = 0;
     try {
       const demandKey = zoneId ? `demand:zone:${zoneId}` : `demand:geo:${pickupLat.toFixed(2)}:${pickupLng.toFixed(2)}`;
       const cachedDemand = await redis.get(demandKey);

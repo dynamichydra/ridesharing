@@ -1,4 +1,4 @@
-import { eq, and, desc, count } from 'drizzle-orm';
+import { eq, and, desc, count, inArray } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import {
   pricingPlans,
@@ -18,7 +18,7 @@ export async function listPricingPlans(page, limit, offset, filters = {}) {
   const where = conditions.length ? and(...conditions) : undefined;
 
   const [{ total }] = await db.select({ total: count() }).from(pricingPlans).where(where);
-  const rows = await db
+  const rawRows = await db
     .select({
       plan:        pricingPlans,
       city:        cities,
@@ -32,6 +32,34 @@ export async function listPricingPlans(page, limit, offset, filters = {}) {
     .where(where)
     .orderBy(desc(pricingPlans.createdAt))
     .limit(limit).offset(offset);
+
+  const planIds = rawRows.map((r) => r.plan.id);
+  const versionsByPlanId = {};
+  if (planIds.length > 0) {
+    const allVersions = await db
+      .select()
+      .from(pricingPlanVersions)
+      .where(inArray(pricingPlanVersions.pricingPlanId, planIds))
+      .orderBy(desc(pricingPlanVersions.version));
+
+    for (const v of allVersions) {
+      if (!versionsByPlanId[v.pricingPlanId]) {
+        versionsByPlanId[v.pricingPlanId] = [];
+      }
+      versionsByPlanId[v.pricingPlanId].push(v);
+    }
+  }
+
+  const rows = rawRows.map((r) => {
+    const versions = versionsByPlanId[r.plan.id] || [];
+    const activeVersion = versions.find((v) => v.isActive) || versions[0] || null;
+    return {
+      ...r,
+      activeVersion,
+      versions,
+      versionCount: versions.length,
+    };
+  });
 
   return { rows, pagination: paginate(page, limit, total) };
 }
@@ -83,6 +111,13 @@ export async function createPricingPlan(data) {
   return plan;
 }
 
+export async function updatePricingPlan(id, data) {
+  data.updatedAt = new Date();
+  const [plan] = await db.update(pricingPlans).set(data).where(eq(pricingPlans.id, id)).returning();
+  if (!plan) throw { statusCode: 404, message: 'Pricing plan not found' };
+  return plan;
+}
+
 export async function createPricingPlanVersion(planId, data) {
   const [latest] = await db.select({ version: pricingPlanVersions.version })
     .from(pricingPlanVersions)
@@ -111,3 +146,12 @@ export async function createPricingPlanVersion(planId, data) {
 
   return version;
 }
+
+export async function updatePricingPlanVersion(planId, versionId, data) {
+  const [version] = await db.update(pricingPlanVersions).set(data)
+    .where(and(eq(pricingPlanVersions.pricingPlanId, planId), eq(pricingPlanVersions.id, versionId)))
+    .returning();
+  if (!version) throw { statusCode: 404, message: 'Pricing plan version not found' };
+  return version;
+}
+

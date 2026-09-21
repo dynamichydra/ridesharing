@@ -1,18 +1,20 @@
 import { useState } from "react";
-import { Globe, Landmark, Building2, Layers, Coins } from "lucide-react";
+import { Globe, Landmark, Building2, Layers, MapPin, Coins } from "lucide-react";
 import { cn } from "@/lib/utils";
 import CountriesTab from "./countries";
 import StatesTab from "./states";
 import CitiesTab from "./cities";
 import CityTypesTab from "./city-types";
+import ServiceAreasTab from "./service-areas";
 import CurrenciesTab from "./currencies";
 
 const TABS = [
   { key: "countries", label: "Countries", icon: Globe },
   { key: "currencies", label: "Currencies", icon: Coins },
   { key: "states", label: "States", icon: Landmark },
-  { key: "cities", label: "Cities (Service Areas)", icon: Building2 },
+  { key: "cities", label: "Cities", icon: Building2 },
   { key: "city-types", label: "City Types / Tiers", icon: Layers },
+  { key: "service-areas", label: "Service Areas", icon: MapPin },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -57,6 +59,7 @@ export default function GeoList() {
       {activeTab === "states" && <StatesTab />}
       {activeTab === "cities" && <CitiesTab />}
       {activeTab === "city-types" && <CityTypesTab />}
+      {activeTab === "service-areas" && <ServiceAreasTab />}
     </div>
   );
 }

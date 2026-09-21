@@ -12,7 +12,7 @@ export const fareQuotes = pgTable('fare_quotes', {
   id: uuid('id').primaryKey().defaultRandom(),
   quoteId: varchar('quote_id', { length: 100 }).notNull().unique(),
   userId: uuid('user_id').references(() => users.id),
-  cityId: uuid('city_id').references(() => cities.id).notNull(),
+  cityId: uuid('city_id').references(() => cities.id),
   pickupZoneId: uuid('pickup_zone_id').references(() => zones.id),
   destinationZoneId: uuid('destination_zone_id').references(() => zones.id),
   pickupAirportId: uuid('pickup_airport_id').references(() => airports.id),

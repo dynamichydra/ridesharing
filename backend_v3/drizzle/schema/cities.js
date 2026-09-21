@@ -1,13 +1,11 @@
 import { pgTable, uuid, varchar, boolean, timestamp, text, integer, jsonb, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { states } from './states.js';
 import { countries } from './countries.js';
-import { cityTypes } from './city-types.js';
 
 export const cities = pgTable('cities', {
   id: uuid('id').primaryKey().defaultRandom(),
   stateId: uuid('state_id').references(() => states.id),
   countryId: uuid('country_id').references(() => countries.id),
-  cityTypeId: uuid('city_type_id').references(() => cityTypes.id),
   name: varchar('name', { length: 100 }).notNull(),
   code: varchar('code', { length: 30 }),
   timezone: varchar('timezone', { length: 100 }).notNull().default('UTC'),

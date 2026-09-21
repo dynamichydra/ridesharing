@@ -17,7 +17,6 @@ const DriverDetail = lazy(() => import("@/features/drivers/pages/Detail"));
 const DriverRegisterWizard = lazy(() => import("@/features/drivers/pages/register-wizard"));
 const RideList = lazy(() => import("@/features/rides/pages"));
 const VehicleTypeList = lazy(() => import("@/features/vehicle-types/pages"));
-const PricingVersionList = lazy(() => import("@/features/pricing-versions/pages/list"));
 const VehicleModelList = lazy(() => import("@/features/vehicle-models/pages"));
 const ZoneList = lazy(() => import("@/features/zones/pages"));
 const GeoList = lazy(() => import("@/features/geo/pages"));
@@ -141,16 +140,6 @@ const router = createBrowserRouter([
           <ProtectedRoute allowedRoles={["super_admin"]}>
             <Suspense fallback={<Loader />}>
               <VehicleTypeList />
-            </Suspense>
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "pricing-versions",
-        element: (
-          <ProtectedRoute allowedRoles={["super_admin"]}>
-            <Suspense fallback={<Loader />}>
-              <PricingVersionList />
             </Suspense>
           </ProtectedRoute>
         ),

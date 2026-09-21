@@ -23,10 +23,16 @@ export async function createFareQuote(request) {
   const expiresAt = moment().add(QUOTE_VALIDITY_MINUTES, 'minutes').toDate();
   const quoteId = `FQ-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
 
+  let resolvedCityId = fareResult.cityId || null;
+  if (!resolvedCityId) {
+    const [defaultCity] = await db.select().from(cities).where(eq(cities.isActive, true)).limit(1);
+    resolvedCityId = defaultCity?.id || null;
+  }
+
   const [quote] = await db.insert(fareQuotes).values({
     quoteId,
     userId: request.userId || null,
-    cityId: fareResult.cityId || null,
+    cityId: resolvedCityId,
     pickupZoneId: fareResult.pickupZoneId || null,
     destinationZoneId: fareResult.destinationZoneId || null,
     pickupAirportId: fareResult.pickupAirportId || null,

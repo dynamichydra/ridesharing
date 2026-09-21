@@ -1,6 +1,6 @@
 import { eq, and, asc, count, ilike } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { countries, states, cities, cityTypes } from '../../../drizzle/schema/index.js';
+import { countries, states, cities } from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
 import { polygonToHexCells, DEFAULT_RESOLUTION } from '../../utils/h3.js';
 
@@ -123,64 +123,41 @@ export async function setStateActive(id, isActive) {
 export async function listCities(stateId, onlyActive = true) {
   const conditions = [eq(cities.stateId, stateId)];
   if (onlyActive) conditions.push(eq(cities.isActive, true));
-  const rows = await db
-    .select({
-      city: cities,
-      cityType: cityTypes,
-    })
+  return db
+    .select()
     .from(cities)
-    .leftJoin(cityTypes, eq(cities.cityTypeId, cityTypes.id))
     .where(and(...conditions))
     .orderBy(asc(cities.sortOrder));
-
-  return rows.map((r) => ({
-    ...r.city,
-    cityType: r.cityType || null,
-  }));
 }
 
 export async function listCitiesPaginated(filters, page, limit, offset) {
   const conditions = [];
   if (filters.countryId)  conditions.push(eq(cities.countryId, filters.countryId));
   if (filters.stateId)    conditions.push(eq(cities.stateId, filters.stateId));
-  if (filters.cityTypeId) conditions.push(eq(cities.cityTypeId, filters.cityTypeId));
   if (filters.search)     conditions.push(ilike(cities.name, `%${filters.search}%`));
   const where = conditions.length ? and(...conditions) : undefined;
 
   const [{ total }] = await db.select({ total: count() }).from(cities).where(where);
   const rows = await db
-    .select({
-      city: cities,
-      cityType: cityTypes,
-    })
+    .select()
     .from(cities)
-    .leftJoin(cityTypes, eq(cities.cityTypeId, cityTypes.id))
     .where(where)
     .orderBy(asc(cities.sortOrder), asc(cities.name))
     .limit(limit)
     .offset(offset);
 
-  const flattenedRows = rows.map((r) => ({
-    ...r.city,
-    cityType: r.cityType || null,
-  }));
-
-  return { rows: flattenedRows, pagination: paginate(page, limit, total) };
+  return { rows, pagination: paginate(page, limit, total) };
 }
 
 export async function getCityById(id) {
-  const [row] = await db
-    .select({
-      city: cities,
-      cityType: cityTypes,
-    })
+  const [city] = await db
+    .select()
     .from(cities)
-    .leftJoin(cityTypes, eq(cities.cityTypeId, cityTypes.id))
     .where(eq(cities.id, id))
     .limit(1);
 
-  if (!row) throw { statusCode: 404, message: 'City not found' };
-  return { ...row.city, cityType: row.cityType || null };
+  if (!city) throw { statusCode: 404, message: 'City not found' };
+  return city;
 }
 
 export async function createCity(data, adminId) {

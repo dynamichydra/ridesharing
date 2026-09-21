@@ -1,0 +1,347 @@
+export type FareRuleType = "time" | "traffic" | "zone";
+
+// Matches the detailed Fare Rules frontend spec's field breakdown exactly.
+// NOTE: this drops `description` and `sortOrder` from the previous version of
+// this feature — the new spec's Common/Time/Traffic/Zone field lists don't
+// mention either, so they're treated as no longer backend-supported. Flag if
+// that's wrong and the backend still accepts them.
+export interface FareRule {
+  id: string;
+  name: string;
+  countryId: string;
+  ruleType: FareRuleType;
+  multiplier: string;
+  flatFareMinor?: number | null;
+  priority: number;
+  vehicleTypeId: string;
+  // Zone-rule field (also present in the "Common Fields" list, but only ever
+  // populated when ruleType === "zone" per the per-type field breakdown)
+  zoneId: string | null;
+  // Time-rule fields
+  startTime: string | null; // e.g. "22:00"
+  endTime: string | null; // e.g. "06:00"
+  daysOfWeek: number[] | null; // 0 (Sun) – 6 (Sat)
+  // Traffic-rule field
+  trafficDelayS: number | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface FareRuleListParams {
+  page?: number;
+  limit?: number;
+  ruleType?: FareRuleType | "";
+  isActive?: boolean;
+  countryId?: string;
+}
+
+// Real runtime shape (confirmed via Network tab) — currentPage/itemsPerPage/
+// totalItems/totalPages — matches the API doc. Consumed directly from
+// data?.PAGINATION in list.tsx, no remapping in api.ts.
+export interface Pagination {
+  currentPage: number;
+  itemsPerPage: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+interface FareRuleBasePayload {
+  name: string;
+  countryId: string;
+  ruleType: FareRuleType;
+  multiplier: number;
+  priority: number;
+  vehicleTypeId: string;
+}
+
+export interface TimeFareRulePayload extends FareRuleBasePayload {
+  ruleType: "time";
+  startTime: string;
+  endTime: string;
+  daysOfWeek: number[];
+}
+
+export interface TrafficFareRulePayload extends FareRuleBasePayload {
+  ruleType: "traffic";
+  trafficDelayS: number;
+}
+
+export interface ZoneFareRulePayload extends FareRuleBasePayload {
+  ruleType: "zone";
+  zoneId: string;
+}
+
+// The frontend only ever submits the fields required by the selected rule
+// type — never all of them at once.
+export type FareRulePayload = TimeFareRulePayload | TrafficFareRulePayload | ZoneFareRulePayload;
+
+export type UpdateFareRulePayload = Partial<FareRuleBasePayload> &
+  Partial<{
+    startTime: string;
+    endTime: string;
+    daysOfWeek: number[];
+    trafficDelayS: number;
+    zoneId: string;
+    isActive: boolean;
+  }>;
+
+// Minimal option shape for the Country / Vehicle Type / Zone dropdowns.
+export interface LookupOption {
+  id: string;
+  name: string;
+}
+
+// ── Tax Rules (same backend module, /fare/tax-rules) ─────────────────────
+
+export type TaxAppliesTo = "fare" | "subscription" | "both";
+
+export interface TaxRule {
+  id: string;
+  countryId: string;
+  stateId: string | null;
+  cityId: string | null; // null = applies to the whole state / country
+  countryName?: string | null;
+  stateName?: string | null;
+  cityName?: string | null;
+  name: string; // e.g. "GST", "HST", "PST", "City Transport Cess"
+  appliesTo: TaxAppliesTo;
+  rate: string; // decimal string, e.g. "0.1300" = 13%
+  isInclusive: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaxRuleListParams {
+  page?: number;
+  limit?: number;
+  countryId?: string;
+  stateId?: string;
+  cityId?: string;
+  appliesTo?: TaxAppliesTo;
+  isActive?: boolean | string;
+}
+
+export interface TaxRulePayload {
+  countryId: string;
+  stateId?: string | null;
+  cityId?: string | null;
+  name: string;
+  appliesTo: TaxAppliesTo;
+  rate: number;
+  isInclusive?: boolean;
+}
+
+export type UpdateTaxRulePayload = Partial<TaxRulePayload> & { isActive?: boolean };
+
+// ── Commission Rules (same backend module family, /commission-rules) ─────
+// Per-ride platform cut — a booking fee off the top plus a %, with a separate rate for
+// drivers with an active subscription vs without one (subscription is a discount on the
+export type CommissionBase = "gross_fare" | "fare_after_booking_fee" | "driver_fare" | "net_fare";
+
+export interface CommissionRule {
+  id: string;
+  name: string;
+  version?: number;
+  countryId: string | null; // null = global default
+  cityId?: string | null; // null = all cities in country / global
+  vehicleTypeId: string | null; // null = all vehicle types
+  planTierId?: string | null;
+  bookingFeeMinor: number;
+  platformFeeMinor?: number;
+  subscriberRate: string; // decimal string, e.g. "0.1500" = 15%
+  nonSubscriberRate: string;
+  commissionBase?: CommissionBase;
+  minCommissionMinor?: number | null; // floor limit
+  maxCommissionMinor?: number | null; // ceiling cap
+  priority: number;
+  effectiveFrom?: string;
+  effectiveTo?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  city?: LookupOption | null;
+  country?: LookupOption | null;
+  vehicleType?: LookupOption | null;
+}
+
+export interface CommissionRuleListParams {
+  page?: number;
+  limit?: number;
+  countryId?: string;
+  cityId?: string;
+  vehicleTypeId?: string;
+  isActive?: boolean;
+}
+
+export interface CommissionRulePayload {
+  name: string;
+  countryId?: string;
+  cityId?: string;
+  vehicleTypeId?: string;
+  planTierId?: string;
+  bookingFeeMinor: number;
+  platformFeeMinor?: number;
+  subscriberRate: number;
+  nonSubscriberRate: number;
+  commissionBase?: CommissionBase;
+  minCommissionMinor?: number;
+  maxCommissionMinor?: number | null;
+  priority?: number;
+  effectiveFrom?: string;
+  effectiveTo?: string | null;
+}
+
+export type UpdateCommissionRulePayload = Partial<CommissionRulePayload> & { isActive?: boolean };
+
+// ── Pricing Plans & Versions (Core Rate Engine) ───────────────────────────
+
+export interface PricingPlanVersion {
+  id: string;
+  pricingPlanId: string;
+  version: number;
+  baseFare: number; // minor units (paise/cents)
+  minimumFare: number;
+  distanceRate: number; // per km in minor units
+  timeRate: number; // per min in minor units
+  bookingFee: number;
+  platformFee: number;
+  freeWaitingMinutes: number;
+  waitingRate: number; // per min in minor units
+  cancellationFee: number;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface PricingPlan {
+  id: string;
+  cityId: string;
+  zoneId?: string | null;
+  vehicleTypeId: string;
+  scope: "city" | "zone";
+  name: string;
+  currencyCode: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EnrichedPricingPlan {
+  plan: PricingPlan;
+  city?: LookupOption | null;
+  zone?: LookupOption | null;
+  vehicleType?: LookupOption | null;
+  activeVersion?: PricingPlanVersion | null;
+  versions?: PricingPlanVersion[];
+  versionCount?: number;
+}
+
+export interface CreatePricingPlanPayload {
+  name: string;
+  cityId: string;
+  zoneId?: string | null;
+  vehicleTypeId: string;
+  scope?: "city" | "zone";
+  currencyCode?: string;
+  isActive?: boolean;
+  initialVersion?: {
+    baseFare: number;
+    minimumFare: number;
+    distanceRate: number;
+    timeRate: number;
+    bookingFee?: number;
+    platformFee?: number;
+    freeWaitingMinutes?: number;
+    waitingRate?: number;
+    cancellationFee?: number;
+    effectiveFrom?: string;
+    effectiveTo?: string | null;
+  };
+}
+
+export interface CreatePlanVersionPayload {
+  baseFare: number;
+  minimumFare: number;
+  distanceRate: number;
+  timeRate: number;
+  bookingFee?: number;
+  platformFee?: number;
+  freeWaitingMinutes?: number;
+  waitingRate?: number;
+  cancellationFee?: number;
+  effectiveFrom?: string;
+  effectiveTo?: string | null;
+  isActive?: boolean;
+}
+
+// ── Night, Peak, Surge, Toll, Airport Rules ───────────────────────────────
+
+export interface NightPricingRule {
+  id: string;
+  pricingPlanId?: string;
+  vehicleTypeId?: string;
+  startTime: string;
+  endTime: string;
+  valueType: "multiplier" | "flat";
+  value: string;
+  isActive: boolean;
+}
+
+export interface PeakPricingRule {
+  id: string;
+  pricingPlanId?: string;
+  vehicleTypeId?: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  daysOfWeek?: number[];
+  valueType: "multiplier" | "flat";
+  value: string;
+  isActive: boolean;
+}
+
+export interface SurgeRule {
+  id: string;
+  cityId: string;
+  zoneId?: string | null;
+  vehicleTypeId?: string | null;
+  minRatio: string;
+  maxRatio?: string | null;
+  multiplier: string;
+  isActive: boolean;
+}
+
+export interface TollRule {
+  id: string;
+  cityId: string;
+  name: string;
+  amount: number;
+  direction: "inbound" | "outbound" | "both";
+  isActive: boolean;
+}
+
+export interface Airport {
+  id: string;
+  cityId: string;
+  zoneId?: string | null;
+  code: string;
+  name: string;
+  latitude: string;
+  longitude: string;
+  isActive: boolean;
+}
+
+export interface AirportPricingRule {
+  id: string;
+  airportId: string;
+  vehicleTypeId?: string | null;
+  direction: "pickup" | "dropoff" | "both";
+  valueType: "multiplier" | "flat";
+  value: string;
+  isActive: boolean;
+}
+
+
+

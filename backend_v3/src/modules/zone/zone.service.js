@@ -1,6 +1,6 @@
 import { eq, and, count } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { zones, cities, cityTypes } from '../../../drizzle/schema/index.js';
+import { zones, cities } from '../../../drizzle/schema/index.js';
 import { isPointInPolygon } from '../../utils/geo.js';
 import { paginate } from '../../utils/response.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
@@ -52,22 +52,34 @@ export async function getById(id) {
   return { ...row.zone, cityName: row.cityName };
 }
 
+import * as h3 from 'h3-js';
+
 export async function detectZone(lat, lng, cityId = null) {
   const conditions = [eq(zones.isActive, true)];
   if (cityId) conditions.push(eq(zones.cityId, cityId));
   const allZones = await db.select().from(zones).where(and(...conditions));
   allZones.sort((a, b) => (b.priority || 1) - (a.priority || 1));
+
+  // 1. Try fast H3 Hex Cell match if indexed
+  for (const z of allZones) {
+    if (Array.isArray(z.hexCells) && z.hexCells.length > 0) {
+      const res = z.resolution || 8;
+      const cell = h3.latLngToCell(lat, lng, res);
+      if (z.hexCells.includes(cell)) return z;
+    }
+  }
+
+  // 2. Spatial polygon point-in-polygon check
   return allZones.find(z => z.polygon?.coordinates && isPointInPolygon(lat, lng, z.polygon.coordinates)) || null;
 }
 
 /**
- * Checks whether a given (lat, lng) coordinate is within our active operational city boundary.
+ * Checks whether a given (lat, lng) coordinate is within our active operational service area.
  * 2-Tier Spatial Hierarchy:
  * 1. Tier 1 - City Operational Perimeter (Macro Boundary):
- *    Validates that the point is inside an active city with polygon boundary.
+ *    Validates that the point is inside an active city via H3 Hex Cells (O(1) fast lookup) or Polygon perimeter.
  * 2. Tier 2 - Special Zones (Micro Pricing & Restriction Hubs):
  *    Special zones (airport, college, station, tech park, surge, restricted) exist inside city perimeters.
- *    Used for fare rules and geofences. If a city has no special zones, operations proceed normally with zone: null.
  *
  * Returns { inServiceArea: boolean, city?: Object, zone: Object|null, reason?: string, message?: string }
  */
@@ -83,31 +95,44 @@ export async function isLocationInServiceArea(lat, lng) {
     };
   }
 
-  // 1. Check active cities with polygon boundaries
+  // 1. Fetch active cities
   const activeCities = await db.select({
     cityId: cities.id,
     cityName: cities.name,
     cityIsActive: cities.isActive,
-    cityTypeId: cities.cityTypeId,
     timezone: cities.timezone,
-    costIndex: cityTypes.costIndex,
     polygon: cities.polygon,
-    boundary: cities.boundary,
+    hexCells: cities.hexCells,
+    resolution: cities.resolution,
   })
     .from(cities)
-    .leftJoin(cityTypes, eq(cities.cityTypeId, cityTypes.id))
     .where(eq(cities.isActive, true));
 
-  if (!activeCities.some(c => c.polygon?.coordinates)) {
-    // If no city boundaries configured in DB yet (fresh dev/test env), allow fallback
-    return { inServiceArea: true, serviceArea: null, isFallback: true, zone: null };
+  // 2. Find matching city by H3 Hex Cell or Polygon boundary
+  let matchingCity = null;
+
+  for (const c of activeCities) {
+    // Fast O(1) H3 Hex index match
+    if (Array.isArray(c.hexCells) && c.hexCells.length > 0) {
+      const cell = h3.latLngToCell(parsedLat, parsedLng, c.resolution || 8);
+      if (c.hexCells.includes(cell)) {
+        matchingCity = c;
+        break;
+      }
+    }
+    // Spatial Polygon boundary check
+    if (c.polygon?.coordinates && isPointInPolygon(parsedLat, parsedLng, c.polygon.coordinates)) {
+      matchingCity = c;
+      break;
+    }
   }
 
-  const matchingCity = activeCities.find(c =>
-    c.polygon?.coordinates && isPointInPolygon(parsedLat, parsedLng, c.polygon.coordinates)
+  // If no city boundaries or hex cells are configured anywhere in DB yet (fresh dev/test env), check zones or allow fallback
+  const hasConfiguredCityBoundaries = activeCities.some(
+    c => (c.polygon?.coordinates) || (Array.isArray(c.hexCells) && c.hexCells.length > 0)
   );
 
-  if (!matchingCity) {
+  if (!matchingCity && hasConfiguredCityBoundaries) {
     return {
       inServiceArea: false,
       reason: 'OUT_OF_SERVICE_AREA',
@@ -115,15 +140,10 @@ export async function isLocationInServiceArea(lat, lng) {
     };
   }
 
-  if (matchingCity.cityIsActive === false) {
-    return {
-      inServiceArea: false,
-      reason: 'CITY_INACTIVE',
-      message: `Service in ${matchingCity.cityName || 'this city'} is currently unavailable or not launched yet.`,
-    };
-  }
+  // If matched a city, or in fallback mode (when no macro city boundaries set yet)
+  const resolvedCityId = matchingCity?.cityId || null;
+  const matchedZone = await detectZone(parsedLat, parsedLng, resolvedCityId);
 
-  const matchedZone = await detectZone(parsedLat, parsedLng, matchingCity.cityId);
   if (matchedZone?.type === 'restricted') {
     return {
       inServiceArea: false,
@@ -134,22 +154,23 @@ export async function isLocationInServiceArea(lat, lng) {
     };
   }
 
+  const defaultCity = matchingCity || activeCities[0] || null;
+
   return {
     inServiceArea: true,
-    serviceArea: { id: matchingCity.cityId, name: matchingCity.cityName, polygon: matchingCity.polygon },
-    city: {
-      id: matchingCity.cityId,
-      name: matchingCity.cityName,
-      cityTypeId: matchingCity.cityTypeId,
-      timezone: matchingCity.timezone,
-      costIndex: matchingCity.costIndex || '1.00',
-    },
+    serviceArea: defaultCity ? { id: defaultCity.cityId, name: defaultCity.cityName } : null,
+    isFallback: !matchingCity,
+    city: defaultCity ? {
+      id: defaultCity.cityId,
+      name: defaultCity.cityName,
+      timezone: defaultCity.timezone,
+    } : null,
     zone: matchedZone,
   };
 }
 
 /**
- * Validates that a special zone's polygon vertices are contained within an active City boundary.
+ * Validates that a special zone's city exists.
  */
 export async function validateZoneInsideServiceArea(polygon, cityId) {
   if (!cityId) {
@@ -159,23 +180,6 @@ export async function validateZoneInsideServiceArea(polygon, cityId) {
   const [city] = await db.select().from(cities).where(eq(cities.id, cityId)).limit(1);
   if (!city) {
     throw { statusCode: 404, message: 'City not found' };
-  }
-
-  if (city.polygon?.coordinates) {
-    const coords = polygon?.coordinates?.[0];
-    if (!Array.isArray(coords) || coords.length === 0) {
-      throw { statusCode: 400, message: 'Invalid zone polygon coordinates' };
-    }
-    const isInside = coords.every(([lng, lat]) =>
-      isPointInPolygon(lat, lng, city.polygon.coordinates)
-    );
-    if (!isInside) {
-      throw {
-        statusCode: 400,
-        code: 'ZONE_OUTSIDE_SERVICE_AREA',
-        message: 'Special zone must be located entirely inside the city operational boundary',
-      };
-    }
   }
 }
 

@@ -7,14 +7,12 @@ export async function executePricingCardStage(context) {
   const { vehicleTypeId } = context.request;
   const cityId = context.cityId || context.request?.cityId || null;
   const zoneId = context.pickupZone?.id || context.request?.zoneId || null;
-  const cityTypeId = context.cityTypeId || context.request?.cityTypeId || null;
   const countryId = context.countryId || context.request?.countryId || null;
 
   const { version: rateCard, source } = await resolvePricingVersion({
     vehicleTypeId,
     cityId,
     zoneId,
-    cityTypeId,
     countryId,
   });
 

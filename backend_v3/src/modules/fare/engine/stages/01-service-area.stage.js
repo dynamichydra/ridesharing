@@ -20,8 +20,6 @@ export async function executeServiceAreaStage(context) {
   context.countryId = pickupAreaCheck.serviceArea?.countryId || context.request.countryId || null;
   context.timezone = pickupAreaCheck.city?.timezone || null;
   context.pickupZone = pickupAreaCheck.zone || null;
-  context.cityTypeId = pickupAreaCheck.city?.cityTypeId || null;
-  context.costIndex = pickupAreaCheck.city?.costIndex || '1.00';
 
   return context;
 }

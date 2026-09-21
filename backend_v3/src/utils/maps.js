@@ -95,14 +95,18 @@ export async function getRouteData(originLat, originLng, destLat, destLng) {
     // Dev fallback — straight-line estimate
     const distanceKm = haversineKm(originLat, originLng, destLat, destLng);
     const durationMin = Math.ceil((distanceKm / 25) * 60); // 25 km/h avg city speed
+    const fallbackPath = [{ lat: originLat, lng: originLng }, { lat: destLat, lng: destLng }];
     return {
       distanceKm,
       durationMin,
       durationInTrafficMin: durationMin,
       trafficDelayS: 0,
-      polyline: null,
-      decodedPath: [{ lat: originLat, lng: originLng }, { lat: destLat, lng: destLng }],
-      bounds: null,
+      polyline: encodePolyline(fallbackPath),
+      decodedPath: fallbackPath,
+      bounds: {
+        northeast: { lat: Math.max(originLat, destLat), lng: Math.max(originLng, destLng) },
+        southwest: { lat: Math.min(originLat, destLat), lng: Math.min(originLng, destLng) },
+      },
     };
   }
 
@@ -127,14 +131,14 @@ export async function getRouteData(originLat, originLng, destLat, destLng) {
     ? Math.max(0, element.duration_in_traffic.value - element.duration.value)
     : 0;
 
-  const polyline = route?.overview_polyline?.points ?? null;
-  const decodedPath = polyline ? decodePolyline(polyline) : [
-    { lat: originLat, lng: originLng }, { lat: destLat, lng: destLng },
-  ];
+  const fallbackPath = [{ lat: originLat, lng: originLng }, { lat: destLat, lng: destLng }];
+  const polyline = route?.overview_polyline?.points || encodePolyline(fallbackPath);
+  const decodedPath = route?.overview_polyline?.points ? decodePolyline(polyline) : fallbackPath;
   const bounds = route?.bounds ?? null;
 
   return { distanceKm, durationMin, durationInTrafficMin, trafficDelayS, polyline, decodedPath, bounds };
 }
+
 
 /**
  * Real, traffic-aware ETA to multiple candidate drivers in a SINGLE Distance
@@ -197,6 +201,43 @@ export async function getEtaMatrix(originLat, originLng, destinations) {
       return { etaMin: Math.ceil((distanceKm / 25) * 60), distanceKm, degraded: true };
     });
   }
+}
+
+/**
+ * Encode an array of {lat, lng} objects into a Google Maps encoded polyline.
+ * Pure JS — no API call needed.
+ */
+export function encodePolyline(points) {
+  if (!points || !points.length) return '';
+  let encoded = '';
+  let prevLat = 0;
+  let prevLng = 0;
+
+  for (const point of points) {
+    const lat = Math.round(point.lat * 1e5);
+    const lng = Math.round(point.lng * 1e5);
+
+    const dLat = lat - prevLat;
+    const dLng = lng - prevLng;
+
+    prevLat = lat;
+    prevLng = lng;
+
+    encoded += _encodeValue(dLat) + _encodeValue(dLng);
+  }
+
+  return encoded;
+}
+
+function _encodeValue(num) {
+  let sgn_num = num < 0 ? ~(num << 1) : (num << 1);
+  let encodeString = '';
+  while (sgn_num >= 0x20) {
+    encodeString += String.fromCharCode((0x20 | (sgn_num & 0x1f)) + 63);
+    sgn_num >>= 5;
+  }
+  encodeString += String.fromCharCode(sgn_num + 63);
+  return encodeString;
 }
 
 /**

@@ -1,0 +1,23 @@
+/* Theme-adapts CKEditor's chrome to the app's shadcn CSS variables (see src/index.css) —
+   CKEditor ships its own light-only styling by default, this keeps it consistent in dark mode. */
+.rich-text-editor .ck.ck-editor__main > .ck-editor__editable {
+  min-height: 180px;
+  background: var(--background);
+  color: var(--foreground);
+  border-color: var(--border) !important;
+}
+
+.rich-text-editor .ck.ck-toolbar {
+  background: var(--card);
+  border-color: var(--border) !important;
+}
+
+.rich-text-editor .ck.ck-button,
+.rich-text-editor .ck.ck-dropdown__button {
+  color: var(--foreground);
+}
+
+.rich-text-editor .ck.ck-editor__editable.ck-focused {
+  border-color: var(--primary) !important;
+  box-shadow: none !important;
+}

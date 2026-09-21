@@ -13,10 +13,12 @@ export interface Zone {
   cityId: string;
   cityName?: string | null;
   name: string;
-  code?: string;
   type: string;
-  boundary?: string;
   polygon: GeoJSONPolygon;
+  multiplier: number;
+  airportFeeMinor?: number;
+  pickupFeeMinor?: number;
+  dropoffFeeMinor?: number;
   description: string | null;
   isActive: boolean;
   hexCells: string[] | null;
@@ -42,12 +44,14 @@ export interface Pagination {
 
 export interface ZonePayload {
   name: string;
-  code?: string;
   countryId: string;
   cityId: string;
   type: string;
-  boundary?: string;
   polygon: GeoJSONPolygon;
+  multiplier?: number;
+  airportFeeMinor?: number;
+  pickupFeeMinor?: number;
+  dropoffFeeMinor?: number;
   description?: string;
   // H3 hex-cell resolution (8-10) — when set on create/update, the backend derives
   // hexCells from `polygon` immediately. Omit to leave hex indexing untouched.
@@ -72,4 +76,4 @@ export interface Country {
   currencyCode: string;
 }
 
-export type { City } from "@/features/geo/types";
+export type { City, CityServiceArea } from "@/features/geo/types";

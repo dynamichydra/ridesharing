@@ -25,9 +25,13 @@ export async function executeTaxesStage(context) {
       rate: rateDecimal,
       isInclusive: false,
     }];
-  } else if (country?.id) {
-    // Fallback to tax_rules table (country/state level rules)
-    taxRulesList = await getApplicableTaxRules(country.id, 'fare');
+  } else if (country?.id || context.cityId) {
+    const countryId = country?.id || context.countryId;
+    const cityId = context.cityId || null;
+    const stateId = context.stateId || null;
+
+    // Fallback to tax_rules table (city/state/country level rules)
+    taxRulesList = await getApplicableTaxRules(countryId, 'fare', { stateId, cityId });
 
     const exclusiveRate = taxRulesList
       .filter((r) => !r.isInclusive)

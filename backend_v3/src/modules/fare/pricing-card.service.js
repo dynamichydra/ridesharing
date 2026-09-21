@@ -13,7 +13,6 @@ export async function resolvePricingVersion({
   vehicleTypeId,
   cityId = null,
   zoneId = null,
-  cityTypeId = null,
   countryId = null,
 }) {
   if (!vehicleTypeId) throw { statusCode: 400, message: 'vehicleTypeId is required to resolve a pricing version' };
@@ -118,18 +117,10 @@ export async function resolvePricingVersion({
     if (res) return res;
   }
 
-  // 4. Any active rate card fallback
-  const [anyActive] = await db.select().from(pricingVersions)
-    .where(and(eq(pricingVersions.isActive, true), eq(pricingVersions.vehicleTypeId, vehicleTypeId)))
-    .orderBy(desc(pricingVersions.version), desc(pricingVersions.createdAt))
-    .limit(1);
-
-  if (anyActive) {
-    return { version: anyActive, source: 'vehicle_type_fallback' };
-  }
-
+  // If no pricing plan is configured for this specific city/zone and vehicle type, do not fall back to unrelated demo data
   throw {
     statusCode: 422,
-    message: `No active pricing plan configured for vehicleTypeId='${vehicleTypeId}'. Please create a pricing plan in the admin portal.`,
+    message: `No active pricing plan configured for vehicleTypeId='${vehicleTypeId}' in cityId='${cityId || 'unspecified'}'.`,
   };
 }
+

@@ -1447,7 +1447,6 @@ export async function getRideById(rideId) {
     riderAvatar: users.avatar,
     riderRatingAverage: users.rating,
     vehicleTypeName: vehicleTypes.name,
-    vehicleTypeIcon: vehicleTypes.icon,
   })
     .from(rides)
     .leftJoin(users, eq(rides.riderId, users.id))
@@ -1595,7 +1594,6 @@ export async function getDriverRideHistory(driverId, { page = 1, limit = 20, off
     riderAvatar: users.avatar,
     riderRatingAverage: users.rating,
     vehicleTypeName: vehicleTypes.name,
-    vehicleTypeIcon: vehicleTypes.icon,
   })
     .from(rides)
     .leftJoin(users, eq(rides.riderId, users.id))

@@ -12,8 +12,7 @@ import { Button } from "@/components/ui/button";
 import { citySchema, emptyCityFormValues, type CityFormValues } from "../schema";
 import { CityForm } from "./city-form";
 import { useCreateCity, useUpdateCity, useStates, useCityTypeOptions } from "../hooks";
-import { parseGeoJSONPolygonInput } from "../utils";
-import type { City, Country, CityType, CreateCityPayload } from "../types";
+import type { City, Country, CityType } from "../types";
 
 interface CityFormDialogProps {
   open: boolean;
@@ -55,19 +54,13 @@ export function CityFormDialog({
             stateId: city.stateId,
             cityTypeId: city.cityTypeId || "",
             name: city.name,
-            code: city.code || city.name.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10),
-            currencyCode: city.currencyCode || "INR",
-            timezone: city.timezone || "UTC",
-            polygon: city.polygon ? JSON.stringify(city.polygon, null, 2) : "",
-            resolution: city.resolution != null ? String(city.resolution) : "8",
-            sortOrder: String(city.sortOrder ?? 0),
-            isActive: city.isActive !== undefined ? city.isActive : true,
+            timezone: city.timezone || "",
+            sortOrder: String(city.sortOrder),
           }
         : {
             ...emptyCityFormValues,
             countryId: defaultCountryId || "",
             stateId: defaultStateId || "",
-            isActive: true,
           },
     );
   }, [open, city, defaultCountryId, defaultStateId, form]);
@@ -80,27 +73,13 @@ export function CityFormDialog({
   const states = selectedCountryId ? statesData?.MESSAGE ?? [] : [];
 
   const onSubmit = form.handleSubmit((values) => {
-    let polygon = undefined;
-    if (values.polygon && values.polygon.trim()) {
-      const parsed = parseGeoJSONPolygonInput(values.polygon);
-      if (parsed.polygon) {
-        polygon = parsed.polygon;
-      }
-    }
-
-    const payload: CreateCityPayload = {
+    const payload = {
       stateId: values.stateId,
       countryId: values.countryId,
       cityTypeId: values.cityTypeId || null,
       name: values.name,
-      code: values.code,
-      currencyCode: values.currencyCode || "INR",
       timezone: values.timezone || undefined,
-      polygon,
-      boundary: values.polygon || undefined,
-      resolution: values.resolution ? parseInt(values.resolution, 10) : 8,
       sortOrder: Number(values.sortOrder),
-      isActive: values.isActive,
     };
 
     if (city) {
@@ -112,13 +91,13 @@ export function CityFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{city ? "Edit Operational City" : "Add Operational City"}</DialogTitle>
+          <DialogTitle>{city ? "Edit City" : "Add City"}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form onSubmit={onSubmit}>
           <CityForm form={form} countries={countries} states={states} cityTypes={cityTypes} />
-          <DialogFooter className="pt-2">
+          <DialogFooter className="pt-4">
             <Button
               type="button"
               variant="outline"
@@ -129,7 +108,7 @@ export function CityFormDialog({
             </Button>
             <Button
               type="submit"
-              className="bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer"
+              className="bg-primary hover:bg-primary/90 text-white cursor-pointer"
               disabled={isPending}
             >
               {city ? "Save Changes" : "Create City"}
@@ -140,3 +119,4 @@ export function CityFormDialog({
     </Dialog>
   );
 }
+
