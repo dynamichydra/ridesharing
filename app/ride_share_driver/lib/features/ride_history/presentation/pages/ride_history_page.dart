@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/utils/currency_helper.dart';
 import '../../../../injection_container.dart' as di;
 import '../../../../presentation/screens/dashboard/driver_main_layout.dart';
 import '../../../../common/widgets/app_date_picker.dart';
@@ -8,6 +9,7 @@ import '../bloc/ride_history_bloc.dart';
 import '../../../ride/presentation/widgets/ride_receipt_sheet.dart';
 import '../../../ride/presentation/widgets/report_lost_item_dialog.dart';
 import '../../../disputes/presentation/widgets/raise_dispute_dialog.dart';
+import '../../../profile/presentation/bloc/profile_bloc.dart';
 
 class RideHistoryPage extends StatefulWidget {
   const RideHistoryPage({super.key});
@@ -832,6 +834,19 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
     final status = (ride['status']?.toString() ?? 'completed').toLowerCase();
     final isCancelled = status == 'cancelled' || ride['isCancelled'] == true;
     final fare = (ride['fare'] as num?)?.toDouble() ?? 0.0;
+    final currencyCode = ride['currencyCode']?.toString() ?? ride['currency_code']?.toString() ?? ride['currency']?.toString() ?? 'INR';
+    
+    final profileState = context.read<ProfileBloc>().state;
+    String? countryName;
+    if (profileState is ProfileLoaded) {
+      countryName = profileState.profile.countryName;
+    } else if (profileState is ProfileUpdating) {
+      countryName = profileState.profile.countryName;
+    } else if (profileState is ProfileUpdateSuccess) {
+      countryName = profileState.profile.countryName;
+    }
+    
+    final symbol = CurrencyHelper.getSymbol(currencyCode, country: countryName);
     final pickupRaw =
         ride['pickupAddress']?.toString() ??
         ride['pickup']?.toString() ??
@@ -1047,7 +1062,7 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '₹${fare.toStringAsFixed(2)}',
+                    '$symbol${fare.toStringAsFixed(2)}',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -1228,6 +1243,19 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
     final rideId = ride['id']?.toString() ?? ride['rideId']?.toString() ?? '';
     final fare = (ride['fare'] as num?)?.toDouble() ?? 0.0;
     final status = (ride['status']?.toString() ?? 'completed').toUpperCase();
+    final currencyCode = ride['currencyCode']?.toString() ?? ride['currency_code']?.toString() ?? ride['currency']?.toString() ?? 'INR';
+    
+    final profileState = context.read<ProfileBloc>().state;
+    String? countryName;
+    if (profileState is ProfileLoaded) {
+      countryName = profileState.profile.countryName;
+    } else if (profileState is ProfileUpdating) {
+      countryName = profileState.profile.countryName;
+    } else if (profileState is ProfileUpdateSuccess) {
+      countryName = profileState.profile.countryName;
+    }
+    
+    final symbol = CurrencyHelper.getSymbol(currencyCode, country: countryName);
 
     showModalBottomSheet(
       context: context,
@@ -1279,7 +1307,7 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Fare Amount', style: TextStyle(fontSize: 14, color: Color(0xFF64748B))),
-                Text('₹${fare.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF009048))),
+                Text('$symbol${fare.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF009048))),
               ],
             ),
             const SizedBox(height: 20),

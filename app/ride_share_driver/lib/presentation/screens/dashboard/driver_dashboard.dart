@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/utils/currency_helper.dart';
 import '../../../../common/widgets/custom_toast.dart';
 import '../../../../injection_container.dart' as di;
 import '../../../../features/dashboard/presentation/bloc/driver_status_bloc.dart';
@@ -682,11 +683,12 @@ class _DriverDashboardState extends State<DriverDashboard>
               final totalFareNum = totalMinor / 100.0;
               
               _showMoneyAddedAnimation(driverNetNum);
+              final symbol = CurrencyHelper.getSymbol(state.ride.currencyCode);
               final isWallet = state.ride.paymentMethod?.toLowerCase() == 'wallet';
               if (isWallet) {
-                CustomToast.show(context, 'Ride Completed! ₹${driverNetNum.toStringAsFixed(2)} credited to your Ryva Wallet');
+                CustomToast.show(context, 'Ride Completed! $symbol${driverNetNum.toStringAsFixed(2)} credited to your Ryva Wallet');
               } else {
-                CustomToast.show(context, 'Ride Completed! Collect ₹${totalFareNum.toStringAsFixed(2)} cash from rider');
+                CustomToast.show(context, 'Ride Completed! Collect $symbol${totalFareNum.toStringAsFixed(2)} cash from rider');
               }
             }
           },
@@ -989,7 +991,7 @@ class _DriverDashboardState extends State<DriverDashboard>
                                     const SizedBox(height: 16),
 
                                     // 2. Metrics Card: [Earnings] [Rides] [Working Hours]
-                                    _buildMetricsSummaryCard(context, summary),
+                                    _buildMetricsSummaryCard(context, summary, profile),
 
                                     const SizedBox(height: 12),
 
@@ -1332,9 +1334,10 @@ class _DriverDashboardState extends State<DriverDashboard>
   Widget _buildMetricsSummaryCard(
     BuildContext context,
     DriverDashboardSummary? summary,
+    DriverProfile? profile,
   ) {
     final earningsStr = summary != null
-        ? summary.today.totalEarnings.toStringAsFixed(0)
+        ? summary.today.totalEarnings.toStringAsFixed(summary.today.totalEarnings % 1 == 0 ? 0 : 2)
         : '0';
     final ridesCountStr = summary != null
         ? summary.today.totalRides.toString()
@@ -1427,11 +1430,12 @@ class _DriverDashboardState extends State<DriverDashboard>
                                 final scale = _moneyAnimController.isAnimating
                                     ? 1.0 + (0.12 * (1.0 - (_moneyAnimController.value - 0.5).abs() * 2).clamp(0.0, 1.0))
                                     : 1.0;
+                                final symbol = CurrencyHelper.getSymbol(summary?.currencyCode, country: profile?.countryName ?? profile?.countryId);
                                 return Transform.scale(
                                   scale: scale,
                                   alignment: Alignment.centerLeft,
                                   child: Text(
-                                    '₹$earningsStr',
+                                    '$symbol$earningsStr',
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w900,
@@ -1450,7 +1454,7 @@ class _DriverDashboardState extends State<DriverDashboard>
                     ],
                   ),
 
-                  // Floating animated "+₹XX" Badge
+                  // Floating animated "+XX" Badge
                   if (_showMoneyBadge && _lastAddedAmount != null)
                     Positioned(
                       top: -24,
@@ -1480,7 +1484,7 @@ class _DriverDashboardState extends State<DriverDashboard>
                                   const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 11),
                                   const SizedBox(width: 2),
                                   Text(
-                                    '+₹${_lastAddedAmount!.toStringAsFixed(0)}',
+                                    '+${CurrencyHelper.getSymbol(summary?.currencyCode, country: profile?.countryName ?? profile?.countryId)}${_lastAddedAmount!.toStringAsFixed(_lastAddedAmount! % 1 == 0 ? 0 : 2)}',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 11,

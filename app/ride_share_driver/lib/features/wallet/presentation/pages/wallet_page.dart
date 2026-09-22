@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/utils/currency_helper.dart';
 import '../../../../common/widgets/custom_toast.dart';
 import '../../../../style/appcolors.dart';
 import '../../../../injection_container.dart' as di;
@@ -42,7 +43,8 @@ class _WalletPageState extends State<WalletPage> {
     return '${dt.day} ${months[dt.month - 1]}, $timeStr';
   }
 
-  void _showInstantPayoutDialog(BuildContext context, double balance, BankDetails? bankDetails) {
+  void _showInstantPayoutDialog(BuildContext context, double balance, BankDetails? bankDetails, [String currencyCode = 'INR']) {
+    final currencySymbol = CurrencyHelper.getSymbol(currencyCode);
     if (bankDetails == null || (bankDetails.accountNumberLast4 == null && bankDetails.upiId == null)) {
       showDialog(
         context: context,
@@ -176,7 +178,7 @@ class _WalletPageState extends State<WalletPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '₹${balance.toStringAsFixed(2)}',
+                      '$currencySymbol${balance.toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w900,
@@ -207,8 +209,8 @@ class _WalletPageState extends State<WalletPage> {
                       ),
                       child: Row(
                         children: [
-                          const Text(
-                            '₹',
+                          Text(
+                            currencySymbol,
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -254,7 +256,7 @@ class _WalletPageState extends State<WalletPage> {
                           const Icon(Icons.error_outline_rounded, size: 14, color: Color(0xFFEF4444)),
                           const SizedBox(width: 5),
                           Text(
-                            'Amount exceeds available balance (₹${balance.toStringAsFixed(2)})',
+                            'Amount exceeds available balance ($currencySymbol${balance.toStringAsFixed(2)})',
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -299,9 +301,9 @@ class _WalletPageState extends State<WalletPage> {
                         String formatPreset(double amt) {
                           final intVal = amt.round();
                           if (intVal >= 1000) {
-                            return '₹${intVal.toString().replaceAllMapped(RegExp(r'(\d+?)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}';
+                            return '$currencySymbol${intVal.toString().replaceAllMapped(RegExp(r'(\d+?)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}';
                           }
-                          return '₹$intVal';
+                          return '$currencySymbol$intVal';
                         }
 
                         return Row(
@@ -610,13 +612,16 @@ class _WalletPageState extends State<WalletPage> {
             bool isNegative = false;
             BankDetails? bankDetails;
             List<WalletTransactionItem> txs = [];
+            String currencyCode = 'INR';
 
             if (state is WalletLoaded) {
               balance = state.walletInfo?.balanceAmount ?? 0.0;
               isNegative = state.walletInfo?.isNegative ?? false;
               bankDetails = state.bankDetails;
               txs = state.transactions;
+              currencyCode = state.walletInfo?.currencyCode ?? 'INR';
             }
+            final currencySymbol = CurrencyHelper.getSymbol(currencyCode);
 
             return RefreshIndicator(
               onRefresh: () async {
@@ -695,7 +700,7 @@ class _WalletPageState extends State<WalletPage> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                '${isNegative ? "-₹" : "₹"}${balance.abs().toStringAsFixed(2)}',
+                                '${isNegative ? "-$currencySymbol" : currencySymbol}${balance.abs().toStringAsFixed(2)}',
                                 style: const TextStyle(
                                   fontSize: 32,
                                   fontWeight: FontWeight.bold,
@@ -734,7 +739,7 @@ class _WalletPageState extends State<WalletPage> {
                           child: SizedBox(
                             height: 50,
                             child: ElevatedButton.icon(
-                              onPressed: () => _showInstantPayoutDialog(context, balance, bankDetails),
+                              onPressed: () => _showInstantPayoutDialog(context, balance, bankDetails, currencyCode),
                               icon: const Icon(Icons.account_balance_rounded, size: 20),
                               label: const Text('Cash Out', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                               style: ElevatedButton.styleFrom(
@@ -926,7 +931,7 @@ class _WalletPageState extends State<WalletPage> {
             ),
           ),
           Text(
-            '${isCredit ? '+' : '-'} ₹${tx.amount.toStringAsFixed(tx.amount.truncateToDouble() == tx.amount ? 0 : 2)}',
+            '${isCredit ? '+' : '-'} ${CurrencyHelper.getSymbol(tx.currencyCode)}${tx.amount.toStringAsFixed(tx.amount.truncateToDouble() == tx.amount ? 0 : 2)}',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,

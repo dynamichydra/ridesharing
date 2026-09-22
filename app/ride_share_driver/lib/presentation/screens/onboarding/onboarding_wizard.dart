@@ -573,7 +573,9 @@ class _OnboardingWizardState extends State<OnboardingWizard>
                               ? Colors.white
                               : AppColors.textPrimary,
                         ),
-                        onPressed: _prevStep,
+                        onPressed: (state is OnboardingLoading || _transitionOnSummaryLoad)
+                            ? null
+                            : _prevStep,
                       ),
                       title: Text(
                         _currentStep >= 8
@@ -592,34 +594,47 @@ class _OnboardingWizardState extends State<OnboardingWizard>
                       actions: null,
                     )
                   : null,
-              body: _currentStep <= 2 && !_isLocationUnsupported
-                  ? _buildOnboardingBody(context)
-                  : SafeArea(
-                      top: _currentStep >= 3,
-                      bottom: _currentStep >= 3,
-                      child: Column(
-                        children: [
-                          if (_currentStep >= 3 && _currentStep < 8)
-                            LinearProgressIndicator(
-                              value: (_currentStep - 2) / 6.0,
-                              color: AppColors.primary,
-                              backgroundColor: AppColors.border,
-                              minHeight: 3,
-                            ),
-                          if (state is OnboardingLoading)
-                            const LinearProgressIndicator(
-                              minHeight: 3,
-                              color: AppColors.secondary,
-                            ),
-                          Expanded(
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              child: _buildStepContent(context),
-                            ),
+              body: Stack(
+                children: [
+                  _currentStep <= 2 && !_isLocationUnsupported
+                      ? _buildOnboardingBody(context)
+                      : SafeArea(
+                          top: _currentStep >= 3,
+                          bottom: _currentStep >= 3,
+                          child: Column(
+                            children: [
+                              if (_currentStep >= 3 && _currentStep < 8)
+                                LinearProgressIndicator(
+                                  value: (_currentStep - 2) / 6.0,
+                                  color: AppColors.primary,
+                                  backgroundColor: AppColors.border,
+                                  minHeight: 3,
+                                ),
+                              if (state is OnboardingLoading)
+                                const LinearProgressIndicator(
+                                  minHeight: 3,
+                                  color: AppColors.secondary,
+                                ),
+                              Expanded(
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 200),
+                                  child: _buildStepContent(context),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
+                  if (state is OnboardingLoading || _transitionOnSummaryLoad)
+                    Container(
+                      color: Colors.white.withOpacity(0.6),
+                      child: const Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.primary,
+                        ),
                       ),
                     ),
+                ],
+              ),
             );
           },
         ),

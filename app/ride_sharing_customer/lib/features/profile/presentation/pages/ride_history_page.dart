@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/constants/constants.dart';
 import '../bloc/profile_bloc.dart';
 
 class RideHistoryPage extends StatefulWidget {
@@ -377,6 +378,9 @@ class _RideHistoryPageState extends State<RideHistoryPage>
     final int actualFareMinor =
         ride['actualFareMinor'] as int? ?? estimatedFareMinor;
     final double fare = actualFareMinor / 100.0;
+    
+    final currencyCode = ride['currencyCode']?.toString() ?? ride['currency_code']?.toString() ?? ride['currency']?.toString() ?? 'INR';
+    final currencySymbol = AppConstants.getCurrencySymbol(currencyCode);
 
     final pickupRaw = ride['pickupAddress'] as String? ??
         ride['pickup_address'] as String? ??
@@ -606,7 +610,7 @@ class _RideHistoryPageState extends State<RideHistoryPage>
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '₹${fare.toStringAsFixed(2)}',
+                    '$currencySymbol${fare.toStringAsFixed(2)}',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,

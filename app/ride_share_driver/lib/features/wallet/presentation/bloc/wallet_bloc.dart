@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/utils/currency_helper.dart';
 import '../../data/datasources/wallet_remote_datasource.dart';
 
 // ── Entities ──────────────────────────────────────────────────────────────────
@@ -62,7 +63,7 @@ class WalletInfo {
 
   factory WalletInfo.fromJson(Map<String, dynamic> json) => WalletInfo(
         balanceMinor: json['balanceMinor'] as int? ?? 0,
-        currencyCode: json['currencyCode'] as String? ?? 'INR',
+        currencyCode: json['currencyCode']?.toString() ?? json['currency']?.toString() ?? 'INR',
       );
 
   double get balanceAmount => balanceMinor / 100.0;
@@ -77,6 +78,7 @@ class WalletTransactionItem {
   final String reason;
   final String description;
   final DateTime createdAt;
+  final String currencyCode;
 
   const WalletTransactionItem({
     required this.id,
@@ -86,6 +88,7 @@ class WalletTransactionItem {
     required this.reason,
     required this.description,
     required this.createdAt,
+    this.currencyCode = 'CAD',
   });
 
   bool get isCredit => type == 'credit';
@@ -95,6 +98,7 @@ class WalletTransactionItem {
     final type = (json['type'] as String?)?.toLowerCase() ?? 'credit';
     final reason = json['reason'] as String? ?? '';
     final rawDesc = json['description'] as String?;
+    final currencyCode = json['currencyCode']?.toString() ?? json['currency']?.toString() ?? 'CAD';
 
     String displayDesc = rawDesc ?? '';
     final lowerReason = reason.toLowerCase();
@@ -144,6 +148,7 @@ class WalletTransactionItem {
       reason: reason,
       description: displayDesc,
       createdAt: dt,
+      currencyCode: currencyCode,
     );
   }
 }
@@ -266,10 +271,11 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     }
 
     emit(WalletSubmitting(bankDetails: currentBank, payoutAccount: currentPayout, walletInfo: currentWallet));
+    final sym = CurrencyHelper.getSymbol(currentWallet?.currencyCode);
     try {
       final amountMinor = (event.amount * 100).round();
       await dataSource.topup(amountMinor, isDemo: event.isDemo);
-      emit(WalletActionSuccess('₹${event.amount.toStringAsFixed(0)} added to wallet!'));
+      emit(WalletActionSuccess('$sym${event.amount.toStringAsFixed(2)} added to wallet!'));
       add(LoadWalletData());
     } catch (e) {
       emit(WalletError(e.toString()));
@@ -288,11 +294,12 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     }
 
     emit(WalletSubmitting(bankDetails: currentBank, payoutAccount: currentPayout, walletInfo: currentWallet));
+    final sym = CurrencyHelper.getSymbol(currentWallet?.currencyCode);
     try {
       final amountMinor = event.amount != null ? (event.amount! * 100).round() : null;
       await dataSource.requestInstantPayout(amountMinor: amountMinor);
       final msg = event.amount != null
-          ? '₹${event.amount!.toStringAsFixed(0)} cashed out successfully!'
+          ? '$sym${event.amount!.toStringAsFixed(2)} cashed out successfully!'
           : 'Instant cash out processed successfully!';
       emit(WalletActionSuccess(msg));
       add(LoadWalletData());

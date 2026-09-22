@@ -5,7 +5,14 @@ class AppLogger {
   AppLogger._();
 
   static final Logger _logger = Logger(
-    printer: PrettyPrinter(methodCount: 0, colors: false, printEmojis: false),
+    printer: PrettyPrinter(
+      methodCount: 0,
+      errorMethodCount: 5,
+      lineLength: 120,
+      colors: false,
+      printEmojis: false,
+      noBoxingByDefault: true,
+    ),
   );
 
   static void d(String message) => _logger.d(message);

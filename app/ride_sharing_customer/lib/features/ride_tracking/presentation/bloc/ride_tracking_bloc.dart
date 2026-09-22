@@ -8,6 +8,7 @@ import '../../domain/repositories/ride_tracking_repository.dart';
 import '../../../../core/services/storage_service.dart';
 import '../../../../core/services/app_logger.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/constants/constants.dart';
 
 import '../../../../injection_container.dart';
 import '../../../booking/domain/entities/passenger_info.dart';
@@ -32,6 +33,11 @@ class StartRideTracking extends RideTrackingEvent {
   final String paymentMethod;
   final PassengerInfo? passenger;
   final String? trackingUrl;
+  final String currencyCode;
+  final String currencySymbol;
+  final Map<String, dynamic>? breakdown;
+  final double? distanceKm;
+  final int? etaMin;
 
   const StartRideTracking({
     required this.rideId,
@@ -44,6 +50,11 @@ class StartRideTracking extends RideTrackingEvent {
     this.paymentMethod = 'cash',
     this.passenger,
     this.trackingUrl,
+    this.currencyCode = 'INR',
+    this.currencySymbol = '₹',
+    this.breakdown,
+    this.distanceKm,
+    this.etaMin,
   });
 
   @override
@@ -58,6 +69,9 @@ class StartRideTracking extends RideTrackingEvent {
         paymentMethod,
         passenger,
         trackingUrl,
+        currencyCode,
+        currencySymbol,
+        breakdown,
       ];
 }
 
@@ -70,9 +84,12 @@ class DriverAssigned extends RideTrackingEvent {
 
 class DriverLocationUpdated extends RideTrackingEvent {
   final LatLng location;
-  const DriverLocationUpdated(this.location);
+  final int? etaMin;
+  final double? remainingKm;
+
+  const DriverLocationUpdated(this.location, {this.etaMin, this.remainingKm});
   @override
-  List<Object?> get props => [location];
+  List<Object?> get props => [location, etaMin, remainingKm];
 }
 
 class UpdateTrackingStep extends RideTrackingEvent {
@@ -88,9 +105,13 @@ class RideStarted extends RideTrackingEvent {}
 
 class RideCompleted extends RideTrackingEvent {
   final double? finalFare;
-  const RideCompleted({this.finalFare});
+  final String? currencyCode;
+  final Map<String, dynamic>? breakdown;
+
+  const RideCompleted({this.finalFare, this.currencyCode, this.breakdown});
+
   @override
-  List<Object?> get props => [finalFare];
+  List<Object?> get props => [finalFare, currencyCode, breakdown];
 }
 
 class CancelRide extends RideTrackingEvent {
@@ -154,6 +175,11 @@ class RideTrackingSearching extends RideTrackingState {
   final List<LatLng> routePoints;
   final PassengerInfo? passenger;
   final String? trackingUrl;
+  final String currencyCode;
+  final String currencySymbol;
+  final Map<String, dynamic>? breakdown;
+  final double? distanceKm;
+  final int? etaMin;
 
   const RideTrackingSearching({
     required this.rideId,
@@ -167,6 +193,11 @@ class RideTrackingSearching extends RideTrackingState {
     this.routePoints = const [],
     this.passenger,
     this.trackingUrl,
+    this.currencyCode = 'INR',
+    this.currencySymbol = '₹',
+    this.breakdown,
+    this.distanceKm,
+    this.etaMin,
   });
 
   @override
@@ -182,6 +213,9 @@ class RideTrackingSearching extends RideTrackingState {
         routePoints,
         passenger,
         trackingUrl,
+        currencyCode,
+        currencySymbol,
+        breakdown,
       ];
 }
 
@@ -206,6 +240,11 @@ class RideTrackingActive extends RideTrackingState {
   final String paymentMethod;
   final PassengerInfo? passenger;
   final String? trackingUrl;
+  final String currencyCode;
+  final String currencySymbol;
+  final Map<String, dynamic>? breakdown;
+  final int? etaMin;
+  final double? remainingKm;
 
   const RideTrackingActive({
     required this.rideId,
@@ -228,6 +267,11 @@ class RideTrackingActive extends RideTrackingState {
     this.paymentMethod = 'cash',
     this.passenger,
     this.trackingUrl,
+    this.currencyCode = 'INR',
+    this.currencySymbol = '₹',
+    this.breakdown,
+    this.etaMin,
+    this.remainingKm,
   });
 
   RideTrackingActive copyWith({
@@ -240,6 +284,11 @@ class RideTrackingActive extends RideTrackingState {
     String? paymentMethod,
     PassengerInfo? passenger,
     String? trackingUrl,
+    String? currencyCode,
+    String? currencySymbol,
+    Map<String, dynamic>? breakdown,
+    int? etaMin,
+    double? remainingKm,
   }) {
     return RideTrackingActive(
       rideId: rideId,
@@ -262,6 +311,11 @@ class RideTrackingActive extends RideTrackingState {
       paymentMethod: paymentMethod ?? this.paymentMethod,
       passenger: passenger ?? this.passenger,
       trackingUrl: trackingUrl ?? this.trackingUrl,
+      currencyCode: currencyCode ?? this.currencyCode,
+      currencySymbol: currencySymbol ?? this.currencySymbol,
+      breakdown: breakdown ?? this.breakdown,
+      etaMin: etaMin ?? this.etaMin,
+      remainingKm: remainingKm ?? this.remainingKm,
     );
   }
 
@@ -270,7 +324,7 @@ class RideTrackingActive extends RideTrackingState {
         rideId, driverName, driverRating, driverAvatar, driverVehicle, plateNumber,
         pickup, pickupName, destination, destinationName, driverPosition,
         driverBearing, routePoints, trackingState, fare, vehicleName, otp, paymentMethod,
-        passenger, trackingUrl,
+        passenger, trackingUrl, currencyCode, currencySymbol, breakdown, etaMin, remainingKm,
       ];
 }
 
@@ -332,8 +386,21 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     _driverLocationSub = _rideTrackingRepository.onDriverLocation.listen((data) {
       final lat = double.tryParse(data['lat'].toString());
       final lng = double.tryParse(data['lng'].toString());
+      
+      int? etaMin;
+      double? remainingKm;
+      if (data['tripProgress'] is Map) {
+        final progress = data['tripProgress'] as Map;
+        if (progress['etaMin'] != null) {
+          etaMin = int.tryParse(progress['etaMin'].toString());
+        }
+        if (progress['remainingKm'] != null) {
+          remainingKm = double.tryParse(progress['remainingKm'].toString());
+        }
+      }
+
       if (lat != null && lng != null) {
-        add(DriverLocationUpdated(LatLng(lat, lng)));
+        add(DriverLocationUpdated(LatLng(lat, lng), etaMin: etaMin, remainingKm: remainingKm));
       }
     });
 
@@ -346,8 +413,15 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     });
 
     _rideCompletedSub = _rideTrackingRepository.onRideCompleted.listen((data) {
-      final finalFare = double.tryParse(data['finalFare']?.toString() ?? '');
-      add(RideCompleted(finalFare: finalFare));
+      double? finalFare;
+      if (data['finalFare'] != null) {
+        finalFare = double.tryParse(data['finalFare'].toString());
+      } else if (data['finalFareMinor'] != null) {
+        finalFare = (num.tryParse(data['finalFareMinor'].toString()) ?? 0) / 100.0;
+      }
+      final currencyCode = data['currencyCode']?.toString() ?? data['currency']?.toString();
+      final breakdown = data['breakdown'] is Map ? Map<String, dynamic>.from(data['breakdown'] as Map) : null;
+      add(RideCompleted(finalFare: finalFare, currencyCode: currencyCode, breakdown: breakdown));
     });
 
     _rideCancelledSub = _rideTrackingRepository.onRideCancelled.listen((data) {
@@ -398,6 +472,11 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       routePoints: initialPoints,
       passenger: event.passenger,
       trackingUrl: event.trackingUrl,
+      currencyCode: event.currencyCode,
+      currencySymbol: event.currencySymbol,
+      breakdown: event.breakdown,
+      distanceKm: event.distanceKm,
+      etaMin: event.etaMin,
     ));
 
     try {
@@ -416,6 +495,9 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         'trackingState': 'searching',
         'passenger': event.passenger?.toJson(),
         'trackingUrl': event.trackingUrl,
+        'currencyCode': event.currencyCode,
+        'currencySymbol': event.currencySymbol,
+        'breakdown': event.breakdown,
       });
     } catch (_) {}
     
@@ -447,9 +529,11 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
           final dioClient = sl<DioClient>();
           final res = await dioClient.dio.get('/api/v1/rides/rider/active');
           if (res.data != null && (res.data['SUCCESS'] == true || res.data['success'] == true)) {
-            final activeObj = (res.data['DATA'] ?? res.data['data'] ?? res.data['MESSAGE']) as Map<String, dynamic>?;
+            final activeObj = (res.data['DATA'] ?? res.data['data'] ?? res.data['MESSAGE']) is Map
+                ? Map<String, dynamic>.from((res.data['DATA'] ?? res.data['data'] ?? res.data['MESSAGE']) as Map)
+                : null;
             if (activeObj != null && activeObj['id'] != null) {
-              final driverObj = activeObj['driver'] as Map<String, dynamic>?;
+              final driverObj = activeObj['driver'] is Map ? Map<String, dynamic>.from(activeObj['driver'] as Map) : null;
               map = {
                 'rideId': activeObj['id'].toString(),
                 'pickupLat': (activeObj['pickupLat'] as num?)?.toDouble() ?? 0.0,
@@ -463,6 +547,8 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
                 'paymentMethod': activeObj['paymentMethod']?.toString() ?? 'cash',
                 'trackingState': (activeObj['status']?.toString().toLowerCase() == 'searching') ? 'searching' : 'rideInProgress',
                 'otp': activeObj['startOtp']?.toString() ?? '',
+                'currencyCode': activeObj['currencyCode'] ?? activeObj['fareSnapshot']?['currencyCode'] ?? activeObj['fareSnapshot']?['currency'] ?? 'INR',
+                'breakdown': activeObj['fareSnapshot']?['breakdown'] ?? activeObj['breakdown'],
                 if (driverObj != null) 'driver': {
                   'name': driverObj['name'] ?? 'Driver',
                   'rating': (driverObj['rating'] as num?)?.toDouble() ?? 4.9,
@@ -491,7 +577,7 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         final dioClient = sl<DioClient>();
         final res = await dioClient.dio.get('/api/v1/rides/$rideId');
         if (res.data != null && res.data['SUCCESS'] == true) {
-          final serverRide = res.data['MESSAGE'] as Map<String, dynamic>?;
+          final serverRide = res.data['MESSAGE'] is Map ? Map<String, dynamic>.from(res.data['MESSAGE'] as Map) : null;
           final serverStatus = serverRide?['status']?.toString().toLowerCase();
 
           if (serverStatus == 'completed' || serverStatus == 'cancelled') {
@@ -521,6 +607,16 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       final paymentMethod = map['paymentMethod']?.toString() ?? 'cash';
       final trackingState = map['trackingState']?.toString() ?? 'searching';
 
+      final String currencyCode = map['currencyCode']?.toString() ??
+          map['fareSnapshot']?['currencyCode']?.toString() ??
+          map['fareSnapshot']?['currency']?.toString() ??
+          'INR';
+      final String currencySymbol = map['currencySymbol']?.toString() ??
+          AppConstants.getCurrencySymbol(currencyCode);
+      final Map<String, dynamic>? breakdown = (map['fareSnapshot']?['breakdown'] ?? map['breakdown']) is Map
+          ? Map<String, dynamic>.from((map['fareSnapshot']?['breakdown'] ?? map['breakdown']) as Map)
+          : null;
+
       PassengerInfo? passengerInfo;
       if (map['passenger'] != null && map['passenger'] is Map) {
         passengerInfo = PassengerInfo.fromJson(Map<String, dynamic>.from(map['passenger'] as Map));
@@ -538,6 +634,11 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         paymentMethod: paymentMethod,
         passenger: passengerInfo,
         trackingUrl: trackingUrl,
+        currencyCode: currencyCode,
+        currencySymbol: currencySymbol,
+        breakdown: breakdown,
+        distanceKm: (map['fareSnapshot']?['distanceKm'] as num?)?.toDouble(),
+        etaMin: (map['fareSnapshot']?['durationMin'] as num?)?.toInt(),
       );
 
       await _rideTrackingRepository.connectToRide(rideId);
@@ -563,6 +664,11 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
           routePoints: initialPoints,
           passenger: passengerInfo,
           trackingUrl: trackingUrl,
+          currencyCode: currencyCode,
+          currencySymbol: currencySymbol,
+          breakdown: breakdown,
+          distanceKm: _initialRideData.distanceKm,
+          etaMin: _initialRideData.etaMin,
         ));
       } else {
         final driver = Map<String, dynamic>.from(map['driver'] as Map);
@@ -612,9 +718,14 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
           paymentMethod: paymentMethod,
           passenger: passengerInfo,
           trackingUrl: trackingUrl,
+          currencyCode: currencyCode,
+          currencySymbol: currencySymbol,
+          breakdown: breakdown,
+          etaMin: _initialRideData.etaMin,
+          remainingKm: _initialRideData.distanceKm,
         ));
       }
-    } catch (_) {}
+    } catch (e) {}
   }
 
   Future<void> _onDriverAssigned(DriverAssigned event, Emitter<RideTrackingState> emit) async {
@@ -683,6 +794,11 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       paymentMethod: _initialRideData.paymentMethod,
       passenger: _initialRideData.passenger,
       trackingUrl: _initialRideData.trackingUrl,
+      currencyCode: _initialRideData.currencyCode,
+      currencySymbol: _initialRideData.currencySymbol,
+      breakdown: _initialRideData.breakdown,
+      etaMin: _initialRideData.etaMin,
+      remainingKm: _initialRideData.distanceKm,
     );
 
     try {
@@ -790,6 +906,8 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         driverPosition: event.location,
         driverBearing: bearing,
         routePoints: updatedRoutePoints,
+        etaMin: event.etaMin,
+        remainingKm: event.remainingKm,
       );
 
       try {
@@ -896,10 +1014,19 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     final currentState = state;
     if (currentState is RideTrackingActive) {
       final finalFare = event.finalFare ?? currentState.fare;
+      final currencyCode = event.currencyCode ?? currentState.currencyCode;
+      final currencySymbol = event.currencyCode != null
+          ? AppConstants.getCurrencySymbol(event.currencyCode)
+          : currentState.currencySymbol;
+      final breakdown = event.breakdown ?? currentState.breakdown;
+
       final completedState = currentState.copyWith(
         trackingState: 'rideCompleted',
         driverPosition: currentState.destination,
         fare: finalFare,
+        currencyCode: currencyCode,
+        currencySymbol: currencySymbol,
+        breakdown: breakdown,
       );
       await _completeRideInCache(completedState);
       try {

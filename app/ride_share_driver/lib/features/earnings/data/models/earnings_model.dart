@@ -18,6 +18,7 @@ class EarningsDataModel {
   final String deductions;
   final String netEarnings;
   final String listTitle;
+  final String currencyCode;
   final List<DayEarningItem> historyItems;
 
   const EarningsDataModel({
@@ -38,35 +39,44 @@ class EarningsDataModel {
     required this.deductions,
     required this.netEarnings,
     required this.listTitle,
+    this.currencyCode = 'CAD',
     required this.historyItems,
   });
 
   factory EarningsDataModel.empty({
     EarningsPeriod period = EarningsPeriod.daily,
-    String listTitle = 'Last 7 Days',
+    String? listTitle,
+    String currencyCode = 'CAD',
   }) {
+    final defaultTitle = period == EarningsPeriod.daily
+        ? 'Today'
+        : period == EarningsPeriod.weekly
+            ? 'Last 7 Days'
+            : 'Last 30 Days';
+    final sym = currencyCode.toUpperCase() == 'INR' ? '₹' : '\$';
     return EarningsDataModel(
-      totalEarnings: '₹0.00',
+      totalEarnings: '${sym}0.00',
       growthPercent: '0.0%',
       growthPeriod: period == EarningsPeriod.daily
           ? 'vs Yesterday'
           : period == EarningsPeriod.weekly
-              ? 'vs Last Week'
-              : 'vs Last Month',
-      cashCollected: '₹0.00',
-      incentivesAmount: '₹0.00',
+              ? 'vs Prior 7 Days'
+              : 'vs Prior 30 Days',
+      cashCollected: '${sym}0.00',
+      incentivesAmount: '${sym}0.00',
       trips: 0,
       onlineHours: '0m',
-      avgPerTrip: '₹0.00',
+      avgPerTrip: '${sym}0.00',
       cashPercent: 50.0,
       walletPercent: 50.0,
-      fareAmount: '₹0.00',
-      incentives: '₹0.00',
-      otherEarnings: '₹0.00',
-      grossEarnings: '₹0.00',
-      deductions: '₹0.00',
-      netEarnings: '₹0.00',
-      listTitle: listTitle,
+      fareAmount: '${sym}0.00',
+      incentives: '${sym}0.00',
+      otherEarnings: '${sym}0.00',
+      grossEarnings: '${sym}0.00',
+      deductions: '${sym}0.00',
+      netEarnings: '${sym}0.00',
+      listTitle: listTitle ?? defaultTitle,
+      currencyCode: currencyCode,
       historyItems: const [],
     );
   }

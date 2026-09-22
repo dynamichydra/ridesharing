@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/custom_toast.dart';
 import '../../../../injection_container.dart';
 import '../../domain/repositories/booking_repository.dart';
@@ -39,8 +40,17 @@ class _PromoCodesPageState extends State<PromoCodesPage> {
   Future<void> _loadPromos() async {
     try {
       final repository = sl<BookingRepository>();
-      final List<Map<String, dynamic>> fetched = await repository
-          .getAvailablePromos();
+      String? vehicleTypeId;
+      String? countryId;
+      final bookingState = context.read<BookingBloc>().state;
+      if (bookingState is BookingVehicleOptionsLoaded) {
+        vehicleTypeId = bookingState.selectedVehicle.id;
+        countryId = bookingState.countryId.isNotEmpty ? bookingState.countryId : bookingState.selectedVehicle.countryId;
+      }
+      final List<Map<String, dynamic>> fetched = await repository.getAvailablePromos(
+        vehicleTypeId: vehicleTypeId,
+        countryId: countryId != null && countryId.isNotEmpty ? countryId : null,
+      );
       if (mounted) {
         setState(() {
           if (fetched.isNotEmpty) {
@@ -53,7 +63,7 @@ class _PromoCodesPageState extends State<PromoCodesPage> {
               final bool isFlat =
                   discountType == 'flat_amount' || discountType == 'flat';
               final String valDisplay = isFlat
-                  ? 'Flat ₹$discountVal Off'
+                  ? 'Flat ${AppConstants.currencySymbol}$discountVal Off'
                   : '$discountVal% Discount';
               final minFare = ((p['minFareMinor'] as num?) ?? 0) / 100.0;
               final maxDiscountMinor = p['maxDiscountMinor'] as num?;
@@ -100,7 +110,7 @@ class _PromoCodesPageState extends State<PromoCodesPage> {
               return {
                 'id': p['id']?.toString() ?? '',
                 'code': p['code']?.toString() ?? '',
-                'title': isFirstRide ? 'Flat ₹$discountVal Off' : valDisplay,
+                'title': isFirstRide ? 'Flat ${AppConstants.currencySymbol}$discountVal Off' : valDisplay,
                 'description':
                     p['description']?.toString() ??
                     'Enjoy savings on your ride.',
@@ -126,7 +136,7 @@ class _PromoCodesPageState extends State<PromoCodesPage> {
                 'code': 'WELCOME50',
                 'title': '50% Off First Ride',
                 'description':
-                    'Get 50% discount on your first ride up to ₹100.',
+                    'Get 50% discount on your first ride up to ${AppConstants.currencySymbol}100.',
                 'minFare': 100,
                 'discountType': 'percentage',
                 'discountValue': '50%',
@@ -138,11 +148,11 @@ class _PromoCodesPageState extends State<PromoCodesPage> {
               },
               {
                 'code': 'FLAT100',
-                'title': 'Flat ₹100 Off',
-                'description': 'Enjoy flat ₹100 savings on rides above ₹200.',
+                'title': 'Flat ${AppConstants.currencySymbol}100 Off',
+                'description': 'Enjoy flat ${AppConstants.currencySymbol}100 savings on rides above ${AppConstants.currencySymbol}200.',
                 'minFare': 200,
                 'discountType': 'flat',
-                'discountValue': '₹100',
+                'discountValue': '${AppConstants.currencySymbol}100',
                 'tag': 'BEST VALUE',
                 'color': const Color(0xFF0065B3),
                 'canApply': true,
@@ -152,7 +162,7 @@ class _PromoCodesPageState extends State<PromoCodesPage> {
               {
                 'code': 'WEEKEND25',
                 'title': '25% Weekend Discount',
-                'description': 'Save 25% on peak weekend trips up to ₹50.',
+                'description': 'Save 25% on peak weekend trips up to ${AppConstants.currencySymbol}50.',
                 'minFare': 150,
                 'discountType': 'percentage',
                 'discountValue': '25%',
@@ -165,7 +175,7 @@ class _PromoCodesPageState extends State<PromoCodesPage> {
               {
                 'code': 'FESTIVE50',
                 'title': '20% Festive Savings',
-                'description': 'Special 20% discount on city rides above ₹250.',
+                'description': 'Special 20% discount on city rides above ${AppConstants.currencySymbol}250.',
                 'minFare': 250,
                 'discountType': 'percentage',
                 'discountValue': '20%',
@@ -516,7 +526,7 @@ class _PromoCodesPageState extends State<PromoCodesPage> {
                                 Text(
                                   state.discountAmount != null &&
                                           state.discountAmount! > 0
-                                      ? 'Saving ₹${state.discountAmount!.toStringAsFixed(0)} on selected vehicle'
+                                      ? 'Saving ${AppConstants.currencySymbol}${state.discountAmount!.toStringAsFixed(state.discountAmount! % 1 == 0 ? 0 : 2)} on selected vehicle'
                                       : (state.promoDescription ??
                                             'Applied to current booking'),
                                   style: const TextStyle(
@@ -1016,7 +1026,7 @@ class _PromoCodesPageState extends State<PromoCodesPage> {
                         icon: Icons.sell_outlined,
                         iconColor: const Color(0xFF009048),
                         label: 'Min. fare',
-                        value: '₹$minFare',
+                        value: '${AppConstants.currencySymbol}$minFare',
                       ),
                       _buildMetaDivider(),
 
@@ -1026,7 +1036,7 @@ class _PromoCodesPageState extends State<PromoCodesPage> {
                           icon: Icons.payments_outlined,
                           iconColor: const Color(0xFF0065B3),
                           label: 'Max. discount',
-                          value: '₹$maxDiscount',
+                          value: '${AppConstants.currencySymbol}$maxDiscount',
                         ),
                         _buildMetaDivider(),
                       ],
@@ -1118,22 +1128,22 @@ class _PromoCodesPageState extends State<PromoCodesPage> {
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Refer a friend, get ₹50',
-                      style: TextStyle(
+                      'Refer a friend, get ${AppConstants.currencySymbol}50',
+                      style: const TextStyle(
                         color: Color(0xFF0F172A),
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
-                      'Share your code. When a friend finishes their 1st trip, you both receive ₹50 wallet cash!',
-                      style: TextStyle(
+                      'Share your code. When a friend finishes their 1st trip, you both receive ${AppConstants.currencySymbol}50 wallet cash!',
+                      style: const TextStyle(
                         color: Color(0xFF64748B),
                         fontSize: 12,
                         height: 1.35,
@@ -1257,7 +1267,7 @@ class _PromoCodesPageState extends State<PromoCodesPage> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    '₹${_totalEarned.toStringAsFixed(0)} Earned',
+                    '${AppConstants.currencySymbol}${_totalEarned.toStringAsFixed(_totalEarned % 1 == 0 ? 0 : 2)} Earned',
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,

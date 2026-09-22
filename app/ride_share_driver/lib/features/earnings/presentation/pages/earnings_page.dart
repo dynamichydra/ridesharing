@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/utils/currency_helper.dart';
 import '../../../../injection_container.dart';
 import '../../../../presentation/screens/dashboard/driver_main_layout.dart';
 import '../../../../style/appcolors.dart';
@@ -22,9 +23,9 @@ class _EarningsPageState extends State<EarningsPage> {
   CommissionStatusModel? _commissionStatus;
 
   final Map<EarningsPeriod, EarningsDataModel> _periodData = {
-    EarningsPeriod.daily: EarningsDataModel.empty(period: EarningsPeriod.daily, listTitle: 'Last 7 Days'),
-    EarningsPeriod.weekly: EarningsDataModel.empty(period: EarningsPeriod.weekly, listTitle: 'This Week'),
-    EarningsPeriod.monthly: EarningsDataModel.empty(period: EarningsPeriod.monthly, listTitle: 'This Month'),
+    EarningsPeriod.daily: EarningsDataModel.empty(period: EarningsPeriod.daily, listTitle: 'Today'),
+    EarningsPeriod.weekly: EarningsDataModel.empty(period: EarningsPeriod.weekly, listTitle: 'Last 7 Days'),
+    EarningsPeriod.monthly: EarningsDataModel.empty(period: EarningsPeriod.monthly, listTitle: 'Last 30 Days'),
   };
 
   @override
@@ -498,9 +499,9 @@ class _EarningsPageState extends State<EarningsPage> {
               // Avg. Per Trip
               Expanded(
                 child: _buildMetricColumn(
-                  icon: const Text(
-                    '₹',
-                    style: TextStyle(
+                  icon: Text(
+                    CurrencyHelper.getSymbol(data.currencyCode),
+                    style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
                       color: Color(0xFF009048),
@@ -816,9 +817,10 @@ class _EarningsPageState extends State<EarningsPage> {
     final ruleName = status?.ruleName ?? 'Default Platform Commission';
     final resolutionTier = status?.resolutionTier ?? 'default';
     final bookingFeeWaived = status?.bookingFeeWaived ?? false;
+    final sym = CurrencyHelper.getSymbol(status?.currencyCode);
     final bookingFeeFormatted = bookingFeeWaived
-        ? 'Waived (₹0.00)'
-        : '₹${(status != null ? status.bookingFee.toStringAsFixed(2) : "0.00")}';
+        ? 'Waived (${sym}0.00)'
+        : '$sym${(status != null ? status.bookingFee.toStringAsFixed(2) : "0.00")}';
     final activePlan = status?.activePlan;
 
     return Container(

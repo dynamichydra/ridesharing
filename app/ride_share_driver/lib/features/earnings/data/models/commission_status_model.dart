@@ -47,6 +47,7 @@ class CommissionStatusModel {
   final int priorityMatchingBonus;
   final String resolutionTier;
   final String ruleName;
+  final String currencyCode;
 
   const CommissionStatusModel({
     required this.driverId,
@@ -63,6 +64,7 @@ class CommissionStatusModel {
     required this.priorityMatchingBonus,
     required this.resolutionTier,
     required this.ruleName,
+    this.currencyCode = 'CAD',
   });
 
   static double _parseDouble(dynamic val, double fallback) {
@@ -95,6 +97,7 @@ class CommissionStatusModel {
       priorityMatchingBonus: _parseInt(json['priorityMatchingBonus']),
       resolutionTier: json['resolutionTier']?.toString() ?? 'default',
       ruleName: json['ruleName']?.toString() ?? 'Default Platform Commission',
+      currencyCode: json['currencyCode']?.toString() ?? json['currency']?.toString() ?? 'CAD',
     );
   }
 
@@ -114,6 +117,7 @@ class CommissionStatusModel {
       priorityMatchingBonus: 0,
       resolutionTier: 'default',
       ruleName: 'Default Platform Commission',
+      currencyCode: 'CAD',
     );
   }
 

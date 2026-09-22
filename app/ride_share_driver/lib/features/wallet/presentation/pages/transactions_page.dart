@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/utils/currency_helper.dart';
 import '../../../../injection_container.dart' as di;
 import '../../../../style/appcolors.dart';
 import '../bloc/wallet_bloc.dart';
@@ -93,8 +94,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
         body: BlocBuilder<WalletBloc, WalletState>(
           builder: (context, state) {
             List<WalletTransactionItem> allTxs = [];
+            String currencyCode = 'INR';
             if (state is WalletLoaded) {
               allTxs = state.transactions;
+              currencyCode = state.walletInfo?.currencyCode ?? 'INR';
             }
 
             List<WalletTransactionItem> filtered = allTxs.where((tx) {
@@ -232,7 +235,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
                                   ),
                                   const SizedBox(height: 10),
-                                  ...txs.map((tx) => _buildTransactionCard(tx)),
+                                  ...txs.map((tx) => _buildTransactionCard(tx, currencyCode)),
                                   const SizedBox(height: 16),
                                 ],
                               );
@@ -248,7 +251,8 @@ class _TransactionsPageState extends State<TransactionsPage> {
     );
   }
 
-  Widget _buildTransactionCard(WalletTransactionItem tx) {
+  Widget _buildTransactionCard(WalletTransactionItem tx, [String currencyCode = 'INR']) {
+    final symbol = CurrencyHelper.getSymbol(currencyCode);
     final isCredit = tx.isCredit;
 
     IconData iconData = isCredit ? Icons.directions_car_filled_rounded : Icons.account_balance_rounded;
@@ -298,7 +302,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
             ),
           ),
           Text(
-            '${isCredit ? '+' : '-'} ₹${tx.amount.toStringAsFixed(tx.amount.truncateToDouble() == tx.amount ? 0 : 2)}',
+            '${isCredit ? '+' : '-'} $symbol${tx.amount.toStringAsFixed(tx.amount.truncateToDouble() == tx.amount ? 0 : 2)}',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.bold,

@@ -25,7 +25,7 @@ class GoogleRoutesService {
 
   GoogleRoutesService({Dio? dio, Logger? logger})
       : _dio = dio ?? _buildDio(),
-        _logger = logger ?? Logger(printer: PrettyPrinter(methodCount: 0));
+        _logger = logger ?? Logger(printer: PrettyPrinter(methodCount: 0, noBoxingByDefault: true));
 
   static Dio _buildDio() {
     return Dio(

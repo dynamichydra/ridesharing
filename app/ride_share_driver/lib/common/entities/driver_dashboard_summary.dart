@@ -34,6 +34,7 @@ class DriverDashboardSummary {
   final String? vehicleModel;
   final String? vehicleNumber;
   final DriverTodayStats today;
+  final String currencyCode;
 
   const DriverDashboardSummary({
     required this.id,
@@ -45,6 +46,7 @@ class DriverDashboardSummary {
     this.vehicleModel,
     this.vehicleNumber,
     required this.today,
+    this.currencyCode = 'INR',
   });
 
   factory DriverDashboardSummary.fromJson(Map<String, dynamic> json) {
@@ -60,6 +62,7 @@ class DriverDashboardSummary {
       today: DriverTodayStats.fromJson(
         json['today'] as Map<String, dynamic>? ?? {},
       ),
+      currencyCode: json['currencyCode']?.toString() ?? json['currency_code']?.toString() ?? json['currency']?.toString() ?? 'INR',
     );
   }
 }

@@ -1,7 +1,8 @@
-import 'package:flutter_bloc/flutter_bloc.dart';
+ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/utils/location_helper.dart';
+import '../../../../core/constants/constants.dart';
 import '../../domain/entities/vehicle.dart';
 import '../../domain/entities/passenger_info.dart';
 import '../../domain/repositories/booking_repository.dart';
@@ -102,6 +103,11 @@ class BookingVehicleOptionsLoaded extends BookingState {
   final String destinationName;
   final String destinationAddress;
   final double distanceMiles;
+  final double distanceKm;
+  final int durationMin;
+  final String currencyCode;
+  final String currencySymbol;
+  final String countryId;
   final List<Vehicle> vehicles;
   final Map<String, double> calculatedFares;
   final Map<String, double>? originalFares;
@@ -118,6 +124,11 @@ class BookingVehicleOptionsLoaded extends BookingState {
     required this.destinationName,
     required this.destinationAddress,
     required this.distanceMiles,
+    this.distanceKm = 0.0,
+    this.durationMin = 0,
+    this.currencyCode = 'INR',
+    this.currencySymbol = '₹',
+    this.countryId = '',
     required this.vehicles,
     required this.calculatedFares,
     required this.selectedVehicle,
@@ -135,6 +146,11 @@ class BookingVehicleOptionsLoaded extends BookingState {
     double? discountAmount,
     String? promoDescription,
     bool clearPromo = false,
+    double? distanceKm,
+    int? durationMin,
+    String? currencyCode,
+    String? currencySymbol,
+    String? countryId,
   }) {
     return BookingVehicleOptionsLoaded(
       pickup: pickup,
@@ -144,6 +160,11 @@ class BookingVehicleOptionsLoaded extends BookingState {
       destinationName: destinationName,
       destinationAddress: destinationAddress,
       distanceMiles: distanceMiles,
+      distanceKm: distanceKm ?? this.distanceKm,
+      durationMin: durationMin ?? this.durationMin,
+      currencyCode: currencyCode ?? this.currencyCode,
+      currencySymbol: currencySymbol ?? this.currencySymbol,
+      countryId: countryId ?? this.countryId,
       vehicles: vehicles,
       calculatedFares: calculatedFares ?? this.calculatedFares,
       originalFares: originalFares ?? this.originalFares,
@@ -163,6 +184,11 @@ class BookingVehicleOptionsLoaded extends BookingState {
         destinationName,
         destinationAddress,
         distanceMiles,
+        distanceKm,
+        durationMin,
+        currencyCode,
+        currencySymbol,
+        countryId,
         vehicles,
         calculatedFares,
         originalFares,
@@ -316,32 +342,58 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
 
       final List<Vehicle> vehiclesList = [];
       final Map<String, double> fares = {};
+      double firstDistKm = 0.0;
+      int firstDurationMin = 0;
 
       for (final est in estimates) {
         final String typeId = est['vehicleTypeId']?.toString() ?? '';
         final String name = est['vehicleTypeName']?.toString() ?? 'Ride';
         final int estimatedFareMinor = est['estimatedFareMinor'] as int? ?? 0;
-        final double fareValue = estimatedFareMinor / 100.0;
+        final double fareValue = estimatedFareMinor > 0
+            ? (estimatedFareMinor / 100.0)
+            : ((est['estimatedFare'] as num?)?.toDouble() ?? 0.0);
         
-        final double distKm = double.tryParse(est['distanceKm']?.toString() ?? '0.0') ?? 0.0;
-        final int durationMin = est['durationMin'] as int? ?? 0;
+        final double distKm = double.tryParse(est['distanceKm']?.toString() ?? '0.0') ?? (distance * 1.60934);
+        final int durationMin = est['durationMin'] as int? ?? (distance * 2.5).round();
+        final int durationInTrafficMin = est['durationInTrafficMin'] as int? ?? durationMin;
+        final Map<String, dynamic>? breakdown = est['breakdown'] is Map ? Map<String, dynamic>.from(est['breakdown'] as Map) : null;
+
+        if (firstDistKm == 0.0) firstDistKm = distKm;
+        if (firstDurationMin == 0) firstDurationMin = durationInTrafficMin > 0 ? durationInTrafficMin : durationMin;
+
+        final int etaMin = (est['etaMinutes'] as num?)?.toInt() ??
+            (est['etaMin'] as num?)?.toInt() ??
+            (est['eta'] as num?)?.toInt() ??
+            (name.toLowerCase().contains('bike') || name.toLowerCase().contains('moto') ? 3 : 5);
+
+        final String cId = est['countryId']?.toString() ?? '';
 
         final vehicle = Vehicle(
           id: typeId,
           name: name,
-          description: '${distKm.toStringAsFixed(1)} km • ${durationMin} mins',
+          description: '${distKm.toStringAsFixed(1)} km • ${durationInTrafficMin > 0 ? durationInTrafficMin : durationMin} mins',
           baseFare: fareValue,
           perMile: 0,
           perMinute: 0,
           capacity: name.toLowerCase().contains('bike') || name.toLowerCase().contains('moto') ? 1 : 4,
           multiplier: 1.0,
-          etaMinutes: 5,
+          etaMinutes: etaMin,
           type: name.toLowerCase().contains('bike') || name.toLowerCase().contains('moto') ? 'bike' : 'sedan',
+          distanceKm: distKm,
+          durationMin: durationMin,
+          durationInTrafficMin: durationInTrafficMin,
+          breakdown: breakdown,
+          countryId: cId,
         );
 
         vehiclesList.add(vehicle);
         fares[typeId] = fareValue;
       }
+
+      final String currencyCode = estimates.first['currencyCode']?.toString() ?? estimates.first['currency']?.toString() ?? 'INR';
+      final String currencySymbol = AppConstants.getCurrencySymbol(currencyCode);
+      final String firstCountryId = estimates.first['countryId']?.toString() ?? '';
+      AppConstants.currencySymbol = currencySymbol;
 
       emit(BookingVehicleOptionsLoaded(
         pickup: event.pickup,
@@ -351,6 +403,11 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
         destinationName: event.destinationName,
         destinationAddress: event.destinationAddress,
         distanceMiles: distance,
+        distanceKm: firstDistKm,
+        durationMin: firstDurationMin,
+        currencyCode: currencyCode,
+        currencySymbol: currencySymbol,
+        countryId: firstCountryId,
         vehicles: vehiclesList,
         calculatedFares: fares,
         originalFares: Map<String, double>.from(fares),

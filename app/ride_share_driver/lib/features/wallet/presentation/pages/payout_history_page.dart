@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/utils/currency_helper.dart';
 import '../../../../injection_container.dart' as di;
 import '../../../../common/widgets/custom_toast.dart';
 import '../../../../style/appcolors.dart';
@@ -152,7 +153,7 @@ class _PayoutHistoryPageState extends State<PayoutHistoryPage> {
                   child: Column(
                     children: [
                       Text(
-                        '₹${payout.amount.toStringAsFixed(2)}',
+                        '${CurrencyHelper.getSymbol(payout.currencyCode)}${payout.amount.toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 32,
                           fontWeight: FontWeight.w900,
@@ -498,7 +499,7 @@ class _PayoutHistoryPageState extends State<PayoutHistoryPage> {
             ),
             const SizedBox(height: 6),
             Text(
-              '₹${totalCompleted.toStringAsFixed(2)}',
+              '${CurrencyHelper.getSymbol(state is PayoutHistoryLoaded && state.payouts.isNotEmpty ? state.payouts.first.currencyCode : "CAD")}${totalCompleted.toStringAsFixed(2)}',
               style: const TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.w900,
@@ -814,7 +815,7 @@ class _PayoutHistoryPageState extends State<PayoutHistoryPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '₹${payout.amount.toStringAsFixed(2)}',
+                      '${CurrencyHelper.getSymbol(payout.currencyCode)}${payout.amount.toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w900,

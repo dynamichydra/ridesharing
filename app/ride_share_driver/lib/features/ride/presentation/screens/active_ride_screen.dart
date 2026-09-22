@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter/services.dart';
 import '../../../../common/widgets/custom_toast.dart';
+import '../../../../core/utils/currency_helper.dart';
 import '../../../../injection_container.dart' as di;
 import '../../data/datasources/ride_remote_datasource.dart';
 import '../../domain/entities/active_ride.dart';
@@ -616,7 +617,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
     final minor = ride.finalFareMinor ?? ride.estimatedFareMinor;
     if (minor == null) return '—';
     final major = minor / 100;
-    return '₹${major.toStringAsFixed(2)}';
+    return '${CurrencyHelper.getSymbol(ride.currencyCode)}${major.toStringAsFixed(2)}';
   }
 
   String _titleFor(String status) {
@@ -670,6 +671,8 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
           final feeMinor = state.feeMinor;
           final feeNum = feeMinor / 100.0;
           final fee = feeNum.toStringAsFixed(2);
+          final code = state.rawData['currencyCode']?.toString() ?? state.rawData['currency_code']?.toString() ?? state.rawData['currency']?.toString();
+          final sym = CurrencyHelper.getSymbol(code);
 
           showModalBottomSheet(
             context: context,
@@ -677,7 +680,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
             enableDrag: false,
             isScrollControlled: true,
             backgroundColor: Colors.transparent,
-            builder: (sheetCtx) => _buildNoShowCompletionSheet(sheetCtx, fee),
+            builder: (sheetCtx) => _buildNoShowCompletionSheet(sheetCtx, fee, sym),
           );
         } else if (state is RideSosSuccess) {
           CustomToast.show(context, state.message);
@@ -1131,7 +1134,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                                 child: Text(
                                   (ride.paymentMethod?.toLowerCase() == 'wallet')
                                       ? 'Payment: Ryva Wallet (Automatic Credit)'
-                                      : 'Payment: Cash (Collect ₹${((ride.finalFareMinor ?? ride.estimatedFareMinor ?? 0) / 100.0).toStringAsFixed(0)} cash from rider)',
+                                      : 'Payment: Cash (Collect ${CurrencyHelper.getSymbol(ride.currencyCode)}${((ride.finalFareMinor ?? ride.estimatedFareMinor ?? 0) / 100.0).toStringAsFixed(2)} cash from rider)',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
@@ -1236,7 +1239,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
     );
   }
 
-  Widget _buildNoShowCompletionSheet(BuildContext sheetCtx, String fee) {
+  Widget _buildNoShowCompletionSheet(BuildContext sheetCtx, String fee, [String symbol = '₹']) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
       decoration: const BoxDecoration(
@@ -1326,7 +1329,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '₹$fee',
+                  '$symbol$fee',
                   style: const TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.w900,
@@ -1387,6 +1390,8 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
     final double commissionNum = commissionMinor / 100.0;
     final double driverEarningsNum = driverEarningsMinor / 100.0;
 
+    final sym = CurrencyHelper.getSymbol(ride.currencyCode);
+
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
       decoration: const BoxDecoration(
@@ -1445,7 +1450,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
           Text(
             isWallet
                 ? 'Your net earnings have been credited to your Ryva Wallet.'
-                : 'Please collect ₹${riderPayableNum.toStringAsFixed(riderPayableNum % 1 == 0 ? 0 : 2)} from the rider.',
+                : 'Please collect $sym${riderPayableNum.toStringAsFixed(riderPayableNum % 1 == 0 ? 0 : 2)} from the rider.',
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 14,
@@ -1491,8 +1496,8 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                 const SizedBox(height: 4),
                 Text(
                   isWallet
-                      ? '₹${driverEarningsNum.toStringAsFixed(2)}'
-                      : '₹${riderPayableNum.toStringAsFixed(riderPayableNum % 1 == 0 ? 0 : 2)}',
+                      ? '$sym${driverEarningsNum.toStringAsFixed(2)}'
+                      : '$sym${riderPayableNum.toStringAsFixed(riderPayableNum % 1 == 0 ? 0 : 2)}',
                   style: TextStyle(
                     fontSize: 34,
                     fontWeight: FontWeight.w900,
@@ -1503,7 +1508,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                 if (!isWallet && hasPromo) ...[
                   const SizedBox(height: 2),
                   Text(
-                    '(Total fare: ₹${grossFareNum.toStringAsFixed(grossFareNum % 1 == 0 ? 0 : 2)})',
+                    '(Total fare: $sym${grossFareNum.toStringAsFixed(grossFareNum % 1 == 0 ? 0 : 2)})',
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -1539,20 +1544,20 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                 const SizedBox(height: 12),
                 _buildBreakdownRow(
                   label: isWallet ? 'Total Fare' : 'Fare paid by rider',
-                  amount: '₹${(isWallet ? grossFareNum : riderPayableNum).toStringAsFixed(2)}',
+                  amount: '$sym${(isWallet ? grossFareNum : riderPayableNum).toStringAsFixed(2)}',
                 ),
                 if (hasPromo) ...[
                   const SizedBox(height: 8),
                   _buildBreakdownRow(
                     label: 'Promo incentive (from Ryva)',
-                    amount: '+ ₹${promoIncentiveNum.toStringAsFixed(2)}',
+                    amount: '+ $sym${promoIncentiveNum.toStringAsFixed(2)}',
                     amountColor: const Color(0xFF009048),
                   ),
                 ],
                 const SizedBox(height: 8),
                 _buildBreakdownRow(
                   label: 'Platform commission',
-                  amount: '- ₹${commissionNum.toStringAsFixed(2)}',
+                  amount: '- $sym${commissionNum.toStringAsFixed(2)}',
                   amountColor: const Color(0xFFDC2626),
                 ),
                 const Padding(
@@ -1561,7 +1566,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                 ),
                 _buildBreakdownRow(
                   label: 'Your Net Earnings',
-                  amount: '₹${driverEarningsNum.toStringAsFixed(2)}',
+                  amount: '$sym${driverEarningsNum.toStringAsFixed(2)}',
                   isBold: true,
                   amountColor: const Color(0xFF009048),
                 ),
@@ -1591,7 +1596,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Promo incentive of ₹${promoIncentiveNum.toStringAsFixed(2)} will be added to your wallet after ride completion.',
+                      'Promo incentive of $sym${promoIncentiveNum.toStringAsFixed(2)} will be added to your wallet after ride completion.',
                       style: const TextStyle(
                         fontSize: 12,
                         color: Color(0xFFB45309),

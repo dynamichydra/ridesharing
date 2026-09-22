@@ -117,6 +117,24 @@ class AppConstants {
   static const String androidMapId = 'fff6d11d7fdc289b41602fe8';
   static const String iosMapId = 'fff6d11d7fdc289b1acc6a66';
 
+  /// Automatically resolves currency symbol based on currency code (e.g. INR -> ₹, USD -> $, EUR -> €)
+  static String getCurrencySymbol(String? currencyCode) {
+    if (currencyCode == null || currencyCode.isEmpty) return currencySymbol;
+    final code = currencyCode.toUpperCase();
+    for (final country in CountryConfig.supportedCountries) {
+      if (country.currencyCode.toUpperCase() == code) {
+        return country.currencySymbol;
+      }
+    }
+    if (code == 'INR') return '₹';
+    if (code == 'USD') return '\$';
+    if (code == 'EUR') return '€';
+    if (code == 'GBP') return '£';
+    if (code == 'BDT') return '৳';
+    if (code == 'BRL') return 'R\$';
+    return code;
+  }
+
   /// Automatically resolves the correct Google Cloud Map ID based on platform
   static String get cloudMapId {
     if (defaultTargetPlatform == TargetPlatform.iOS) {

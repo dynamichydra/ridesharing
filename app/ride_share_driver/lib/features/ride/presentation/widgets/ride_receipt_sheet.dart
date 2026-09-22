@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/utils/currency_helper.dart';
 import '../../../../injection_container.dart';
 import '../../data/datasources/ride_remote_datasource.dart';
 import '../../data/models/ride_receipt_model.dart';
@@ -49,7 +50,7 @@ class _RideReceiptSheetState extends State<RideReceiptSheet> {
   }
 
   String _formatCurrency(int amountMinor, String code) {
-    final symbol = code.toUpperCase() == 'INR' ? '₹' : '\$';
+    final symbol = CurrencyHelper.getSymbol(code);
     final val = (amountMinor / 100).toStringAsFixed(2);
     return '$symbol$val';
   }

@@ -3,8 +3,9 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
 import '../services/storage_service.dart';
-import '../services/app_logger.dart';
 import '../../injection_container.dart';
+
+import 'interceptors/http_log_interceptor.dart';
 
 class DioClient {
   final Dio dio;
@@ -52,24 +53,16 @@ class DioClient {
           return handler.next(error);
         },
       ),
-      LogInterceptor(
-        request: true,
-        requestHeader: true,
-        requestBody: true,
-        responseHeader: false,
-        responseBody: true,
-        error: true,
-        logPrint: (obj) => AppLogger.d(obj.toString()),
-      ),
+      HttpLogInterceptor(),
     ]);
   }
 
   /// Platform-aware local API URL (Android emulator vs iOS/web/desktop)
   static String get baseUrl =>
-          Platform.isAndroid ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
-      //  Platform.isAndroid ? 'https://rideshareapi.dokume.in' : 'https://rideshareapi.dokume.in';
-      //  Platform.isAndroid ? 'https://ryva.duckdns.org' : 'https://ryva.duckdns.org';
-      //  Platform.isAndroid ? 'https://rideshareapi.dokume.in' : 'https://rideshareapi.dokume.in';
+         // Platform.isAndroid ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+      // Platform.isAndroid ? 'https://rideshareapi.dokume.in' : 'https://rideshareapi.dokume.in';
+      // Platform.isAndroid ? 'https://ryva.duckdns.org' : 'https://ryva.duckdns.org';
+      Platform.isAndroid ? 'https://rideshareapi.dokume.in' : 'https://rideshareapi.dokume.in';
 
   /// Socket.IO base URL — just the origin, no path prefix.
   /// Socket.IO is mounted on the raw HTTP server, not under /api/v1.

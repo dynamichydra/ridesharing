@@ -12,6 +12,11 @@ class Vehicle extends Equatable {
   final int etaMinutes;
   final String type;
   final bool isShared;
+  final double distanceKm;
+  final int durationMin;
+  final int durationInTrafficMin;
+  final Map<String, dynamic>? breakdown;
+  final String countryId;
 
   const Vehicle({
     required this.id,
@@ -25,6 +30,11 @@ class Vehicle extends Equatable {
     required this.etaMinutes,
     required this.type,
     this.isShared = false,
+    this.distanceKm = 0.0,
+    this.durationMin = 0,
+    this.durationInTrafficMin = 0,
+    this.breakdown,
+    this.countryId = '',
   });
 
   @override
@@ -40,5 +50,10 @@ class Vehicle extends Equatable {
         etaMinutes,
         type,
         isShared,
+        distanceKm,
+        durationMin,
+        durationInTrafficMin,
+        breakdown,
+        countryId,
       ];
 }

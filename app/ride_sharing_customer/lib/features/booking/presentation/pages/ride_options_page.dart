@@ -68,8 +68,10 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
   Widget build(BuildContext context) {
     final walletState = context.watch<WalletBloc>().state;
     double walletBalance = 0.0;
+    String walletCurrency = 'INR';
     if (walletState is WalletLoaded) {
       walletBalance = walletState.balance;
+      walletCurrency = walletState.currency;
     }
 
     return Scaffold(
@@ -118,6 +120,11 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                     paymentMethod: state.paymentMethod,
                     passenger: state.passenger,
                     trackingUrl: state.trackingUrl,
+                    currencyCode: _cachedOptions?.currencyCode ?? 'INR',
+                    currencySymbol: _cachedOptions?.currencySymbol ?? '₹',
+                    breakdown: state.selectedVehicle.breakdown,
+                    distanceKm: state.selectedVehicle.distanceKm,
+                    etaMin: state.selectedVehicle.etaMinutes,
                   ),
                 );
             context.go('/ride-tracking');
@@ -283,8 +290,8 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
             }
 
             return _isConfirmStep
-                ? _buildConfirmRideView(context, data, walletBalance)
-                : _buildChooseRideView(context, data, walletBalance);
+                ? _buildConfirmRideView(context, data, walletBalance, walletCurrency)
+                : _buildChooseRideView(context, data, walletBalance, walletCurrency);
           }
 
           return const LoadingView();
@@ -524,7 +531,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
   // ===========================================================================
   // Screen 2: Choose a ride (Available Ride Options)
   // ===========================================================================
-  Widget _buildChooseRideView(BuildContext context, BookingVehicleOptionsLoaded state, double walletBalance) {
+  Widget _buildChooseRideView(BuildContext context, BookingVehicleOptionsLoaded state, double walletBalance, String walletCurrency) {
     final selectedPrice = state.calculatedFares[state.selectedVehicle.id] ?? state.selectedVehicle.baseFare;
 
     return Column(
@@ -617,7 +624,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                                             borderRadius: BorderRadius.circular(4),
                                           ),
                                           child: Text(
-                                            'Save ₹${(origPrice - price).toStringAsFixed(0)}',
+                                            'Save ${state.currencySymbol}${(origPrice - price).toStringAsFixed(2)}',
                                             style: const TextStyle(
                                               fontSize: 9,
                                               fontWeight: FontWeight.bold,
@@ -634,9 +641,17 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                                     style: const TextStyle(fontSize: 12, color: Color(0xFF8A94A6)),
                                   ),
                                   const SizedBox(height: 2),
-                                  Text(
-                                    '${vehicle.etaMinutes} min away • 18 min',
-                                    style: const TextStyle(fontSize: 11, color: Color(0xFF8A94A6)),
+                                  Builder(
+                                    builder: (context) {
+                                      final int tripDuration = vehicle.durationInTrafficMin > 0
+                                          ? vehicle.durationInTrafficMin
+                                          : (vehicle.durationMin > 0 ? vehicle.durationMin : state.durationMin);
+                                      final double tripDist = vehicle.distanceKm > 0 ? vehicle.distanceKm : state.distanceKm;
+                                      return Text(
+                                        '${vehicle.etaMinutes} min away • $tripDuration min (${tripDist.toStringAsFixed(1)} km)',
+                                        style: const TextStyle(fontSize: 11, color: Color(0xFF8A94A6)),
+                                      );
+                                    },
                                   ),
                                 ],
                               ),
@@ -650,7 +665,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                                   children: [
                                     if (hasDiscount)
                                       Text(
-                                        '${AppConstants.currencySymbol}${origPrice.toStringAsFixed(0)}',
+                                        '${state.currencySymbol}${origPrice.toStringAsFixed(2)}',
                                         style: const TextStyle(
                                           fontSize: 12,
                                           color: Color(0xFF8A94A6),
@@ -658,7 +673,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                                         ),
                                       ),
                                     Text(
-                                      '${AppConstants.currencySymbol}${price.toStringAsFixed(0)}',
+                                      '${state.currencySymbol}${price.toStringAsFixed(2)}',
                                       style: TextStyle(
                                         fontSize: 17,
                                         fontWeight: FontWeight.bold,
@@ -751,7 +766,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                                     const SizedBox(height: 1),
                                     Text(
                                       state.discountAmount != null && state.discountAmount! > 0
-                                          ? 'Discount of ₹${state.discountAmount!.toStringAsFixed(0)} applied'
+                                          ? 'Discount of ${state.currencySymbol}${state.discountAmount!.toStringAsFixed(state.discountAmount! % 1 == 0 ? 0 : 2)} applied'
                                           : (state.promoDescription ?? 'Coupon applied'),
                                       style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                                     ),
@@ -890,6 +905,10 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                     Expanded(
                       child: InkWell(
                         onTap: () {
+                          if (walletCurrency.toUpperCase() != state.currencyCode.toUpperCase()) {
+                            CustomToast.show(context, 'Wallet currency (${walletCurrency.toUpperCase()}) does not match ride currency (${state.currencyCode.toUpperCase()})');
+                            return;
+                          }
                           if (walletBalance < selectedPrice) {
                             _showInsufficientWalletSnackbar(context, walletBalance, selectedPrice);
                             return;
@@ -924,7 +943,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                                     const Text('Wallet', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF021B47))),
                                     const SizedBox(height: 1),
                                     Text(
-                                      'Balance: ₹${walletBalance.toStringAsFixed(2)}',
+                                      'Balance: ${AppConstants.getCurrencySymbol(walletCurrency)}${walletBalance.toStringAsFixed(2)} ($walletCurrency)',
                                       style: const TextStyle(fontSize: 10, color: Color(0xFF8A94A6)),
                                     ),
                                   ],
@@ -963,9 +982,15 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                   height: 52,
                   child: ElevatedButton(
                     onPressed: () {
-                      if (_paymentMethod == 'Wallet' && walletBalance < selectedPrice) {
-                        _showInsufficientWalletSnackbar(context, walletBalance, selectedPrice);
-                        return;
+                      if (_paymentMethod == 'Wallet') {
+                        if (walletCurrency.toUpperCase() != state.currencyCode.toUpperCase()) {
+                          CustomToast.show(context, 'Wallet currency (${walletCurrency.toUpperCase()}) does not match ride currency (${state.currencyCode.toUpperCase()})');
+                          return;
+                        }
+                        if (walletBalance < selectedPrice) {
+                          _showInsufficientWalletSnackbar(context, walletBalance, selectedPrice);
+                          return;
+                        }
                       }
                       if (_isBookingForSomeoneElse && _passenger == null) {
                         CustomToast.show(context, 'Please enter passenger details');
@@ -999,7 +1024,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                       children: [
                         if (hasDiscount) ...[
                           Text(
-                            '${AppConstants.currencySymbol}${origPrice.toStringAsFixed(0)}',
+                            '${state.currencySymbol}${origPrice.toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontSize: 14,
                               color: Color(0xFF8A94A6),
@@ -1009,7 +1034,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                           const SizedBox(width: 4),
                         ],
                         Text(
-                          '${AppConstants.currencySymbol}${selectedPrice.toStringAsFixed(0)}',
+                          '${state.currencySymbol}${selectedPrice.toStringAsFixed(2)}',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -1023,7 +1048,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                     final origPrice = (state.originalFares ?? state.calculatedFares)[state.selectedVehicle.id] ?? state.selectedVehicle.baseFare;
                     final bool hasDiscount = state.appliedPromoCode != null && origPrice > selectedPrice;
                     return Text(
-                      hasDiscount ? 'Total (Saved ₹${(origPrice - selectedPrice).toStringAsFixed(0)})' : 'Total',
+                      hasDiscount ? 'Total (Saved ${state.currencySymbol}${(origPrice - selectedPrice).toStringAsFixed(2)})' : 'Total',
                       style: TextStyle(
                         fontSize: 11,
                         color: hasDiscount ? const Color(0xFF009048) : const Color(0xFF8A94A6),
@@ -1043,12 +1068,69 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
   // ===========================================================================
   // Screen 3: Confirm Your Ride
   // ===========================================================================
-  Widget _buildConfirmRideView(BuildContext context, BookingVehicleOptionsLoaded state, double walletBalance) {
-    final price = state.calculatedFares[state.selectedVehicle.id] ?? state.selectedVehicle.baseFare;
-    final double baseFare = (price * 0.75).clamp(20.0, price);
-    final double distanceFare = (price * 0.18).clamp(5.0, price);
-    final double timeFare = (price - baseFare - distanceFare).clamp(0.0, price);
-    final assetPath = _getVehicleAsset(state.selectedVehicle.name);
+  Widget _buildConfirmRideView(BuildContext context, BookingVehicleOptionsLoaded state, double walletBalance, String walletCurrency) {
+    final selectedVeh = state.selectedVehicle;
+    final price = state.calculatedFares[selectedVeh.id] ?? selectedVeh.baseFare;
+    final origPrice = (state.originalFares ?? state.calculatedFares)[selectedVeh.id] ?? selectedVeh.baseFare;
+    final assetPath = _getVehicleAsset(selectedVeh.name);
+
+    final double distanceKm = selectedVeh.distanceKm > 0 ? selectedVeh.distanceKm : state.distanceKm;
+    final int durationMin = selectedVeh.durationInTrafficMin > 0
+        ? selectedVeh.durationInTrafficMin
+        : (selectedVeh.durationMin > 0 ? selectedVeh.durationMin : state.durationMin);
+
+    final breakdown = selectedVeh.breakdown;
+    double baseFare = 0.0;
+    double distanceFare = 0.0;
+    double timeFare = 0.0;
+    double surgeFare = 0.0;
+    double totalFees = 0.0;
+    double totalTax = 0.0;
+    String? surgeRuleName;
+    bool isSurging = false;
+    double surgeMultiplier = 1.0;
+
+    if (breakdown != null) {
+      final metered = breakdown['metered'] is Map ? breakdown['metered'] as Map : null;
+      if (metered != null) {
+        baseFare = ((metered['baseFareMinor'] as num? ?? 0) / 100.0).toDouble();
+        distanceFare = ((metered['distanceFareMinor'] as num? ?? 0) / 100.0).toDouble();
+        timeFare = ((metered['timeFareMinor'] as num? ?? 0) / 100.0).toDouble();
+      }
+
+      final surge = breakdown['surge'] is Map ? breakdown['surge'] as Map : null;
+      if (surge != null) {
+        isSurging = surge['isSurging'] == true;
+        surgeMultiplier = (surge['surgeMultiplier'] as num? ?? 1.0).toDouble();
+        surgeFare = ((surge['surgeAmountMinor'] as num? ?? 0) / 100.0).toDouble();
+      }
+
+      final rules = breakdown['rules'] is Map ? breakdown['rules'] as Map : null;
+      if (rules != null && rules['appliedRules'] is List && (rules['appliedRules'] as List).isNotEmpty) {
+        final firstRule = (rules['appliedRules'] as List).first is Map ? (rules['appliedRules'] as List).first as Map : null;
+        surgeRuleName = firstRule?['name'] as String?;
+      }
+
+      final fees = breakdown['fees'] is Map ? breakdown['fees'] as Map : null;
+      if (fees != null) {
+        totalFees = ((fees['totalFeesMinor'] as num? ?? 0) / 100.0).toDouble();
+      }
+
+      final taxes = breakdown['taxes'] is Map ? breakdown['taxes'] as Map : null;
+      if (taxes != null) {
+        totalTax = ((taxes['totalTaxMinor'] as num? ?? 0) / 100.0).toDouble();
+      }
+    }
+
+    if (baseFare == 0 && distanceFare == 0 && timeFare == 0) {
+      baseFare = (origPrice * 0.60).clamp(20.0, origPrice);
+      distanceFare = (origPrice * 0.25).clamp(5.0, origPrice);
+      timeFare = (origPrice - baseFare - distanceFare).clamp(0.0, origPrice);
+    }
+
+    String fmt(double val) {
+      return val.toStringAsFixed(2);
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -1107,7 +1189,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                     children: [
                       if (hasDiscount)
                         Text(
-                          '${AppConstants.currencySymbol}${origPrice.toStringAsFixed(0)}',
+                          '${state.currencySymbol}${fmt(origPrice)}',
                           style: const TextStyle(
                             fontSize: 12,
                             color: Color(0xFF8A94A6),
@@ -1115,7 +1197,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                           ),
                         ),
                       Text(
-                        '${AppConstants.currencySymbol}${price.toStringAsFixed(0)}',
+                        '${state.currencySymbol}${fmt(price)}',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -1294,15 +1376,15 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                 const SizedBox(height: 12),
                 const Divider(),
                 const SizedBox(height: 6),
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.near_me_rounded, size: 14, color: Color(0xFF8A94A6)),
-                    SizedBox(width: 4),
-                    Text('6.2 km', style: TextStyle(fontSize: 12, color: Color(0xFF8A94A6))),
-                    SizedBox(width: 16),
-                    Icon(Icons.access_time_rounded, size: 14, color: Color(0xFF8A94A6)),
-                    SizedBox(width: 4),
-                    Text('18 min', style: TextStyle(fontSize: 12, color: Color(0xFF8A94A6))),
+                    const Icon(Icons.near_me_rounded, size: 14, color: Color(0xFF8A94A6)),
+                    const SizedBox(width: 4),
+                    Text('${distanceKm.toStringAsFixed(1)} km', style: const TextStyle(fontSize: 12, color: Color(0xFF8A94A6))),
+                    const SizedBox(width: 16),
+                    const Icon(Icons.access_time_rounded, size: 14, color: Color(0xFF8A94A6)),
+                    const SizedBox(width: 4),
+                    Text('$durationMin min', style: const TextStyle(fontSize: 12, color: Color(0xFF8A94A6))),
                   ],
                 ),
               ],
@@ -1326,16 +1408,32 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
             ),
             child: Column(
               children: [
-                _buildFareRow('Base Fare', '₹${baseFare.toStringAsFixed(0)}'),
+                _buildFareRow('Base Fare', '${state.currencySymbol}${fmt(baseFare)}'),
                 const SizedBox(height: 8),
-                _buildFareRow('Distance (6.2 km)', '₹${distanceFare.toStringAsFixed(0)}'),
+                _buildFareRow('Distance (${distanceKm.toStringAsFixed(1)} km)', '${state.currencySymbol}${fmt(distanceFare)}'),
                 const SizedBox(height: 8),
-                _buildFareRow('Time (18 min)', '₹${timeFare.toStringAsFixed(0)}'),
+                _buildFareRow('Time ($durationMin min)', '${state.currencySymbol}${fmt(timeFare)}'),
+                if (surgeFare > 0 || (isSurging && surgeMultiplier > 1.0)) ...[
+                  const SizedBox(height: 8),
+                  _buildFareRow(
+                    surgeRuleName != null ? 'Surge ($surgeRuleName ${surgeMultiplier}x)' : 'Peak Hour Surge (${surgeMultiplier}x)',
+                    '+${state.currencySymbol}${fmt(surgeFare > 0 ? surgeFare : (origPrice * (surgeMultiplier - 1)))}',
+                    color: const Color(0xFFE65100),
+                  ),
+                ],
+                if (totalFees > 0) ...[
+                  const SizedBox(height: 8),
+                  _buildFareRow('Platform & Service Fees', '+${state.currencySymbol}${fmt(totalFees)}'),
+                ],
+                if (totalTax > 0) ...[
+                  const SizedBox(height: 8),
+                  _buildFareRow('Taxes', '+${state.currencySymbol}${fmt(totalTax)}'),
+                ],
                 if (state.discountAmount != null && state.discountAmount! > 0) ...[
                   const SizedBox(height: 8),
                   _buildFareRow(
                     'Promo Discount',
-                    '-₹${state.discountAmount!.toStringAsFixed(0)}',
+                    '-${state.currencySymbol}${fmt(state.discountAmount!)}',
                     color: const Color(0xFF009048),
                   ),
                 ],
@@ -1346,7 +1444,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('Total Fare', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF021B47))),
-                    Text('₹${price.toStringAsFixed(0)}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF009048))),
+                    Text('${state.currencySymbol}${fmt(price)}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF009048))),
                   ],
                 ),
               ],
@@ -1416,7 +1514,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                         Text(
                           state.appliedPromoCode != null
                               ? (state.discountAmount != null && state.discountAmount! > 0
-                                  ? 'Saved ₹${state.discountAmount!.toStringAsFixed(0)} on this ride'
+                                  ? 'Saved ${state.currencySymbol}${state.discountAmount!.toStringAsFixed(2)} on this ride'
                                   : (state.promoDescription ?? 'Promo applied'))
                               : 'Apply a promo code for discount',
                           style: TextStyle(
@@ -1485,7 +1583,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
                       ),
                       Text(
-                        _paymentMethod == 'Cash' ? 'Pay to driver' : 'Balance: ₹${walletBalance.toStringAsFixed(2)}',
+                        _paymentMethod == 'Cash' ? 'Pay to driver' : 'Balance: ${AppConstants.getCurrencySymbol(walletCurrency)}${walletBalance.toStringAsFixed(2)} ($walletCurrency)',
                         style: const TextStyle(fontSize: 11, color: Color(0xFF8A94A6)),
                       ),
                     ],
@@ -1494,9 +1592,15 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                 TextButton(
                   onPressed: () {
                     final targetMethod = _paymentMethod == 'Cash' ? 'Wallet' : 'Cash';
-                    if (targetMethod == 'Wallet' && walletBalance < price) {
-                      _showInsufficientWalletSnackbar(context, walletBalance, price);
-                      return;
+                    if (targetMethod == 'Wallet') {
+                      if (walletCurrency.toUpperCase() != state.currencyCode.toUpperCase()) {
+                        CustomToast.show(context, 'Wallet currency (${walletCurrency.toUpperCase()}) does not match ride currency (${state.currencyCode.toUpperCase()})');
+                        return;
+                      }
+                      if (walletBalance < price) {
+                        _showInsufficientWalletSnackbar(context, walletBalance, price);
+                        return;
+                      }
                     }
                     setState(() {
                       _paymentMethod = targetMethod;
@@ -1518,9 +1622,15 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                   ? null
                   : () {
                       final chosenMethod = _paymentMethod.toLowerCase();
-                      if (chosenMethod == 'wallet' && walletBalance < price) {
-                        _showInsufficientWalletSnackbar(context, walletBalance, price);
-                        return;
+                      if (chosenMethod == 'wallet') {
+                        if (walletCurrency.toUpperCase() != state.currencyCode.toUpperCase()) {
+                          CustomToast.show(context, 'Wallet currency (${walletCurrency.toUpperCase()}) does not match ride currency (${state.currencyCode.toUpperCase()})');
+                          return;
+                        }
+                        if (walletBalance < price) {
+                          _showInsufficientWalletSnackbar(context, walletBalance, price);
+                          return;
+                        }
                       }
                       if (_isBookingForSomeoneElse && _passenger == null) {
                         CustomToast.show(context, 'Please enter passenger details');

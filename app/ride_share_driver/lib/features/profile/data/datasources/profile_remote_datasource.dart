@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/error/app_exception.dart';
@@ -150,33 +151,56 @@ class ProfileRemoteDataSource {
       final baseUri = Uri.tryParse(apiClient.dio.options.baseUrl);
       final uploadUri = Uri.tryParse(uploadUrl);
       if (baseUri != null && uploadUri != null) {
-        if ((uploadUri.host == 'localhost' || uploadUri.host == '127.0.0.1') &&
-            baseUri.host != 'localhost' &&
-            baseUri.host != '127.0.0.1') {
+        // If the upload URL is a dev-storage local URL, force it to use the app's current base URL host.
+        if (uploadUri.path.contains('/dev-storage/') || 
+            uploadUri.host == 'localhost' || 
+            uploadUri.host == '127.0.0.1') {
           targetUrl = uploadUri.replace(
             scheme: baseUri.scheme,
             host: baseUri.host,
-            port: baseUri.hasPort ? baseUri.port : null,
+            port: baseUri.hasPort ? baseUri.port : (baseUri.scheme == 'https' ? 443 : 80),
           ).toString();
         }
       }
 
+      debugPrint('[Upload] PUT $targetUrl  bytes=${bytes.length}  ct=$contentType');
       final directDio = Dio();
       final response = await directDio.put(
         targetUrl,
-        data: Stream.fromIterable([bytes]),
+        // Pass bytes directly — Dio serialises List<int> as raw binary.
+        // Stream.fromIterable([bytes]) sends bytes as one opaque chunk and
+        // can produce a malformed body when combined with Content-Length.
+        data: bytes,
         options: Options(
           headers: {
             'Content-Type': contentType,
             'Content-Length': bytes.length,
           },
+          // Use bytes response type so error bodies are also readable.
+          responseType: ResponseType.bytes,
+          validateStatus: (status) => true, // handle all statuses manually
         ),
       );
-      return response.statusCode == 200;
+      debugPrint('[Upload] Response status=${response.statusCode}');
+      if (response.statusCode != null &&
+          response.statusCode! >= 200 &&
+          response.statusCode! < 300) {
+        return true;
+      }
+      // Log the raw error body so it shows in Flutter logs
+      final bodyStr = response.data is List<int>
+          ? String.fromCharCodes(response.data as List<int>)
+          : response.data?.toString() ?? '(empty)';
+      debugPrint('[Upload] Error body: $bodyStr');
+      throw ServerException(
+        'Upload failed (${response.statusCode}): $bodyStr',
+        statusCode: response.statusCode,
+      );
     } on DioException catch (e) {
       throw mapDioException(e);
     }
   }
+
 
   Future<Map<String, dynamic>> uploadDocument(
     String documentTypeId, {

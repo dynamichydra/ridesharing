@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../injection_container.dart';
+import '../../../../core/constants/constants.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../../../../core/widgets/custom_toast.dart';
@@ -115,7 +116,7 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
                         ),
                       ),
                       Text(
-                        '₹${fare.toStringAsFixed(0)}',
+                        '${AppConstants.currencySymbol}${fare.toStringAsFixed(2)}',
                         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                       ),
                     ],
@@ -214,10 +215,10 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
                 children: [
                   const Text('Invoice Breakdown', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
                   const SizedBox(height: 12),
-                  _buildRow('Base Fare', '₹${((fare * 0.70)).toStringAsFixed(0)}'),
-                  _buildRow('Distance & Time', '₹${((fare * 0.30)).toStringAsFixed(0)}'),
+                  _buildRow('Base Fare', '${AppConstants.currencySymbol}${((fare * 0.70)).toStringAsFixed(2)}'),
+                  _buildRow('Distance & Time', '${AppConstants.currencySymbol}${((fare * 0.30)).toStringAsFixed(2)}'),
                   const Divider(height: 20),
-                  _buildRow('Total Paid', '₹${fare.toStringAsFixed(0)}', isBold: true),
+                  _buildRow('Total Paid', '${AppConstants.currencySymbol}${fare.toStringAsFixed(2)}', isBold: true),
                 ],
               ),
             ),

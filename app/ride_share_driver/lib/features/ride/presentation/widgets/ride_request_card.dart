@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../../core/utils/currency_helper.dart';
 import '../../domain/entities/ride_offer.dart';
 
 class RideRequestCard extends StatefulWidget {
@@ -365,16 +366,16 @@ class _RideRequestCardState extends State<RideRequestCard>
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              '₹',
-                              style: TextStyle(
+                            Text(
+                              CurrencyHelper.getSymbol(offer.currencyCode),
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF0F172A),
                               ),
                             ),
                             Text(
-                              (offer.grossEstimatedFare > 0 ? offer.grossEstimatedFare : offer.estimatedFare).toStringAsFixed(0),
+                              (offer.grossEstimatedFare > 0 ? offer.grossEstimatedFare : offer.estimatedFare).toStringAsFixed(2),
                               style: const TextStyle(
                                 fontSize: 26,
                                 fontWeight: FontWeight.w900,
@@ -397,7 +398,7 @@ class _RideRequestCardState extends State<RideRequestCard>
                                 ),
                               ),
                               Text(
-                                '₹${(offer.riderEstimatedFare > 0 ? offer.riderEstimatedFare : (offer.estimatedFare - offer.promoIncentive)).toStringAsFixed(offer.riderEstimatedFare % 1 == 0 ? 0 : 2)}',
+                                '${CurrencyHelper.getSymbol(offer.currencyCode)}${(offer.riderEstimatedFare > 0 ? offer.riderEstimatedFare : (offer.estimatedFare - offer.promoIncentive)).toStringAsFixed(offer.riderEstimatedFare % 1 == 0 ? 0 : 2)}',
                                 style: const TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
@@ -413,7 +414,7 @@ class _RideRequestCardState extends State<RideRequestCard>
                                 ),
                               ),
                               Text(
-                                '₹${offer.promoIncentive.toStringAsFixed(offer.promoIncentive % 1 == 0 ? 0 : 2)}',
+                                '${CurrencyHelper.getSymbol(offer.currencyCode)}${offer.promoIncentive.toStringAsFixed(offer.promoIncentive % 1 == 0 ? 0 : 2)}',
                                 style: const TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,

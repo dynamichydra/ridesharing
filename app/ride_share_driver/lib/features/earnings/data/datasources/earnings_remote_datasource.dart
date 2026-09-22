@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/error/app_exception.dart';
+import '../../../../core/utils/currency_helper.dart';
 import '../models/earnings_model.dart';
 import '../models/commission_status_model.dart';
 
@@ -48,6 +49,8 @@ class EarningsRemoteDataSource {
       }
 
       final payload = data['MESSAGE'] as Map<String, dynamic>;
+      final currencyCode = payload['currencyCode']?.toString() ?? payload['currency']?.toString() ?? 'CAD';
+      final sym = CurrencyHelper.getSymbol(currencyCode);
 
       int parseInt(dynamic val) {
         if (val == null) return 0;
@@ -69,28 +72,29 @@ class EarningsRemoteDataSource {
           dateSubtitle: map['dateSubtitle']?.toString(),
           isToday: map['isToday'] == true,
           trips: parseInt(map['trips']),
-          amount: map['amount']?.toString() ?? '₹0.00',
+          amount: map['amount']?.toString() ?? '${sym}0.00',
         );
       }).toList();
 
       return EarningsDataModel(
-        totalEarnings: payload['totalEarnings']?.toString() ?? '₹0.00',
+        totalEarnings: payload['totalEarnings']?.toString() ?? '${sym}0.00',
         growthPercent: payload['growthPercent']?.toString() ?? '0.0%',
         growthPeriod: payload['growthPeriod']?.toString() ?? '',
-        cashCollected: payload['cashCollected']?.toString() ?? '₹0.00',
-        incentivesAmount: payload['incentivesAmount']?.toString() ?? '₹0.00',
+        cashCollected: payload['cashCollected']?.toString() ?? '${sym}0.00',
+        incentivesAmount: payload['incentivesAmount']?.toString() ?? '${sym}0.00',
         trips: parseInt(payload['trips']),
         onlineHours: payload['onlineHours']?.toString() ?? '0m',
-        avgPerTrip: payload['avgPerTrip']?.toString() ?? '₹0.00',
+        avgPerTrip: payload['avgPerTrip']?.toString() ?? '${sym}0.00',
         cashPercent: parseDouble(payload['cashPercent'], 50.0),
         walletPercent: parseDouble(payload['walletPercent'], 50.0),
-        fareAmount: payload['fareAmount']?.toString() ?? '₹0.00',
-        incentives: payload['incentives']?.toString() ?? '₹0.00',
-        otherEarnings: payload['otherEarnings']?.toString() ?? '₹0.00',
-        grossEarnings: payload['grossEarnings']?.toString() ?? '₹0.00',
-        deductions: payload['deductions']?.toString() ?? '₹0.00',
-        netEarnings: payload['netEarnings']?.toString() ?? '₹0.00',
+        fareAmount: payload['fareAmount']?.toString() ?? '${sym}0.00',
+        incentives: payload['incentives']?.toString() ?? '${sym}0.00',
+        otherEarnings: payload['otherEarnings']?.toString() ?? '${sym}0.00',
+        grossEarnings: payload['grossEarnings']?.toString() ?? '${sym}0.00',
+        deductions: payload['deductions']?.toString() ?? '${sym}0.00',
+        netEarnings: payload['netEarnings']?.toString() ?? '${sym}0.00',
         listTitle: payload['listTitle']?.toString() ?? 'Last 7 Days',
+        currencyCode: currencyCode,
         historyItems: historyItems,
       );
     } on DioException catch (e) {

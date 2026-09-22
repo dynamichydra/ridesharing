@@ -419,7 +419,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
   Widget _buildDriverAcceptedView(BuildContext context, RideTrackingActive state) {
     final spacedOtp = state.otp.padLeft(4, '0').split('').join('  ');
 
-    final distanceKm = LocationHelper.calculateDistance(
+    final distanceKm = state.remainingKm ?? LocationHelper.calculateDistance(
       state.driverPosition.latitude,
       state.driverPosition.longitude,
       state.pickup.latitude,
@@ -428,7 +428,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
     final distanceStr = distanceKm < 1.0
         ? '${(distanceKm * 1000).round()} m'
         : '${distanceKm.toStringAsFixed(1)} km';
-    final etaMins = max(1, (distanceKm / 25 * 60).round());
+    final etaMins = state.etaMin ?? max(1, (distanceKm / 25 * 60).round());
     final etaStr = '$etaMins min';
 
     return Stack(
@@ -631,7 +631,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
   Widget _buildDriverEnRouteView(BuildContext context, RideTrackingActive state) {
     final spacedOtp = state.otp.padLeft(4, '0').split('').join('  ');
 
-    final distanceKm = LocationHelper.calculateDistance(
+    final distanceKm = state.remainingKm ?? LocationHelper.calculateDistance(
       state.driverPosition.latitude,
       state.driverPosition.longitude,
       state.pickup.latitude,
@@ -640,7 +640,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
     final distanceStr = distanceKm < 1.0
         ? '${(distanceKm * 1000).round()} m'
         : '${distanceKm.toStringAsFixed(1)} km';
-    final etaMins = max(1, (distanceKm / 25 * 60).round());
+    final etaMins = state.etaMin ?? max(1, (distanceKm / 25 * 60).round());
     final etaStr = '$etaMins min';
 
     return Stack(
@@ -1073,6 +1073,18 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
   // Screen 8: Ride in Progress ("In Ride")
   // ===========================================================================
   Widget _buildInRideView(BuildContext context, RideTrackingActive state) {
+    final distanceKm = state.remainingKm ?? LocationHelper.calculateDistance(
+      state.driverPosition.latitude,
+      state.driverPosition.longitude,
+      state.destination.latitude,
+      state.destination.longitude,
+    );
+    final distanceStr = distanceKm < 1.0
+        ? '${(distanceKm * 1000).round()} m'
+        : '${distanceKm.toStringAsFixed(1)} km';
+    final etaMins = state.etaMin ?? max(1, (distanceKm / 25 * 60).round());
+    final etaStr = '$etaMins min';
+
     return Stack(
       children: [
         // 1. Live Map View
@@ -1245,11 +1257,11 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildPillItem('6.2 km', 'Distance'),
+                      _buildPillItem(distanceStr, 'Distance'),
                       _buildPillDivider(),
-                      _buildPillItem('18 min', 'Duration'),
+                      _buildPillItem(etaStr, 'Duration'),
                       _buildPillDivider(),
-                      _buildPillItem('₹${state.fare.toStringAsFixed(0)}', 'Fare'),
+                      _buildPillItem('${state.currencySymbol}${state.fare.toStringAsFixed(2)}', 'Fare'),
                     ],
                   ),
                 ),
@@ -1299,9 +1311,35 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
   // ===========================================================================
   Widget _buildRideCompletedReceiptView(BuildContext context, RideTrackingActive state) {
     final price = state.fare;
-    final double baseFare = (price * 0.75).clamp(20.0, price);
-    final double distanceFare = (price * 0.18).clamp(5.0, price);
-    final double timeFare = (price - baseFare - distanceFare).clamp(0.0, price);
+    final currencySymbol = state.currencySymbol;
+
+    double? baseFare;
+    double? distanceFare;
+    double? timeFare;
+    double? surgeFare;
+    double? taxFare;
+
+    if (state.breakdown != null) {
+      final b = state.breakdown!;
+      final metered = b['metered'] is Map ? b['metered'] as Map : null;
+      if (metered != null) {
+        if (metered['baseFareMinor'] != null) baseFare = (metered['baseFareMinor'] as num).toDouble() / 100.0;
+        if (metered['distanceFareMinor'] != null) distanceFare = (metered['distanceFareMinor'] as num).toDouble() / 100.0;
+        if (metered['timeFareMinor'] != null) timeFare = (metered['timeFareMinor'] as num).toDouble() / 100.0;
+      }
+      final surge = b['surge'] is Map ? b['surge'] as Map : null;
+      if (surge != null && surge['surgeAmountMinor'] != null) {
+        surgeFare = (surge['surgeAmountMinor'] as num).toDouble() / 100.0;
+      }
+      final taxes = b['taxes'] is Map ? b['taxes'] as Map : null;
+      if (taxes != null && taxes['totalTaxMinor'] != null) {
+        taxFare = (taxes['totalTaxMinor'] as num).toDouble() / 100.0;
+      }
+    }
+
+    baseFare ??= (price * 0.75).clamp(0.0, price);
+    distanceFare ??= (price * 0.18).clamp(0.0, price);
+    timeFare ??= (price - baseFare - distanceFare).clamp(0.0, price);
 
     return Scaffold(
       backgroundColor: const Color(0xFF009048),
@@ -1354,7 +1392,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                           style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
                         ),
                         Text(
-                          '₹${price.toStringAsFixed(0)}',
+                          '$currencySymbol${price.toStringAsFixed(2)}',
                           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
                         ),
                       ],
@@ -1363,9 +1401,13 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                     const Divider(),
                     const SizedBox(height: 10),
 
-                    _buildReceiptRow('Base Fare', '₹${baseFare.toStringAsFixed(0)}'),
-                    _buildReceiptRow('Distance (6.2 km)', '₹${distanceFare.toStringAsFixed(0)}'),
-                    _buildReceiptRow('Time (18 min)', '₹${timeFare.toStringAsFixed(0)}'),
+                    _buildReceiptRow('Base Fare', '$currencySymbol${baseFare.toStringAsFixed(2)}'),
+                    _buildReceiptRow('Distance Fare', '$currencySymbol${distanceFare.toStringAsFixed(2)}'),
+                    _buildReceiptRow('Time Fare', '$currencySymbol${timeFare.toStringAsFixed(2)}'),
+                    if (surgeFare != null && surgeFare > 0)
+                      _buildReceiptRow('Surge Fee', '$currencySymbol${surgeFare.toStringAsFixed(2)}'),
+                    if (taxFare != null && taxFare > 0)
+                      _buildReceiptRow('Taxes & Fees', '$currencySymbol${taxFare.toStringAsFixed(2)}'),
                     const SizedBox(height: 14),
                     const Divider(),
                     const SizedBox(height: 10),
