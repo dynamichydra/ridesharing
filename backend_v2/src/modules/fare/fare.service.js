@@ -15,6 +15,17 @@ export async function calculateFare(params) {
  * Estimates fare across all available vehicle types for the rider app map/selector.
  */
 export async function estimateAllTypes({ pickupLat, pickupLng, dropLat, dropLng, activeVehicleTypes, promoCode = null, userId = null }) {
+  let precomputedRoute = null;
+  try {
+    const { getRouteData } = await import('../../utils/maps.js');
+    precomputedRoute = await getRouteData(
+      parseFloat(pickupLat), parseFloat(pickupLng),
+      parseFloat(dropLat), parseFloat(dropLng),
+    );
+  } catch (err) {
+    // Non-fatal, calculateFare will handle individually
+  }
+
   return Promise.all(
     activeVehicleTypes.map((vt) =>
       calculateFare({
@@ -25,6 +36,7 @@ export async function estimateAllTypes({ pickupLat, pickupLng, dropLat, dropLng,
         vehicleTypeId: vt.id,
         promoCode,
         userId,
+        precomputedRoute,
       }).catch((err) => {
         console.warn(`[FareEstimate] Skipped vehicle type ${vt.id}:`, err.message || err);
         return null;

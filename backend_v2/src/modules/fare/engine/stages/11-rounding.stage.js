@@ -29,8 +29,12 @@ export async function executeRoundingStage(context) {
   const roundedFinalFareMinor = Math.max(0, roundToIncrement(promo.discountedFareMinor, roundingIncrementMinor));
 
   const breakdown = {
-    pricingVersionId,
-    pricingVersionNumber,
+    countryId: country.id,
+    currencyCode,
+    cityTypeId: rateCard.cityTypeId || context.cityTypeId || null,
+    cityTypeFareId: rateCard.id || context.cityTypeFareId || null,
+    pricingVersionId: pricingVersionId || rateCard.id || null,
+    pricingVersionNumber: pricingVersionNumber || 1,
     rateCard: {
       baseRateMinor: rateCard.baseFareMinor,
       perKmRateMinor: rateCard.perKmRateMinor,
@@ -88,7 +92,7 @@ export async function executeRoundingStage(context) {
       ) + (rateCard.platformFeeMinor || 0),
       driverEarningMinor: Math.max(
         0,
-        roundedFinalFareMinor -
+        roundedPreDiscountMinor -
         (Math.round((metered.meteredSubtotalMinor + (surge.surgeAmountMinor || 0)) * parseFloat(rateCard.nonSubscriberCommissionRate || '0.2000')) + (rateCard.platformFeeMinor || 0)) -
         (taxes.totalTaxMinor || 0)
       ),

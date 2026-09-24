@@ -37,8 +37,13 @@ export async function executeSurgeStage(context) {
   const surgeableBaseMinor = metered.meteredSubtotalMinor;
   let surgeAmountMinor = 0;
 
-  if (effectiveSurgeMultiplier > 1.0 && rules.flatFareMinor === null) {
-    surgeAmountMinor = Math.round(surgeableBaseMinor * (effectiveSurgeMultiplier - 1.0));
+  if (rules.flatFareMinor === null) {
+    if (effectiveSurgeMultiplier > 1.0) {
+      surgeAmountMinor = Math.round(surgeableBaseMinor * (effectiveSurgeMultiplier - 1.0));
+    } else if (effectiveSurgeMultiplier < 1.0) {
+      // Off-peak rule discount
+      surgeAmountMinor = Math.round(surgeableBaseMinor * (effectiveSurgeMultiplier - 1.0));
+    }
   }
 
   context.surge = {

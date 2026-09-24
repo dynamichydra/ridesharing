@@ -145,7 +145,7 @@ export async function requestRide({
     const lockedQuote = await validateAndLockQuote(quoteId, riderId);
     fareData = {
       vehicleTypeId: lockedQuote.vehicleTypeId,
-      countryId: lockedQuote.breakdown?.countryId || null,
+      countryId: lockedQuote.breakdown?.countryId || pickupCheck.city?.countryId || null,
       currencyCode: lockedQuote.currencyCode,
       appliedFareRuleIds: lockedQuote.appliedFareRuleIds || [],
       distanceKm: parseFloat(lockedQuote.distanceKm),

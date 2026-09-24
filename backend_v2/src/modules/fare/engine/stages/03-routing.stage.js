@@ -4,9 +4,9 @@ import { getRouteData } from '../../../../utils/maps.js';
  * Stage 3: Google Maps Route & Traffic Analysis.
  */
 export async function executeRoutingStage(context) {
-  const { pickupLat, pickupLng, dropLat, dropLng } = context.request;
+  const { pickupLat, pickupLng, dropLat, dropLng, precomputedRoute } = context.request;
 
-  const route = await getRouteData(
+  const route = precomputedRoute || await getRouteData(
     parseFloat(pickupLat), parseFloat(pickupLng),
     parseFloat(dropLat),   parseFloat(dropLng),
   );

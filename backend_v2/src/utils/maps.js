@@ -109,31 +109,47 @@ export async function getRouteData(originLat, originLng, destLat, destLng) {
   const origin = `${originLat},${originLng}`;
   const destination = `${destLat},${destLng}`;
 
-  const [element, route] = await Promise.all([
-    _distancematrix(origin, destination),
-    _directions(origin, destination).catch(() => null),
-  ]);
+  try {
+    const [element, route] = await Promise.all([
+      _distancematrix(origin, destination),
+      _directions(origin, destination).catch(() => null),
+    ]);
 
-  if (element.status !== 'OK') {
-    throw { statusCode: 422, message: 'Could not calculate route between given coordinates' };
+    if (!element || element.status !== 'OK') {
+      throw new Error(`Google Distance Matrix returned element status: ${element?.status || 'EMPTY'}`);
+    }
+
+    const distanceKm = element.distance.value / 1000;
+    const durationMin = Math.ceil(element.duration.value / 60);
+    const durationInTrafficMin = element.duration_in_traffic
+      ? Math.ceil(element.duration_in_traffic.value / 60)
+      : durationMin;
+    const trafficDelayS = element.duration_in_traffic
+      ? Math.max(0, element.duration_in_traffic.value - element.duration.value)
+      : 0;
+
+    const polyline = route?.overview_polyline?.points ?? null;
+    const decodedPath = polyline ? decodePolyline(polyline) : [
+      { lat: originLat, lng: originLng }, { lat: destLat, lng: destLng },
+    ];
+    const bounds = route?.bounds ?? null;
+
+    return { distanceKm, durationMin, durationInTrafficMin, trafficDelayS, polyline, decodedPath, bounds };
+  } catch (err) {
+    console.warn(`[Maps] getRouteData failed (${err.message || err}). Falling back to Haversine estimate.`);
+    metrics.routingFallbackTotal.inc({ source: 'route_error' });
+    const distanceKm = haversineKm(originLat, originLng, destLat, destLng);
+    const durationMin = Math.ceil((distanceKm / 25) * 60);
+    return {
+      distanceKm,
+      durationMin,
+      durationInTrafficMin: durationMin,
+      trafficDelayS: 0,
+      polyline: null,
+      decodedPath: [{ lat: originLat, lng: originLng }, { lat: destLat, lng: destLng }],
+      bounds: null,
+    };
   }
-
-  const distanceKm = element.distance.value / 1000;
-  const durationMin = Math.ceil(element.duration.value / 60);
-  const durationInTrafficMin = element.duration_in_traffic
-    ? Math.ceil(element.duration_in_traffic.value / 60)
-    : durationMin;
-  const trafficDelayS = element.duration_in_traffic
-    ? Math.max(0, element.duration_in_traffic.value - element.duration.value)
-    : 0;
-
-  const polyline = route?.overview_polyline?.points ?? null;
-  const decodedPath = polyline ? decodePolyline(polyline) : [
-    { lat: originLat, lng: originLng }, { lat: destLat, lng: destLng },
-  ];
-  const bounds = route?.bounds ?? null;
-
-  return { distanceKm, durationMin, durationInTrafficMin, trafficDelayS, polyline, decodedPath, bounds };
 }
 
 /**

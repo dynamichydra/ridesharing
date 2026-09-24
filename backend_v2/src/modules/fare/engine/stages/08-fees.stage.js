@@ -27,7 +27,7 @@ export async function executeFeesStage(context) {
   if (rules.flatFareMinor != null) {
     subtotalBeforeMinMinor = rules.flatFareMinor;
   } else {
-    subtotalBeforeMinMinor = metered.meteredSubtotalMinor + surge.surgeAmountMinor;
+    subtotalBeforeMinMinor = Math.max(0, metered.meteredSubtotalMinor + surge.surgeAmountMinor);
   }
 
   // Check minimum fare floor against metered+surge subtotal
