@@ -460,11 +460,11 @@ export async function getRideReceipt(rideId, requesterId) {
     currencyCode: ride.currencyCode || 'USD',
     itemization: {
       fareSnapshot: ride.fareSnapshot,
-      baseFareMinor: ride.fareSnapshot?.baseFareMinor || totalFareMinor,
-      distanceChargeMinor: ride.fareSnapshot?.distanceChargeMinor || 0,
-      timeChargeMinor: ride.fareSnapshot?.timeChargeMinor || 0,
+      baseFareMinor: ride.fareSnapshot?.breakdown?.metered?.baseFareMinor ?? ride.fareSnapshot?.breakdown?.baseFareMinor ?? ride.fareSnapshot?.baseFareMinor ?? Math.round(totalFareMinor * 0.75),
+      distanceChargeMinor: ride.fareSnapshot?.breakdown?.metered?.distanceFareMinor ?? ride.fareSnapshot?.breakdown?.distanceFareMinor ?? ride.fareSnapshot?.distanceChargeMinor ?? Math.round(totalFareMinor * 0.18),
+      timeChargeMinor: ride.fareSnapshot?.breakdown?.metered?.timeFareMinor ?? ride.fareSnapshot?.breakdown?.timeFareMinor ?? ride.fareSnapshot?.timeChargeMinor ?? Math.max(0, totalFareMinor - Math.round(totalFareMinor * 0.75) - Math.round(totalFareMinor * 0.18)),
       surgeMultiplier: ride.fareSnapshot?.surgeMultiplier || '1.00',
-      promoDiscountMinor: ride.fareSnapshot?.promoDiscountMinor || 0,
+      promoDiscountMinor: ride.fareSnapshot?.discountAmountMinor ?? ride.fareSnapshot?.promoDiscountMinor ?? 0,
       finalFareMinor: totalFareMinor,
     },
     paymentMethod: ride.paymentMethod || 'online',
@@ -972,6 +972,7 @@ export async function completeRide(rideId, driverId) {
   let ride;
   let snapshot;
   let commission;
+  let breakdownPayload;
 
   await db.transaction(async (tx) => {
     const [lockedRide] = await tx.select().from(rides).where(
@@ -987,17 +988,18 @@ export async function completeRide(rideId, driverId) {
       : ride.durationMin;
 
     snapshot = ride.fareSnapshot || {};
-    const baseFareMinor = snapshot.breakdown?.baseFareMinor ?? Math.round((snapshot.originalEstimatedFareMinor || ride.estimatedFareMinor) * 0.2);
-    const distanceFareMinor = snapshot.breakdown?.distanceFareMinor ?? Math.round((snapshot.originalEstimatedFareMinor || ride.estimatedFareMinor) * 0.6);
-    const perMinRateMinor = snapshot.breakdown?.timeFareMinor
-      ? snapshot.breakdown.timeFareMinor / Math.max(ride.durationMin, 1)
-      : 0;
-    const actualTimeFareMinor = perMinRateMinor * actualDurationMin;
-    const zoneMultiplier = snapshot.breakdown?.zoneMultiplier ?? 1;
-    const surgeMultiplier = snapshot.breakdown?.surgeMultiplier ?? 1;
-    const minFareMinor = snapshot.breakdown?.minFareMinor ?? 0;
+    const metered = snapshot.breakdown?.metered || snapshot.breakdown || {};
+    const rateCard = snapshot.breakdown?.rateCard || {};
+
+    const baseFareMinor = metered.baseFareMinor ?? snapshot.breakdown?.baseFareMinor ?? rateCard.baseRateMinor ?? Math.round((snapshot.originalEstimatedFareMinor || ride.estimatedFareMinor) * 0.2);
+    const distanceFareMinor = metered.distanceFareMinor ?? snapshot.breakdown?.distanceFareMinor ?? Math.round((snapshot.originalEstimatedFareMinor || ride.estimatedFareMinor) * 0.6);
+    const perMinRateMinor = rateCard.perMinRateMinor ?? (metered.timeFareMinor && ride.durationMin ? metered.timeFareMinor / Math.max(ride.durationMin, 1) : 0);
+    const actualTimeFareMinor = Math.round(perMinRateMinor * actualDurationMin);
+    const zoneMultiplier = snapshot.breakdown?.zoneMultiplier ?? snapshot.breakdown?.zones?.zoneMultiplier ?? 1;
+    const surgeMultiplier = snapshot.breakdown?.surgeMultiplier ?? snapshot.breakdown?.surge?.surgeMultiplier ?? 1;
+    const minFareMinor = rateCard.minFareMinor ?? metered.minFareMinor ?? snapshot.breakdown?.minFareMinor ?? 0;
     const rawFinalFareMinor = (baseFareMinor + distanceFareMinor + actualTimeFareMinor) * zoneMultiplier * surgeMultiplier;
-    grossFareMinor = Math.ceil(Math.max(rawFinalFareMinor, minFareMinor));
+    grossFareMinor = Math.ceil(Math.max(rawFinalFareMinor, minFareMinor, snapshot.originalEstimatedFareMinor || ride.estimatedFareMinor || 0));
 
     promoDiscountMinor = snapshot.breakdown?.promo?.discountAmountMinor
       || snapshot.discountAmountMinor
@@ -1005,13 +1007,13 @@ export async function completeRide(rideId, driverId) {
     finalFareMinor = Math.max(0, grossFareMinor - promoDiscountMinor);
 
     try {
-      commission = await resolveRideCommission({ ...ride, grossFareMinor, finalFareMinor }, { skipDbUpdate: true, tx });
+      commission = await resolveRideCommission({ ...ride, grossFareMinor, finalFareMinor }, { skipDbUpdate: true, tx, forceRecalculate: true });
     } catch (err) {
       console.error('[Ride] resolveRideCommission failed:', err.message);
     }
 
-    driverEarningsMinor = commission?.driverEarningsMinor ?? commission?.driverEarningMinor ?? Math.max(0, grossFareMinor - (commission?.commissionMinor ?? Math.round(grossFareMinor * 0.8)));
-    platformCommissionMinor = commission?.commissionMinor ?? (grossFareMinor - driverEarningsMinor);
+    platformCommissionMinor = commission?.commissionMinor ?? Math.round(grossFareMinor * (commission?.isSubscriber ? 0.05 : 0.2));
+    driverEarningsMinor = commission?.driverEarningsMinor ?? commission?.driverEarningMinor ?? Math.max(0, grossFareMinor - platformCommissionMinor);
 
     await tx.insert(driverEarnings).values({
       driverId,
@@ -1023,6 +1025,29 @@ export async function completeRide(rideId, driverId) {
       status: 'available',
     });
 
+    const commissionData = commission ? { ruleId: commission.ruleId, ...commission, grossFareMinor, commissionMinor: platformCommissionMinor, driverEarningsMinor } : {
+      grossFareMinor,
+      promoDiscountMinor,
+      platformSubsidyMinor: promoDiscountMinor,
+      commissionMinor: platformCommissionMinor,
+      driverEarningsMinor,
+    };
+
+    breakdownPayload = {
+      ...(snapshot.breakdown || {}),
+      grossFareMinor,
+      finalFareMinor,
+      metered: {
+        baseFareMinor,
+        distanceFareMinor,
+        timeFareMinor: actualTimeFareMinor,
+      },
+      commission: commissionData,
+      ...(snapshot.breakdown?.taxes ? { taxes: snapshot.breakdown.taxes } : {}),
+      ...(snapshot.breakdown?.surge ? { surge: snapshot.breakdown.surge } : {}),
+      ...(promoDiscountMinor > 0 ? { discount: { promoDiscountMinor }, discountAmountMinor: promoDiscountMinor } : {}),
+    };
+
     const [u] = await tx.update(rides).set({
       status: 'completed',
       finalFareMinor,
@@ -1033,13 +1058,8 @@ export async function completeRide(rideId, driverId) {
         grossFareMinor,
         discountAmountMinor: promoDiscountMinor,
         finalFareMinor,
-        commission: commission ? { ruleId: commission.ruleId, ...commission } : {
-          grossFareMinor,
-          promoDiscountMinor,
-          platformSubsidyMinor: promoDiscountMinor,
-          commissionMinor: platformCommissionMinor,
-          driverEarningsMinor,
-        },
+        breakdown: breakdownPayload,
+        commission: commissionData,
       },
     }).where(eq(rides.id, rideId)).returning();
     updated = u;
@@ -1057,6 +1077,7 @@ export async function completeRide(rideId, driverId) {
         grossFareMinor,
         driverEarningsMinor,
         currencyCode: ride.currencyCode,
+        breakdown: breakdownPayload,
       },
     });
 
@@ -1086,12 +1107,16 @@ export async function completeRide(rideId, driverId) {
         finalFareMinor,
         grossFareMinor,
         currencyCode: ride.currencyCode,
+        paymentMethod: ride.paymentMethod,
+        breakdown: breakdownPayload,
       });
       io.of('/rider').to(`ride:${rideId}`).emit('ride:completed', {
         rideId,
         finalFareMinor,
         grossFareMinor,
         currencyCode: ride.currencyCode,
+        paymentMethod: ride.paymentMethod,
+        breakdown: breakdownPayload,
       });
     }
   } catch (err) {
@@ -1110,9 +1135,14 @@ export async function completeRide(rideId, driverId) {
   await publishEvent(TOPICS.RIDE_COMPLETED, {
     id: rideId, rideId, driverId, riderId: ride.riderId,
     finalFare: fromMinor(finalFareMinor, ride.currencyCode),
+    finalFareMinor,
     grossFare: fromMinor(grossFareMinor, ride.currencyCode),
+    grossFareMinor,
     driverEarnings: fromMinor(driverEarningsMinor, ride.currencyCode),
+    driverEarningsMinor,
     currency: ride.currencyCode,
+    currencyCode: ride.currencyCode,
+    breakdown: breakdownPayload,
   });
 
   await publishEvent(TOPICS.NOTIF_PUSH, {
@@ -1173,7 +1203,15 @@ export async function completeRide(rideId, driverId) {
     }
   }
 
-  return updated;
+  return {
+    ...updated,
+    grossFareMinor,
+    promoDiscountMinor,
+    platformCommissionMinor,
+    commissionMinor: platformCommissionMinor,
+    driverEarningsMinor,
+    driverEarningMinor: driverEarningsMinor,
+  };
 }
 
 export async function cancelRideByDriver(rideId, driverId, reason) {

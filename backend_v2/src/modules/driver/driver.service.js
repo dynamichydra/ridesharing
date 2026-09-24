@@ -191,6 +191,7 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
     startedAt: rides.startedAt,
     actualDurationMin: rides.actualDurationMin,
     durationMin: rides.durationMin,
+    grossFareMinor: driverEarnings.grossFareMinor,
     netFareMinor: driverEarnings.netFareMinor,
     platformCommissionMinor: driverEarnings.platformCommissionMinor,
   }).from(rides)
@@ -263,16 +264,17 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
   let deductionsMinor = 0;
 
   for (const r of currentRides) {
-    const gross = r.fareSnapshot?.commission?.grossFareMinor || r.fareSnapshot?.grossFareMinor || r.fareSnapshot?.originalEstimatedFareMinor || r.finalFareMinor || r.estimatedFareMinor || 0;
+    const gross = r.grossFareMinor ?? r.fareSnapshot?.commission?.grossFareMinor ?? r.fareSnapshot?.grossFareMinor ?? r.finalFareMinor ?? r.estimatedFareMinor ?? 0;
     const fare = r.finalFareMinor || r.estimatedFareMinor || gross;
+    const comm = r.platformCommissionMinor ?? r.fareSnapshot?.commission?.commissionMinor ?? Math.round(gross * (r.fareSnapshot?.commission?.isSubscriber ? 0.05 : 0.2));
+
     fareAmountMinor += gross;
-    const comm = r.platformCommissionMinor ?? r.fareSnapshot?.commission?.commissionMinor ?? Math.round(gross * 0.2);
     deductionsMinor += comm;
 
     if (r.paymentMethod === 'cash') {
       cashCollectedMinor += fare;
     } else {
-      walletPaymentsMinor += (gross - comm);
+      walletPaymentsMinor += fare;
     }
 
     const rComp = r.completedAt || r.requestedAt;
@@ -306,9 +308,9 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
     ? `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`
     : `${totalMinutes}m`;
 
-  const totalFare = fareAmountMinor / 100;
-  const cashPercent = totalFare > 0 ? (cashCollectedMinor / fareAmountMinor) * 100 : 50.0;
-  const walletPercent = totalFare > 0 ? (walletPaymentsMinor / fareAmountMinor) * 100 : 50.0;
+  const totalRidesFare = cashCollectedMinor + walletPaymentsMinor;
+  const cashPercent = totalRidesFare > 0 ? (cashCollectedMinor / totalRidesFare) * 100 : (fareAmountMinor > 0 ? 100.0 : 50.0);
+  const walletPercent = totalRidesFare > 0 ? (walletPaymentsMinor / totalRidesFare) * 100 : (fareAmountMinor > 0 ? 0.0 : 50.0);
   const avgPerTripMinor = tripsCount > 0 ? Math.round(netEarningsMinor / tripsCount) : 0;
 
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -327,9 +329,11 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
   };
 
   const calculateRideNetMinor = (r) => {
-    if (r.netFareMinor != null) return r.netFareMinor;
-    const gross = r.fareSnapshot?.commission?.grossFareMinor || r.fareSnapshot?.grossFareMinor || r.finalFareMinor || r.estimatedFareMinor || 0;
+    const gross = r.grossFareMinor ?? r.fareSnapshot?.commission?.grossFareMinor ?? r.fareSnapshot?.grossFareMinor ?? r.finalFareMinor ?? r.estimatedFareMinor ?? 0;
     const comm = r.platformCommissionMinor ?? r.fareSnapshot?.commission?.commissionMinor ?? Math.round(gross * 0.2);
+    if (r.netFareMinor != null && Math.abs(r.netFareMinor - (gross - comm)) <= 1) {
+      return r.netFareMinor;
+    }
     return Math.max(0, gross - comm);
   };
 

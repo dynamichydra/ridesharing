@@ -17,6 +17,7 @@ import { handleDriverLocationUpdate } from '../modules/ride/ride.service.js';
 import { upsertDriverCell, removeDriverFromIndex } from '../modules/matching/driver-geo-index.service.js';
 
 let ioInstance = null;
+const lastDriverDbUpdate = new Map();
 
 export function getSocketStats() {
   if (!ioInstance) return { initialized: false, totalClients: 0 };
@@ -175,12 +176,16 @@ export function initSocketIO(fastifyServer, app) {
         await redis.setex(REDIS_KEYS.driverLocation(driverId), 30, JSON.stringify({ lat, lng, updatedAt: nowMs }));
         await upsertDriverCell(driverId, lat, lng, undefined, nowMs);
 
-        // Update database with latest coordinates and location timestamp
-        await db.update(drivers).set({
-          currentLat: String(lat),
-          currentLng: String(lng),
-          lastLocationAt: now,
-        }).where(eq(drivers.id, driverId));
+        // Throttle Postgres DB writes to at most once every 5 seconds per driver to prevent exhausting DB pool
+        const lastDbTime = lastDriverDbUpdate.get(driverId) || 0;
+        if (nowMs - lastDbTime >= 5000) {
+          lastDriverDbUpdate.set(driverId, nowMs);
+          await db.update(drivers).set({
+            currentLat: String(lat),
+            currentLng: String(lng),
+            lastLocationAt: now,
+          }).where(eq(drivers.id, driverId));
+        }
 
         // Bug 3 fix: handleDriverLocationUpdate reads {rideId,riderId} from Redis
         //            and calls the correct tracking phase (approach or trip)
@@ -246,6 +251,7 @@ export function initSocketIO(fastifyServer, app) {
     // ── disconnect ─────────────────────────────────────────────────────────
     socket.on('disconnect', async (reason) => {
       console.log(`[Socket/driver] disconnected: ${driverId} (${reason})`);
+      lastDriverDbUpdate.delete(driverId);
       // Mark offline only on intentional disconnects, not transport errors
       if (reason !== 'transport error' && reason !== 'ping timeout') {
         await db.update(drivers).set({ isOnline: false }).where(eq(drivers.id, driverId));
@@ -331,35 +337,39 @@ export function initSocketIO(fastifyServer, app) {
     console.log(`[Socket/admin] connected: ${socket.id}`);
 
     // Helper to send snapshot
+    const fetchDashboardSnapshot = async () => {
+      const {
+        getDashboardStats,
+        getDispatchQueue,
+        getLiveMonitoringAlerts,
+        getSupplyDemandAnalytics,
+        getRecentActivity,
+        getSupplyDemandHeatmap,
+      } = await import('../modules/admin/admin.service.js');
+
+      // Sequential fetch to reuse a single DB connection slot from the pool
+      const overview = await getDashboardStats().catch(() => null);
+      const queue = await getDispatchQueue(10).catch(() => []);
+      const alerts = await getLiveMonitoringAlerts().catch(() => []);
+      const supplyDemand = await getSupplyDemandAnalytics().catch(() => null);
+      const recentActivity = await getRecentActivity(10).catch(() => []);
+      const fleetMap = await getSupplyDemandHeatmap().catch(() => []);
+
+      return {
+        overview,
+        queue,
+        alerts,
+        supplyDemand,
+        recentActivity,
+        fleetMap,
+        timestamp: new Date().toISOString(),
+      };
+    };
+
     const sendDashboardSnapshot = async () => {
       try {
-        const {
-          getDashboardStats,
-          getDispatchQueue,
-          getLiveMonitoringAlerts,
-          getSupplyDemandAnalytics,
-          getRecentActivity,
-          getSupplyDemandHeatmap,
-        } = await import('../modules/admin/admin.service.js');
-
-        const [overview, queue, alerts, supplyDemand, recentActivity, fleetMap] = await Promise.all([
-          getDashboardStats().catch(() => null),
-          getDispatchQueue(10).catch(() => []),
-          getLiveMonitoringAlerts().catch(() => []),
-          getSupplyDemandAnalytics().catch(() => null),
-          getRecentActivity(10).catch(() => []),
-          getSupplyDemandHeatmap().catch(() => []),
-        ]);
-
-        socket.emit('dashboard:snapshot', {
-          overview,
-          queue,
-          alerts,
-          supplyDemand,
-          recentActivity,
-          fleetMap,
-          timestamp: new Date().toISOString(),
-        });
+        const snapshot = await fetchDashboardSnapshot();
+        socket.emit('dashboard:snapshot', snapshot);
       } catch (err) {
         console.warn('[Socket/admin] send snapshot error:', err.message);
       }
@@ -398,14 +408,13 @@ export function initSocketIO(fastifyServer, app) {
         getSupplyDemandHeatmap,
       } = await import('../modules/admin/admin.service.js');
 
-      const [overview, queue, alerts, supplyDemand, recentActivity, fleetMap] = await Promise.all([
-        getDashboardStats().catch(() => null),
-        getDispatchQueue(10).catch(() => []),
-        getLiveMonitoringAlerts().catch(() => []),
-        getSupplyDemandAnalytics().catch(() => null),
-        getRecentActivity(10).catch(() => []),
-        getSupplyDemandHeatmap().catch(() => []),
-      ]);
+      // Sequential fetch to reuse a single DB connection slot from the pool
+      const overview = await getDashboardStats().catch(() => null);
+      const queue = await getDispatchQueue(10).catch(() => []);
+      const alerts = await getLiveMonitoringAlerts().catch(() => []);
+      const supplyDemand = await getSupplyDemandAnalytics().catch(() => null);
+      const recentActivity = await getRecentActivity(10).catch(() => []);
+      const fleetMap = await getSupplyDemandHeatmap().catch(() => []);
 
       ioInstance.of('/admin').to('admin:dashboard').emit('dashboard:snapshot', {
         overview,

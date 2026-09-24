@@ -11,9 +11,9 @@ const pool = new pg.Pool({
   database: process.env.DB_NAME || env.DB_NAME,
   user: process.env.DB_USER || env.DB_USER,
   password: process.env.DB_PASSWORD || env.DB_PASSWORD,
-  max: parseInt(process.env.DB_POOL_MAX || '10', 10),
-  idleTimeoutMillis: 10000,
-  connectionTimeoutMillis: 5000,
+  max: parseInt(process.env.DB_POOL_MAX || '5', 10),
+  idleTimeoutMillis: 5000,
+  connectionTimeoutMillis: 10000,
   allowExitOnIdle: true,
   ...(sslConfig ? { ssl: sslConfig } : {}),
 });

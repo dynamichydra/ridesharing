@@ -239,7 +239,11 @@ async function startRideConsumer() {
         _io.of('/rider').to(`rider:${payload.riderId}`).emit('ride:completed', {
           rideId: payload.rideId,
           finalFare: payload.finalFare,
-          currency: payload.currency,
+          finalFareMinor: payload.finalFareMinor,
+          grossFareMinor: payload.grossFareMinor,
+          currency: payload.currency || payload.currencyCode,
+          currencyCode: payload.currencyCode || payload.currency,
+          breakdown: payload.breakdown,
         });
       }
 

@@ -157,16 +157,16 @@ export function calculateRideFinancialBreakdown({
  * @param {Date} [options.evaluatedAt]
  * @returns {Promise<object>} Persisted ride_financials row
  */
-export async function getOrCalculateRideFinancials(rideId, { evaluatedAt = null, tx = null } = {}) {
+export async function getOrCalculateRideFinancials(rideId, { evaluatedAt = null, tx = null, grossFareMinor = null, promoDiscountMinor = null, forceRecalculate = false } = {}) {
   const dbClient = tx || db;
-  // Check if immutable snapshot already exists
+  // Check if snapshot already exists
   const [existing] = await dbClient
     .select()
     .from(rideFinancials)
     .where(eq(rideFinancials.rideId, rideId))
     .limit(1);
 
-  if (existing) {
+  if (existing && !forceRecalculate && (grossFareMinor == null || existing.grossFareMinor === grossFareMinor)) {
     return existing;
   }
 
@@ -194,17 +194,19 @@ export async function getOrCalculateRideFinancials(rideId, { evaluatedAt = null,
   });
 
   // 3. Extract Gross Fare and Modifiers
-  const promoDiscountMinor =
-    ride.fareSnapshot?.breakdown?.promo?.discountAmountMinor ||
-    ride.fareSnapshot?.discountAmountMinor ||
-    ride.discountAmountMinor ||
-    0;
+  const promoDiscount = promoDiscountMinor != null
+    ? promoDiscountMinor
+    : (ride.fareSnapshot?.breakdown?.promo?.discountAmountMinor ||
+       ride.fareSnapshot?.discountAmountMinor ||
+       ride.discountAmountMinor ||
+       0);
 
-  const grossFareMinor =
-    ride.grossFareMinor ||
-    ride.fareSnapshot?.grossFareMinor ||
-    ride.fareSnapshot?.originalEstimatedFareMinor ||
-    Math.max(ride.finalFareMinor || 0, (ride.finalFareMinor || 0) + promoDiscountMinor);
+  const grossFare = grossFareMinor != null
+    ? grossFareMinor
+    : (ride.grossFareMinor ||
+       ride.fareSnapshot?.grossFareMinor ||
+       ride.fareSnapshot?.originalEstimatedFareMinor ||
+       Math.max(ride.finalFareMinor || 0, (ride.finalFareMinor || 0) + promoDiscount));
 
   const tipMinor = Number(ride.tipMinor || 0);
   const tollMinor = Number(ride.tollMinor || 0);
@@ -212,8 +214,8 @@ export async function getOrCalculateRideFinancials(rideId, { evaluatedAt = null,
 
   // 4. Calculate Financials
   const calculated = calculateRideFinancialBreakdown({
-    grossFareMinor,
-    promoDiscountMinor,
+    grossFareMinor: grossFare,
+    promoDiscountMinor: promoDiscount,
     tipMinor,
     tollMinor,
     taxMinor,
@@ -264,6 +266,39 @@ export async function getOrCalculateRideFinancials(rideId, { evaluatedAt = null,
     .onConflictDoUpdate({
       target: rideFinancials.rideId,
       set: {
+        currencyCode: calculated.currencyCode,
+        grossFareMinor: calculated.grossFareMinor,
+        bookingFeeMinor: calculated.bookingFeeMinor,
+        platformFeeMinor: calculated.platformFeeMinor,
+        commissionBaseMinor: calculated.commissionBaseMinor,
+        commissionBase: calculated.commissionBase,
+        commissionRate: calculated.commissionRate,
+        commissionMinor: calculated.commissionMinor,
+        promoDiscountMinor: calculated.promoDiscountMinor,
+        platformSubsidyMinor: calculated.platformSubsidyMinor,
+        taxMinor: calculated.taxMinor,
+        tollMinor: calculated.tollMinor,
+        tipMinor: calculated.tipMinor,
+        driverEarningMinor: calculated.driverEarningMinor,
+        platformRevenueMinor: calculated.platformRevenueMinor,
+        isSubscriber: calculated.isSubscriber,
+        subscriptionId: calculated.subscriptionId,
+        subscriptionPlanId: calculated.subscriptionPlanId,
+        subscriptionPlanVersionId: calculated.subscriptionPlanVersionId,
+        subscriptionPlanVersion: calculated.subscriptionPlanVersion,
+        commissionRuleId: calculated.commissionRuleId,
+        commissionRuleVersionId: calculated.commissionRuleVersionId,
+        commissionRuleVersion: calculated.commissionRuleVersion,
+        breakdown: {
+          ...calculated,
+          ruleSnapshot: {
+            id: rule?.id || null,
+            name: rule?.name || 'Standard Commission',
+            version: rule?.version || 1,
+            tier: rule?.resolutionTier || 'default',
+          },
+        },
+        calculatedAt: calculationTimestamp,
         updatedAt: new Date(),
       },
     })

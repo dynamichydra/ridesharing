@@ -84,9 +84,60 @@ export async function verifyRidePayment(riderId, rideId, orderRef, paymentRef, s
 // ── Driver — record cash collection ────────────────────────────────────────────
 
 export async function recordCashCollection(driverId, rideId, collectedAmountMinor = null) {
-  const ride = await _loadPayableRide(and(eq(rides.id, rideId), eq(rides.driverId, driverId)));
+  const [ride] = await db.select().from(rides)
+    .where(and(eq(rides.id, rideId), eq(rides.driverId, driverId))).limit(1);
+
+  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
+  if (ride.status !== 'completed') throw { statusCode: 409, message: 'Ride is not completed yet' };
 
   const finalCollectedMinor = collectedAmountMinor ?? ride.finalFareMinor;
+
+  // If already paid with cash, ensure cash collection is logged and return idempotently
+  if (ride.paymentStatus === 'paid' && ride.paymentMethod === 'cash') {
+    const isMismatch = finalCollectedMinor !== ride.finalFareMinor;
+    try {
+      const [existingCollection] = await db.select().from(cashCollections)
+        .where(eq(cashCollections.rideId, rideId)).limit(1);
+      if (existingCollection) {
+        if (collectedAmountMinor != null && existingCollection.collectedAmountMinor !== finalCollectedMinor) {
+          await db.update(cashCollections).set({
+            collectedAmountMinor: finalCollectedMinor,
+            status: isMismatch ? 'mismatch' : 'reported',
+            updatedAt: new Date(),
+          }).where(eq(cashCollections.id, existingCollection.id));
+        }
+      } else {
+        let commissionMinor = 0;
+        try {
+          const commission = await resolveRideCommission(ride);
+          commissionMinor = commission?.commissionMinor ?? Math.round(ride.finalFareMinor * 0.2);
+        } catch {
+          commissionMinor = Math.round(ride.finalFareMinor * 0.2);
+        }
+        await db.insert(cashCollections).values({
+          rideId,
+          driverId,
+          expectedAmountMinor: ride.finalFareMinor,
+          collectedAmountMinor: finalCollectedMinor,
+          platformCommissionMinor: commissionMinor,
+          currencyCode: ride.currencyCode || 'INR',
+          status: isMismatch ? 'mismatch' : 'reported',
+          reportedAt: new Date(),
+        });
+      }
+    } catch (e) {
+      console.warn('[RidePayment] cash_collections sync on idempotent call:', e.message);
+    }
+
+    const paymentStatus = await getRidePaymentStatus(rideId, { id: driverId, role: 'driver' });
+    return {
+      ...ride,
+      paymentMethod: 'cash',
+      paymentStatus: 'paid',
+      alreadyRecorded: true,
+      ...paymentStatus,
+    };
+  }
 
   const [payment] = await db.insert(payments).values({
     rideId, subscriptionId: null,
@@ -110,19 +161,30 @@ export async function recordCashCollection(driverId, rideId, collectedAmountMino
     commissionMinor = Math.round(ride.finalFareMinor * 0.2);
   }
 
-  // Insert cash collection record for admin cash management & reconciliation
+  // Insert or update cash collection record for admin cash management & reconciliation
   try {
     const isMismatch = finalCollectedMinor !== ride.finalFareMinor;
-    await db.insert(cashCollections).values({
-      rideId,
-      driverId,
-      expectedAmountMinor: ride.finalFareMinor,
-      collectedAmountMinor: finalCollectedMinor,
-      platformCommissionMinor: commissionMinor,
-      currencyCode: ride.currencyCode || 'INR',
-      status: isMismatch ? 'mismatch' : 'reported',
-      reportedAt: new Date(),
-    });
+    const [existingCollection] = await db.select().from(cashCollections)
+      .where(eq(cashCollections.rideId, rideId)).limit(1);
+    if (existingCollection) {
+      await db.update(cashCollections).set({
+        collectedAmountMinor: finalCollectedMinor,
+        platformCommissionMinor: commissionMinor,
+        status: isMismatch ? 'mismatch' : 'reported',
+        updatedAt: new Date(),
+      }).where(eq(cashCollections.id, existingCollection.id));
+    } else {
+      await db.insert(cashCollections).values({
+        rideId,
+        driverId,
+        expectedAmountMinor: ride.finalFareMinor,
+        collectedAmountMinor: finalCollectedMinor,
+        platformCommissionMinor: commissionMinor,
+        currencyCode: ride.currencyCode || 'INR',
+        status: isMismatch ? 'mismatch' : 'reported',
+        reportedAt: new Date(),
+      });
+    }
   } catch (err) {
     console.error('Failed to log cash_collections entry:', err);
   }
@@ -386,13 +448,28 @@ async function _loadPayableRideForUser(rideId, userId) {
 // stamps the breakdown onto ride.fareSnapshot so getRideInvoice/getRidePaymentStatus can show
 // it without a schema change to `rides`. Returns null (no commission applied) if there's no
 // driver to charge one against.
-export async function resolveRideCommission(ride, { skipDbUpdate = false, tx = null } = {}) {
+export async function resolveRideCommission(ride, { skipDbUpdate = false, tx = null, forceRecalculate = false } = {}) {
   if (!ride.driverId) return null;
-  const financials = await getOrCalculateRideFinancials(ride.id, { tx });
+  const promoDiscountMinor = ride.promoDiscountMinor
+    ?? ride.fareSnapshot?.breakdown?.promo?.discountAmountMinor
+    ?? ride.fareSnapshot?.discountAmountMinor
+    ?? 0;
+  const resolvedGrossMinor = ride.grossFareMinor
+    ?? (ride.finalFareMinor != null && ride.finalFareMinor > 0 ? (ride.finalFareMinor + promoDiscountMinor) : null)
+    ?? ride.fareSnapshot?.grossFareMinor
+    ?? ride.fareSnapshot?.originalEstimatedFareMinor
+    ?? ride.estimatedFareMinor;
+
+  const financials = await getOrCalculateRideFinancials(ride.id, {
+    tx,
+    grossFareMinor: resolvedGrossMinor,
+    promoDiscountMinor,
+    forceRecalculate,
+  });
   const rawBreakdown = financials.breakdown || financials;
-  const grossFare = rawBreakdown.grossFareMinor || ride.grossFareMinor || (ride.finalFareMinor || 0);
-  const commCut = rawBreakdown.commissionMinor ?? Math.round(grossFare * 0.2);
-  const driverEarnings = rawBreakdown.driverEarningsMinor ?? rawBreakdown.driverEarningMinor ?? Math.max(0, grossFare - commCut);
+  const grossFare = resolvedGrossMinor || rawBreakdown.grossFareMinor || (ride.finalFareMinor || 0);
+  const commCut = rawBreakdown.commissionMinor ?? Math.round(grossFare * (rawBreakdown.isSubscriber ? 0.05 : 0.2));
+  const driverEarnings = Math.max(0, grossFare - commCut);
 
   const breakdown = {
     ...rawBreakdown,
@@ -408,7 +485,7 @@ export async function resolveRideCommission(ride, { skipDbUpdate = false, tx = n
       await dbClient.update(rides).set({
         fareSnapshot: {
           ...(ride.fareSnapshot || {}),
-          grossFareMinor: financials.grossFareMinor || grossFare,
+          grossFareMinor: grossFare,
           commission: {
             ruleId: financials.commissionRuleId || null,
             ...breakdown,
