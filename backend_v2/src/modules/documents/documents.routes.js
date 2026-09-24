@@ -1,5 +1,6 @@
 import { sendSuccess, sendError, sendList, parsePagination } from '../../utils/response.js';
-import { authenticateDriver, authenticateAdmin } from '../../middleware/authenticate.js';
+import { authenticateDriver, authenticateAdmin, authenticateAny } from '../../middleware/authenticate.js';
+import { uploadBuffer, createUploadUrl, keyToPublicUrl } from '../../utils/storage.js';
 import * as docService from './documents.service.js';
 
 export async function documentsRoutes(app) {
@@ -65,11 +66,46 @@ export async function documentsRoutes(app) {
     return sendSuccess(reply, data);
   });
 
-  // ── Admin — driver document review ───────────────────────────────────────────
+  // ── Document File Upload Endpoint (Driver & Admin) ─────────────────────────
+  app.post('/upload', { preHandler: [authenticateAny] }, async (request, reply) => {
+    try {
+      if (request.isMultipart()) {
+        const file = await request.file();
+        if (!file) return sendError(reply, 'No document file uploaded in multipart request');
+        const buffer = await file.toBuffer();
+        const mime = file.mimetype || 'application/octet-stream';
+        const result = await uploadBuffer('driver-documents', mime, buffer);
+        return sendSuccess(reply, {
+          url: result.url,
+          key: result.key,
+        }, 201);
+      }
+
+      const { contentType = 'image/jpeg' } = request.body || {};
+      const result = await createUploadUrl('driver-documents', contentType);
+      return sendSuccess(reply, {
+        uploadUrl: result.uploadUrl,
+        key: result.key,
+        url: keyToPublicUrl(result.key),
+        expiresIn: result.expiresIn,
+      });
+    } catch (err) {
+      return sendError(reply, err.message || 'Document upload failed', err.statusCode || 500);
+    }
+  });
+
+  // ── Admin — driver document review & save ────────────────────────────────────
 
   app.get('/admin/drivers/:driverId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
     const data = await docService.listDriverDocuments(request.params.driverId);
     return sendSuccess(reply, data);
+  });
+
+  app.post('/admin/drivers/:driverId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+    const { documentTypeId } = request.body || {};
+    if (!documentTypeId) return sendError(reply, 'documentTypeId is required');
+    const data = await docService.adminSaveDriverDocument(request.params.driverId, request.body);
+    return sendSuccess(reply, data, 201);
   });
 
   app.post('/admin/:docId/verify', { preHandler: [authenticateAdmin] }, async (request, reply) => {

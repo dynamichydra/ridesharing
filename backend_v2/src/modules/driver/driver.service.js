@@ -789,8 +789,10 @@ export async function adminRegisterDriver(adminId, data) {
 
   const [driver] = await db.insert(drivers).values({
     name, phone, email,
+    profilePhoto: data.profilePhoto,
     dateOfBirth: data.dateOfBirth,
     gender: data.gender,
+    referralCode: data.referralCode,
     preferredLanguageCode: data.preferredLanguageCode,
     countryId: data.countryId,
     stateId: data.stateId,

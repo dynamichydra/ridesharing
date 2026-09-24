@@ -232,3 +232,34 @@ export async function verifyDocument(docId, adminId, approve, rejectionReason) {
 
   return doc;
 }
+
+export async function adminSaveDriverDocument(driverId, { documentTypeId, side, key, frontUrl, backUrl, pdfUrl, documentNumber, expiryDate }) {
+  const [docType] = await db.select().from(documentTypes).where(eq(documentTypes.id, documentTypeId)).limit(1);
+  if (!docType) throw { statusCode: 404, message: 'Document type not found' };
+
+  const [existing] = await db.select().from(driverDocuments)
+    .where(and(eq(driverDocuments.driverId, driverId), eq(driverDocuments.documentTypeId, documentTypeId))).limit(1);
+
+  const patch = {
+    status: 'pending',
+    uploadedAt: new Date(),
+  };
+  if (side && key && SIDE_COLUMN[side]) {
+    patch[SIDE_COLUMN[side]] = key;
+  }
+  if (frontUrl !== undefined) patch.frontUrl = frontUrl;
+  if (backUrl !== undefined) patch.backUrl = backUrl;
+  if (pdfUrl !== undefined) patch.pdfUrl = pdfUrl;
+  if (documentNumber !== undefined) patch.documentNumber = documentNumber;
+  if (expiryDate !== undefined) patch.expiryDate = expiryDate ? new Date(expiryDate) : null;
+
+  let row;
+  if (existing) {
+    [row] = await db.update(driverDocuments).set(patch).where(eq(driverDocuments.id, existing.id)).returning();
+  } else {
+    [row] = await db.insert(driverDocuments).values({ driverId, documentTypeId, ...patch }).returning();
+  }
+  await advanceRegistration(driverId, REGISTRATION_STEP.DOCUMENTS);
+  return row;
+}
+

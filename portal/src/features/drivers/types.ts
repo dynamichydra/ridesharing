@@ -70,6 +70,7 @@ export interface CreateDriverPayload {
   name: string;
   phone?: string;
   email?: string;
+  profilePhoto?: string;
   dateOfBirth?: string;
   gender?: string;
   referralCode?: string;
@@ -80,6 +81,17 @@ export interface CreateDriverPayload {
   vehicleModelId?: string;
   vehicleNumber?: string;
   vehicleYear?: string;
+}
+
+export interface AdminSaveDocumentPayload {
+  documentTypeId: string;
+  side?: "front" | "back" | "pdf";
+  key?: string;
+  frontUrl?: string;
+  backUrl?: string;
+  pdfUrl?: string;
+  documentNumber?: string;
+  expiryDate?: string;
 }
 
 export interface UpdateDriverPayload {

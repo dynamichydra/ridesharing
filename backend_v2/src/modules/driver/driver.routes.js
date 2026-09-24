@@ -1,5 +1,6 @@
 import { sendSuccess, sendError, sendList, parsePagination } from '../../utils/response.js';
-import { authenticateDriver, authenticateAdmin } from '../../middleware/authenticate.js';
+import { authenticateDriver, authenticateAdmin, authenticateAny } from '../../middleware/authenticate.js';
+import { uploadBuffer, createUploadUrl, keyToPublicUrl } from '../../utils/storage.js';
 import * as driverService from './driver.service.js';
 import * as rideService from '../ride/ride.service.js';
 
@@ -65,6 +66,34 @@ export async function driverRoutes(app) {
     if (!countryId || !stateId || !cityId) return sendError(reply, 'countryId, stateId and cityId are required');
     const data = await driverService.updateDrivingLocation(request.user.id, request.body);
     return sendSuccess(reply, data);
+  });
+
+  // ── Unified Driver Profile Photo Upload Endpoint (Driver & Admin) ─────────
+  app.post('/upload-photo', { preHandler: [authenticateAny] }, async (request, reply) => {
+    try {
+      if (request.isMultipart()) {
+        const file = await request.file();
+        if (!file) return sendError(reply, 'No image file uploaded in multipart request');
+        const buffer = await file.toBuffer();
+        const mime = file.mimetype || 'image/jpeg';
+        const result = await uploadBuffer('driver-profile-photos', mime, buffer);
+        return sendSuccess(reply, {
+          url: result.url,
+          key: result.key,
+        }, 201);
+      }
+
+      const { contentType = 'image/jpeg' } = request.body || {};
+      const result = await createUploadUrl('driver-profile-photos', contentType);
+      return sendSuccess(reply, {
+        uploadUrl: result.uploadUrl,
+        key: result.key,
+        url: keyToPublicUrl(result.key),
+        expiresIn: result.expiresIn,
+      });
+    } catch (err) {
+      return sendError(reply, err.message || 'Driver photo upload failed', err.statusCode || 500);
+    }
   });
 
   app.post('/profile-photo/upload-url', { preHandler: [authenticateDriver] }, async (request, reply) => {

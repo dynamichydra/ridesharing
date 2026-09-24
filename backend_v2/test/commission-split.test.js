@@ -211,5 +211,45 @@ test('cash promo payment ledger entries perfectly balance when platform pays pro
   assert.equal(validation.balanced, true, 'Cash promo subsidy payout entries must balance to zero');
 });
 
+test('wallet payment ledger entries balance exactly between rider deduction, processor clearing, driver earnings, and platform commission', async () => {
+  const { validateBalancedEntries } = await import('../src/modules/ledger/ledger.service.js');
+  const { calculateRideFinancialBreakdown } = await import('../src/modules/ride-financial/ride-financial.service.js');
+
+  const grossFareMinor = 35000;      // ₹350 fare
+  const promoDiscountMinor = 5000;   // ₹50 promo discount
+  const finalFareMinor = 30000;      // ₹300 paid by rider from wallet
+
+  const breakdown = calculateRideFinancialBreakdown({
+    grossFareMinor,
+    promoDiscountMinor,
+    rule: {
+      bookingFeeMinor: 2000,
+      nonSubscriberRate: '0.15',
+    },
+    driverEntitlements: { isSubscriber: false },
+    currencyCode: 'INR',
+  });
+
+  assert.equal(breakdown.driverEarningsMinor, breakdown.driverEarningMinor);
+  assert.equal(breakdown.driverEarningsMinor + breakdown.commissionMinor, grossFareMinor);
+
+  // 1. Rider wallet debit transaction
+  const riderEntries = [
+    { direction: 'debit', amountMinor: finalFareMinor, currencyCode: 'INR' },   // Rider wallet debit
+    { direction: 'credit', amountMinor: finalFareMinor, currencyCode: 'INR' },  // Processor clearing credit
+  ];
+  assert.equal(validateBalancedEntries(riderEntries).balanced, true);
+
+  // 2. Settlement ledger transaction
+  const settlementEntries = [
+    { direction: 'debit', amountMinor: finalFareMinor, currencyCode: 'INR' },                  // Processor clearing debit
+    { direction: 'debit', amountMinor: breakdown.platformSubsidyMinor, currencyCode: 'INR' },  // Platform marketing subsidy
+    { direction: 'credit', amountMinor: breakdown.driverEarningsMinor, currencyCode: 'INR' },  // Driver wallet credit
+    { direction: 'credit', amountMinor: breakdown.commissionMinor, currencyCode: 'INR' },      // Commission revenue credit
+  ];
+  assert.equal(validateBalancedEntries(settlementEntries).balanced, true, 'Wallet settlement entries must balance');
+});
+
+
 
 

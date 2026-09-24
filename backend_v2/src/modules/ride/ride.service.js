@@ -1010,7 +1010,7 @@ export async function completeRide(rideId, driverId) {
       console.error('[Ride] resolveRideCommission failed:', err.message);
     }
 
-    driverEarningsMinor = commission?.driverEarningsMinor ?? Math.round(grossFareMinor * 0.8);
+    driverEarningsMinor = commission?.driverEarningsMinor ?? commission?.driverEarningMinor ?? Math.max(0, grossFareMinor - (commission?.commissionMinor ?? Math.round(grossFareMinor * 0.8)));
     platformCommissionMinor = commission?.commissionMinor ?? (grossFareMinor - driverEarningsMinor);
 
     await tx.insert(driverEarnings).values({
@@ -1150,7 +1150,11 @@ export async function completeRide(rideId, driverId) {
     if (updated.paymentStatus !== 'paid') {
       try {
         const { payRideWithWallet } = await import('../ride-payment/ride-payment.service.js');
-        await payRideWithWallet(ride.riderId, rideId, `auto_complete_wallet:${rideId}`);
+        const paidResult = await payRideWithWallet(ride.riderId, rideId, `auto_complete_wallet:${rideId}`);
+        if (paidResult) {
+          updated.paymentStatus = paidResult.paymentStatus || 'paid';
+          updated.paymentMethod = paidResult.paymentMethod || 'wallet';
+        }
       } catch (err) {
         console.error('[Ride] auto wallet settlement on completion error:', err.message);
       }
@@ -1159,7 +1163,11 @@ export async function completeRide(rideId, driverId) {
     // For cash payment, automatically record cash collection so the commission is debited against driver's wallet (negative balance)
     try {
       const { recordCashCollection } = await import('../ride-payment/ride-payment.service.js');
-      await recordCashCollection(driverId, rideId, finalFareMinor);
+      const paidResult = await recordCashCollection(driverId, rideId, finalFareMinor);
+      if (paidResult) {
+        updated.paymentStatus = paidResult.paymentStatus || 'paid';
+        updated.paymentMethod = paidResult.paymentMethod || 'cash';
+      }
     } catch (err) {
       console.error('[Ride] auto cash commission settlement on completion error:', err.message);
     }
@@ -1656,6 +1664,8 @@ export async function getDriverRideHistory(driverId, { page = 1, limit = 20, off
       startedAt: startDate ? startDate.toISOString() : null,
       fare: fareMajor,
       fareMinor,
+      driverEarningsMinor: r.fareSnapshot?.commission?.driverEarningsMinor || r.fareSnapshot?.commission?.driverEarningMinor || fareMinor,
+      driverEarnings: ((r.fareSnapshot?.commission?.driverEarningsMinor || r.fareSnapshot?.commission?.driverEarningMinor || fareMinor) / 100),
       pickup: r.pickupAddress,
       drop: r.dropAddress,
       distance: `${distKm} km`,

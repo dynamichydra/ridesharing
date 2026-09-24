@@ -11,6 +11,7 @@ import type {
   RequestDocumentsPayload,
   DriverDocument,
   DocumentType,
+  AdminSaveDocumentPayload,
   VerifyDocumentPayload,
   DriverSubscriptionHistoryRow,
   DriverPaymentRow,
@@ -75,6 +76,17 @@ export const driversApi = {
   // POST /drivers/:id/request-documents  (Admin)
   requestDocuments: (id: string, payload: RequestDocumentsPayload) =>
     apiClient.post(`${BASE_URL}/${id}/request-documents`, payload),
+
+  // POST /drivers/upload-photo (Direct profile photo multipart upload)
+  uploadPhoto: async (file: File): Promise<{ url: string; key: string }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiClient.post<{ url: string; key: string }>(`${BASE_URL}/upload-photo`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
 };
 
 export const vehiclesApi = {
@@ -118,6 +130,21 @@ export const documentsApi = {
   // GET /documents/admin/drivers/:driverId  (Admin)
   getForDriver: (driverId: string) =>
     apiClient.get<DriverDocument[]>(`${DOCUMENTS_BASE_URL}/admin/drivers/${driverId}`),
+
+  // POST /documents/admin/drivers/:driverId (Admin save/upsert driver document)
+  saveDriverDocument: (driverId: string, payload: AdminSaveDocumentPayload) =>
+    apiClient.post<DriverDocument>(`${DOCUMENTS_BASE_URL}/admin/drivers/${driverId}`, payload),
+
+  // POST /documents/upload (Multipart direct document upload)
+  uploadFile: async (file: File): Promise<{ url: string; key: string }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiClient.post<{ url: string; key: string }>(`${DOCUMENTS_BASE_URL}/upload`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
 
   // POST /documents/admin/:docId/verify  (Admin) — { approve, rejectionReason? }
   verify: (docId: string, payload: VerifyDocumentPayload) =>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
   User,
@@ -19,6 +19,11 @@ import {
   Copy,
   Check,
   MapPin,
+  Camera,
+  Calendar,
+  Eye,
+  FileCheck,
+  File as FileIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,20 +31,86 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { useVehicleModelsLookup, useDriver } from "../hooks";
+import { useVehicleModelsLookup, useDriver, useDocumentTypes, useDriverDocuments } from "../hooks";
 import { useCountryOptions, useStateOptions, useCityOptions } from "@/features/geo/hooks";
-import { vehiclesApi, driversApi } from "../api";
+import { vehiclesApi, driversApi, documentsApi } from "../api";
 import { bankDetailsApi } from "@/features/bank-details/api";
 import { useDriverPayoutSetup } from "@/features/bank-details/hooks";
+import type { DocumentType } from "../types";
 import toast from "react-hot-toast";
 
 const STEPS = [
-  { id: 1, label: "Personal Details", icon: User },
+  { id: 1, label: "Personal & Photo", icon: User },
   { id: 2, label: "Vehicle & Photos", icon: Car },
   { id: 3, label: "Document Uploads", icon: FileText },
   { id: 4, label: "Bank & Payouts", icon: Landmark },
   { id: 5, label: "Review & Submit", icon: CheckCircle2 },
 ];
+
+export interface DocItemState {
+  documentTypeId: string;
+  code: string;
+  name: string;
+  documentNumber: string;
+  expiryDate: string;
+  frontUrl: string;
+  backUrl: string;
+  pdfUrl: string;
+  status?: string;
+  rejectionReason?: string;
+  requiresFront: boolean;
+  requiresBack: boolean;
+  requiresPdf: boolean;
+  requiresExpiry: boolean;
+  requiresDocNumber: boolean;
+}
+
+const DEFAULT_DOC_TYPES: DocumentType[] = [
+  {
+    id: "dt-license",
+    code: "DRIVING_LICENSE",
+    requiresFront: true,
+    requiresBack: true,
+    requiresPdf: false,
+    requiresExpiry: true,
+    requiresDocNumber: true,
+    maxFileSizeMb: 5,
+    isActive: true,
+    sortOrder: 1,
+  },
+  {
+    id: "dt-national-id",
+    code: "AADHAR_CARD",
+    requiresFront: true,
+    requiresBack: true,
+    requiresPdf: false,
+    requiresExpiry: false,
+    requiresDocNumber: true,
+    maxFileSizeMb: 5,
+    isActive: true,
+    sortOrder: 2,
+  },
+  {
+    id: "dt-insurance",
+    code: "VEHICLE_INSURANCE",
+    requiresFront: true,
+    requiresBack: false,
+    requiresPdf: true,
+    requiresExpiry: true,
+    requiresDocNumber: true,
+    maxFileSizeMb: 5,
+    isActive: true,
+    sortOrder: 3,
+  },
+];
+
+function formatDocTitle(code: string) {
+  return code
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 
 export default function DriverRegisterWizardPage() {
   const navigate = useNavigate();
@@ -50,6 +121,8 @@ export default function DriverRegisterWizardPage() {
   const [driverId, setDriverId] = useState<string | null>(existingDriverId || null);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isUploadingProfilePhoto, setIsUploadingProfilePhoto] = useState(false);
+  const [uploadingDocKey, setUploadingDocKey] = useState<string | null>(null);
 
   const { data: vehicleModelsData } = useVehicleModelsLookup();
   const vehicleModels = vehicleModelsData?.MESSAGE ?? [];
@@ -58,12 +131,23 @@ export default function DriverRegisterWizardPage() {
   const { data: countriesData, isLoading: isLoadingCountries } = useCountryOptions();
   const countries = countriesData?.MESSAGE ?? [];
 
-  // If editing an existing driver, fetch their profile
+  // Document types & existing documents
+  const { data: docTypesData, isLoading: isLoadingDocTypes } = useDocumentTypes();
+  const docTypes: DocumentType[] = useMemo(() => {
+    const raw = docTypesData?.MESSAGE;
+    if (raw && raw.length > 0) return raw;
+    return DEFAULT_DOC_TYPES;
+  }, [docTypesData]);
+
+  // If editing an existing driver, fetch their profile & documents
   const { data: existingDriverData } = useDriver(driverId || undefined);
   const existingSummary = existingDriverData?.MESSAGE;
   const existingDriver = existingSummary?.driver;
   const existingVehicles = existingSummary?.vehicles ?? [];
   const existingActiveVehicle = existingVehicles.find((v) => v.isActive) || existingVehicles[0];
+
+  const { data: existingDocsData } = useDriverDocuments(driverId || undefined);
+  const existingDocs = existingDocsData?.MESSAGE ?? [];
 
   const { data: payoutSetupData } = useDriverPayoutSetup(driverId || undefined);
   const payoutSetup = payoutSetupData?.MESSAGE ?? null;
@@ -79,10 +163,11 @@ export default function DriverRegisterWizardPage() {
 
   // Form State
   const [formData, setFormData] = useState({
-    // Step 1: Personal & Location
+    // Step 1: Personal & Photo & Location
     name: "",
     phone: "",
     email: "",
+    profilePhoto: "",
     dateOfBirth: "",
     gender: "male",
     referralCode: "",
@@ -111,6 +196,79 @@ export default function DriverRegisterWizardPage() {
     routingCode: "",
   });
 
+  // Dynamic document records state
+  const [docsState, setDocsState] = useState<Record<string, DocItemState>>({});
+
+  // Initialize or update docsState when docTypes or existing documents arrive
+  useEffect(() => {
+    setDocsState((prev) => {
+      const next: Record<string, DocItemState> = { ...prev };
+      docTypes.forEach((dt) => {
+        const existing = existingDocs.find((d) => d.documentTypeId === dt.id);
+        const code = dt.code.toUpperCase();
+        
+        let initialDocNumber = existing?.documentNumber || "";
+        let initialFrontUrl = existing?.frontViewUrl || existing?.frontUrl || "";
+        let initialBackUrl = existing?.backViewUrl || existing?.backUrl || "";
+        let initialPdfUrl = existing?.pdfViewUrl || existing?.pdfUrl || "";
+        let initialExpiry = existing?.expiryDate ? existing.expiryDate.split("T")[0] : "";
+
+        // Fallback from legacy driver record
+        if (!initialDocNumber && code.includes("LICENSE") && existingDriver?.licenseNumber) {
+          initialDocNumber = existingDriver.licenseNumber;
+        }
+        if (!initialFrontUrl && code.includes("LICENSE") && existingDriver?.licenseDoc) {
+          initialFrontUrl = existingDriver.licenseDoc;
+        }
+        if (!initialDocNumber && (code.includes("AADHAR") || code.includes("NATIONAL")) && existingDriver?.aadharNumber) {
+          initialDocNumber = existingDriver.aadharNumber;
+        }
+        if (!initialFrontUrl && (code.includes("AADHAR") || code.includes("NATIONAL")) && existingDriver?.aadharDoc) {
+          initialFrontUrl = existingDriver.aadharDoc;
+        }
+
+        if (!next[dt.id]) {
+          next[dt.id] = {
+            documentTypeId: dt.id,
+            code: dt.code,
+            name: formatDocTitle(dt.code),
+            documentNumber: initialDocNumber,
+            expiryDate: initialExpiry,
+            frontUrl: initialFrontUrl,
+            backUrl: initialBackUrl,
+            pdfUrl: initialPdfUrl,
+            status: existing?.status || "missing",
+            rejectionReason: existing?.rejectionReason || "",
+            requiresFront: dt.requiresFront ?? true,
+            requiresBack: dt.requiresBack ?? false,
+            requiresPdf: dt.requiresPdf ?? false,
+            requiresExpiry: dt.requiresExpiry ?? false,
+            requiresDocNumber: dt.requiresDocNumber ?? true,
+          };
+        } else {
+          // Merge in any loaded server data if empty locally
+          next[dt.id] = {
+            ...next[dt.id],
+            name: formatDocTitle(dt.code),
+            requiresFront: dt.requiresFront ?? next[dt.id].requiresFront,
+            requiresBack: dt.requiresBack ?? next[dt.id].requiresBack,
+            requiresPdf: dt.requiresPdf ?? next[dt.id].requiresPdf,
+            requiresExpiry: dt.requiresExpiry ?? next[dt.id].requiresExpiry,
+            requiresDocNumber: dt.requiresDocNumber ?? next[dt.id].requiresDocNumber,
+            documentNumber: next[dt.id].documentNumber || initialDocNumber,
+            frontUrl: next[dt.id].frontUrl || initialFrontUrl,
+            backUrl: next[dt.id].backUrl || initialBackUrl,
+            pdfUrl: next[dt.id].pdfUrl || initialPdfUrl,
+            expiryDate: next[dt.id].expiryDate || initialExpiry,
+            status: existing?.status || next[dt.id].status,
+            rejectionReason: existing?.rejectionReason || next[dt.id].rejectionReason,
+          };
+        }
+      });
+      return next;
+    });
+  }, [docTypes, existingDocs, existingDriver]);
+
   const { data: statesData, isLoading: isLoadingStates } = useStateOptions(formData.countryId || undefined);
   const states = statesData?.MESSAGE ?? [];
 
@@ -125,6 +283,7 @@ export default function DriverRegisterWizardPage() {
         name: existingDriver.name || prev.name,
         phone: existingDriver.phone || prev.phone,
         email: existingDriver.email || prev.email,
+        profilePhoto: existingDriver.profilePhoto || prev.profilePhoto,
         dateOfBirth: existingDriver.dateOfBirth || prev.dateOfBirth,
         gender: existingDriver.gender || prev.gender,
         referralCode: existingDriver.referralCode || prev.referralCode,
@@ -132,7 +291,9 @@ export default function DriverRegisterWizardPage() {
         stateId: existingDriver.stateId || prev.stateId,
         cityId: existingDriver.cityId || prev.cityId,
         licenseNumber: existingDriver.licenseNumber || prev.licenseNumber,
+        licenseDocUrl: existingDriver.licenseDoc || prev.licenseDocUrl,
         aadharNumber: existingDriver.aadharNumber || prev.aadharNumber,
+        aadharDocUrl: existingDriver.aadharDoc || prev.aadharDocUrl,
         ...(existingActiveVehicle
           ? {
               vehicleModelId: existingActiveVehicle.vehicleModelId || prev.vehicleModelId,
@@ -171,6 +332,23 @@ export default function DriverRegisterWizardPage() {
     }));
   };
 
+  // Handle Driver Profile Photo upload
+  const handleProfilePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploadingProfilePhoto(true);
+      const res = await driversApi.uploadPhoto(file);
+      handleChange("profilePhoto", res.url);
+      toast.success("Driver profile photo uploaded successfully!");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.MESSAGE || err?.message || "Failed to upload profile photo");
+    } finally {
+      setIsUploadingProfilePhoto(false);
+    }
+  };
+
   // Handle vehicle image upload
   const handleVehiclePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -183,10 +361,107 @@ export default function DriverRegisterWizardPage() {
       handleChange("images", [...formData.images, res.url]);
       toast.success("Vehicle photo uploaded successfully!");
     } catch (err: any) {
-      toast.error(err.message || "Failed to upload vehicle photo");
+      toast.error(err?.response?.data?.MESSAGE || err?.message || "Failed to upload vehicle photo");
     } finally {
       setIsUploadingImage(false);
     }
+  };
+
+  // Handle Document File Upload (front, back, pdf)
+  const handleDocFileUpload = async (
+    docTypeId: string,
+    side: "front" | "back" | "pdf",
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const key = `${docTypeId}_${side}`;
+    try {
+      setUploadingDocKey(key);
+      const res = await documentsApi.uploadFile(file);
+      
+      setDocsState((prev) => {
+        const item = prev[docTypeId] || {
+          documentTypeId: docTypeId,
+          code: "",
+          name: "",
+          documentNumber: "",
+          expiryDate: "",
+          frontUrl: "",
+          backUrl: "",
+          pdfUrl: "",
+          requiresFront: true,
+          requiresBack: false,
+          requiresPdf: false,
+          requiresExpiry: false,
+          requiresDocNumber: true,
+        };
+
+        const updated = {
+          ...item,
+          [`${side}Url`]: res.url,
+          status: "pending",
+        };
+
+        // If this is license or aadhar, also update formData legacy fields
+        if (item.code.toUpperCase().includes("LICENSE") && side === "front") {
+          handleChange("licenseDocUrl", res.url);
+        }
+        if (
+          (item.code.toUpperCase().includes("AADHAR") || item.code.toUpperCase().includes("NATIONAL")) &&
+          side === "front"
+        ) {
+          handleChange("aadharDocUrl", res.url);
+        }
+
+        return {
+          ...prev,
+          [docTypeId]: updated,
+        };
+      });
+
+      toast.success(`${side.toUpperCase()} document uploaded successfully!`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.MESSAGE || err?.message || `Failed to upload ${side} document`);
+    } finally {
+      setUploadingDocKey(null);
+    }
+  };
+
+  const handleDocFieldChange = (docTypeId: string, field: "documentNumber" | "expiryDate", val: string) => {
+    setDocsState((prev) => {
+      const item = prev[docTypeId];
+      if (!item) return prev;
+      return {
+        ...prev,
+        [docTypeId]: {
+          ...item,
+          [field]: val,
+        },
+      };
+    });
+
+    // Also sync legacy form state if applicable
+    const code = docsState[docTypeId]?.code.toUpperCase() || "";
+    if (field === "documentNumber") {
+      if (code.includes("LICENSE")) handleChange("licenseNumber", val);
+      if (code.includes("AADHAR") || code.includes("NATIONAL")) handleChange("aadharNumber", val);
+    }
+  };
+
+  const handleRemoveDocFile = (docTypeId: string, side: "front" | "back" | "pdf") => {
+    setDocsState((prev) => {
+      const item = prev[docTypeId];
+      if (!item) return prev;
+      return {
+        ...prev,
+        [docTypeId]: {
+          ...item,
+          [`${side}Url`]: "",
+        },
+      };
+    });
   };
 
   // Save current step data to database
@@ -195,14 +470,14 @@ export default function DriverRegisterWizardPage() {
       setIsSaving(true);
       let targetId = driverId;
 
-      // ── Step 1: Save Personal Info ───────────────────────────────────────
+      // ── Step 1: Save Personal Info & Profile Photo ─────────────────────────
       if (stepToSave === 1 || !targetId) {
         if (!formData.name.trim()) {
-          toast.error("Please enter the driver's full name");
+          toast.error("Please enter the driver's full legal name");
           return null;
         }
         if (!formData.phone.trim() && !formData.email.trim()) {
-          toast.error("Please enter at least a phone number or email");
+          toast.error("Please enter at least a mobile phone number or email address");
           return null;
         }
 
@@ -214,12 +489,13 @@ export default function DriverRegisterWizardPage() {
         if (!targetId) {
           // Create initial driver record
           const driverRes: any = await driversApi.create({
-            name: formData.name,
-            phone: formData.phone || undefined,
-            email: formData.email || undefined,
+            name: formData.name.trim(),
+            phone: formData.phone?.trim() || undefined,
+            email: formData.email?.trim() || undefined,
+            profilePhoto: formData.profilePhoto || undefined,
             dateOfBirth: formData.dateOfBirth || undefined,
             gender: formData.gender,
-            referralCode: formData.referralCode || undefined,
+            referralCode: formData.referralCode?.trim() || undefined,
             countryId: formData.countryId || undefined,
             stateId: formData.stateId || undefined,
             cityId: formData.cityId || undefined,
@@ -232,12 +508,13 @@ export default function DriverRegisterWizardPage() {
         } else {
           // Update existing driver record
           await driversApi.update(targetId, {
-            name: formData.name,
-            phone: formData.phone || undefined,
-            email: formData.email || undefined,
+            name: formData.name.trim(),
+            phone: formData.phone?.trim() || undefined,
+            email: formData.email?.trim() || undefined,
+            profilePhoto: formData.profilePhoto || undefined,
             dateOfBirth: formData.dateOfBirth || undefined,
             gender: formData.gender,
-            referralCode: formData.referralCode || undefined,
+            referralCode: formData.referralCode?.trim() || undefined,
             countryId: formData.countryId || undefined,
             stateId: formData.stateId || undefined,
             cityId: formData.cityId || undefined,
@@ -245,7 +522,7 @@ export default function DriverRegisterWizardPage() {
         }
       }
 
-      // ── Step 2: Save Vehicle Info ────────────────────────────────────────
+      // ── Step 2: Save Vehicle Info & Photos ─────────────────────────────────
       if (stepToSave === 2) {
         if (!targetId) {
           toast.error("Driver record not found. Please complete Step 1 first.");
@@ -284,15 +561,57 @@ export default function DriverRegisterWizardPage() {
         }
       }
 
-      // ── Step 3: Save Document Numbers ────────────────────────────────────
+      // ── Step 3: Save Document Uploads & Metadata ───────────────────────────
       if (stepToSave === 3 && targetId) {
+        // 1. Save all structured document records to /documents/admin/drivers/:driverId
+        const docPromises = Object.values(docsState).map(async (doc) => {
+          // Only save if document has an actual number, date, or uploaded files
+          const hasData = doc.frontUrl || doc.backUrl || doc.pdfUrl || doc.documentNumber || doc.expiryDate;
+          if (!hasData) return null;
+
+          // If id is a real DB uuid (not dt- fallback), persist to document repository
+          if (doc.documentTypeId && !doc.documentTypeId.startsWith("dt-")) {
+            return documentsApi.saveDriverDocument(targetId!, {
+              documentTypeId: doc.documentTypeId,
+              frontUrl: doc.frontUrl || undefined,
+              backUrl: doc.backUrl || undefined,
+              pdfUrl: doc.pdfUrl || undefined,
+              documentNumber: doc.documentNumber || undefined,
+              expiryDate: doc.expiryDate || undefined,
+            });
+          }
+          return null;
+        });
+
+        await Promise.all(docPromises.filter(Boolean));
+
+        // 2. Also sync legacy driver columns for license and aadhar
+        let licenseNo = formData.licenseNumber;
+        let licenseDoc = formData.licenseDocUrl;
+        let aadharNo = formData.aadharNumber;
+        let aadharDoc = formData.aadharDocUrl;
+
+        Object.values(docsState).forEach((doc) => {
+          const code = doc.code.toUpperCase();
+          if (code.includes("LICENSE")) {
+            if (doc.documentNumber) licenseNo = doc.documentNumber;
+            if (doc.frontUrl) licenseDoc = doc.frontUrl;
+          }
+          if (code.includes("AADHAR") || code.includes("NATIONAL")) {
+            if (doc.documentNumber) aadharNo = doc.documentNumber;
+            if (doc.frontUrl) aadharDoc = doc.frontUrl;
+          }
+        });
+
         await driversApi.update(targetId, {
-          licenseNumber: formData.licenseNumber || undefined,
-          aadharNumber: formData.aadharNumber || undefined,
+          licenseNumber: licenseNo || undefined,
+          licenseDoc: licenseDoc || undefined,
+          aadharNumber: aadharNo || undefined,
+          aadharDoc: aadharDoc || undefined,
         });
       }
 
-      // ── Step 4: Save Bank Details ────────────────────────────────────────
+      // ── Step 4: Save Bank Details ──────────────────────────────────────────
       if (stepToSave === 4 && targetId && formData.accountNumber.trim()) {
         await bankDetailsApi.upsert("driver", targetId, {
           accountHolderName: formData.accountHolderName || formData.name,
@@ -457,19 +776,91 @@ export default function DriverRegisterWizardPage() {
 
       {/* Form Content Card */}
       <Card className="border-border bg-card shadow-sm">
-        {/* Step 1: Personal Information */}
+        {/* Step 1: Personal Information & Profile Photo */}
         {currentStep === 1 && (
           <div>
             <CardHeader className="p-4 sm:p-6 border-b border-border">
               <div className="flex items-center gap-2">
                 <User className="h-5 w-5 text-primary" />
-                <CardTitle className="text-lg">Step 1: Personal Information</CardTitle>
+                <CardTitle className="text-lg">Step 1: Personal Details & Profile Photo</CardTitle>
               </div>
               <CardDescription>
-                Basic identification and contact information for the driver.
+                Basic identification, contact information, and driver headshot portrait.
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 space-y-4">
+            <CardContent className="p-4 sm:p-6 space-y-6">
+              {/* ── Profile Photo Upload Widget ── */}
+              <div className="p-4 sm:p-5 rounded-2xl border border-primary/20 bg-primary/5 flex flex-col sm:flex-row items-center gap-5">
+                <div className="relative group shrink-0">
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden border-2 border-primary/40 bg-card shadow-inner flex items-center justify-center text-primary font-bold text-3xl">
+                    {formData.profilePhoto ? (
+                      <img
+                        src={formData.profilePhoto}
+                        alt="Driver Profile Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <User className="w-12 h-12 text-primary/40" />
+                    )}
+                  </div>
+                  {isUploadingProfilePhoto && (
+                    <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
+                      <Loader2 className="h-6 w-6 text-white animate-spin" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 text-center sm:text-left flex-1">
+                  <div>
+                    <h4 className="text-sm font-bold text-foreground flex items-center justify-center sm:justify-start gap-1.5">
+                      <Camera className="h-4 w-4 text-primary" /> Driver Profile Photo
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Upload a clear, front-facing passport-style portrait. JPG, PNG, or WEBP up to 5MB.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleProfilePhotoUpload}
+                        disabled={isUploadingProfilePhoto}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isUploadingProfilePhoto}
+                        className="text-xs h-8 gap-1.5 cursor-pointer border-primary/30 text-primary hover:bg-primary/10"
+                        asChild
+                      >
+                        <span>
+                          <UploadCloud className="h-3.5 w-3.5" />
+                          {formData.profilePhoto ? "Change Photo" : "Upload Photo"}
+                        </span>
+                      </Button>
+                    </label>
+
+                    {formData.profilePhoto && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleChange("profilePhoto", "")}
+                        className="text-xs h-8 text-destructive hover:bg-destructive/10 cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Personal Info Fields ── */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label htmlFor="name">Full Legal Name *</Label>
@@ -766,45 +1157,286 @@ export default function DriverRegisterWizardPage() {
           </div>
         )}
 
-        {/* Step 3: Document Uploads */}
+        {/* Step 3: Document Uploads & Verification */}
         {currentStep === 3 && (
           <div>
             <CardHeader className="p-4 sm:p-6 border-b border-border">
               <div className="flex items-center gap-2">
                 <FileText className="h-5 w-5 text-primary" />
-                <CardTitle className="text-lg">Step 3: Document Verification</CardTitle>
+                <CardTitle className="text-lg">Step 3: Document Uploads & Verification</CardTitle>
               </div>
               <CardDescription>
-                Enter legal license numbers and documentation.
+                Upload required licenses, identity cards, vehicle documents, and enter official document numbers.
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-4 sm:p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="licNo">Driver's License Number</Label>
-                  <Input
-                    id="licNo"
-                    placeholder="e.g. DL-992019482"
-                    value={formData.licenseNumber}
-                    onChange={(e) => handleChange("licenseNumber", e.target.value)}
-                  />
+            <CardContent className="p-4 sm:p-6 space-y-6">
+              {isLoadingDocTypes && Object.keys(docsState).length === 0 ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  <span className="text-xs">Loading document verification requirements...</span>
                 </div>
+              ) : (
+                <div className="space-y-6">
+                  {Object.values(docsState).map((doc) => {
+                    const isFrontUploading = uploadingDocKey === `${doc.documentTypeId}_front`;
+                    const isBackUploading = uploadingDocKey === `${doc.documentTypeId}_back`;
+                    const isPdfUploading = uploadingDocKey === `${doc.documentTypeId}_pdf`;
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="aadharNo">National ID / Aadhar Number</Label>
-                  <Input
-                    id="aadharNo"
-                    placeholder="e.g. 5542 1829 0192"
-                    value={formData.aadharNumber}
-                    onChange={(e) => handleChange("aadharNumber", e.target.value)}
-                  />
+                    const hasAnyFile = !!(doc.frontUrl || doc.backUrl || doc.pdfUrl);
+
+                    return (
+                      <div
+                        key={doc.documentTypeId}
+                        className="rounded-xl border border-border bg-muted/10 p-4 sm:p-5 space-y-4 hover:border-primary/30 transition-colors"
+                      >
+                        {/* Doc Card Header */}
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-border/60 pb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                              <FileCheck className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                                {doc.name || formatDocTitle(doc.code)}
+                                <Badge variant="outline" className="text-[10px] font-mono uppercase">
+                                  {doc.code}
+                                </Badge>
+                              </h4>
+                              <p className="text-[11px] text-muted-foreground">
+                                Front {doc.requiresBack ? "& Back " : ""}Document Photo or Scan
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 self-start sm:self-auto">
+                            {hasAnyFile ? (
+                              <Badge className="bg-green-600/15 text-green-700 dark:text-green-400 border-green-600/30 text-xs font-semibold">
+                                <Check className="h-3 w-3 mr-1" /> Ready
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs text-muted-foreground">
+                                Upload Required
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Doc Number & Expiry Date Inputs */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {doc.requiresDocNumber && (
+                            <div className="space-y-1.5">
+                              <Label htmlFor={`doc-num-${doc.documentTypeId}`} className="text-xs font-semibold">
+                                Document / License Number
+                              </Label>
+                              <Input
+                                id={`doc-num-${doc.documentTypeId}`}
+                                placeholder={`e.g. ${doc.code.includes("LICENSE") ? "DL-1420110012345" : "XXXX-XXXX-XXXX"}`}
+                                value={doc.documentNumber}
+                                onChange={(e) =>
+                                  handleDocFieldChange(doc.documentTypeId, "documentNumber", e.target.value)
+                                }
+                              />
+                            </div>
+                          )}
+
+                          {doc.requiresExpiry && (
+                            <div className="space-y-1.5">
+                              <Label htmlFor={`doc-exp-${doc.documentTypeId}`} className="text-xs font-semibold flex items-center gap-1">
+                                <Calendar className="h-3.5 w-3.5 text-muted-foreground" /> Expiration Date
+                              </Label>
+                              <Input
+                                id={`doc-exp-${doc.documentTypeId}`}
+                                type="date"
+                                value={doc.expiryDate}
+                                onChange={(e) =>
+                                  handleDocFieldChange(doc.documentTypeId, "expiryDate", e.target.value)
+                                }
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* File Upload Grid (Front, Back, PDF) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                          {/* Front Side Upload */}
+                          <div className="space-y-1.5">
+                            <span className="text-xs font-semibold text-foreground flex items-center justify-between">
+                              <span>Front Side Document *</span>
+                              {doc.frontUrl && <span className="text-[10px] text-green-600 font-medium">Uploaded</span>}
+                            </span>
+
+                            {doc.frontUrl ? (
+                              <div className="relative rounded-lg border border-border overflow-hidden h-36 bg-card flex items-center justify-center group">
+                                <img
+                                  src={doc.frontUrl}
+                                  alt={`${doc.name} Front`}
+                                  className="w-full h-full object-cover"
+                                />
+                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                  <a href={doc.frontUrl} target="_blank" rel="noopener noreferrer">
+                                    <Button size="sm" variant="outline" className="h-7 text-xs bg-black/60 text-white border-white/20">
+                                      <Eye className="h-3 w-3 mr-1" /> View
+                                    </Button>
+                                  </a>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="h-7 text-xs"
+                                    onClick={() => handleRemoveDocFile(doc.documentTypeId, "front")}
+                                  >
+                                    <Trash2 className="h-3 w-3 mr-1" /> Remove
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <label className="border-2 border-dashed border-border hover:border-primary/50 bg-background/50 hover:bg-muted/30 transition-colors rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer h-36 text-center">
+                                <input
+                                  type="file"
+                                  accept="image/*,application/pdf"
+                                  className="hidden"
+                                  onChange={(e) => handleDocFileUpload(doc.documentTypeId, "front", e)}
+                                  disabled={isFrontUploading}
+                                />
+                                {isFrontUploading ? (
+                                  <div className="flex flex-col items-center gap-1.5">
+                                    <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                                    <span className="text-[11px] text-muted-foreground">Uploading front side...</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col items-center gap-1">
+                                    <UploadCloud className="h-5 w-5 text-primary mb-1" />
+                                    <span className="text-xs font-semibold text-foreground">Upload Front Side</span>
+                                    <span className="text-[10px] text-muted-foreground">JPG, PNG, PDF up to 5MB</span>
+                                  </div>
+                                )}
+                              </label>
+                            )}
+                          </div>
+
+                          {/* Back Side Upload */}
+                          {doc.requiresBack && (
+                            <div className="space-y-1.5">
+                              <span className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                <span>Back Side Document</span>
+                                {doc.backUrl && <span className="text-[10px] text-green-600 font-medium">Uploaded</span>}
+                              </span>
+
+                              {doc.backUrl ? (
+                                <div className="relative rounded-lg border border-border overflow-hidden h-36 bg-card flex items-center justify-center group">
+                                  <img
+                                    src={doc.backUrl}
+                                    alt={`${doc.name} Back`}
+                                    className="w-full h-full object-cover"
+                                  />
+                                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                    <a href={doc.backUrl} target="_blank" rel="noopener noreferrer">
+                                      <Button size="sm" variant="outline" className="h-7 text-xs bg-black/60 text-white border-white/20">
+                                        <Eye className="h-3 w-3 mr-1" /> View
+                                      </Button>
+                                    </a>
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      className="h-7 text-xs"
+                                      onClick={() => handleRemoveDocFile(doc.documentTypeId, "back")}
+                                    >
+                                      <Trash2 className="h-3 w-3 mr-1" /> Remove
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <label className="border-2 border-dashed border-border hover:border-primary/50 bg-background/50 hover:bg-muted/30 transition-colors rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer h-36 text-center">
+                                  <input
+                                    type="file"
+                                    accept="image/*,application/pdf"
+                                    className="hidden"
+                                    onChange={(e) => handleDocFileUpload(doc.documentTypeId, "back", e)}
+                                    disabled={isBackUploading}
+                                  />
+                                  {isBackUploading ? (
+                                    <div className="flex flex-col items-center gap-1.5">
+                                      <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                                      <span className="text-[11px] text-muted-foreground">Uploading back side...</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-col items-center gap-1">
+                                      <UploadCloud className="h-5 w-5 text-primary mb-1" />
+                                      <span className="text-xs font-semibold text-foreground">Upload Back Side</span>
+                                      <span className="text-[10px] text-muted-foreground">JPG, PNG, PDF up to 5MB</span>
+                                    </div>
+                                  )}
+                                </label>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Optional / Alternative PDF Upload */}
+                          {doc.requiresPdf && (
+                            <div className="space-y-1.5 sm:col-span-2">
+                              <span className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                <span>PDF Document Document (Alternative / Full)</span>
+                                {doc.pdfUrl && <span className="text-[10px] text-green-600 font-medium">Uploaded</span>}
+                              </span>
+
+                              {doc.pdfUrl ? (
+                                <div className="p-3 rounded-lg border border-border bg-card flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2">
+                                    <FileIcon className="h-5 w-5 text-primary" />
+                                    <span className="text-xs font-medium text-foreground truncate">
+                                      PDF Document Attached
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <a href={doc.pdfUrl} target="_blank" rel="noopener noreferrer">
+                                      <Button size="sm" variant="outline" className="h-7 text-xs">
+                                        <Eye className="h-3 w-3 mr-1" /> View PDF
+                                      </Button>
+                                    </a>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 text-xs text-destructive hover:bg-destructive/10"
+                                      onClick={() => handleRemoveDocFile(doc.documentTypeId, "pdf")}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <label className="border border-dashed border-border hover:border-primary/50 bg-background/50 rounded-lg p-3 flex items-center justify-center gap-2 cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors">
+                                  <input
+                                    type="file"
+                                    accept="application/pdf"
+                                    className="hidden"
+                                    onChange={(e) => handleDocFileUpload(doc.documentTypeId, "pdf", e)}
+                                    disabled={isPdfUploading}
+                                  />
+                                  {isPdfUploading ? (
+                                    <>
+                                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                      <span>Uploading PDF...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <UploadCloud className="h-4 w-4 text-primary" />
+                                      <span>Click to attach PDF document version</span>
+                                    </>
+                                  )}
+                                </label>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
+              )}
 
               <div className="bg-primary/5 border border-primary/20 rounded-lg p-3.5 text-xs text-primary flex items-start gap-2 mt-4">
                 <Sparkles className="h-4 w-4 shrink-0 mt-0.5" />
                 <p>
-                  Documents can also be uploaded, verified, and audited from the Driver Profile Dashboard anytime.
+                  Documents can also be uploaded, verified, audited, and approved from the Driver Profile Dashboard anytime after initial registration.
                 </p>
               </div>
             </CardContent>
@@ -928,15 +1560,15 @@ export default function DriverRegisterWizardPage() {
                 <CardTitle className="text-lg">Step 5: Review Application</CardTitle>
               </div>
               <CardDescription>
-                Verify all details before finalizing the driver onboarding.
+                Verify all details, driver photo, and uploaded documents before finalizing the onboarding.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                {/* Personal summary */}
-                <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-2">
+                {/* Personal summary with Avatar */}
+                <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-3 sm:col-span-2">
                   <div className="flex justify-between items-center font-semibold text-foreground">
-                    <span>Personal Info</span>
+                    <span>Personal Profile</span>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -946,10 +1578,21 @@ export default function DriverRegisterWizardPage() {
                       Edit
                     </Button>
                   </div>
-                  <p><span className="text-muted-foreground">Name:</span> {formData.name}</p>
-                  <p><span className="text-muted-foreground">Phone:</span> {formData.phone || "N/A"}</p>
-                  <p><span className="text-muted-foreground">Email:</span> {formData.email || "N/A"}</p>
-                  <p><span className="text-muted-foreground">Gender:</span> {formData.gender}</p>
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-full overflow-hidden border border-primary/30 bg-card shrink-0 flex items-center justify-center font-bold text-primary text-xl">
+                      {formData.profilePhoto ? (
+                        <img src={formData.profilePhoto} alt="Driver Avatar" className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="h-7 w-7 text-primary/40" />
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-foreground">{formData.name || "Unnamed Driver"}</p>
+                      <p className="text-muted-foreground"><span className="font-medium">Phone:</span> {formData.phone || "N/A"}</p>
+                      <p className="text-muted-foreground"><span className="font-medium">Email:</span> {formData.email || "N/A"}</p>
+                      <p className="text-muted-foreground"><span className="font-medium">Gender:</span> {formData.gender}</p>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Location summary */}
@@ -998,7 +1641,74 @@ export default function DriverRegisterWizardPage() {
                   <p><span className="text-muted-foreground">Plate:</span> {formData.registrationNumber || "N/A"}</p>
                   <p><span className="text-muted-foreground">Year:</span> {formData.year}</p>
                   <p><span className="text-muted-foreground">Color:</span> {formData.color || "Standard"}</p>
-                  <p><span className="text-muted-foreground">Photo:</span> {formData.image ? "Uploaded ✅" : "None"}</p>
+                  <p><span className="text-muted-foreground">Vehicle Photo:</span> {formData.image ? "Uploaded ✅" : "None"}</p>
+                </div>
+
+                {/* Document verification summary */}
+                <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-2 sm:col-span-2">
+                  <div className="flex justify-between items-center font-semibold text-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <FileCheck className="h-3.5 w-3.5 text-primary" />
+                      Uploaded Documents & Compliance
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[11px] text-primary"
+                      onClick={() => setCurrentStep(3)}
+                    >
+                      Edit
+                    </Button>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    {Object.values(docsState).map((doc) => {
+                      const hasFiles = doc.frontUrl || doc.backUrl || doc.pdfUrl;
+                      return (
+                        <div key={doc.documentTypeId} className="p-2.5 rounded-lg border border-border bg-card/60 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-foreground">{doc.name || doc.code}</span>
+                            {hasFiles ? (
+                              <Badge className="bg-green-600/15 text-green-700 dark:text-green-400 text-[10px] py-0">
+                                Uploaded ✅
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] text-muted-foreground py-0">
+                                Pending
+                              </Badge>
+                            )}
+                          </div>
+                          {doc.documentNumber && (
+                            <p className="text-muted-foreground text-[11px]">
+                              <span>Number:</span> {doc.documentNumber}
+                            </p>
+                          )}
+                          {doc.expiryDate && (
+                            <p className="text-muted-foreground text-[11px]">
+                              <span>Expires:</span> {doc.expiryDate}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 pt-1">
+                            {doc.frontUrl && (
+                              <a href={doc.frontUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary underline">
+                                Front Photo
+                              </a>
+                            )}
+                            {doc.backUrl && (
+                              <a href={doc.backUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary underline">
+                                Back Photo
+                              </a>
+                            )}
+                            {doc.pdfUrl && (
+                              <a href={doc.pdfUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary underline">
+                                PDF Doc
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Bank summary */}

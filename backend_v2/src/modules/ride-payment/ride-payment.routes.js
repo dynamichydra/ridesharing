@@ -11,8 +11,7 @@ export async function ridePaymentRoutes(app) {
   // Requires an Idempotency-Key header so a retried/double-submitted request returns the
   // original gateway order instead of creating a second charge attempt.
   app.post('/:rideId/initiate', { preHandler: [authenticateRider] }, async (request, reply) => {
-    const idempotencyKey = request.headers['idempotency-key'];
-    if (!idempotencyKey) return sendError(reply, 'Idempotency-Key header is required', 400);
+    const idempotencyKey = request.headers['idempotency-key'] || `ride_pay_${request.params.rideId}_${Date.now()}`;
     const data = await ridePaymentService.initiateRidePayment(request.user.id, request.params.rideId, idempotencyKey);
     return sendSuccess(reply, data);
   });
@@ -30,7 +29,7 @@ export async function ridePaymentRoutes(app) {
 
   // POST /api/v1/ride-payments/:rideId/pay-wallet
   app.post('/:rideId/pay-wallet', { preHandler: [authenticateRider] }, async (request, reply) => {
-    const idempotencyKey = request.headers['idempotency-key'];
+    const idempotencyKey = request.headers['idempotency-key'] || `wallet_pay_${request.params.rideId}_${Date.now()}`;
     const data = await ridePaymentService.payRideWithWallet(
       request.user.id, request.params.rideId, idempotencyKey,
     );
