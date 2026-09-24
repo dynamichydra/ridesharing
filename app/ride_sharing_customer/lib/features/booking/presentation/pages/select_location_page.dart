@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -59,12 +60,14 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
   LocationTarget _activeInputTarget = LocationTarget.destination;
 
   // ---- Location state ----
-  LatLng _pickupLatLng = const LatLng(22.5726, 88.3639); // Kolkata fallback
+  LatLng _pickupLatLng = const LatLng(0, 0);
+  LatLng? _userGpsLocation;
   LatLng? _destLatLng;
   String _pickupName = 'Current Location';
   String _pickupAddress = 'Loading address details...';
   String _destName = '';
   String _destAddress = '';
+  Timer? _debounceTimer;
 
   // ---- Autocomplete state ----
   bool _isSearching = false;
@@ -107,6 +110,13 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
     _pickupController.text = _pickupName;
     _initCurrentLocation();
 
+    _pickupController.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _destinationController.addListener(() {
+      if (mounted) setState(() {});
+    });
+
     _pickupFocusNode.addListener(() {
       if (_pickupFocusNode.hasFocus) {
         setState(() {
@@ -130,8 +140,12 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
     });
   }
 
+  StreamSubscription<LatLng>? _gpsSubscription;
+
   @override
   void dispose() {
+    _gpsSubscription?.cancel();
+    _debounceTimer?.cancel();
     _pickupController.dispose();
     _destinationController.dispose();
     _pickupFocusNode.dispose();
@@ -149,13 +163,15 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
   Future<void> _initCurrentLocation() async {
     try {
       final locationService = LocationService();
-      final currentLoc = await locationService.getCurrentLocation().timeout(
-        const Duration(seconds: 3),
-        onTimeout: () => null,
-      );
+      
+      // 1. Immediate fresh location fetch
+      final currentLoc = await locationService.getCurrentLocation();
       if (currentLoc != null && mounted) {
         setState(() {
-          _pickupLatLng = currentLoc;
+          _userGpsLocation = currentLoc;
+          if (_pickupLatLng.latitude == 0 && _pickupLatLng.longitude == 0) {
+            _pickupLatLng = currentLoc;
+          }
         });
         _mapController?.animateCamera(
           CameraUpdate.newLatLng(currentLoc),
@@ -173,11 +189,36 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
         if (_destLatLng != null && _destName.isNotEmpty) {
           await _fetchRoute();
         }
-      } else if (mounted) {
-        if (_destLatLng != null && _destName.isNotEmpty) {
-          await _fetchRoute();
-        }
       }
+
+      // 2. Subscribe to continuous real-time GPS updates
+      _gpsSubscription?.cancel();
+      _gpsSubscription = locationService.getPositionStream(distanceFilter: 5).listen((liveLoc) async {
+        if (!mounted) return;
+        setState(() {
+          _userGpsLocation = liveLoc;
+        });
+
+        // If user is using Current Location as pickup, update it dynamically
+        if (_pickupName == 'Current Location' || (_pickupLatLng.latitude == 0 && _pickupLatLng.longitude == 0)) {
+          setState(() {
+            _pickupLatLng = liveLoc;
+          });
+          final place = await _geocodingService.reverseGeocode(liveLoc);
+          final placeName = _extractPlaceName(place, fallback: 'Current Location');
+          final placeAddress = place?.formattedAddress ?? '';
+          if (mounted) {
+            setState(() {
+              _pickupName = placeName;
+              _pickupAddress = placeAddress;
+              _pickupController.text = placeName;
+            });
+          }
+          if (_destLatLng != null && _destName.isNotEmpty) {
+            await _fetchRoute();
+          }
+        }
+      });
     } catch (_) {
       if (mounted && _destLatLng != null && _destName.isNotEmpty) {
         await _fetchRoute();
@@ -304,15 +345,46 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
     await _fetchRoute();
   }
 
+  void _clearPickup() {
+    setState(() {
+      _pickupController.clear();
+      _pickupName = '';
+      _pickupAddress = '';
+      _currentRoute = null;
+      _searchResults = [];
+      _currentStep = SelectionStep.initialSearch;
+      _activeInputTarget = LocationTarget.pickup;
+      _showAutocomplete = true;
+    });
+    _pickupFocusNode.requestFocus();
+  }
+
+  void _clearDestination() {
+    setState(() {
+      _destinationController.clear();
+      _destName = '';
+      _destAddress = '';
+      _destLatLng = null;
+      _currentRoute = null;
+      _searchResults = [];
+      _currentStep = _pickupName.isNotEmpty ? SelectionStep.pickupSelected : SelectionStep.initialSearch;
+      _activeInputTarget = LocationTarget.destination;
+      _showAutocomplete = true;
+    });
+    _destinationFocusNode.requestFocus();
+  }
+
 
   // ---------------------------------------------------------------------------
-  // Autocomplete search
+  // Autocomplete search (Debounced with user GPS Location Bias & RegionCode: "IN")
   // ---------------------------------------------------------------------------
 
-  Future<void> _onSearchQueryChanged(String query, LocationTarget target) async {
+  void _onSearchQueryChanged(String query, LocationTarget target) {
     if (_activeInputTarget != target) {
       setState(() => _activeInputTarget = target);
     }
+
+    _debounceTimer?.cancel();
 
     if (query.trim().isEmpty) {
       setState(() {
@@ -328,9 +400,20 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
       _showAutocomplete = true;
     });
 
+    _debounceTimer = Timer(const Duration(milliseconds: 350), () async {
+      _performSearch(query);
+    });
+  }
+
+  Future<void> _performSearch(String query) async {
     try {
-      final results = await _placesService.searchPlacesMulti(query);
-      if (results.isNotEmpty && mounted) {
+      final results = await _placesService.searchPlacesMulti(
+        query,
+        userLocation: _userGpsLocation ?? (_pickupLatLng.latitude != 0 ? _pickupLatLng : null),
+      );
+      if (!mounted) return;
+
+      if (results.isNotEmpty) {
         setState(() {
           _searchResults = results;
           _isSearching = false;
@@ -338,15 +421,15 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
         return;
       }
 
-      // Final fallback: forward geocoding (single result)
+      // Final fallback: forward geocoding
       final coord = await _geocodingService.forwardGeocode(query);
-      if (coord != null && mounted) {
+      if (!mounted) return;
+
+      if (coord != null) {
         String displayAddress = query;
         try {
-          final reversedPlace =
-              await _geocodingService.reverseGeocode(coord);
-          final resolved =
-              _extractPlaceName(reversedPlace, fallback: query);
+          final reversedPlace = await _geocodingService.reverseGeocode(coord);
+          final resolved = _extractPlaceName(reversedPlace, fallback: query);
           if (resolved.isNotEmpty) displayAddress = resolved;
         } catch (_) {}
 
@@ -373,24 +456,50 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
   }
 
   Future<void> _onSelectLocationItem(Map<String, dynamic> place) async {
-    final String name = (place['name'] as String?) ?? 'Selected Location';
-    final String address = (place['address'] as String?) ?? name;
+    final String placeId = (place['placeId'] as String?) ?? '';
+    String name = (place['name'] as String?) ?? 'Selected Location';
+    String address = (place['address'] as String?) ?? name;
+    double? lat = place['latitude'] is num ? (place['latitude'] as num).toDouble() : null;
+    double? lng = place['longitude'] is num ? (place['longitude'] as num).toDouble() : null;
 
-    LatLng coords;
-    if (place['latitude'] != null && place['longitude'] != null) {
-      coords = LatLng(place['latitude'] as double, place['longitude'] as double);
-    } else if (place['placeId'] != null) {
-      coords = (await _placesService.getLatLngFromPlaceId(place['placeId'] as String, apiKey: AppConstants.googleMapsApiKey)) ??
-          LatLng(_pickupLatLng.latitude + 0.015, _pickupLatLng.longitude + 0.015);
-    } else {
-      coords = (await _geocodingService.forwardGeocode('$name $address')) ??
-          LatLng(_pickupLatLng.latitude + 0.015, _pickupLatLng.longitude + 0.015);
+    if (lat == null || lng == null) {
+      if (placeId.isNotEmpty) {
+        final details = await _placesService.getPlaceDetails(placeId, apiKey: AppConstants.googleMapsApiKey);
+        if (details != null) {
+          lat = details.latitude;
+          lng = details.longitude;
+          if (details.name.isNotEmpty) name = details.name;
+          if (details.address.isNotEmpty) address = details.address;
+        }
+      }
     }
+
+    if (lat == null || lng == null) {
+      final coords = await _geocodingService.forwardGeocode('$name $address');
+      if (coords != null) {
+        lat = coords.latitude;
+        lng = coords.longitude;
+      } else {
+        lat = _pickupLatLng.latitude + 0.015;
+        lng = _pickupLatLng.longitude + 0.015;
+      }
+    }
+
+    final coords = LatLng(lat, lng);
+
+    final selectedPlace = PlaceDetails(
+      placeId: placeId,
+      name: name,
+      address: address,
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+    );
+    debugPrint('[PlaceSelected] placeId: ${selectedPlace.placeId}, name: ${selectedPlace.name}, address: ${selectedPlace.address}, lat: ${selectedPlace.latitude}, lng: ${selectedPlace.longitude}');
 
     _pickupFocusNode.unfocus();
     _destinationFocusNode.unfocus();
 
-    // Reverse geocode for full location name (consistent with map tap)
+    // Reverse geocode for full location name consistency
     String resolvedName = name;
     String resolvedAddress = address;
     try {
@@ -458,7 +567,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
             destinationAddress: _destAddress,
           ),
         );
-    context.pushReplacement('/ride-options');
+    context.push('/ride-options');
   }
 
   // ---------------------------------------------------------------------------
@@ -899,6 +1008,21 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
                                 border: InputBorder.none,
                                 enabledBorder: InputBorder.none,
                                 focusedBorder: InputBorder.none,
+                                suffixIconConstraints:
+                                    const BoxConstraints(maxHeight: 24, maxWidth: 24),
+                                suffixIcon: _pickupController.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(
+                                          Icons.cancel_rounded,
+                                          size: 18,
+                                          color: Color(0xFF94A3B8),
+                                        ),
+                                        onPressed: _clearPickup,
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        splashRadius: 16,
+                                      )
+                                    : null,
                               ),
                             ),
 
@@ -945,6 +1069,21 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
                                 border: InputBorder.none,
                                 enabledBorder: InputBorder.none,
                                 focusedBorder: InputBorder.none,
+                                suffixIconConstraints:
+                                    const BoxConstraints(maxHeight: 24, maxWidth: 24),
+                                suffixIcon: _destinationController.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(
+                                          Icons.cancel_rounded,
+                                          size: 18,
+                                          color: Color(0xFF94A3B8),
+                                        ),
+                                        onPressed: _clearDestination,
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        splashRadius: 16,
+                                      )
+                                    : null,
                               ),
                             ),
                           ],

@@ -16,8 +16,9 @@ class EarningsPage extends StatefulWidget {
   State<EarningsPage> createState() => _EarningsPageState();
 }
 
-class _EarningsPageState extends State<EarningsPage> {
-  EarningsPeriod _selectedPeriod = EarningsPeriod.daily;
+class _EarningsPageState extends State<EarningsPage> with SingleTickerProviderStateMixin {
+  TabController? _tabController;
+  TabController get _controller => _tabController ??= TabController(length: 3, vsync: this);
   late final EarningsRemoteDataSource _dataSource;
   bool _isLoading = false;
   CommissionStatusModel? _commissionStatus;
@@ -31,33 +32,41 @@ class _EarningsPageState extends State<EarningsPage> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _dataSource = sl<EarningsRemoteDataSource>();
-    _fetchEarnings();
+    _fetchAllEarnings();
   }
 
-  Future<void> _fetchEarnings() async {
+  @override
+  void reassemble() {
+    super.reassemble();
+    _tabController ??= TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchAllEarnings() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
     try {
-      final periodStr = _selectedPeriod == EarningsPeriod.daily
-          ? 'daily'
-          : _selectedPeriod == EarningsPeriod.weekly
-              ? 'weekly'
-              : 'monthly';
-
       final results = await Future.wait([
-        _dataSource.getEarnings(period: periodStr),
+        _dataSource.getEarnings(period: 'daily'),
+        _dataSource.getEarnings(period: 'weekly'),
+        _dataSource.getEarnings(period: 'monthly'),
         _dataSource.getCommissionStatus(),
       ]);
 
-      final liveData = results[0] as EarningsDataModel;
-      final liveCommission = results[1] as CommissionStatusModel;
-
       if (mounted) {
         setState(() {
-          _periodData[_selectedPeriod] = liveData;
-          _commissionStatus = liveCommission;
+          _periodData[EarningsPeriod.daily] = results[0] as EarningsDataModel;
+          _periodData[EarningsPeriod.weekly] = results[1] as EarningsDataModel;
+          _periodData[EarningsPeriod.monthly] = results[2] as EarningsDataModel;
+          _commissionStatus = results[3] as CommissionStatusModel;
           _isLoading = false;
         });
       }
@@ -69,16 +78,32 @@ class _EarningsPageState extends State<EarningsPage> {
     }
   }
 
-  void _onPeriodChanged(EarningsPeriod period) {
-    if (_selectedPeriod == period) return;
-    setState(() => _selectedPeriod = period);
-    _fetchEarnings();
+  Future<void> _fetchSinglePeriod(EarningsPeriod period) async {
+    final periodStr = period == EarningsPeriod.daily
+        ? 'daily'
+        : period == EarningsPeriod.weekly
+            ? 'weekly'
+            : 'monthly';
+
+    try {
+      final results = await Future.wait([
+        _dataSource.getEarnings(period: periodStr),
+        _dataSource.getCommissionStatus(),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _periodData[period] = results[0] as EarningsDataModel;
+          _commissionStatus = results[1] as CommissionStatusModel;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error refreshing $period earnings: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final data = _periodData[_selectedPeriod]!;
-
     return Scaffold(
       backgroundColor: const Color(0xFFFAFAFA),
       appBar: AppBar(
@@ -99,154 +124,142 @@ class _EarningsPageState extends State<EarningsPage> {
           ),
         ),
       ),
-      body: RefreshIndicator(
-        onRefresh: _fetchEarnings,
-        color: const Color(0xFF009048),
-        backgroundColor: Colors.white,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Top Period Tabs (Underlined Bar Style)
-              _buildPeriodTabs(),
+      body: Column(
+        children: [
+          // 1. Top Period Selector Tab Bar (Daily, Weekly, Monthly)
+          _buildPeriodTabs(),
 
-              const SizedBox(height: 18),
+          // Subtle loading bar during initial load or full refresh
+          if (_isLoading)
+            const LinearProgressIndicator(
+              minHeight: 2.5,
+              backgroundColor: Color(0xFFE2E8F0),
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF009048)),
+            ),
 
-              // Loading Indicator Bar (Subtle)
-              if (_isLoading)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 12),
-                  child: LinearProgressIndicator(
-                    minHeight: 2.5,
-                    backgroundColor: Color(0xFFE2E8F0),
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF009048)),
-                  ),
-                ),
-
-              // 2. Total Earnings Hero Card
-              _buildTotalEarningsCard(data),
-
-              const SizedBox(height: 16),
-
-              // 2.1 Commission Structure & Savings Breakdown Card
-              _buildCommissionBreakdownCard(_commissionStatus),
-
-              const SizedBox(height: 16),
-
-              // 2.2 Active Bonus Quests & Incentive Campaign Tracker
-              const ActiveIncentiveQuestsSection(),
-
-              const SizedBox(height: 16),
-
-              // 3. Payment Breakdown Card
-              _buildPaymentBreakdownCard(data),
-
-              const SizedBox(height: 16),
-
-              // 4. Earnings Breakdown Card
-              _buildEarningsBreakdownCard(data),
-
-              const SizedBox(height: 20),
-
-              // 5. History Section Header
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      data.listTitle,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: _fetchEarnings,
-                      child: const Text(
-                        'Refresh',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF009048),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              // 6. History List Card
-              _buildHistoryListCard(data.historyItems, _selectedPeriod == EarningsPeriod.daily),
-
-              const SizedBox(height: 28),
-            ],
+          // 2. Full-Page Horizontal Slider across Daily, Weekly, and Monthly
+          Expanded(
+            child: TabBarView(
+              controller: _controller,
+              children: [
+                _buildPeriodPage(EarningsPeriod.daily),
+                _buildPeriodPage(EarningsPeriod.weekly),
+                _buildPeriodPage(EarningsPeriod.monthly),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  // ── Top Period Selector Tabs ───────────────────────────────────────────────
+  // ── Top Period Selector Tab Bar ─────────────────────────────────────────────
   Widget _buildPeriodTabs() {
     return Container(
-      color: Colors.transparent,
-      child: Stack(
-        alignment: Alignment.bottomCenter,
-        children: [
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 1.5,
-              color: const Color(0xFFE2E8F0),
-            ),
-          ),
-          Row(
-            children: [
-              Expanded(child: _buildTabItem('Daily', EarningsPeriod.daily)),
-              Expanded(child: _buildTabItem('Weekly', EarningsPeriod.weekly)),
-              Expanded(child: _buildTabItem('Monthly', EarningsPeriod.monthly)),
-            ],
-          ),
+      color: Colors.white,
+      child: TabBar(
+        controller: _controller,
+        indicatorColor: const Color(0xFF009048),
+        indicatorWeight: 3.0,
+        indicatorSize: TabBarIndicatorSize.tab,
+        labelColor: const Color(0xFF009048),
+        unselectedLabelColor: const Color(0xFF334155),
+        labelStyle: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.bold,
+        ),
+        unselectedLabelStyle: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
+        overlayColor: WidgetStateProperty.all(Colors.transparent),
+        dividerColor: const Color(0xFFE2E8F0),
+        dividerHeight: 1.5,
+        tabs: const [
+          Tab(text: 'Daily', height: 44),
+          Tab(text: 'Weekly', height: 44),
+          Tab(text: 'Monthly', height: 44),
         ],
       ),
     );
   }
 
-  Widget _buildTabItem(String title, EarningsPeriod period) {
-    final isSelected = _selectedPeriod == period;
-    return GestureDetector(
-      onTap: () => _onPeriodChanged(period),
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected ? const Color(0xFF009048) : const Color(0xFF334155),
+  // ── Per-Period Page View (Daily, Weekly, Monthly) ───────────────────────────
+  Widget _buildPeriodPage(EarningsPeriod period) {
+    final data = _periodData[period]!;
+
+    return RefreshIndicator(
+      onRefresh: () => _fetchSinglePeriod(period),
+      color: const Color(0xFF009048),
+      backgroundColor: Colors.white,
+      child: SingleChildScrollView(
+        key: PageStorageKey<String>('earnings_scroll_${period.name}'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1. Total Earnings Hero Card
+            _buildTotalEarningsCard(data),
+
+            const SizedBox(height: 16),
+
+            // 2. Commission Structure & Savings Breakdown Card
+            _buildCommissionBreakdownCard(_commissionStatus),
+
+            const SizedBox(height: 16),
+
+            // 3. Active Bonus Quests & Incentive Campaign Tracker
+            const ActiveIncentiveQuestsSection(),
+
+            const SizedBox(height: 16),
+
+            // 4. Payment Breakdown Card
+            _buildPaymentBreakdownCard(data),
+
+            const SizedBox(height: 16),
+
+            // 5. Earnings Breakdown Card
+            _buildEarningsBreakdownCard(data),
+
+            const SizedBox(height: 20),
+
+            // 6. History Section Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    data.listTitle,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => _fetchSinglePeriod(period),
+                    child: const Text(
+                      'Refresh',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF009048),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          Container(
-            height: 3,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: isSelected ? const Color(0xFF009048) : Colors.transparent,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-        ],
+            const SizedBox(height: 10),
+
+            // 7. History List Card
+            _buildHistoryListCard(data.historyItems, period == EarningsPeriod.daily),
+
+            const SizedBox(height: 28),
+          ],
+        ),
       ),
     );
   }
@@ -848,45 +861,54 @@ class _EarningsPageState extends State<EarningsPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: isSubscriber ? const Color(0xFFDCFCE7) : const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      isSubscriber ? Icons.verified_user_rounded : Icons.shield_outlined,
-                      color: isSubscriber ? AppColors.primary : AppColors.secondary,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Commission Structure',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
-                        ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isSubscriber ? const Color(0xFFDCFCE7) : const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        ruleName,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF64748B),
-                          fontWeight: FontWeight.w500,
-                        ),
+                      child: Icon(
+                        isSubscriber ? Icons.verified_user_rounded : Icons.shield_outlined,
+                        color: isSubscriber ? AppColors.primary : AppColors.secondary,
+                        size: 20,
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Commission Structure',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            ruleName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF64748B),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               InkWell(
                 onTap: () => context.push('/subscription'),
                 borderRadius: BorderRadius.circular(8),
@@ -903,12 +925,17 @@ class _EarningsPageState extends State<EarningsPage> {
                         const Icon(Icons.check_rounded, color: Colors.white, size: 12),
                         const SizedBox(width: 3),
                       ],
-                      Text(
-                        isSubscriber ? (activePlan?.name ?? 'Subscriber Plan') : 'Standard Plan',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: isSubscriber ? Colors.white : const Color(0xFF475569),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 130),
+                        child: Text(
+                          isSubscriber ? (activePlan?.name ?? 'Subscriber Plan') : 'Standard Plan',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isSubscriber ? Colors.white : const Color(0xFF475569),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 3),
@@ -1200,12 +1227,17 @@ class _EarningsPageState extends State<EarningsPage> {
             ),
           ),
         ),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-            color: valueColor,
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+              color: valueColor,
+            ),
           ),
         ),
       ],
@@ -1223,14 +1255,17 @@ class _EarningsPageState extends State<EarningsPage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: isLarge ? 14 : 13,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
-            color: const Color(0xFF0F172A),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: isLarge ? 14 : 13,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+              color: const Color(0xFF0F172A),
+            ),
           ),
         ),
+        const SizedBox(width: 8),
         Text(
           value,
           style: TextStyle(

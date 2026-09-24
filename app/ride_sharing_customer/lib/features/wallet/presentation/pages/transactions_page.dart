@@ -37,6 +37,24 @@ class _TransactionsPageState extends State<TransactionsPage>
     return months[(month - 1).clamp(0, 11)];
   }
 
+  /// Maps an ISO 4217 currency code to a display symbol.
+  static String _currencySymbolFor(String code) {
+    switch (code.toUpperCase()) {
+      case 'CAD':
+      case 'USD':
+        return '\$';
+      case 'GBP':
+        return '£';
+      case 'EUR':
+        return '€';
+      case 'AED':
+        return 'د.إ';
+      case 'INR':
+      default:
+        return '₹';
+    }
+  }
+
   String _formatTime(DateTime dt) {
     final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
     final minute = dt.minute.toString().padLeft(2, '0');
@@ -380,9 +398,11 @@ class _TransactionsPageState extends State<TransactionsPage>
         builder: (context, state) {
           List<Map<String, dynamic>> allTxs = [];
           String currencySymbol = '₹';
+          String currencyCode = 'INR';
           if (state is WalletLoaded) {
             allTxs = _parseTransactions(state.transactions);
-            currencySymbol = state.currency == 'CAD' ? '\$' : '₹';
+            currencyCode = state.currency;
+            currencySymbol = _currencySymbolFor(currencyCode);
           }
 
           // Apply date range filter if selected

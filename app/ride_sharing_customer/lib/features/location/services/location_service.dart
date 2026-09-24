@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:permission_handler/permission_handler.dart' as ph;
@@ -74,7 +75,7 @@ class LocationService {
     }
   }
 
-  /// Fetches the current location if permissions and GPS are active.
+  /// Fetches the fresh current location from device GPS.
   Future<LatLng?> getCurrentLocation() async {
     try {
       final permissionResult = await checkAndRequestPermission();
@@ -82,12 +83,19 @@ class LocationService {
         return null;
       }
 
-      final Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
-      );
-
-      return LatLng(position.latitude, position.longitude);
+      try {
+        final Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 10),
+        );
+        return LatLng(position.latitude, position.longitude);
+      } catch (_) {
+        final Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.medium,
+          timeLimit: const Duration(seconds: 5),
+        );
+        return LatLng(position.latitude, position.longitude);
+      }
     } catch (e) {
       try {
         final Position? lastKnown = await Geolocator.getLastKnownPosition();
@@ -97,6 +105,39 @@ class LocationService {
       } catch (_) {}
       return null;
     }
+  }
+
+  /// Listens to continuous, real-time location updates from device GPS.
+  Stream<LatLng> getPositionStream({
+    LocationAccuracy accuracy = LocationAccuracy.high,
+    int distanceFilter = 5,
+  }) {
+    late LocationSettings locationSettings;
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      locationSettings = AndroidSettings(
+        accuracy: accuracy,
+        distanceFilter: distanceFilter,
+        forceLocationManager: false,
+        intervalDuration: const Duration(seconds: 3),
+      );
+    } else if (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS) {
+      locationSettings = AppleSettings(
+        accuracy: accuracy,
+        activityType: ActivityType.fitness,
+        distanceFilter: distanceFilter,
+        pauseLocationUpdatesAutomatically: true,
+      );
+    } else {
+      locationSettings = LocationSettings(
+        accuracy: accuracy,
+        distanceFilter: distanceFilter,
+      );
+    }
+
+    return Geolocator.getPositionStream(locationSettings: locationSettings)
+        .map((position) => LatLng(position.latitude, position.longitude));
   }
 
   /// Opens application settings if permission was permanently denied.

@@ -1382,267 +1382,332 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
     final double riderPayableNum = finalFareMinor / 100.0;
     final double promoIncentiveNum = promoMinor / 100.0;
 
-    // Driver earnings & commission
+    // Driver earnings & commission: strictly balanced
     final int commissionMinor = ride.commissionMinor ?? (grossFareMinor * 0.2).round();
     final int calculatedEarnings = grossFareMinor - commissionMinor;
-    final int driverEarningsMinor = ride.driverEarningsMinor ?? (calculatedEarnings > 0 ? calculatedEarnings : 0);
+    final int driverEarningsMinor = (ride.driverEarningsMinor != null && (ride.driverEarningsMinor! - calculatedEarnings).abs() <= 1)
+        ? ride.driverEarningsMinor!
+        : calculatedEarnings;
 
     final double commissionNum = commissionMinor / 100.0;
     final double driverEarningsNum = driverEarningsMinor / 100.0;
 
     final sym = CurrencyHelper.getSymbol(ride.currencyCode);
+    bool isProcessing = false;
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 20,
-            offset: Offset(0, -4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag handle
-          Container(
-            width: 48,
-            height: 5,
-            decoration: BoxDecoration(
-              color: const Color(0xFFCBD5E1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-          const SizedBox(height: 18),
-
-          // Green circle check icon
-          Container(
-            width: 68,
-            height: 68,
-            decoration: const BoxDecoration(
-              color: Color(0xFFDCFCE7),
-              shape: BoxShape.circle,
-            ),
-            child: const Center(
-              child: Icon(
-                Icons.check_rounded,
-                color: Color(0xFF009048),
-                size: 42,
+    return StatefulBuilder(
+      builder: (sheetContext, setSheetState) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 20,
+                offset: Offset(0, -4),
               ),
-            ),
+            ],
           ),
-          const SizedBox(height: 14),
-
-          const Text(
-            'Ride Completed!',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF0F172A),
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            isWallet
-                ? 'Your net earnings have been credited to your Ryva Wallet.'
-                : 'Please collect $sym${riderPayableNum.toStringAsFixed(riderPayableNum % 1 == 0 ? 0 : 2)} from the rider.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Color(0xFF64748B),
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 18),
-
-          // Main Action Card (Collect Cash or Wallet Credited)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-            decoration: BoxDecoration(
-              color: isWallet ? const Color(0xFFF0FDF4) : const Color(0xFFFEF3C7),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: isWallet ? const Color(0xFFDCFCE7) : const Color(0xFFFDE68A),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Drag handle
+              Container(
+                width: 48,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+              const SizedBox(height: 18),
+
+              // Green circle check icon
+              Container(
+                width: 68,
+                height: 68,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFDCFCE7),
+                  shape: BoxShape.circle,
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.check_rounded,
+                    color: Color(0xFF009048),
+                    size: 42,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              const Text(
+                'Ride Completed!',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0F172A),
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                isWallet
+                    ? 'Your net earnings have been credited to your Ryva Wallet.'
+                    : 'Please collect $sym${riderPayableNum.toStringAsFixed(riderPayableNum % 1 == 0 ? 0 : 2)} from the rider.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF64748B),
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Main Action Card (Collect Cash or Wallet Credited)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: isWallet ? const Color(0xFFF0FDF4) : const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: isWallet ? const Color(0xFFDCFCE7) : const Color(0xFFFDE68A),
+                  ),
+                ),
+                child: Column(
                   children: [
-                    Icon(
-                      isWallet ? Icons.account_balance_wallet_outlined : Icons.payments_outlined,
-                      color: isWallet ? const Color(0xFF009048) : const Color(0xFFB45309),
-                      size: 18,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          isWallet ? Icons.account_balance_wallet_outlined : Icons.payments_outlined,
+                          color: isWallet ? const Color(0xFF009048) : const Color(0xFFB45309),
+                          size: 18,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          isWallet ? 'YOUR NET EARNINGS (WALLET)' : 'COLLECT CASH FROM RIDER',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                            color: isWallet ? const Color(0xFF009048) : const Color(0xFFB45309),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(height: 4),
                     Text(
-                      isWallet ? 'YOUR NET EARNINGS (WALLET)' : 'COLLECT CASH FROM RIDER',
+                      isWallet
+                          ? '$sym${driverEarningsNum.toStringAsFixed(2)}'
+                          : '$sym${riderPayableNum.toStringAsFixed(riderPayableNum % 1 == 0 ? 0 : 2)}',
                       style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                        color: isWallet ? const Color(0xFF009048) : const Color(0xFFB45309),
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
+                        color: isWallet ? const Color(0xFF009048) : const Color(0xFF92400E),
+                        letterSpacing: -0.5,
                       ),
+                    ),
+                    if (!isWallet && hasPromo) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '(Total fare: $sym${grossFareNum.toStringAsFixed(grossFareNum % 1 == 0 ? 0 : 2)})',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF78350F),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Earnings Preview Card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Earnings Preview',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildBreakdownRow(
+                      label: isWallet ? 'Total Fare' : 'Fare paid by rider',
+                      amount: '$sym${(isWallet ? grossFareNum : riderPayableNum).toStringAsFixed(2)}',
+                    ),
+                    if (hasPromo) ...[
+                      const SizedBox(height: 8),
+                      _buildBreakdownRow(
+                        label: 'Promo incentive (from Ryva)',
+                        amount: '+ $sym${promoIncentiveNum.toStringAsFixed(2)}',
+                        amountColor: const Color(0xFF009048),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    _buildBreakdownRow(
+                      label: 'Platform commission',
+                      amount: '- $sym${commissionNum.toStringAsFixed(2)}',
+                      amountColor: const Color(0xFFDC2626),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Divider(height: 1, color: Color(0xFFE2E8F0)),
+                    ),
+                    _buildBreakdownRow(
+                      label: 'Your Net Earnings',
+                      amount: '$sym${driverEarningsNum.toStringAsFixed(2)}',
+                      isBold: true,
+                      amountColor: const Color(0xFF009048),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  isWallet
-                      ? '$sym${driverEarningsNum.toStringAsFixed(2)}'
-                      : '$sym${riderPayableNum.toStringAsFixed(riderPayableNum % 1 == 0 ? 0 : 2)}',
-                  style: TextStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w900,
-                    color: isWallet ? const Color(0xFF009048) : const Color(0xFF92400E),
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                if (!isWallet && hasPromo) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    '(Total fare: $sym${grossFareNum.toStringAsFixed(grossFareNum % 1 == 0 ? 0 : 2)})',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF78350F),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Earnings Preview Card
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Earnings Preview',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _buildBreakdownRow(
-                  label: isWallet ? 'Total Fare' : 'Fare paid by rider',
-                  amount: '$sym${(isWallet ? grossFareNum : riderPayableNum).toStringAsFixed(2)}',
-                ),
-                if (hasPromo) ...[
-                  const SizedBox(height: 8),
-                  _buildBreakdownRow(
-                    label: 'Promo incentive (from Ryva)',
-                    amount: '+ $sym${promoIncentiveNum.toStringAsFixed(2)}',
-                    amountColor: const Color(0xFF009048),
-                  ),
-                ],
-                const SizedBox(height: 8),
-                _buildBreakdownRow(
-                  label: 'Platform commission',
-                  amount: '- $sym${commissionNum.toStringAsFixed(2)}',
-                  amountColor: const Color(0xFFDC2626),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Divider(height: 1, color: Color(0xFFE2E8F0)),
-                ),
-                _buildBreakdownRow(
-                  label: 'Your Net Earnings',
-                  amount: '$sym${driverEarningsNum.toStringAsFixed(2)}',
-                  isBold: true,
-                  amountColor: const Color(0xFF009048),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Disclaimer Note for Promo Incentive or Settlement
-          if (!isWallet && hasPromo)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFFBEB),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFFDE68A)),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.info_outline_rounded,
-                    size: 16,
-                    color: Color(0xFFD97706),
+              const SizedBox(height: 12),
+
+              // Disclaimer Note for Promo Incentive or Settlement
+              if (!isWallet && hasPromo)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Promo incentive of $sym${promoIncentiveNum.toStringAsFixed(2)} will be added to your wallet after ride completion.',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFFB45309),
-                        height: 1.35,
-                        fontWeight: FontWeight.w500,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline_rounded,
+                        size: 16,
+                        color: Color(0xFFD97706),
                       ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Promo incentive of $sym${promoIncentiveNum.toStringAsFixed(2)} will be added to your wallet after cash collection is confirmed.',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFFB45309),
+                            height: 1.35,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 18),
+
+              // Action Button (Confirm Cash Collection or Close)
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: isProcessing
+                      ? null
+                      : () async {
+                          if (isWallet) {
+                            Navigator.of(sheetCtx).pop();
+                            if (context.canPop()) {
+                              context.pop();
+                            } else {
+                              context.go('/dashboard');
+                            }
+                            return;
+                          }
+
+                          // Record cash collection via backend API
+                          setSheetState(() {
+                            isProcessing = true;
+                          });
+
+                          try {
+                            await _dataSource.recordCashCollection(ride.id);
+                            if (sheetCtx.mounted) {
+                              Navigator.of(sheetCtx).pop();
+                              if (mounted) {
+                                CustomToast.show(context, 'Cash payment recorded successfully');
+                                if (context.canPop()) {
+                                  context.pop();
+                                } else {
+                                  context.go('/dashboard');
+                                }
+                              }
+                            }
+                          } catch (e) {
+                            if (sheetCtx.mounted) {
+                              setSheetState(() {
+                                isProcessing = false;
+                              });
+                              ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                                SnackBar(
+                                  content: Text('Cash recording: $e'),
+                                  backgroundColor: Colors.red,
+                                  action: SnackBarAction(
+                                    label: 'Continue',
+                                    textColor: Colors.white,
+                                    onPressed: () {
+                                      Navigator.of(sheetCtx).pop();
+                                      if (context.canPop()) {
+                                        context.pop();
+                                      } else {
+                                        context.go('/dashboard');
+                                      }
+                                    },
+                                  ),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF009048),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                ],
-              ),
-            ),
-          const SizedBox(height: 18),
-
-          // Done Button
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.of(sheetCtx).pop();
-                if (context.canPop()) {
-                  context.pop();
-                } else {
-                  context.go('/dashboard');
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF009048),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  child: isProcessing
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          isWallet ? 'Done' : 'CONFIRM CASH RECEIVED',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                 ),
               ),
-              child: Text(
-                isWallet ? 'Done' : 'Cash Collected — Done',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.2,
-                ),
-              ),
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

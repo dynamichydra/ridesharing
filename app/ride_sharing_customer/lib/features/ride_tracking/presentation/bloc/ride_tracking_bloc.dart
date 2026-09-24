@@ -1040,28 +1040,31 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
   Future<void> _completeRideInCache(RideTrackingActive activeRide) async {
     try {
       final storage = sl<StorageService>();
-      final walletCached = storage.getCachedData('cached_wallet_data');
-      if (walletCached != null) {
-        final walletMap = Map<String, dynamic>.from(walletCached as Map);
-        final double balance = (walletMap['balance'] as num).toDouble();
-        final double nextBalance = balance - activeRide.fare;
-        
-        final transactions = (walletMap['transactions'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
-        transactions.insert(0, {
-          'id': 'tx_trip_${DateTime.now().millisecondsSinceEpoch}',
-          'amount': activeRide.fare,
-          'type': 'trip',
-          'status': 'completed',
-          'date': DateTime.now().toIso8601String(),
-          'description': 'Ride to ${activeRide.destinationName}'
-        });
-        
-        final updatedWallet = {
-          ...walletMap,
-          'balance': nextBalance,
-          'transactions': transactions,
-        };
-        await storage.cacheData('cached_wallet_data', updatedWallet);
+      final isWalletPayment = activeRide.paymentMethod.toLowerCase() == 'wallet';
+      if (isWalletPayment) {
+        final walletCached = storage.getCachedData('cached_wallet_data');
+        if (walletCached != null) {
+          final walletMap = Map<String, dynamic>.from(walletCached as Map);
+          final double balance = (walletMap['balance'] as num).toDouble();
+          final double nextBalance = balance - activeRide.fare;
+          
+          final transactions = (walletMap['transactions'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          transactions.insert(0, {
+            'id': 'tx_trip_${DateTime.now().millisecondsSinceEpoch}',
+            'amount': activeRide.fare,
+            'type': 'trip',
+            'status': 'completed',
+            'date': DateTime.now().toIso8601String(),
+            'description': 'Ride to ${activeRide.destinationName}'
+          });
+          
+          final updatedWallet = {
+            ...walletMap,
+            'balance': nextBalance,
+            'transactions': transactions,
+          };
+          await storage.cacheData('cached_wallet_data', updatedWallet);
+        }
       }
       
       final historyCached = storage.getCachedData('cached_ride_history_data');

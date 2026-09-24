@@ -20,14 +20,47 @@ class _AddFundsPageState extends State<AddFundsPage> {
   late final TextEditingController _amountController;
   late double _selectedAmount;
   String _selectedMethodType = 'gateway';
-  String _countryCode = 'IN'; // Strict based on logged in user's profile: 'IN' or 'CA'
+  String _countryCode = 'IN'; // Resolved from wallet API or cached profile
 
-  List<double> get _presets => _countryCode == 'CA'
-      ? [10.0, 20.0, 50.0, 100.0, 200.0]
-      : [100.0, 200.0, 500.0, 1000.0, 2000.0];
+  /// Maps ISO 4217 currency code → display symbol.
+  static String _currencySymbolFor(String code) {
+    switch (code.toUpperCase()) {
+      case 'CAD':
+      case 'USD':
+        return '\$';
+      case 'GBP':
+        return '£';
+      case 'EUR':
+        return '€';
+      case 'AED':
+        return 'د.إ';
+      case 'INR':
+      default:
+        return '₹';
+    }
+  }
 
-  String get _currencySymbol => _countryCode == 'CA' ? '\$' : '₹';
-  String get _currencyCode => _countryCode == 'CA' ? 'CAD' : 'INR';
+  List<double> get _presets {
+    switch (_countryCode) {
+      case 'CA':
+      case 'US':
+        return [10.0, 20.0, 50.0, 100.0, 200.0];
+      case 'GB':
+        return [10.0, 20.0, 50.0, 100.0, 200.0];
+      default: // IN and others
+        return [100.0, 200.0, 500.0, 1000.0, 2000.0];
+    }
+  }
+
+  String get _currencySymbol => _currencySymbolFor(_currencyCode);
+  String get _currencyCode {
+    switch (_countryCode) {
+      case 'CA': return 'CAD';
+      case 'US': return 'USD';
+      case 'GB': return 'GBP';
+      default:   return 'INR';
+    }
+  }
 
   @override
   void initState() {
@@ -40,64 +73,86 @@ class _AddFundsPageState extends State<AddFundsPage> {
   void _resolveUserCountry() {
     try {
       final storage = di.sl<StorageService>();
-      
+
       // 1. First check cached wallet data (authoritative from server /api/v1/wallets/me)
       final cachedWallet = storage.getCachedData('cached_wallet_data');
       if (cachedWallet is Map && cachedWallet['currency'] != null) {
-        final currency = cachedWallet['currency'].toString().toUpperCase();
-        if (currency == 'CAD') {
+        _applyCountryFromCurrency(cachedWallet['currency'].toString());
+        return;
+      }
+
+      // 2. Fallback to stored user profile phone / country code
+      final cachedProfile = storage.getCachedData('cached_profile_data');
+      if (cachedProfile is Map && cachedProfile['phone'] != null) {
+        final phone = cachedProfile['phone'].toString();
+        if (phone.startsWith('+1')) {
           _countryCode = 'CA';
-        } else if (currency == 'INR') {
+        } else if (phone.startsWith('+91')) {
           _countryCode = 'IN';
         }
       } else {
-        // 2. Fallback to stored user profile phone / country code
-        final cachedProfile = storage.getCachedData('cached_profile_data');
-        if (cachedProfile is Map && cachedProfile['phone'] != null) {
-          final phone = cachedProfile['phone'].toString();
-          if (phone.startsWith('+1')) {
-            _countryCode = 'CA';
-          } else if (phone.startsWith('+91')) {
-            _countryCode = 'IN';
-          }
-        } else {
-          final storedCountry = storage.getCountryCode().toUpperCase();
-          if (storedCountry == 'CA') {
-            _countryCode = 'CA';
-          } else {
-            _countryCode = 'IN';
-          }
-        }
+        final storedCountry = storage.getCountryCode().toUpperCase();
+        _countryCode = storedCountry.isNotEmpty ? storedCountry : 'IN';
       }
     } catch (_) {}
 
-    if (_countryCode == 'CA') {
+    _applyDefaultAmount();
+  }
+
+  void _applyCountryFromCurrency(String currencyCode) {
+    switch (currencyCode.toUpperCase()) {
+      case 'CAD':
+        _countryCode = 'CA';
+        break;
+      case 'USD':
+        _countryCode = 'US';
+        break;
+      case 'GBP':
+        _countryCode = 'GB';
+        break;
+      case 'INR':
+      default:
+        _countryCode = 'IN';
+    }
+    _applyDefaultAmount();
+  }
+
+  void _applyDefaultAmount() {
+    if (_countryCode == 'IN') {
+      _selectedAmount = 200.0;
+      _amountController.text = '200';
+    } else {
       _selectedAmount = 50.0;
       _amountController.text = '50';
     }
   }
 
+
   List<Map<String, dynamic>> get _paymentMethods {
-    if (_countryCode == 'CA') {
-      return [
-        {
-          'id': 'gateway',
-          'gateway': 'stripe',
-          'title': 'Credit / Debit Card',
-          'subtitle': 'Visa, Mastercard, American Express, Apple Pay',
-          'iconData': Icons.credit_card_rounded,
-        },
-      ];
-    } else {
-      return [
-        {
-          'id': 'gateway',
-          'gateway': 'razorpay',
-          'title': 'Instant UPI / Cards / NetBanking',
-          'subtitle': 'GPay, PhonePe, Paytm, Cards & NetBanking',
-          'iconData': Icons.account_balance_wallet_rounded,
-        },
-      ];
+    switch (_countryCode) {
+      case 'CA':
+      case 'US':
+      case 'GB':
+      case 'AU':
+        return [
+          {
+            'id': 'gateway',
+            'gateway': 'stripe',
+            'title': 'Credit / Debit Card',
+            'subtitle': 'Visa, Mastercard, American Express, Apple Pay',
+            'iconData': Icons.credit_card_rounded,
+          },
+        ];
+      default: // India
+        return [
+          {
+            'id': 'gateway',
+            'gateway': 'razorpay',
+            'title': 'Instant UPI / Cards / NetBanking',
+            'subtitle': 'GPay, PhonePe, Paytm, Cards & NetBanking',
+            'iconData': Icons.account_balance_wallet_rounded,
+          },
+        ];
     }
   }
 
@@ -202,6 +257,14 @@ class _AddFundsPageState extends State<AddFundsPage> {
             context.pop();
           } else if (state is WalletError) {
             CustomToast.show(context, state.message);
+          } else if (state is WalletLoaded) {
+            // Update country/currency in case cache was stale at initState
+            final resolvedCode = state.currency;
+            final prevCountry = _countryCode;
+            _applyCountryFromCurrency(resolvedCode);
+            if (_countryCode != prevCountry) {
+              setState(() {}); // Rebuild with correct currency/presets/gateway
+            }
           }
         },
         builder: (context, walletState) {

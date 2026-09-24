@@ -2,9 +2,35 @@ import 'dart:ui' as ui;
 import 'package:dio/dio.dart';
 import 'package:flutter_google_places_sdk/flutter_google_places_sdk.dart'
     hide LatLng;
+import 'package:flutter_google_places_sdk_platform_interface/flutter_google_places_sdk_platform_interface.dart'
+    as sdk show LatLng, LatLngBounds;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/constants/constants.dart';
 import '../models/location_model.dart';
+
+class PlaceDetails {
+  final String placeId;
+  final String name;
+  final String address;
+  final double latitude;
+  final double longitude;
+
+  PlaceDetails({
+    required this.placeId,
+    required this.name,
+    required this.address,
+    required this.latitude,
+    required this.longitude,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'placeId': placeId,
+        'name': name,
+        'address': address,
+        'latitude': latitude,
+        'longitude': longitude,
+      };
+}
 
 class PlacesService {
   FlutterGooglePlacesSdk? _placesSdk;
@@ -26,19 +52,38 @@ class PlacesService {
   }
 
   /// Fetches autocomplete predictions for a given user query.
+  /// Passes [userLocation] as a location bias bounding box to prioritize nearby results.
   Future<List<AutocompletePrediction>> fetchPredictions(
     String query, {
     List<String>? countries,
+    LatLng? userLocation,
   }) async {
     if (!_isInitialized || _placesSdk == null || query.trim().isEmpty) {
       return [];
     }
 
     try {
+      // Build a ~50 km bounding box around the user's GPS location for bias.
+      sdk.LatLngBounds? locationBias;
+      if (userLocation != null) {
+        const delta = 0.45; // ~50 km
+        locationBias = sdk.LatLngBounds(
+          southwest: sdk.LatLng(
+            lat: userLocation.latitude - delta,
+            lng: userLocation.longitude - delta,
+          ),
+          northeast: sdk.LatLng(
+            lat: userLocation.latitude + delta,
+            lng: userLocation.longitude + delta,
+          ),
+        );
+      }
+
       final FindAutocompletePredictionsResponse response =
           await _placesSdk!.findAutocompletePredictions(
         query,
         countries: countries,
+        locationBias: locationBias,
       );
 
       return response.predictions;
@@ -75,28 +120,72 @@ class PlacesService {
     }
   }
 
-  /// Helper to fetch location model directly from a place ID lookup.
-  Future<LocationModel?> getPlaceLocationModel(String placeId, {String? apiKey}) async {
-    final Place? place = await fetchPlaceDetails(placeId);
-    if (place != null && place.latLng != null) {
-      return LocationModel(
-        latitude: place.latLng!.lat,
-        longitude: place.latLng!.lng,
-        formattedAddress: place.address ?? place.name ?? '',
-        placeId: place.id ?? placeId,
-      );
-    }
+  /// Fetches complete PlaceDetails (placeId, name, address, latitude, longitude)
+  Future<PlaceDetails?> getPlaceDetails(
+    String placeId, {
+    String? apiKey,
+  }) async {
+    if (placeId.trim().isEmpty) return null;
+    final key = apiKey ?? AppConstants.googleMapsApiKey;
 
-    if (apiKey != null && apiKey.isNotEmpty) {
-      final coords = await getLatLngFromPlaceIdHttp(placeId, apiKey);
-      if (coords != null) {
-        return LocationModel(
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          formattedAddress: '',
-          placeId: placeId,
+    // 1. Try Native SDK
+    try {
+      final Place? place = await fetchPlaceDetails(placeId);
+      if (place != null && place.latLng != null) {
+        return PlaceDetails(
+          placeId: place.id ?? placeId,
+          name: place.name ?? '',
+          address: place.address ?? place.name ?? '',
+          latitude: place.latLng!.lat,
+          longitude: place.latLng!.lng,
         );
       }
+    } catch (_) {}
+
+    // 2. Try HTTP Place Details API
+    try {
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 6),
+        receiveTimeout: const Duration(seconds: 6),
+      ));
+      final response = await dio.get<Map<String, dynamic>>(
+        'https://maps.googleapis.com/maps/api/place/details/json',
+        queryParameters: {
+          'place_id': placeId,
+          'fields': 'place_id,name,formatted_address,geometry',
+          'key': key,
+        },
+      );
+
+      final data = response.data;
+      if (data != null && data['status'] == 'OK' && data['result'] != null) {
+        final res = data['result'] as Map<String, dynamic>;
+        final loc = res['geometry']?['location'];
+        if (loc != null && loc['lat'] != null && loc['lng'] != null) {
+          return PlaceDetails(
+            placeId: (res['place_id'] as String?) ?? placeId,
+            name: (res['name'] as String?) ?? '',
+            address: (res['formatted_address'] as String?) ?? '',
+            latitude: (loc['lat'] as num).toDouble(),
+            longitude: (loc['lng'] as num).toDouble(),
+          );
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  /// Helper to fetch location model directly from a place ID lookup.
+  Future<LocationModel?> getPlaceLocationModel(String placeId, {String? apiKey}) async {
+    final PlaceDetails? details = await getPlaceDetails(placeId, apiKey: apiKey);
+    if (details != null) {
+      return LocationModel(
+        latitude: details.latitude,
+        longitude: details.longitude,
+        formattedAddress: details.address.isNotEmpty ? details.address : details.name,
+        placeId: details.placeId,
+      );
     }
 
     return null;
@@ -104,15 +193,9 @@ class PlacesService {
 
   /// Converts a Place ID into LatLng coordinates.
   Future<LatLng?> getLatLngFromPlaceId(String placeId, {String? apiKey}) async {
-    try {
-      final Place? place = await fetchPlaceDetails(placeId);
-      if (place != null && place.latLng != null) {
-        return LatLng(place.latLng!.lat, place.latLng!.lng);
-      }
-    } catch (_) {}
-
-    if (apiKey != null && apiKey.isNotEmpty) {
-      return await getLatLngFromPlaceIdHttp(placeId, apiKey);
+    final PlaceDetails? details = await getPlaceDetails(placeId, apiKey: apiKey);
+    if (details != null) {
+      return LatLng(details.latitude, details.longitude);
     }
     return null;
   }
@@ -150,11 +233,13 @@ class PlacesService {
   }
 
   /// Fetches autocomplete predictions via the Google Places REST API.
-  /// Reliable fallback when the native SDK returns empty results or errors.
+  /// Uses location biasing with current device GPS lat/lng.
   Future<List<Map<String, dynamic>>> fetchPredictionsHttp(
     String query,
-    String apiKey,
-  ) async {
+    String apiKey, {
+    LatLng? userLocation,
+    String? regionCode,
+  }) async {
     if (query.trim().isEmpty || apiKey.isEmpty) return [];
 
     try {
@@ -162,12 +247,26 @@ class PlacesService {
         connectTimeout: const Duration(seconds: 4),
         receiveTimeout: const Duration(seconds: 4),
       ));
+
+      final Map<String, dynamic> queryParameters = {
+        'input': query,
+        'key': apiKey,
+      };
+
+      if (regionCode != null && regionCode.isNotEmpty) {
+        queryParameters['components'] = 'country:${regionCode.toLowerCase()}';
+        queryParameters['region'] = regionCode.toLowerCase();
+      }
+
+      if (userLocation != null) {
+        queryParameters['location'] = '${userLocation.latitude},${userLocation.longitude}';
+        queryParameters['radius'] = '50000'; // 50km
+        queryParameters['locationbias'] = 'circle:50000@${userLocation.latitude},${userLocation.longitude}';
+      }
+
       final response = await dio.get<Map<String, dynamic>>(
         'https://maps.googleapis.com/maps/api/place/autocomplete/json',
-        queryParameters: {
-          'input': query,
-          'key': apiKey,
-        },
+        queryParameters: queryParameters,
       );
 
       final data = response.data;
@@ -193,14 +292,26 @@ class PlacesService {
     return [];
   }
 
-  /// High-reliability multi-suggestion search that tries Google Places, then OpenStreetMap Nominatim.
-  Future<List<Map<String, dynamic>>> searchPlacesMulti(String query) async {
+  /// High-reliability multi-suggestion search using Google Places centered on user device GPS location.
+  Future<List<Map<String, dynamic>>> searchPlacesMulti(
+    String query, {
+    LatLng? userLocation,
+    String? regionCode,
+  }) async {
     final cleanQuery = query.trim();
     if (cleanQuery.isEmpty) return [];
 
+    final countries = (regionCode != null && regionCode.isNotEmpty)
+        ? [regionCode.toLowerCase()]
+        : null;
+
     // 1. Try Native Places SDK
     try {
-      final sdkResults = await fetchPredictions(cleanQuery);
+      final sdkResults = await fetchPredictions(
+        cleanQuery,
+        countries: countries,
+        userLocation: userLocation,
+      );
       if (sdkResults.isNotEmpty) {
         return sdkResults.map((p) => {
           'name': p.primaryText,
@@ -211,15 +322,20 @@ class PlacesService {
       }
     } catch (_) {}
 
-    // 2. Try Google Places HTTP Autocomplete
+    // 2. Try Google Places HTTP Autocomplete with device location bias
     try {
-      final httpResults = await fetchPredictionsHttp(cleanQuery, AppConstants.googleMapsApiKey);
+      final httpResults = await fetchPredictionsHttp(
+        cleanQuery,
+        AppConstants.googleMapsApiKey,
+        userLocation: userLocation,
+        regionCode: regionCode,
+      );
       if (httpResults.isNotEmpty) {
         return httpResults;
       }
     } catch (_) {}
 
-    // 3. Try OpenStreetMap Nominatim for rich multi-item suggestions
+    // 3. Try OpenStreetMap Nominatim for fallback suggestions with viewbox bias
     try {
       final dio = Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 5),
@@ -229,14 +345,27 @@ class PlacesService {
         },
       ));
 
+      final Map<String, dynamic> params = {
+        'q': cleanQuery,
+        'format': 'json',
+        'addressdetails': '1',
+        'limit': '6',
+      };
+
+      if (regionCode != null && regionCode.isNotEmpty) {
+        params['countrycodes'] = regionCode.toLowerCase();
+      }
+
+      if (userLocation != null) {
+        const delta = 0.5; // ~50km bounding box
+        params['viewbox'] =
+            '${userLocation.longitude - delta},${userLocation.latitude + delta},${userLocation.longitude + delta},${userLocation.latitude - delta}';
+        params['bounded'] = '0';
+      }
+
       final response = await dio.get<List<dynamic>>(
         'https://nominatim.openstreetmap.org/search',
-        queryParameters: {
-          'q': cleanQuery,
-          'format': 'json',
-          'addressdetails': '1',
-          'limit': '6',
-        },
+        queryParameters: params,
       );
 
       if (response.data != null && response.data!.isNotEmpty) {

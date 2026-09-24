@@ -203,24 +203,43 @@ class _RideDetailsPageState extends State<RideDetailsPage> {
             const SizedBox(height: 16),
 
             // Fare Receipt Breakdown
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Invoice Breakdown', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
-                  const SizedBox(height: 12),
-                  _buildRow('Base Fare', '${AppConstants.currencySymbol}${((fare * 0.70)).toStringAsFixed(2)}'),
-                  _buildRow('Distance & Time', '${AppConstants.currencySymbol}${((fare * 0.30)).toStringAsFixed(2)}'),
-                  const Divider(height: 20),
-                  _buildRow('Total Paid', '${AppConstants.currencySymbol}${fare.toStringAsFixed(2)}', isBold: true),
-                ],
-              ),
+            Builder(
+              builder: (context) {
+                final itemization = _receiptData?['itemization'] is Map ? _receiptData!['itemization'] as Map : null;
+                final baseMinor = itemization?['baseFareMinor'] as num?;
+                final distMinor = itemization?['distanceChargeMinor'] as num?;
+                final timeMinor = itemization?['timeChargeMinor'] as num?;
+                final promoMinor = itemization?['promoDiscountMinor'] as num?;
+
+                final baseVal = baseMinor != null ? baseMinor / 100.0 : fare * 0.75;
+                final distVal = distMinor != null ? distMinor / 100.0 : fare * 0.18;
+                final timeVal = timeMinor != null ? timeMinor / 100.0 : (fare - baseVal - distVal).clamp(0.0, fare);
+                final promoVal = promoMinor != null ? promoMinor / 100.0 : 0.0;
+
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Invoice Breakdown', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
+                      const SizedBox(height: 12),
+                      _buildRow('Base Fare', '${AppConstants.currencySymbol}${baseVal.toStringAsFixed(2)}'),
+                      _buildRow('Distance Fare', '${AppConstants.currencySymbol}${distVal.toStringAsFixed(2)}'),
+                      if (timeVal > 0)
+                        _buildRow('Time Fare', '${AppConstants.currencySymbol}${timeVal.toStringAsFixed(2)}'),
+                      if (promoVal > 0)
+                        _buildRow('Promo Discount', '-${AppConstants.currencySymbol}${promoVal.toStringAsFixed(2)}'),
+                      const Divider(height: 20),
+                      _buildRow('Total Paid', '${AppConstants.currencySymbol}${fare.toStringAsFixed(2)}', isBold: true),
+                    ],
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 24),
 

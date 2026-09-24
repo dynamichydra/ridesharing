@@ -74,151 +74,87 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
       walletCurrency = walletState.currency;
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: Text(
-          _isConfirmStep ? 'Confirm Your Ride' : 'Choose a ride',
-          style: const TextStyle(color: Color(0xFF021B47), fontWeight: FontWeight.bold, fontSize: 18),
+    return PopScope(
+      canPop: !_isConfirmStep,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _isConfirmStep) {
+          setState(() {
+            _isConfirmStep = false;
+          });
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          title: Text(
+            _isConfirmStep ? 'Confirm Your Ride' : 'Choose a ride',
+            style: const TextStyle(color: Color(0xFF021B47), fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          backgroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF021B47), size: 20),
+            onPressed: () {
+              if (_isConfirmStep) {
+                setState(() {
+                  _isConfirmStep = false;
+                });
+              } else {
+                context.read<BookingBloc>().add(ClearBooking());
+                context.pop();
+              }
+            },
+          ),
         ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF021B47), size: 20),
-          onPressed: () {
-            if (_isConfirmStep) {
+        body: BlocConsumer<BookingBloc, BookingState>(
+          listener: (context, state) {
+            if (state is BookingVehicleOptionsLoaded) {
               setState(() {
-                _isConfirmStep = false;
+                _cachedOptions = state;
               });
-            } else {
-              context.read<BookingBloc>().add(ClearBooking());
-              context.pop();
+            } else if (state is BookingConfirmed) {
+              setState(() {
+                _isBooking = false;
+              });
+              context.read<RideTrackingBloc>().add(
+                    StartRideTracking(
+                      rideId: state.rideId,
+                      pickup: state.pickup,
+                      pickupName: state.pickupName,
+                      destination: state.destination,
+                      destinationName: state.destinationName,
+                      vehicleName: state.selectedVehicle.name,
+                      fare: state.fare,
+                      paymentMethod: state.paymentMethod,
+                      passenger: state.passenger,
+                      trackingUrl: state.trackingUrl,
+                      currencyCode: _cachedOptions?.currencyCode ?? 'INR',
+                      currencySymbol: _cachedOptions?.currencySymbol ?? '₹',
+                      breakdown: state.selectedVehicle.breakdown,
+                      distanceKm: state.selectedVehicle.distanceKm,
+                      etaMin: state.selectedVehicle.etaMinutes,
+                    ),
+                  );
+              context.go('/ride-tracking');
+            } else if (state is BookingError) {
+              setState(() {
+                _isBooking = false;
+              });
+              CustomToast.show(context, state.message);
             }
           },
-        ),
-      ),
-      body: BlocConsumer<BookingBloc, BookingState>(
-        listener: (context, state) {
-          if (state is BookingVehicleOptionsLoaded) {
-            setState(() {
-              _cachedOptions = state;
-            });
-          } else if (state is BookingConfirmed) {
-            setState(() {
-              _isBooking = false;
-            });
-            context.read<RideTrackingBloc>().add(
-                  StartRideTracking(
-                    rideId: state.rideId,
-                    pickup: state.pickup,
-                    pickupName: state.pickupName,
-                    destination: state.destination,
-                    destinationName: state.destinationName,
-                    vehicleName: state.selectedVehicle.name,
-                    fare: state.fare,
-                    paymentMethod: state.paymentMethod,
-                    passenger: state.passenger,
-                    trackingUrl: state.trackingUrl,
-                    currencyCode: _cachedOptions?.currencyCode ?? 'INR',
-                    currencySymbol: _cachedOptions?.currencySymbol ?? '₹',
-                    breakdown: state.selectedVehicle.breakdown,
-                    distanceKm: state.selectedVehicle.distanceKm,
-                    etaMin: state.selectedVehicle.etaMinutes,
-                  ),
-                );
-            context.go('/ride-tracking');
-          } else if (state is BookingError) {
-            setState(() {
-              _isBooking = false;
-            });
-            CustomToast.show(context, state.message);
-          }
-        },
-        builder: (context, state) {
-          final effectiveState = (state is BookingVehicleOptionsLoaded)
-              ? state
-              : _cachedOptions;
+          builder: (context, state) {
+            final effectiveState = (state is BookingVehicleOptionsLoaded)
+                ? state
+                : _cachedOptions;
 
-          if (effectiveState == null && state is BookingLoading) {
-            return const LoadingView();
-          }
+            if (effectiveState == null && state is BookingLoading) {
+              return const LoadingView();
+            }
 
-          if (state is BookingError || (effectiveState == null && state is! BookingLoading)) {
-            final errorMsg = state is BookingError ? state.message : 'No rides are currently available in this area.';
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE53935).withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.no_crash_rounded,
-                        color: Color(0xFFE53935),
-                        size: 40,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'No Rides Available',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF021B47),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      errorMsg,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF8A94A6),
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          context.read<BookingBloc>().add(ClearBooking());
-                          context.pop();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF009048),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          'Choose Another Location',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          if (effectiveState != null) {
-            final data = effectiveState;
-            if (data.vehicles.isEmpty) {
+            if (state is BookingError || (effectiveState == null && state is! BookingLoading)) {
+              final errorMsg = state is BookingError ? state.message : 'No rides are currently available in this area.';
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
@@ -248,10 +184,10 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
-                        'There are no drivers currently available for this route.',
+                      Text(
+                        errorMsg,
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 14,
                           color: Color(0xFF8A94A6),
                           height: 1.4,
@@ -289,13 +225,87 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
               );
             }
 
-            return _isConfirmStep
-                ? _buildConfirmRideView(context, data, walletBalance, walletCurrency)
-                : _buildChooseRideView(context, data, walletBalance, walletCurrency);
-          }
+            if (effectiveState != null) {
+              final data = effectiveState;
+              if (data.vehicles.isEmpty) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE53935).withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.no_crash_rounded,
+                            color: Color(0xFFE53935),
+                            size: 40,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'No Rides Available',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF021B47),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'There are no drivers currently available for this route.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Color(0xFF8A94A6),
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              context.read<BookingBloc>().add(ClearBooking());
+                              context.pop();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF009048),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: const Text(
+                              'Choose Another Location',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
 
-          return const LoadingView();
-        },
+              return _isConfirmStep
+                  ? _buildConfirmRideView(context, data, walletBalance, walletCurrency)
+                  : _buildChooseRideView(context, data, walletBalance, walletCurrency);
+            }
+
+            return const LoadingView();
+          },
+        ),
       ),
     );
   }

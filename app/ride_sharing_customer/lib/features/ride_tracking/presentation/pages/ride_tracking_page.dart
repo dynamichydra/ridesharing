@@ -1318,6 +1318,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
     double? timeFare;
     double? surgeFare;
     double? taxFare;
+    double? promoDiscount;
 
     if (state.breakdown != null) {
       final b = state.breakdown!;
@@ -1326,6 +1327,10 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
         if (metered['baseFareMinor'] != null) baseFare = (metered['baseFareMinor'] as num).toDouble() / 100.0;
         if (metered['distanceFareMinor'] != null) distanceFare = (metered['distanceFareMinor'] as num).toDouble() / 100.0;
         if (metered['timeFareMinor'] != null) timeFare = (metered['timeFareMinor'] as num).toDouble() / 100.0;
+      } else {
+        if (b['baseFareMinor'] != null) baseFare = (b['baseFareMinor'] as num).toDouble() / 100.0;
+        if (b['distanceFareMinor'] != null) distanceFare = (b['distanceFareMinor'] as num).toDouble() / 100.0;
+        if (b['timeFareMinor'] != null) timeFare = (b['timeFareMinor'] as num).toDouble() / 100.0;
       }
       final surge = b['surge'] is Map ? b['surge'] as Map : null;
       if (surge != null && surge['surgeAmountMinor'] != null) {
@@ -1334,6 +1339,12 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
       final taxes = b['taxes'] is Map ? b['taxes'] as Map : null;
       if (taxes != null && taxes['totalTaxMinor'] != null) {
         taxFare = (taxes['totalTaxMinor'] as num).toDouble() / 100.0;
+      }
+      final discount = b['discount'] is Map ? b['discount'] as Map : null;
+      if (discount != null && discount['promoDiscountMinor'] != null) {
+        promoDiscount = (discount['promoDiscountMinor'] as num).toDouble() / 100.0;
+      } else if (b['discountAmountMinor'] != null) {
+        promoDiscount = (b['discountAmountMinor'] as num).toDouble() / 100.0;
       }
     }
 
@@ -1408,6 +1419,8 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                       _buildReceiptRow('Surge Fee', '$currencySymbol${surgeFare.toStringAsFixed(2)}'),
                     if (taxFare != null && taxFare > 0)
                       _buildReceiptRow('Taxes & Fees', '$currencySymbol${taxFare.toStringAsFixed(2)}'),
+                    if (promoDiscount != null && promoDiscount > 0)
+                      _buildReceiptRow('Promo Discount', '-$currencySymbol${promoDiscount.toStringAsFixed(2)}'),
                     const SizedBox(height: 14),
                     const Divider(),
                     const SizedBox(height: 10),

@@ -314,7 +314,10 @@ class RideBloc extends Bloc<RideEvent, RideState> {
       (message) => add(_SocketErrorArrived(message)),
     );
 
-    _locationSub ??= locationService.getPositionStream().listen(
+    _locationSub ??= locationService.getPositionStream(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 5,
+    ).listen(
       (pos) => add(_DriverLocationChanged(pos)),
       onError: (e) => AppLogger.w('[RideBloc] location stream error: $e'),
     );
@@ -328,17 +331,34 @@ class RideBloc extends Bloc<RideEvent, RideState> {
       AppLogger.w('[RideBloc] failed to get initial position on connect: $e');
     });
 
-    // Heartbeat: re-emit last known position every 15s so the Redis
-    // driver:location key (TTL 30s) never expires while the driver is idle.
-    _heartbeatTimer ??= Timer.periodic(_kLocationHeartbeatInterval, (_) {
-      final last = _lastDriverPos;
-      if (last == null) return;
-      rideRepository.sendLocationUpdate(
-        last.latitude,
-        last.longitude,
-        recordedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-      AppLogger.i('[RideBloc] heartbeat location_update sent');
+    // Heartbeat: refresh the Redis driver:loc key (TTL 30s) every 15s so it
+    // never expires while the driver is stationary between GPS stream events.
+    // Fetches a fresh GPS fix so the backend always has the true current position.
+    _heartbeatTimer ??= Timer.periodic(_kLocationHeartbeatInterval, (_) async {
+      try {
+        final freshPos = await locationService.getCurrentPosition();
+        rideRepository.sendLocationUpdate(
+          freshPos.latitude,
+          freshPos.longitude,
+          accuracy: freshPos.accuracy,
+          speedKmh: freshPos.speed * 3.6,
+          recordedAt: freshPos.timestamp.millisecondsSinceEpoch,
+        );
+        // Keep in-memory position up to date for UI / bearing calculations.
+        add(_DriverLocationChanged(freshPos));
+        AppLogger.i('[RideBloc] heartbeat location_update sent (fresh GPS)');
+      } catch (e) {
+        // GPS unavailable — fall back to last known position to keep Redis key alive.
+        final last = _lastDriverPos;
+        if (last != null) {
+          rideRepository.sendLocationUpdate(
+            last.latitude,
+            last.longitude,
+            recordedAt: DateTime.now().millisecondsSinceEpoch,
+          );
+          AppLogger.w('[RideBloc] heartbeat used stale position (GPS error: $e)');
+        }
+      }
     });
 
     // Restore an in-progress ride if the app was killed/restarted mid-trip.

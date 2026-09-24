@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 /// Thin wrapper around `geolocator` so callers never talk to the plugin
@@ -24,24 +25,29 @@ class LocationService {
       );
     }
 
-    // 1. Check last known position first for instantaneous (<10ms) response
-    try {
-      final lastKnown = await Geolocator.getLastKnownPosition();
-      if (lastKnown != null) {
-        return lastKnown;
-      }
-    } catch (_) {}
-
-    // 2. Otherwise get current position with short 3s timeout
+    // Always request a FRESH high-accuracy fix first.
+    // lastKnownPosition is intentionally NOT used here because it can be
+    // minutes or hours stale — critical when registering the driver's position
+    // in the geo-index on go_online.
     try {
       return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
-        timeLimit: const Duration(seconds: 3),
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 8),
       );
     } catch (_) {
-      final lastKnown = await Geolocator.getLastKnownPosition();
-      if (lastKnown != null) return lastKnown;
-      rethrow;
+      // On timeout (rare in well-lit outdoor conditions), try medium accuracy
+      // with a shorter timeout before falling back to last known.
+      try {
+        return await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.medium,
+          timeLimit: const Duration(seconds: 5),
+        );
+      } catch (_) {
+        // Last resort: use cached position if available
+        final lastKnown = await Geolocator.getLastKnownPosition();
+        if (lastKnown != null) return lastKnown;
+        rethrow;
+      }
     }
   }
 
@@ -60,12 +66,37 @@ class LocationService {
     return null;
   }
 
-  Stream<Position> getPositionStream({LocationSettings? locationSettings}) {
-    final settings = locationSettings ??
-        const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 3,
-        );
+  /// Returns a continuous real-time position stream with platform-appropriate settings.
+  /// [distanceFilter] — minimum metres moved before a new position is emitted.
+  Stream<Position> getPositionStream({
+    LocationAccuracy accuracy = LocationAccuracy.high,
+    int distanceFilter = 5,
+  }) {
+    late LocationSettings settings;
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      settings = AndroidSettings(
+        accuracy: accuracy,
+        distanceFilter: distanceFilter,
+        forceLocationManager: false,
+        intervalDuration: const Duration(seconds: 4),
+      );
+    } else if (defaultTargetPlatform == TargetPlatform.iOS ||
+               defaultTargetPlatform == TargetPlatform.macOS) {
+      settings = AppleSettings(
+        accuracy: accuracy,
+        activityType: ActivityType.automotiveNavigation,
+        distanceFilter: distanceFilter,
+        pauseLocationUpdatesAutomatically: false,
+        showBackgroundLocationIndicator: true,
+      );
+    } else {
+      settings = LocationSettings(
+        accuracy: accuracy,
+        distanceFilter: distanceFilter,
+      );
+    }
+
     return Geolocator.getPositionStream(locationSettings: settings);
   }
 }

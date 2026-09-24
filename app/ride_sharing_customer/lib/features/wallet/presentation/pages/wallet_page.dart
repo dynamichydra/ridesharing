@@ -22,6 +22,24 @@ class _WalletPageState extends State<WalletPage> {
     return months[(month - 1).clamp(0, 11)];
   }
 
+  /// Maps an ISO 4217 currency code to a display symbol.
+  static String _currencySymbolFor(String code) {
+    switch (code.toUpperCase()) {
+      case 'CAD':
+      case 'USD':
+        return '\$';
+      case 'GBP':
+        return '£';
+      case 'EUR':
+        return '€';
+      case 'AED':
+        return 'د.إ';
+      case 'INR':
+      default:
+        return '₹';
+    }
+  }
+
   String _formatTime(DateTime dt) {
     final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
     final minute = dt.minute.toString().padLeft(2, '0');
@@ -91,7 +109,7 @@ class _WalletPageState extends State<WalletPage> {
 
           if (state is WalletLoaded) {
             balance = state.balance;
-            currencySymbol = state.currency == 'CAD' ? '\$' : '₹';
+            currencySymbol = _currencySymbolFor(state.currency);
             recentTxs = _parseTransactions(state.transactions);
           } else if (state is WalletLoading) {
             // Keep previous data if any
