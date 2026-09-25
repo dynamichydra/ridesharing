@@ -88,13 +88,16 @@ export async function recordCashCollection(driverId, rideId, collectedAmountMino
     .where(and(eq(rides.id, rideId), eq(rides.driverId, driverId))).limit(1);
 
   if (!ride) throw { statusCode: 404, message: 'Ride not found' };
-  if (ride.status !== 'completed') throw { statusCode: 409, message: 'Ride is not completed yet' };
+  if (ride.status !== 'completed' && ride.status !== 'started' && ride.status !== 'arrived') {
+    throw { statusCode: 409, message: 'Ride is not active or completed' };
+  }
 
-  const finalCollectedMinor = collectedAmountMinor ?? ride.finalFareMinor;
+  const expectedFareMinor = ride.finalFareMinor ?? ride.estimatedFareMinor ?? 0;
+  const finalCollectedMinor = collectedAmountMinor ?? expectedFareMinor;
 
   // If already paid with cash, ensure cash collection is logged and return idempotently
   if (ride.paymentStatus === 'paid' && ride.paymentMethod === 'cash') {
-    const isMismatch = finalCollectedMinor !== ride.finalFareMinor;
+    const isMismatch = finalCollectedMinor !== expectedFareMinor;
     try {
       const [existingCollection] = await db.select().from(cashCollections)
         .where(eq(cashCollections.rideId, rideId)).limit(1);
@@ -110,14 +113,14 @@ export async function recordCashCollection(driverId, rideId, collectedAmountMino
         let commissionMinor = 0;
         try {
           const commission = await resolveRideCommission(ride);
-          commissionMinor = commission?.commissionMinor ?? Math.round(ride.finalFareMinor * 0.2);
+          commissionMinor = commission?.commissionMinor ?? Math.round(expectedFareMinor * 0.2);
         } catch {
-          commissionMinor = Math.round(ride.finalFareMinor * 0.2);
+          commissionMinor = Math.round(expectedFareMinor * 0.2);
         }
         await db.insert(cashCollections).values({
           rideId,
           driverId,
-          expectedAmountMinor: ride.finalFareMinor,
+          expectedAmountMinor: expectedFareMinor,
           collectedAmountMinor: finalCollectedMinor,
           platformCommissionMinor: commissionMinor,
           currencyCode: ride.currencyCode || 'INR',
@@ -144,7 +147,7 @@ export async function recordCashCollection(driverId, rideId, collectedAmountMino
     countryId: await _requireCountryId(ride),
     gateway: 'cash',
     currencyCode: ride.currencyCode,
-    amountMinor: ride.finalFareMinor,
+    amountMinor: expectedFareMinor,
     status: 'captured',
     gatewayOrderId: null,
     gatewayPaymentId: null,
