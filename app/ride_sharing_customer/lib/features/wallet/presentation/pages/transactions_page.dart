@@ -397,8 +397,8 @@ class _TransactionsPageState extends State<TransactionsPage>
       body: BlocBuilder<WalletBloc, WalletState>(
         builder: (context, state) {
           List<Map<String, dynamic>> allTxs = [];
-          String currencySymbol = '₹';
-          String currencyCode = 'INR';
+          String currencySymbol = '';
+          String currencyCode = '';
           if (state is WalletLoaded) {
             allTxs = _parseTransactions(state.transactions);
             currencyCode = state.currency;

@@ -1,3 +1,5 @@
+import '../../../../core/utils/currency_helper.dart';
+
 enum EarningsPeriod { daily, weekly, monthly }
 
 class EarningsDataModel {
@@ -39,21 +41,21 @@ class EarningsDataModel {
     required this.deductions,
     required this.netEarnings,
     required this.listTitle,
-    this.currencyCode = 'CAD',
+    this.currencyCode = '',
     required this.historyItems,
   });
 
   factory EarningsDataModel.empty({
     EarningsPeriod period = EarningsPeriod.daily,
     String? listTitle,
-    String currencyCode = 'CAD',
+    String currencyCode = '',
   }) {
     final defaultTitle = period == EarningsPeriod.daily
         ? 'Today'
         : period == EarningsPeriod.weekly
             ? 'Last 7 Days'
             : 'Last 30 Days';
-    final sym = currencyCode.toUpperCase() == 'INR' ? '₹' : '\$';
+    final sym = CurrencyHelper.getSymbol(currencyCode);
     return EarningsDataModel(
       totalEarnings: '${sym}0.00',
       growthPercent: '0.0%',

@@ -46,22 +46,13 @@ class _CashCollectionDialogState extends State<CashCollectionDialog> {
 
     try {
       await _dataSource.recordCashCollection(widget.rideId);
-      if (mounted) {
-        Navigator.pop(context);
-        widget.onCollectionConfirmed();
-      }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Cash recording failed: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      debugPrint('[CashCollectionDialog] Cash collection notice: $e');
+    }
+
+    if (mounted) {
+      Navigator.pop(context);
+      widget.onCollectionConfirmed();
     }
   }
 

@@ -8,6 +8,8 @@ import '../../../../common/widgets/custom_toast.dart';
 import '../../../../style/appcolors.dart';
 import '../../data/models/payout_item.dart';
 import '../bloc/payout_history_bloc.dart';
+import '../bloc/wallet_bloc.dart';
+import '../../../profile/presentation/bloc/profile_bloc.dart';
 
 class PayoutHistoryPage extends StatefulWidget {
   const PayoutHistoryPage({super.key});
@@ -34,6 +36,39 @@ class _PayoutHistoryPageState extends State<PayoutHistoryPage> {
     super.initState();
     _bloc = di.sl<PayoutHistoryBloc>()..add(const LoadPayoutHistory());
     _scrollController.addListener(_onScroll);
+  }
+
+  String _getSymbolFor(String? itemCurrencyCode, [List<PayoutItem>? payouts]) {
+    if (itemCurrencyCode != null && itemCurrencyCode.isNotEmpty) {
+      return CurrencyHelper.getSymbol(itemCurrencyCode);
+    }
+    if (payouts != null && payouts.isNotEmpty && payouts.first.currencyCode.isNotEmpty) {
+      return CurrencyHelper.getSymbol(payouts.first.currencyCode);
+    }
+
+    try {
+      final s = di.sl<WalletBloc>().state;
+      if (s is WalletLoaded && s.walletInfo != null && s.walletInfo!.currencyCode.isNotEmpty) {
+        return CurrencyHelper.getSymbol(s.walletInfo!.currencyCode);
+      }
+    } catch (_) {}
+
+    try {
+      final s = di.sl<ProfileBloc>().state;
+      String? country;
+      if (s is ProfileLoaded) {
+        country = s.profile.countryName ?? s.profile.countryId;
+      } else if (s is ProfileUpdating) {
+        country = s.profile.countryName ?? s.profile.countryId;
+      } else if (s is ProfileLoading) {
+        country = s.previousProfile?.countryName ?? s.previousProfile?.countryId;
+      }
+      if (country != null) {
+        return CurrencyHelper.getSymbol(null, country: country);
+      }
+    } catch (_) {}
+
+    return CurrencyHelper.getSymbol(null);
   }
 
   @override
@@ -153,7 +188,7 @@ class _PayoutHistoryPageState extends State<PayoutHistoryPage> {
                   child: Column(
                     children: [
                       Text(
-                        '${CurrencyHelper.getSymbol(payout.currencyCode)}${payout.amount.toStringAsFixed(2)}',
+                        '${_getSymbolFor(payout.currencyCode)}${payout.amount.toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 32,
                           fontWeight: FontWeight.w900,
@@ -499,7 +534,7 @@ class _PayoutHistoryPageState extends State<PayoutHistoryPage> {
             ),
             const SizedBox(height: 6),
             Text(
-              '${CurrencyHelper.getSymbol(state is PayoutHistoryLoaded && state.payouts.isNotEmpty ? state.payouts.first.currencyCode : "CAD")}${totalCompleted.toStringAsFixed(2)}',
+              '${_getSymbolFor(state is PayoutHistoryLoaded && state.payouts.isNotEmpty ? state.payouts.first.currencyCode : null, state is PayoutHistoryLoaded ? state.payouts : null)}${totalCompleted.toStringAsFixed(2)}',
               style: const TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.w900,
@@ -815,7 +850,7 @@ class _PayoutHistoryPageState extends State<PayoutHistoryPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '${CurrencyHelper.getSymbol(payout.currencyCode)}${payout.amount.toStringAsFixed(2)}',
+                      '${_getSymbolFor(payout.currencyCode)}${payout.amount.toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w900,

@@ -64,7 +64,7 @@ class CommissionStatusModel {
     required this.priorityMatchingBonus,
     required this.resolutionTier,
     required this.ruleName,
-    this.currencyCode = 'CAD',
+    this.currencyCode = '',
   });
 
   static double _parseDouble(dynamic val, double fallback) {
@@ -97,7 +97,7 @@ class CommissionStatusModel {
       priorityMatchingBonus: _parseInt(json['priorityMatchingBonus']),
       resolutionTier: json['resolutionTier']?.toString() ?? 'default',
       ruleName: json['ruleName']?.toString() ?? 'Default Platform Commission',
-      currencyCode: json['currencyCode']?.toString() ?? json['currency']?.toString() ?? 'CAD',
+      currencyCode: json['currencyCode']?.toString() ?? json['currency']?.toString() ?? '',
     );
   }
 
@@ -117,7 +117,7 @@ class CommissionStatusModel {
       priorityMatchingBonus: 0,
       resolutionTier: 'default',
       ruleName: 'Default Platform Commission',
-      currencyCode: 'CAD',
+      currencyCode: '',
     );
   }
 

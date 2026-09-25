@@ -78,7 +78,7 @@ class WalletLoaded extends WalletState {
 
   const WalletLoaded({
     required this.balance,
-    this.currency = 'INR',
+    this.currency = '',
     required this.transactions,
   });
 
@@ -161,7 +161,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
     try {
       final details = await _walletRepository.getWalletDetails();
       final double balance = (details['balance'] as num).toDouble();
-      final String currency = details['currency']?.toString() ?? 'INR';
+      final String currency = details['currency']?.toString() ?? details['currencyCode']?.toString() ?? '';
       final rawTxs = details['transactions'] as List? ?? [];
       final txsList = rawTxs.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       emit(WalletLoaded(balance: balance, currency: currency, transactions: txsList));

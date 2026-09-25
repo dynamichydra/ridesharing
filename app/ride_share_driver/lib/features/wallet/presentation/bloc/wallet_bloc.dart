@@ -63,7 +63,7 @@ class WalletInfo {
 
   factory WalletInfo.fromJson(Map<String, dynamic> json) => WalletInfo(
         balanceMinor: json['balanceMinor'] as int? ?? 0,
-        currencyCode: json['currencyCode']?.toString() ?? json['currency']?.toString() ?? 'INR',
+        currencyCode: json['currencyCode']?.toString() ?? json['currency']?.toString() ?? '',
       );
 
   double get balanceAmount => balanceMinor / 100.0;
@@ -88,7 +88,7 @@ class WalletTransactionItem {
     required this.reason,
     required this.description,
     required this.createdAt,
-    this.currencyCode = 'CAD',
+    this.currencyCode = '',
   });
 
   bool get isCredit => type == 'credit';
@@ -98,7 +98,7 @@ class WalletTransactionItem {
     final type = (json['type'] as String?)?.toLowerCase() ?? 'credit';
     final reason = json['reason'] as String? ?? '';
     final rawDesc = json['description'] as String?;
-    final currencyCode = json['currencyCode']?.toString() ?? json['currency']?.toString() ?? 'CAD';
+    final currencyCode = json['currencyCode']?.toString() ?? json['currency']?.toString() ?? '';
 
     String displayDesc = rawDesc ?? '';
     final lowerReason = reason.toLowerCase();

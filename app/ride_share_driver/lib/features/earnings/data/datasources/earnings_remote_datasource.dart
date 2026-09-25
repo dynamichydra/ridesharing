@@ -49,7 +49,7 @@ class EarningsRemoteDataSource {
       }
 
       final payload = data['MESSAGE'] as Map<String, dynamic>;
-      final currencyCode = payload['currencyCode']?.toString() ?? payload['currency']?.toString() ?? 'CAD';
+      final currencyCode = payload['currencyCode']?.toString() ?? payload['currency']?.toString() ?? '';
       final sym = CurrencyHelper.getSymbol(currencyCode);
 
       int parseInt(dynamic val) {

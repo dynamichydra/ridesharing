@@ -37,7 +37,7 @@ class DriverIncentiveQuest {
       currentTrips: (json['currentTrips'] as num?)?.toInt() ?? 0,
       tripsRemaining: (json['tripsRemaining'] as num?)?.toInt() ?? 0,
       rewardAmountMinor: (json['rewardAmountMinor'] as num?)?.toInt() ?? 0,
-      currencyCode: json['currencyCode']?.toString() ?? 'INR',
+      currencyCode: json['currencyCode']?.toString() ?? json['currency']?.toString() ?? '',
       percentComplete: (json['percentComplete'] as num?)?.toInt() ?? 0,
       status: json['status']?.toString() ?? 'in_progress',
       endAt: json['endAt']?.toString(),

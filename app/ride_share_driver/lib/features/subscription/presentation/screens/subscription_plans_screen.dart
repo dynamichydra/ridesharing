@@ -980,6 +980,7 @@ String _formatDurationLabel(SubscriptionPlan plan) {
 }
 
 String _formatCurrencySymbol(String currencyCode) {
+  if (currencyCode.trim().isEmpty) return '';
   switch (currencyCode.toUpperCase()) {
     case 'INR':
       return '₹';

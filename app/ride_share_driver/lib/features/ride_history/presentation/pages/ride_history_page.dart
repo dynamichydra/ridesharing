@@ -10,6 +10,8 @@ import '../../../ride/presentation/widgets/ride_receipt_sheet.dart';
 import '../../../ride/presentation/widgets/report_lost_item_dialog.dart';
 import '../../../disputes/presentation/widgets/raise_dispute_dialog.dart';
 import '../../../profile/presentation/bloc/profile_bloc.dart';
+import 'dart:async';
+import '../../../../core/services/app_event_bus.dart';
 
 class RideHistoryPage extends StatefulWidget {
   const RideHistoryPage({super.key});
@@ -31,15 +33,27 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
   ); // 0 mins (12:00 AM) to 1440 mins (11:59 PM)
   RangeValues _earningsRange = const RangeValues(0, 10000); // ₹0 to ₹10,000+
 
+  StreamSubscription<AppEvent>? _eventSubscription;
+
   @override
   void initState() {
     super.initState();
     _applyFilters();
     _scrollController.addListener(_onScroll);
+
+    _eventSubscription = AppEventBus.stream.listen((event) {
+      if (!mounted) return;
+      if (event.type == AppEventType.rideCompleted ||
+          event.type == AppEventType.refreshAll ||
+          (event.type == AppEventType.tabSwitched && event.payload == 1)) {
+        _applyFilters();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _eventSubscription?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();

@@ -12,6 +12,7 @@ import '../../data/datasources/ride_remote_datasource.dart';
 import '../../domain/entities/active_ride.dart';
 import '../bloc/ride_bloc.dart';
 import '../widgets/driver_map_view.dart';
+import '../widgets/cash_collection_dialog.dart';
 
 class ActiveRidePage extends StatefulWidget {
   const ActiveRidePage({super.key});
@@ -123,6 +124,30 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
 
     if (otp != null && otp.length == 4) {
       _rideBloc.add(StartRideRequested(otp: otp));
+    }
+  }
+
+  void _promptCompleteRideWithCashCheck(BuildContext context, ActiveRide ride) {
+    final isCash = ride.paymentMethod?.toLowerCase() == 'cash';
+    if (isCash) {
+      final totalFareNum = ride.finalFareMinor != null
+          ? (ride.finalFareMinor! / 100.0)
+          : (ride.estimatedFareMinor != null
+              ? (ride.estimatedFareMinor! / 100.0)
+              : 0.0);
+      final symbol = CurrencyHelper.getSymbol(ride.currencyCode);
+      final fareText = '$symbol${totalFareNum.toStringAsFixed(2)}';
+
+      CashCollectionDialog.show(
+        context: context,
+        rideId: ride.id,
+        fareText: fareText,
+        onCollectionConfirmed: () {
+          _rideBloc.add(CompleteRideRequested());
+        },
+      );
+    } else {
+      _rideBloc.add(CompleteRideRequested());
     }
   }
 
@@ -1161,7 +1186,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                                     } else if (ride.status == 'arrived') {
                                       _promptStartOtpAndDispatch(context);
                                     } else if (ride.status == 'started') {
-                                      _rideBloc.add(CompleteRideRequested());
+                                      _promptCompleteRideWithCashCheck(context, ride);
                                     }
                                   },
                             style: ElevatedButton.styleFrom(

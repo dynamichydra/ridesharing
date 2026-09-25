@@ -109,7 +109,7 @@ class CountryConfig {
 }
 
 class AppConstants {
-  static String currencySymbol = '₹';
+  static String currencySymbol = '';
   static const String distanceUnit = 'km';
   static const String googleMapsApiKey = 'AIzaSyCa9c3EMWliRd2AUcZA-LpJF7VwhEjsd7g';
 
@@ -127,12 +127,12 @@ class AppConstants {
       }
     }
     if (code == 'INR') return '₹';
-    if (code == 'USD') return '\$';
+    if (code == 'USD' || code == 'CAD') return '\$';
     if (code == 'EUR') return '€';
     if (code == 'GBP') return '£';
     if (code == 'BDT') return '৳';
     if (code == 'BRL') return 'R\$';
-    return code;
+    return '';
   }
 
   /// Automatically resolves the correct Google Cloud Map ID based on platform

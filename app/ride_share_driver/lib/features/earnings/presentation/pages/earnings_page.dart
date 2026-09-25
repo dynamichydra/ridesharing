@@ -7,6 +7,8 @@ import '../../../../style/appcolors.dart';
 import '../../data/datasources/earnings_remote_datasource.dart';
 import '../../data/models/earnings_model.dart';
 import '../../data/models/commission_status_model.dart';
+import 'dart:async';
+import '../../../../core/services/app_event_bus.dart';
 import '../widgets/active_incentive_quests_section.dart';
 
 class EarningsPage extends StatefulWidget {
@@ -20,6 +22,7 @@ class _EarningsPageState extends State<EarningsPage> with SingleTickerProviderSt
   TabController? _tabController;
   TabController get _controller => _tabController ??= TabController(length: 3, vsync: this);
   late final EarningsRemoteDataSource _dataSource;
+  StreamSubscription<AppEvent>? _eventSubscription;
   bool _isLoading = false;
   CommissionStatusModel? _commissionStatus;
 
@@ -35,6 +38,15 @@ class _EarningsPageState extends State<EarningsPage> with SingleTickerProviderSt
     _tabController = TabController(length: 3, vsync: this);
     _dataSource = sl<EarningsRemoteDataSource>();
     _fetchAllEarnings();
+
+    _eventSubscription = AppEventBus.stream.listen((event) {
+      if (!mounted) return;
+      if (event.type == AppEventType.rideCompleted ||
+          event.type == AppEventType.refreshAll ||
+          (event.type == AppEventType.tabSwitched && event.payload == 2)) {
+        _fetchAllEarnings();
+      }
+    });
   }
 
   @override
@@ -45,6 +57,7 @@ class _EarningsPageState extends State<EarningsPage> with SingleTickerProviderSt
 
   @override
   void dispose() {
+    _eventSubscription?.cancel();
     _tabController?.dispose();
     super.dispose();
   }

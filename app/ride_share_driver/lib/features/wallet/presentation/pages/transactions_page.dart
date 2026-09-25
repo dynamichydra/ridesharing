@@ -94,10 +94,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
         body: BlocBuilder<WalletBloc, WalletState>(
           builder: (context, state) {
             List<WalletTransactionItem> allTxs = [];
-            String currencyCode = 'INR';
+            String currencyCode = '';
             if (state is WalletLoaded) {
               allTxs = state.transactions;
-              currencyCode = state.walletInfo?.currencyCode ?? 'INR';
+              currencyCode = state.walletInfo?.currencyCode ?? '';
             }
 
             List<WalletTransactionItem> filtered = allTxs.where((tx) {
@@ -251,7 +251,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
     );
   }
 
-  Widget _buildTransactionCard(WalletTransactionItem tx, [String currencyCode = 'INR']) {
+  Widget _buildTransactionCard(WalletTransactionItem tx, [String currencyCode = '']) {
     final symbol = CurrencyHelper.getSymbol(currencyCode);
     final isCredit = tx.isCredit;
 

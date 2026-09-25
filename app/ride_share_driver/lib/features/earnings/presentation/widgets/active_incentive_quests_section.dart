@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/utils/currency_helper.dart';
 import '../../../../injection_container.dart';
 import '../../data/datasources/earnings_remote_datasource.dart';
 import '../../data/models/driver_incentive_model.dart';
@@ -71,7 +72,7 @@ class _ActiveIncentiveQuestsSectionState extends State<ActiveIncentiveQuestsSect
   }
 
   String _formatCurrency(int amountMinor, String code) {
-    final symbol = code.toUpperCase() == 'INR' ? '₹' : '\$';
+    final symbol = CurrencyHelper.getSymbol(code);
     return '$symbol${(amountMinor / 100).toStringAsFixed(2)}';
   }
 
@@ -109,6 +110,8 @@ class _ActiveIncentiveQuestsSectionState extends State<ActiveIncentiveQuestsSect
         ),
       );
     }
+
+    final summaryCurrencyCode = quests.isNotEmpty ? quests.first.currencyCode : '';
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -149,7 +152,7 @@ class _ActiveIncentiveQuestsSectionState extends State<ActiveIncentiveQuestsSect
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    'Total Earned: ${_formatCurrency(_summary!.totalRewardsEarnedMinor, "INR")}',
+                    'Total Earned: ${_formatCurrency(_summary!.totalRewardsEarnedMinor, summaryCurrencyCode)}',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF009048)),
                   ),
                 ),

@@ -9,6 +9,9 @@ import '../../../../injection_container.dart' as di;
 import '../bloc/wallet_bloc.dart';
 import '../../../../presentation/screens/dashboard/driver_main_layout.dart';
 
+import 'dart:async';
+import '../../../../core/services/app_event_bus.dart';
+
 class WalletPage extends StatefulWidget {
   const WalletPage({super.key});
 
@@ -18,15 +21,26 @@ class WalletPage extends StatefulWidget {
 
 class _WalletPageState extends State<WalletPage> {
   late final WalletBloc _bloc = di.sl<WalletBloc>();
+  StreamSubscription<AppEvent>? _eventSubscription;
 
   @override
   void initState() {
     super.initState();
     _bloc.add(LoadWalletData());
+
+    _eventSubscription = AppEventBus.stream.listen((event) {
+      if (!mounted) return;
+      if (event.type == AppEventType.rideCompleted ||
+          event.type == AppEventType.refreshAll ||
+          (event.type == AppEventType.tabSwitched && event.payload == 3)) {
+        _bloc.add(LoadWalletData());
+      }
+    });
   }
 
   @override
   void dispose() {
+    _eventSubscription?.cancel();
     super.dispose();
   }
 
@@ -43,7 +57,7 @@ class _WalletPageState extends State<WalletPage> {
     return '${dt.day} ${months[dt.month - 1]}, $timeStr';
   }
 
-  void _showInstantPayoutDialog(BuildContext context, double balance, BankDetails? bankDetails, [String currencyCode = 'INR']) {
+  void _showInstantPayoutDialog(BuildContext context, double balance, BankDetails? bankDetails, [String currencyCode = '']) {
     final currencySymbol = CurrencyHelper.getSymbol(currencyCode);
     if (bankDetails == null || (bankDetails.accountNumberLast4 == null && bankDetails.upiId == null)) {
       showDialog(
@@ -612,14 +626,14 @@ class _WalletPageState extends State<WalletPage> {
             bool isNegative = false;
             BankDetails? bankDetails;
             List<WalletTransactionItem> txs = [];
-            String currencyCode = 'INR';
+            String currencyCode = '';
 
             if (state is WalletLoaded) {
               balance = state.walletInfo?.balanceAmount ?? 0.0;
               isNegative = state.walletInfo?.isNegative ?? false;
               bankDetails = state.bankDetails;
               txs = state.transactions;
-              currencyCode = state.walletInfo?.currencyCode ?? 'INR';
+              currencyCode = state.walletInfo?.currencyCode ?? '';
             }
             final currencySymbol = CurrencyHelper.getSymbol(currencyCode);
 

@@ -115,7 +115,7 @@ class PayoutItem extends Equatable {
       batchId: json['batchId']?.toString(),
       payoutAccountId: json['payoutAccountId']?.toString(),
       amountMinor: (json['amountMinor'] as num?)?.toInt() ?? 0,
-      currencyCode: json['currencyCode']?.toString() ?? 'INR',
+      currencyCode: json['currencyCode']?.toString() ?? json['currency_code']?.toString() ?? json['currency']?.toString() ?? '',
       gateway: json['gateway']?.toString() ?? 'razorpay',
       gatewayPayoutId: json['gatewayPayoutId']?.toString(),
       status: json['status']?.toString() ?? 'pending',

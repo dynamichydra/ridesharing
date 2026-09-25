@@ -5,6 +5,7 @@ import '../../../common/widgets/app_drawer.dart';
 import '../../../features/profile/presentation/bloc/profile_bloc.dart';
 import '../../../features/ride/presentation/bloc/ride_bloc.dart';
 import '../../../injection_container.dart' as di;
+import '../../../core/services/app_event_bus.dart';
 
 class DriverMainLayout extends StatefulWidget {
   final StatefulNavigationShell navigationShell;
@@ -48,6 +49,7 @@ class _DriverMainLayoutState extends State<DriverMainLayout> {
       index,
       initialLocation: index == widget.navigationShell.currentIndex,
     );
+    AppEventBus.notifyTabSwitched(index);
   }
 
   @override
@@ -69,6 +71,8 @@ class _DriverMainLayoutState extends State<DriverMainLayout> {
                 if (widget.navigationShell.currentIndex != 0) {
                   widget.navigationShell.goBranch(0);
                 }
+              } else if (state is RideCompleted) {
+                AppEventBus.notifyRideCompleted(state.ride);
               }
             },
           ),

@@ -104,7 +104,7 @@ class _WalletPageState extends State<WalletPage> {
       body: BlocBuilder<WalletBloc, WalletState>(
         builder: (context, state) {
           double balance = 0.0;
-          String currencySymbol = '₹';
+          String currencySymbol = '';
           List<Map<String, dynamic>> recentTxs = [];
 
           if (state is WalletLoaded) {
