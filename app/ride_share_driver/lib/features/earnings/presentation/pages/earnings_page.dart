@@ -118,24 +118,32 @@ class _EarningsPageState extends State<EarningsPage> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
+      backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.menu_rounded, color: Color(0xFF021B47), size: 26),
+          icon: const Icon(Icons.menu_rounded, color: Color(0xFF0B1D35), size: 26),
           onPressed: () => DriverMainLayout.openDrawer(),
         ),
         centerTitle: true,
         title: const Text(
           'Earnings',
           style: TextStyle(
-            color: Color(0xFF0F172A),
+            color: Color(0xFF0B1D35),
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.account_balance_wallet_outlined, color: Color(0xFF0B1D35), size: 24),
+            tooltip: 'Wallet',
+            onPressed: () => context.push('/wallet'),
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
       body: Column(
         children: [
@@ -170,29 +178,43 @@ class _EarningsPageState extends State<EarningsPage> with SingleTickerProviderSt
   Widget _buildPeriodTabs() {
     return Container(
       color: Colors.white,
-      child: TabBar(
-        controller: _controller,
-        indicatorColor: const Color(0xFF009048),
-        indicatorWeight: 3.0,
-        indicatorSize: TabBarIndicatorSize.tab,
-        labelColor: const Color(0xFF009048),
-        unselectedLabelColor: const Color(0xFF334155),
-        labelStyle: const TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.bold,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return Row(
+            children: [
+              _buildPillTab(label: 'Daily', index: 0),
+              const SizedBox(width: 8),
+              _buildPillTab(label: 'Weekly', index: 1),
+              const SizedBox(width: 8),
+              _buildPillTab(label: 'Monthly', index: 2),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildPillTab({required String label, required int index}) {
+    final isActive = _controller.index == index;
+    return GestureDetector(
+      onTap: () => _controller.animateTo(index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xFF009048) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(20),
         ),
-        unselectedLabelStyle: const TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: isActive ? Colors.white : const Color(0xFF64748B),
+          ),
         ),
-        overlayColor: WidgetStateProperty.all(Colors.transparent),
-        dividerColor: const Color(0xFFE2E8F0),
-        dividerHeight: 1.5,
-        tabs: const [
-          Tab(text: 'Daily', height: 44),
-          Tab(text: 'Weekly', height: 44),
-          Tab(text: 'Monthly', height: 44),
-        ],
       ),
     );
   }
@@ -281,30 +303,132 @@ class _EarningsPageState extends State<EarningsPage> with SingleTickerProviderSt
   Widget _buildTotalEarningsCard(EarningsDataModel data) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFEEF2F7)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         children: [
-          // Top Split Section
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+          // Dark Navy hero header with earnings amount + trip count
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+            decoration: const BoxDecoration(
+              color: Color(0xFF0B1D35),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(18),
+                topRight: Radius.circular(18),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Left Column: Total Earnings + Amount + Growth Tag
-                Expanded(
-                  flex: 11,
-                  child: Column(
+                Text(
+                  data.listTitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.white60,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  data.totalEarnings,
+                  style: const TextStyle(
+                    fontSize: 36,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.directions_car_rounded, color: Colors.white70, size: 13),
+                          const SizedBox(width: 5),
+                          Text(
+                          '${data.trips} Trips',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Builder(
+                      builder: (context) {
+                        final isNegativeGrowth = data.growthPercent.startsWith('-');
+                        final displayGrowth = isNegativeGrowth
+                            ? data.growthPercent.replaceFirst('-', '')
+                            : data.growthPercent;
+                        final trendColor = isNegativeGrowth ? const Color(0xFFFC8181) : Colors.greenAccent;
+                        final trendIcon = isNegativeGrowth ? Icons.trending_down_rounded : Icons.trending_up_rounded;
+
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isNegativeGrowth
+                                ? const Color(0xFFEF4444).withValues(alpha: 0.2)
+                                : const Color(0xFF009048).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(trendIcon, color: trendColor, size: 12),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$displayGrowth ${data.growthPeriod}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: trendColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Split-section details below
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Left Column: Total Earnings + Amount + Growth Tag
+                      Expanded(
+                        flex: 11,
+                        child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -541,7 +665,10 @@ class _EarningsPageState extends State<EarningsPage> with SingleTickerProviderSt
           ),
         ],
       ),
-    );
+    ),
+  ],
+),
+);
   }
 
   Widget _buildMetricColumn({
