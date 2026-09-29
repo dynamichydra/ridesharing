@@ -1720,28 +1720,13 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                           ),
                         )
                       : Text(
-                          isWallet ? 'Complete' : 'CONFIRM CASH RECEIVED',
+                          isWallet ? 'Done' : 'CONFIRM CASH RECEIVED',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 0.5,
                           ),
                         ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(sheetCtx).pop();
-                  context.push('/settings');
-                },
-                child: const Text(
-                  'Report an Issue',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF64748B),
-                  ),
                 ),
               ),
             ],

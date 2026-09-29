@@ -221,15 +221,14 @@ class _ProfilePageState extends State<ProfilePage> {
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
-          scrolledUnderElevation: 0,
           leading: IconButton(
-            icon: const Icon(Icons.menu_rounded, color: Color(0xFF0B1D35), size: 26),
+            icon: const Icon(Icons.menu_rounded, color: Color(0xFF0F172A), size: 26),
             onPressed: () => DriverMainLayout.openDrawer(),
           ),
           title: const Text(
-            'Profile',
+            'Driver Profile',
             style: TextStyle(
-              color: Color(0xFF0B1D35),
+              color: Color(0xFF0F172A),
               fontWeight: FontWeight.bold,
               fontSize: 17,
             ),
@@ -247,13 +246,13 @@ class _ProfilePageState extends State<ProfilePage> {
                             : null;
                 if (profile == null) return const SizedBox.shrink();
                 return IconButton(
-                  icon: const Icon(Icons.settings_outlined, color: Color(0xFF0B1D35), size: 24),
-                  tooltip: 'Settings',
-                  onPressed: () => context.push('/settings'),
+                  icon: const Icon(Icons.edit_note_rounded, color: Color(0xFF009048), size: 26),
+                  tooltip: 'Edit Profile',
+                  onPressed: () => context.push('/edit-profile'),
                 );
               },
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 8),
           ],
         ),
         body: BlocConsumer<ProfileBloc, ProfileState>(
@@ -288,14 +287,14 @@ class _ProfilePageState extends State<ProfilePage> {
                 ? profile.name!
                 : 'Registered Driver';
             final driverPhone = profile?.phone ?? 'Phone Not Set';
-            // final driverEmail = profile?.email ?? 'Email Not Set';
+            final driverEmail = profile?.email ?? 'Email Not Set';
             final ratingStr = profile?.rating.toStringAsFixed(1) ?? '5.0';
             final vehicleStr = profile?.vehicleModel != null && profile?.vehicleNumber != null
                 ? '${profile!.vehicleModel} • ${profile.vehicleNumber}'
                 : (profile?.vehicleModel ?? profile?.vehicleNumber ?? 'Not Configured');
 
-            // final subPlanName = profile?.activeSubscriptionPlanName ?? 'No Active Plan';
-            // final hasSub = profile?.hasActiveSubscription ?? false;
+            final subPlanName = profile?.activeSubscriptionPlanName ?? 'No Active Plan';
+            final hasSub = profile?.hasActiveSubscription ?? false;
             final photoUrl = _formatUrl(profile?.profilePhoto);
 
             return Stack(
@@ -308,7 +307,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     child: Column(
                       children: [
-                        // 1. Driver Profile Hero Card
+                        // 1. Driver Profile Hero Card with Interactive Photo
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(20),
@@ -326,46 +325,59 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                           child: Column(
                             children: [
-                              // Avatar Row with photo + camera overlay
-                              InkWell(
-                                onTap: () {
-                                  if (profile != null) _showProfilePhotoOptions(context, profile);
-                                },
-                                borderRadius: BorderRadius.circular(40),
-                                child: Stack(
-                                  alignment: Alignment.bottomRight,
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 44,
-                                      backgroundColor: const Color(0xFF0B1D35),
+                              Stack(
+                                alignment: Alignment.bottomRight,
+                                children: [
+                                  InkWell(
+                                    onTap: () {
+                                      if (profile != null) _showProfilePhotoOptions(context, profile);
+                                    },
+                                    borderRadius: BorderRadius.circular(46),
+                                    child: CircleAvatar(
+                                      radius: 46,
+                                      backgroundColor: const Color(0xFFE6F4EA),
                                       backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-                                      onBackgroundImageError: photoUrl.isNotEmpty ? (_, __) {} : null,
+                                      onBackgroundImageError: photoUrl.isNotEmpty
+                                          ? (_, __) {}
+                                          : null,
                                       child: photoUrl.isEmpty
                                           ? Text(
                                               _getInitials(driverName),
                                               style: const TextStyle(
-                                                fontSize: 26,
+                                                fontSize: 28,
                                                 fontWeight: FontWeight.bold,
-                                                color: Colors.white,
+                                                color: Color(0xFF009048),
                                               ),
                                             )
                                           : null,
                                     ),
-                                    Container(
-                                      width: 28,
-                                      height: 28,
+                                  ),
+                                  // Edit Photo Camera Button Badge
+                                  InkWell(
+                                    onTap: () {
+                                      if (profile != null) _showProfilePhotoOptions(context, profile);
+                                    },
+                                    child: Container(
+                                      width: 30,
+                                      height: 30,
                                       decoration: BoxDecoration(
                                         color: const Color(0xFF009048),
                                         shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 2),
+                                        border: Border.all(color: Colors.white, width: 2.5),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(alpha: 0.15),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
                                       ),
-                                      child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 14),
+                                      child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 15),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 12),
-                              // Name + Rating badge
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
@@ -375,22 +387,22 @@ class _ProfilePageState extends State<ProfilePage> {
                                       style: const TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.bold,
-                                        color: Color(0xFF0B1D35),
+                                        color: Color(0xFF0F172A),
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFFEF3C7),
-                                      borderRadius: BorderRadius.circular(10),
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        const Icon(Icons.star_rounded, color: Color(0xFFD97706), size: 13),
+                                        const Icon(Icons.star_rounded, color: Color(0xFFD97706), size: 14),
                                         const SizedBox(width: 3),
                                         Text(
                                           ratingStr,
@@ -398,14 +410,6 @@ class _ProfilePageState extends State<ProfilePage> {
                                             fontSize: 12,
                                             fontWeight: FontWeight.bold,
                                             color: Color(0xFFB45309),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 2),
-                                        Text(
-                                          '(${(double.tryParse(ratingStr) ?? 5.0) * 125 ~/ 1} rides)',
-                                          style: const TextStyle(
-                                            fontSize: 10,
-                                            color: Color(0xFF92400E),
                                           ),
                                         ),
                                       ],
@@ -418,69 +422,91 @@ class _ProfilePageState extends State<ProfilePage> {
                                 driverPhone,
                                 style: const TextStyle(fontSize: 13, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
                               ),
-                              const SizedBox(height: 16),
-
-                              // Stats Row: Total Rides | Rating | Months
-                              Container(
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF8FAFC),
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                child: Row(
+                              if (profile?.cityName != null || profile?.countryName != null) ...[
+                                const SizedBox(height: 4),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    _buildStatItem(
-                                      value: profile?.totalRides.toString() ?? '0',
-                                      label: 'Total Rides',
-                                    ),
-                                    Container(width: 1, height: 32, color: const Color(0xFFE2E8F0)),
-                                    _buildStatItem(
-                                      value: ratingStr,
-                                      label: 'Rating',
-                                    ),
-                                    Container(width: 1, height: 32, color: const Color(0xFFE2E8F0)),
-                                    _buildStatItem(
-                                      value: profile?.createdAt != null
-                                          ? '${DateTime.now().difference(profile!.createdAt!).inDays ~/ 30}'
-                                          : '0',
-                                      label: 'Months',
+                                    const Icon(Icons.location_on_outlined, size: 13, color: Color(0xFF94A3B8)),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      '${profile?.cityName ?? "City"}, ${profile?.countryName ?? "India"}',
+                                      style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
                                     ),
                                   ],
                                 ),
+                              ],
+                              const SizedBox(height: 14),
+                              // Edit Profile & Photo Action Buttons Row
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        side: const BorderSide(color: Color(0xFF009048)),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                      ),
+                                      icon: const Icon(Icons.edit_rounded, size: 15, color: Color(0xFF009048)),
+                                      label: const Text(
+                                        'Edit Profile',
+                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF009048)),
+                                      ),
+                                      onPressed: () => context.push('/edit-profile'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF009048),
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                      ),
+                                      icon: const Icon(Icons.camera_alt_outlined, size: 15, color: Colors.white),
+                                      label: const Text(
+                                        'Edit Photo',
+                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                      ),
+                                      onPressed: () {
+                                        if (profile != null) _showProfilePhotoOptions(context, profile);
+                                      },
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 16),
-                    // 2. Menu Options - matching reference design
+                        const SizedBox(height: 20),
+
+                    // 2. Menu Options
                     Material(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(20),
                       clipBehavior: Clip.antiAlias,
                       child: Container(
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(20),
                           border: Border.all(color: const Color(0xFFE2E8F0)),
                         ),
                         child: Column(
                           children: [
                             _buildMenuItem(
-                              icon: Icons.directions_car_filled_outlined,
-                              iconColor: const Color(0xFF009048),
-                              iconBg: const Color(0xFFF0FDF4),
-                              title: 'My Vehicle',
-                              subtitle: vehicleStr,
-                              onTap: () => context.push('/vehicle-info'),
+                              icon: Icons.person_outline_rounded,
+                              title: 'Personal Information',
+                              subtitle: driverEmail,
+                              onTap: () => context.push('/edit-profile'),
                             ),
-                            const Divider(height: 1, color: Color(0xFFF1F5F9), indent: 68),
+                            const Divider(height: 1, color: Color(0xFFF1F5F9), indent: 56),
                             _buildMenuItem(
                               icon: Icons.description_outlined,
-                              iconColor: const Color(0xFF0165B7),
-                              iconBg: const Color(0xFFEFF6FF),
-                              title: 'Documents',
+                              title: 'Documents Management',
                               subtitle: totalDocsCount > 0
-                                  ? 'License, RC, Insurance'
-                                  : 'Upload & verify your docs',
+                                  ? '$approvedDocsCount / $totalDocsCount verified'
+                                  : 'Upload & verify license, RC, insurance',
                               trailingBadge: totalDocsCount > 0 && approvedDocsCount == totalDocsCount
                                   ? 'Verified'
                                   : 'Pending',
@@ -489,31 +515,34 @@ class _ProfilePageState extends State<ProfilePage> {
                                   : const Color(0xFFD97706),
                               onTap: () => context.push('/documents'),
                             ),
-                            const Divider(height: 1, color: Color(0xFFF1F5F9), indent: 68),
+                            const Divider(height: 1, color: Color(0xFFF1F5F9), indent: 56),
+                            _buildMenuItem(
+                              icon: Icons.directions_car_filled_outlined,
+                              title: 'Vehicle Information',
+                              subtitle: vehicleStr,
+                              onTap: () => context.push('/vehicle-info'),
+                            ),
+                            const Divider(height: 1, color: Color(0xFFF1F5F9), indent: 56),
+                            _buildMenuItem(
+                              icon: Icons.workspace_premium_outlined,
+                              title: 'Subscription Management',
+                              subtitle: subPlanName,
+                              trailingBadge: hasSub ? 'Active' : 'Get Plan',
+                              trailingBadgeColor: hasSub ? const Color(0xFF009048) : const Color(0xFF3B82F6),
+                              onTap: () => context.push('/subscription'),
+                            ),
+                            const Divider(height: 1, color: Color(0xFFF1F5F9), indent: 56),
                             _buildMenuItem(
                               icon: Icons.account_balance_rounded,
-                              iconColor: const Color(0xFF7C3AED),
-                              iconBg: const Color(0xFFF5F3FF),
-                              title: 'Bank & Payouts',
-                              subtitle: 'Manage your earnings',
+                              title: 'Bank & Payout Account',
+                              subtitle: 'Manage linked bank details & verification',
                               onTap: () => context.push('/bank-payout'),
                             ),
-                            const Divider(height: 1, color: Color(0xFFF1F5F9), indent: 68),
+                            const Divider(height: 1, color: Color(0xFFF1F5F9), indent: 56),
                             _buildMenuItem(
-                              icon: Icons.settings_outlined,
-                              iconColor: const Color(0xFF64748B),
-                              iconBg: const Color(0xFFF1F5F9),
-                              title: 'App Settings',
-                              subtitle: 'Language, Notifications',
-                              onTap: () => context.push('/settings'),
-                            ),
-                            const Divider(height: 1, color: Color(0xFFF1F5F9), indent: 68),
-                            _buildMenuItem(
-                              icon: Icons.help_outline_rounded,
-                              iconColor: const Color(0xFFD97706),
-                              iconBg: const Color(0xFFFFFBEB),
-                              title: 'Help & Support',
-                              subtitle: 'Get help or contact us',
+                              icon: Icons.notifications_none_rounded,
+                              title: 'Notification Settings',
+                              subtitle: 'Push alerts & ride broadcasts',
                               onTap: () => context.push('/settings'),
                             ),
                           ],
@@ -636,37 +665,8 @@ class _ProfilePageState extends State<ProfilePage> {
 );
 }
 
-  Widget _buildStatItem({required String value, required String label}) {
-    return Expanded(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF0B1D35),
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              color: Color(0xFF64748B),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildMenuItem({
     required IconData icon,
-    Color? iconColor,
-    Color? iconBg,
     required String title,
     String? subtitle,
     String? trailingBadge,
@@ -676,17 +676,17 @@ class _ProfilePageState extends State<ProfilePage> {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: Container(
-        width: 42,
-        height: 42,
+        width: 40,
+        height: 40,
         decoration: BoxDecoration(
-          color: iconBg ?? const Color(0xFFF8FAFC),
+          color: const Color(0xFFF8FAFC),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(icon, color: iconColor ?? const Color(0xFF0B1D35), size: 22),
+        child: Icon(icon, color: const Color(0xFF0F172A), size: 20),
       ),
       title: Text(
         title,
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0B1D35)),
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
       ),
       subtitle: subtitle != null
           ? Text(
@@ -715,7 +715,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
           ],
           const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF94A3B8)),
         ],

@@ -9,7 +9,6 @@ import '../../features/subscription/presentation/screens/subscription_plans_scre
 import '../../features/subscription/presentation/screens/subscription_history_page.dart';
 import '../../features/ride_history/presentation/pages/ride_history_page.dart';
 import '../../features/earnings/presentation/pages/earnings_page.dart';
-import '../../features/inbox/presentation/pages/inbox_page.dart';
 import '../../features/wallet/presentation/pages/wallet_page.dart';
 import '../../features/wallet/presentation/pages/transactions_page.dart';
 import '../../features/wallet/presentation/pages/payout_history_page.dart';
@@ -143,6 +142,14 @@ class AppRouter {
           StatefulShellBranch(
             routes: [
               GoRoute(
+                path: '/ride-history',
+                builder: (context, state) => const RideHistoryPage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
                 path: '/earnings',
                 builder: (context, state) => const EarningsPage(),
               ),
@@ -151,8 +158,8 @@ class AppRouter {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/inbox',
-                builder: (context, state) => const InboxPage(),
+                path: '/wallet',
+                builder: (context, state) => const WalletPage(),
               ),
             ],
           ),
@@ -211,22 +218,6 @@ class AppRouter {
             ],
           ),
         ],
-      ),
-
-      GoRoute(
-        parentNavigatorKey: _rootNavigatorKey,
-        path: '/ride-history',
-        builder: (context, state) => const RideHistoryPage(),
-      ),
-      GoRoute(
-        parentNavigatorKey: _rootNavigatorKey,
-        path: '/wallet',
-        builder: (context, state) => const WalletPage(),
-      ),
-      GoRoute(
-        parentNavigatorKey: _rootNavigatorKey,
-        path: '/notifications',
-        builder: (context, state) => const InboxPage(),
       ),
 
       GoRoute(

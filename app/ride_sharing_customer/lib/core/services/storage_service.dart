@@ -21,33 +21,58 @@ class StorageService {
 
   // Auth Secure Storage
   Future<void> saveToken(String token) async {
-    await _secureStorage.write(key: _tokenKey, value: token);
+    try {
+      await _secureStorage.write(key: _tokenKey, value: token);
+    } catch (_) {}
   }
 
   Future<String?> getToken() async {
-    return await _secureStorage.read(key: _tokenKey);
+    try {
+      return await _secureStorage.read(key: _tokenKey);
+    } catch (e) {
+      await clearAuth();
+      return null;
+    }
   }
 
   Future<void> saveRefreshToken(String refreshToken) async {
-    await _secureStorage.write(key: _refreshTokenKey, value: refreshToken);
+    try {
+      await _secureStorage.write(key: _refreshTokenKey, value: refreshToken);
+    } catch (_) {}
   }
 
   Future<String?> getRefreshToken() async {
-    return await _secureStorage.read(key: _refreshTokenKey);
+    try {
+      return await _secureStorage.read(key: _refreshTokenKey);
+    } catch (e) {
+      return null;
+    }
   }
 
   Future<void> saveUserId(String id) async {
-    await _secureStorage.write(key: _userIdKey, value: id);
+    try {
+      await _secureStorage.write(key: _userIdKey, value: id);
+    } catch (_) {}
   }
 
   Future<String?> getUserId() async {
-    return await _secureStorage.read(key: _userIdKey);
+    try {
+      return await _secureStorage.read(key: _userIdKey);
+    } catch (e) {
+      return null;
+    }
   }
 
   Future<void> clearAuth() async {
-    await _secureStorage.delete(key: _tokenKey);
-    await _secureStorage.delete(key: _refreshTokenKey);
-    await _secureStorage.delete(key: _userIdKey);
+    try {
+      await _secureStorage.delete(key: _tokenKey);
+      await _secureStorage.delete(key: _refreshTokenKey);
+      await _secureStorage.delete(key: _userIdKey);
+    } catch (_) {
+      try {
+        await _secureStorage.deleteAll();
+      } catch (_) {}
+    }
   }
 
   // Theme Settings Hive

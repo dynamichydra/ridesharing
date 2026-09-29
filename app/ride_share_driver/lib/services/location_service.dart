@@ -32,15 +32,14 @@ class LocationService {
     try {
       return await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 8),
+        timeLimit: const Duration(seconds: 15),
       );
     } catch (_) {
-      // On timeout (rare in well-lit outdoor conditions), try medium accuracy
-      // with a shorter timeout before falling back to last known.
+      // On timeout, try medium accuracy with 8s timeout before falling back to last known.
       try {
         return await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.medium,
-          timeLimit: const Duration(seconds: 5),
+          timeLimit: const Duration(seconds: 8),
         );
       } catch (_) {
         // Last resort: use cached position if available

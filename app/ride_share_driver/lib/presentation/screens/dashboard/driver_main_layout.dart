@@ -64,6 +64,9 @@ class _DriverMainLayoutState extends State<DriverMainLayout> {
           BlocListener<RideBloc, RideState>(
             bloc: _rideBloc,
             listener: (context, state) {
+              // When a customer makes a ride request and an offer arrives,
+              // if driver is on another tab (Rides, Earnings, Wallet, Profile),
+              // immediately switch to the Dashboard tab so the driver sees the incoming ride offer card!
               if (state is RideOfferPending && state.offers.isNotEmpty) {
                 if (widget.navigationShell.currentIndex != 0) {
                   widget.navigationShell.goBranch(0);
@@ -78,84 +81,59 @@ class _DriverMainLayoutState extends State<DriverMainLayout> {
           key: DriverMainLayout.scaffoldKey,
           drawer: const AppDrawer(),
           body: widget.navigationShell,
-          bottomNavigationBar: _buildBottomNav(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomNav() {
-    final currentIndex = widget.navigationShell.currentIndex;
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Color(0xFFEEF2F7), width: 1),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 16,
-            offset: Offset(0, -4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 60,
-          child: Row(
-            children: [
-              _buildNavItem(index: 0, icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Home', currentIndex: currentIndex),
-              _buildNavItem(index: 1, icon: Icons.account_balance_wallet_outlined, activeIcon: Icons.account_balance_wallet_rounded, label: 'Earnings', currentIndex: currentIndex),
-              _buildNavItem(index: 2, icon: Icons.mail_outline_rounded, activeIcon: Icons.mail_rounded, label: 'Inbox', currentIndex: currentIndex),
-              _buildNavItem(index: 3, icon: Icons.person_outline_rounded, activeIcon: Icons.person_rounded, label: 'Profile', currentIndex: currentIndex),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavItem({
-    required int index,
-    required IconData icon,
-    required IconData activeIcon,
-    required String label,
-    required int currentIndex,
-  }) {
-    final isActive = currentIndex == index;
-    return Expanded(
-      child: InkWell(
-        onTap: () => _onItemTapped(index),
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: isActive ? const Color(0xFF009048).withValues(alpha: 0.1) : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: const Border(
+                top: BorderSide(color: Color(0xFFF1F5F9), width: 1),
               ),
-              child: Icon(
-                isActive ? activeIcon : icon,
-                color: isActive ? const Color(0xFF009048) : const Color(0xFF8A94A6),
-                size: 22,
-              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, -2),
+                ),
+              ],
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                color: isActive ? const Color(0xFF009048) : const Color(0xFF8A94A6),
-              ),
+            child: BottomNavigationBar(
+              currentIndex: widget.navigationShell.currentIndex,
+              onTap: _onItemTapped,
+              type: BottomNavigationBarType.fixed,
+              backgroundColor: Colors.white,
+              elevation: 0,
+              selectedItemColor: const Color(0xFF009048),
+              unselectedItemColor: const Color(0xFF8A94A6),
+              selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.home_rounded, size: 22),
+                  activeIcon: Icon(Icons.home_rounded, size: 22),
+                  label: 'Home',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.assignment_outlined, size: 22),
+                  activeIcon: Icon(Icons.assignment_rounded, size: 22),
+                  label: 'Rides',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.monetization_on_outlined, size: 22),
+                  activeIcon: Icon(Icons.monetization_on_rounded, size: 22),
+                  label: 'Earnings',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.account_balance_wallet_outlined, size: 22),
+                  activeIcon: Icon(Icons.account_balance_wallet_rounded, size: 22),
+                  label: 'Wallet',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.person_outline_rounded, size: 22),
+                  activeIcon: Icon(Icons.person_rounded, size: 22),
+                  label: 'Profile',
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

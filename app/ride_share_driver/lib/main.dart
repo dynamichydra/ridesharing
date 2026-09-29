@@ -13,8 +13,17 @@ import 'core/services/fcm_service.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'presentation/bloc/onboarding/onboarding_bloc.dart';
 
+import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
+import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  final GoogleMapsFlutterPlatform mapsImplementation = GoogleMapsFlutterPlatform.instance;
+  if (mapsImplementation is GoogleMapsFlutterAndroid) {
+    mapsImplementation.useAndroidViewSurface = true;
+  }
+
   await di.init();
   try {
     await di.sl<FcmService>().initialize();

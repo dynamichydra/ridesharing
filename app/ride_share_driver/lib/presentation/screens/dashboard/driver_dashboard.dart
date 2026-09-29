@@ -817,66 +817,24 @@ class _DriverDashboardState extends State<DriverDashboard>
                           leading: IconButton(
                             icon: const Icon(
                               Icons.menu_rounded,
-                              color: Color(0xFF0B1D35),
+                              color: Color(0xFF021B47),
                               size: 26,
                             ),
                             onPressed: () => DriverMainLayout.openDrawer(),
                           ),
                           centerTitle: true,
-                          // Online / Offline status pill — tapping toggles status
-                          title: GestureDetector(
-                            onTap: isTransitioning
-                                ? null
-                                : () => _toggleOnlineStatus(isOnline),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 280),
-                              curve: Curves.easeInOut,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 7,
-                              ),
-                              decoration: BoxDecoration(
-                                color: (isOnline || isGoingOnline)
-                                    ? const Color(0xFF009048)
-                                    : const Color(0xFF1E293B),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 7,
-                                    height: 7,
-                                    decoration: BoxDecoration(
-                                      color: (isOnline || isGoingOnline)
-                                          ? Colors.greenAccent
-                                          : const Color(0xFF94A3B8),
-                                      shape: BoxShape.circle,
-                                    ),
+                          title: Image.asset(
+                            'assets/images/ride-share-text-icon.png',
+                            height: 28,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Text(
+                                  'Ryva Ride',
+                                  style: TextStyle(
+                                    color: Color(0xFF009048),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 20,
                                   ),
-                                  const SizedBox(width: 7),
-                                  AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 200),
-                                    child: Text(
-                                      isGoingOnline
-                                          ? 'Going Online...'
-                                          : isGoingOffline
-                                              ? 'Going Offline...'
-                                              : isOnline
-                                                  ? 'You are Online'
-                                                  : 'You are Offline',
-                                      key: ValueKey('$isOnline-$isTransitioning'),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.2,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                                ),
                           ),
                           actions: [
                             Stack(
@@ -884,8 +842,8 @@ class _DriverDashboardState extends State<DriverDashboard>
                               children: [
                                 IconButton(
                                   icon: const Icon(
-                                    Icons.notifications_outlined,
-                                    color: Color(0xFF0B1D35),
+                                    Icons.notifications_none_rounded,
+                                    color: Color(0xFF021B47),
                                     size: 26,
                                   ),
                                   onPressed: () =>
@@ -895,8 +853,8 @@ class _DriverDashboardState extends State<DriverDashboard>
                                   top: 14,
                                   right: 14,
                                   child: Container(
-                                    width: 7,
-                                    height: 7,
+                                    width: 8,
+                                    height: 8,
                                     decoration: const BoxDecoration(
                                       color: Color(0xFF009048),
                                       shape: BoxShape.circle,
@@ -905,7 +863,7 @@ class _DriverDashboardState extends State<DriverDashboard>
                                 ),
                               ],
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 8),
                           ],
                         ),
                         body: Stack(
@@ -1145,7 +1103,7 @@ class _DriverDashboardState extends State<DriverDashboard>
   }
 
   // ===========================================================================
-  // Top Header Section: Profile + Greeting + Rating (toggle moved to AppBar)
+  // Top Header Section: Profile + Greeting + Rating + Online/Offline Pill Switch
   // ===========================================================================
   Widget _buildHeaderSection({
     required BuildContext context,
@@ -1159,125 +1117,214 @@ class _DriverDashboardState extends State<DriverDashboard>
   }) {
     final initials = _getInitials(driverName);
 
-    return GestureDetector(
-      onTap: () => DriverMainLayout.openDrawer(),
-      child: Row(
-        children: [
-          // Driver Avatar with online indicator dot
-          Stack(
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        // Driver Avatar & Name + Rating
+        GestureDetector(
+          onTap: () => DriverMainLayout.openDrawer(),
+          child: Row(
             children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF0B1D35),
-                  shape: BoxShape.circle,
-                ),
-                clipBehavior: Clip.antiAlias,
-                alignment: Alignment.center,
-                child: (profilePhoto != null && profilePhoto.isNotEmpty)
-                    ? Image.network(
-                        profilePhoto,
-                        width: 46,
-                        height: 46,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Text(
-                          initials,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
+              Stack(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0F172A),
+                      shape: BoxShape.circle,
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    alignment: Alignment.center,
+                    child: (profilePhoto != null && profilePhoto.isNotEmpty)
+                        ? Image.network(
+                            profilePhoto,
+                            width: 48,
+                            height: 48,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Text(
+                              initials,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          )
+                        : Text(
+                            initials,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                            ),
                           ),
-                        ),
-                      )
-                    : Text(
-                        initials,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-              ),
-              // Online status dot
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  width: 13,
-                  height: 13,
-                  decoration: BoxDecoration(
-                    color: (isOnline || isGoingOnline)
-                        ? const Color(0xFF009048)
-                        : const Color(0xFF94A3B8),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
                   ),
-                ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: (isOnline || isGoingOnline)
+                            ? const Color(0xFF009048)
+                            : const Color(0xFF94A3B8),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(width: 12),
-          // Greeting + Name + Rating
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _getGreeting(),
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFF64748B),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 1),
-              Row(
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    driverName,
+                    _getGreeting(),
                     style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF0B1D35),
+                      fontSize: 12,
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFEF3C7),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.star_rounded,
-                          size: 12,
-                          color: Color(0xFFD97706),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Text(
+                        driverName,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0F172A),
                         ),
-                        const SizedBox(width: 2),
-                        Text(
-                          driverRating,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF92400E),
-                          ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
                         ),
-                      ],
-                    ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.star_rounded,
+                              size: 13,
+                              color: Color(0xFFD97706),
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              driverRating,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF92400E),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ],
           ),
-        ],
-      ),
+        ),
+
+        // Online / Offline Pill Switch with smooth sliding and loading animation
+        GestureDetector(
+          onTap: isTransitioning ? null : () => _toggleOnlineStatus(isOnline),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeInOut,
+            width: 96,
+            height: 36,
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: isOnline
+                  ? const Color(0xFF009048)
+                  : (isGoingOnline
+                      ? const Color(0xFF009048).withValues(alpha: 0.8)
+                      : const Color(0xFF64748B)),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Stack(
+              children: [
+                AnimatedAlign(
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeInOut,
+                  alignment: (isOnline || isGoingOnline)
+                      ? Alignment.centerLeft
+                      : Alignment.centerRight,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      left: (isOnline || isGoingOnline) ? 8 : 0,
+                      right: (isOnline || isGoingOnline) ? 0 : 8,
+                    ),
+                    child: Text(
+                      isGoingOnline
+                          ? 'Going...'
+                          : (isGoingOffline
+                              ? 'Going...'
+                              : (isOnline ? 'Online' : 'Offline')),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                AnimatedAlign(
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeInOut,
+                  alignment: (isOnline || isGoingOnline)
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: Container(
+                    width: 30,
+                    height: 30,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 4,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: isTransitioning
+                        ? const Center(
+                            child: SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.0,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFF009048),
+                                ),
+                              ),
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1300,15 +1347,16 @@ class _DriverDashboardState extends State<DriverDashboard>
         : '0m';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFF0B1D35),
-        borderRadius: BorderRadius.circular(18),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0B1D35).withValues(alpha: 0.15),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -1337,12 +1385,10 @@ class _DriverDashboardState extends State<DriverDashboard>
                           return Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: isAnimating
-                                  ? Colors.white.withValues(alpha: 0.25)
-                                  : Colors.white.withValues(alpha: 0.12),
+                              color: isAnimating ? const Color(0xFFDCFCE7) : const Color(0xFFF0FDF4),
                               borderRadius: BorderRadius.circular(10),
                               border: isAnimating
-                                  ? Border.all(color: Colors.greenAccent.withValues(alpha: 0.6), width: 1.5)
+                                  ? Border.all(color: const Color(0xFF009048).withValues(alpha: 0.6), width: 1.5)
                                   : null,
                               boxShadow: isAnimating
                                   ? [
@@ -1359,7 +1405,7 @@ class _DriverDashboardState extends State<DriverDashboard>
                         },
                         child: const Icon(
                           Icons.account_balance_wallet_outlined,
-                          color: Colors.white,
+                          color: Color(0xFF009048),
                           size: 20,
                         ),
                       ),
@@ -1369,10 +1415,10 @@ class _DriverDashboardState extends State<DriverDashboard>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Earnings',
+                              "Earnings",
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.white60,
+                                color: Color(0xFF64748B),
                                 fontWeight: FontWeight.w500,
                               ),
                               overflow: TextOverflow.ellipsis,
@@ -1394,8 +1440,8 @@ class _DriverDashboardState extends State<DriverDashboard>
                                       fontSize: 16,
                                       fontWeight: FontWeight.w900,
                                       color: _moneyAnimController.isAnimating
-                                          ? Colors.greenAccent
-                                          : Colors.white,
+                                          ? const Color(0xFF009048)
+                                          : const Color(0xFF0F172A),
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -1458,7 +1504,7 @@ class _DriverDashboardState extends State<DriverDashboard>
           ),
 
           // Divider 1
-          Container(width: 1, height: 32, color: Colors.white.withValues(alpha: 0.12)),
+          Container(width: 1, height: 32, color: const Color(0xFFE2E8F0)),
 
           // 2. Rides Today
           Expanded(
@@ -1477,12 +1523,12 @@ class _DriverDashboardState extends State<DriverDashboard>
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.12),
+                        color: const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(
                         Icons.directions_car_outlined,
-                        color: Colors.white,
+                        color: Color(0xFF0F172A),
                         size: 20,
                       ),
                     ),
@@ -1495,7 +1541,7 @@ class _DriverDashboardState extends State<DriverDashboard>
                             'Rides',
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.white60,
+                              color: Color(0xFF64748B),
                               fontWeight: FontWeight.w500,
                             ),
                             overflow: TextOverflow.ellipsis,
@@ -1506,7 +1552,7 @@ class _DriverDashboardState extends State<DriverDashboard>
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w900,
-                              color: Colors.white,
+                              color: Color(0xFF0F172A),
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -1520,7 +1566,7 @@ class _DriverDashboardState extends State<DriverDashboard>
           ),
 
           // Divider 2
-          Container(width: 1, height: 32, color: Colors.white.withValues(alpha: 0.12)),
+          Container(width: 1, height: 32, color: const Color(0xFFE2E8F0)),
 
           // 3. Working Hours
           Expanded(
@@ -1531,12 +1577,12 @@ class _DriverDashboardState extends State<DriverDashboard>
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.12),
+                      color: const Color(0xFFEFF6FF),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
                       Icons.schedule_outlined,
-                      color: Colors.white,
+                      color: Color(0xFF2563EB),
                       size: 20,
                     ),
                   ),
@@ -1549,7 +1595,7 @@ class _DriverDashboardState extends State<DriverDashboard>
                           'Duration',
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.white60,
+                            color: Color(0xFF64748B),
                             fontWeight: FontWeight.w500,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -1560,7 +1606,7 @@ class _DriverDashboardState extends State<DriverDashboard>
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w900,
-                            color: Colors.white,
+                            color: Color(0xFF0F172A),
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1601,8 +1647,8 @@ class _DriverDashboardState extends State<DriverDashboard>
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.025),
-            blurRadius: 8,
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
             offset: const Offset(0, 2),
           ),
         ],
@@ -1775,40 +1821,37 @@ class _DriverDashboardState extends State<DriverDashboard>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          SizedBox(height: 32),
+          SizedBox(height: 48),
 
           // Radar with vehicle in the center & pulse animation
           PulsingRadarView(),
 
-          SizedBox(height: 28),
+          SizedBox(height: 36),
 
-          // "Waiting for ride requests..."
+          // "Looking for ride requests..."
           Text(
-            'Waiting for ride requests...',
+            'Looking for ride requests...',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF0B1D35),
+              color: Color(0xFF0F172A),
             ),
           ),
 
           SizedBox(height: 8),
 
           // Subtitle
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              'Stay online to receive more rides in your area',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.5,
-                color: Color(0xFF64748B),
-              ),
+          Text(
+            "We'll notify you as soon as\na new request comes in.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.4,
+              color: Color(0xFF64748B),
             ),
           ),
 
-          SizedBox(height: 32),
+          SizedBox(height: 48),
         ],
       ),
     );

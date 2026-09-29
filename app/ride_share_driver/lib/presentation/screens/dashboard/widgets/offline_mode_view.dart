@@ -28,11 +28,11 @@ class _OfflineModeViewState extends State<OfflineModeView>
       duration: const Duration(milliseconds: 1500),
     );
 
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.4).animate(
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.35).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeOutQuad),
     );
 
-    _opacityAnimation = Tween<double>(begin: 0.5, end: 0.0).animate(
+    _opacityAnimation = Tween<double>(begin: 0.6, end: 0.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeOutQuad),
     );
 
@@ -62,45 +62,33 @@ class _OfflineModeViewState extends State<OfflineModeView>
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
       children: [
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
 
-        // Illustration Area
+        // Animated Power / Radar Illustration
         SizedBox(
-          width: double.infinity,
-          height: 200,
+          width: 200,
+          height: 180,
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Subtle green tinted radial background
-              Container(
-                width: 200,
-                height: 200,
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(0xFF009048).withOpacity(0.08),
-                      Colors.transparent,
-                    ],
-                    radius: 0.9,
-                  ),
-                  shape: BoxShape.circle,
-                ),
-              ),
-
-              // Pulsing rings when going online
+              // Pulsing green radar ripple when going online
               if (widget.isGoingOnline)
                 AnimatedBuilder(
                   animation: _pulseController,
                   builder: (context, child) {
                     return Container(
-                      width: 150 * _scaleAnimation.value,
-                      height: 150 * _scaleAnimation.value,
+                      width: 140 * _scaleAnimation.value,
+                      height: 140 * _scaleAnimation.value,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
+                        color: const Color(0xFF009048).withValues(
+                          alpha: _opacityAnimation.value * 0.4,
+                        ),
                         border: Border.all(
-                          color: const Color(0xFF009048).withOpacity(_opacityAnimation.value),
+                          color: const Color(0xFF009048).withValues(
+                            alpha: _opacityAnimation.value,
+                          ),
                           width: 2,
                         ),
                       ),
@@ -108,177 +96,149 @@ class _OfflineModeViewState extends State<OfflineModeView>
                   },
                 ),
 
-              // Main illustration
+              // Illustration image with smooth animated scale when active
               AnimatedScale(
-                scale: widget.isGoingOnline ? 1.06 : 1.0,
-                duration: const Duration(milliseconds: 400),
+                scale: widget.isGoingOnline ? 1.05 : 1.0,
+                duration: const Duration(milliseconds: 300),
                 child: Image.asset(
                   'assets/images/offline-ui.png',
-                  width: 180,
+                  width: 200,
                   height: 180,
                   fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) =>
-                      _buildFallbackIllustration(),
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      color: widget.isGoingOnline
+                          ? const Color(0xFFDCFCE7)
+                          : const Color(0xFFF1F5F9),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.power_settings_new_rounded,
+                      size: 56,
+                      color: widget.isGoingOnline
+                          ? const Color(0xFF009048)
+                          : const Color(0xFF94A3B8),
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
         ),
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
 
-        // Title
+        // Title with animated cross-fade
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 250),
           child: Text(
-            widget.isGoingOnline ? 'Going online...' : 'Go Online to Start Earning',
+            widget.isGoingOnline ? 'Going online...' : "You're offline",
             key: ValueKey<bool>(widget.isGoingOnline),
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF0B1D35),
-              height: 1.2,
+              color: Color(0xFF0F172A),
             ),
           ),
         ),
 
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
 
-        // Subtitle
+        // Subtitle with animated cross-fade
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 250),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              widget.isGoingOnline
-                  ? 'Connecting to GPS & Ryva Network...\nGetting you ready for rides.'
-                  : 'You will start receiving ride requests in your area',
-              key: ValueKey<bool>(widget.isGoingOnline),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 14,
-                height: 1.5,
-                color: Color(0xFF64748B),
-                fontWeight: FontWeight.w400,
-              ),
+          child: Text(
+            widget.isGoingOnline
+                ? 'Connecting to GPS & Ryva Network...\nGetting you ready for rides.'
+                : 'Go online to start receiving\nride requests and earn.',
+            key: ValueKey<bool>(widget.isGoingOnline),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.4,
+              color: Color(0xFF64748B),
             ),
           ),
         ),
 
-        const SizedBox(height: 32),
+        const SizedBox(height: 28),
 
-        // Go Online Button
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
+        // "Go Online" / "Connecting..." button
+        Center(
           child: SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: widget.isGoingOnline
-                  ? ElevatedButton(
-                      key: const ValueKey('loading'),
-                      onPressed: null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF009048),
-                        disabledBackgroundColor: const Color(0xFF009048),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+            width: MediaQuery.of(context).size.width * 0.65,
+            height: 48,
+            child: widget.isGoingOnline
+                ? ElevatedButton(
+                    onPressed: null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF009048),
+                      disabledBackgroundColor: const Color(0xFF009048),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
-                          SizedBox(width: 12),
-                          Text(
-                            'Going Online...',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'Going Online...',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
-                        ],
-                      ),
-                    )
-                  : ElevatedButton(
-                      key: const ValueKey('go-online'),
-                      onPressed: widget.onGoOnline,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF009048),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shadowColor: const Color(0xFF009048).withOpacity(0.3),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
                         ),
-                      ),
-                      child: const Text(
-                        'Go Online',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.3,
-                        ),
+                      ],
+                    ),
+                  )
+                : OutlinedButton.icon(
+                    onPressed: widget.onGoOnline,
+                    icon: const Icon(
+                      Icons.power_settings_new_rounded,
+                      color: Color(0xFF009048),
+                      size: 18,
+                    ),
+                    label: const Text(
+                      'Go Online',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF009048),
                       ),
                     ),
-            ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      side: const BorderSide(
+                        color: Color(0xFF009048),
+                        width: 1.2,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
           ),
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 36),
       ],
-    );
-  }
-
-  Widget _buildFallbackIllustration() {
-    return Container(
-      width: 160,
-      height: 160,
-      decoration: BoxDecoration(
-        color: widget.isGoingOnline
-            ? const Color(0xFFDCFCE7)
-            : const Color(0xFFF1F5F9),
-        shape: BoxShape.circle,
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Car icon
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF009048).withOpacity(0.15),
-                  blurRadius: 16,
-                  spreadRadius: 4,
-                ),
-              ],
-            ),
-            child: Icon(
-              Icons.directions_car_rounded,
-              size: 48,
-              color: widget.isGoingOnline
-                  ? const Color(0xFF009048)
-                  : const Color(0xFF64748B),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -64,7 +64,9 @@ final sl = GetIt.instance;
 
 Future<void> init() async {
   // Core Services
-  const secureStorage = FlutterSecureStorage();
+  const secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
   sl.registerSingleton<FlutterSecureStorage>(secureStorage);
 
   final storageService = StorageService(secureStorage);
