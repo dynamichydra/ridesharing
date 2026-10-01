@@ -540,6 +540,15 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                             const Divider(height: 1, color: Color(0xFFF1F5F9), indent: 56),
                             _buildMenuItem(
+                              icon: Icons.support_agent_rounded,
+                              title: 'Help & Driver Support',
+                              subtitle: 'Toll claims, cash disputes, payouts & quick help',
+                              trailingBadge: '24/7 Support',
+                              trailingBadgeColor: const Color(0xFF009048),
+                              onTap: () => context.push('/support'),
+                            ),
+                            const Divider(height: 1, color: Color(0xFFF1F5F9), indent: 56),
+                            _buildMenuItem(
                               icon: Icons.notifications_none_rounded,
                               title: 'Notification Settings',
                               subtitle: 'Push alerts & ride broadcasts',

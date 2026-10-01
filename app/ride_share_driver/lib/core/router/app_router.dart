@@ -19,6 +19,8 @@ import '../../features/profile/presentation/pages/driver_documents_page.dart';
 import '../../features/profile/presentation/pages/bank_payout_page.dart';
 import '../../features/ride/presentation/screens/active_ride_screen.dart';
 import '../../features/chat/presentation/pages/ride_chat_page.dart';
+import '../../features/support/presentation/pages/driver_support_hub_page.dart';
+
 
 class AppRouter {
   final AuthBloc authBloc;
@@ -282,9 +284,15 @@ class AppRouter {
         path: '/bank-payout',
         builder: (context, state) => const BankPayoutPage(),
       ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/support',
+        builder: (context, state) => const DriverSupportHubPage(),
+      ),
     ],
   );
 }
+
 
 class _BlocRefreshListenable extends ChangeNotifier {
   final AuthBloc bloc;

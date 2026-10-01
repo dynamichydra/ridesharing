@@ -33,7 +33,9 @@ import 'features/wallet/presentation/bloc/payout_history_bloc.dart';
 import 'features/ride_history/data/datasources/ride_history_datasource.dart';
 import 'features/ride_history/presentation/bloc/ride_history_bloc.dart';
 import 'features/earnings/data/datasources/earnings_remote_datasource.dart';
+import 'features/support/data/datasources/driver_support_remote_datasource.dart';
 import 'core/services/fcm_service.dart';
+
 import 'core/network/network_cubit.dart';
 
 final sl = GetIt.instance;
@@ -74,6 +76,9 @@ Future<void> init() async {
       () => RideHistoryDataSource(apiClient: sl()));
   sl.registerLazySingleton<EarningsRemoteDataSource>(
       () => EarningsRemoteDataSource(apiClient: sl()));
+  sl.registerLazySingleton<DriverSupportRemoteDataSource>(
+      () => DriverSupportRemoteDataSource(apiClient: sl()));
+
 
   // ── Repositories ──────────────────────────────────────────────────────────
   sl.registerLazySingleton<AuthRepository>(

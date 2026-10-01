@@ -200,7 +200,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
           const SizedBox(height: 8),
           _sectionHeader('Support'),
-          _navTile(icon: Icons.help_outline_rounded, iconColor: Colors.teal, title: 'Help & Support', onTap: () {}),
+          _navTile(icon: Icons.help_outline_rounded, iconColor: Colors.teal, title: 'Help & Support', trailing: '24/7 Help', onTap: () => context.push('/support')),
           _navTile(icon: Icons.privacy_tip_outlined, iconColor: AppColors.secondary, title: 'Privacy Policy', onTap: () {}),
           _navTile(icon: Icons.description_outlined, iconColor: AppColors.primary, title: 'Terms of Service', onTap: () {}),
           _navTile(icon: Icons.info_outline_rounded, iconColor: AppColors.textSecondary, title: 'App Version', trailing: 'v1.0.2', onTap: () {}),

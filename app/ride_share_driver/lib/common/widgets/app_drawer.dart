@@ -173,6 +173,13 @@ class AppDrawer extends StatelessWidget {
                     ),
                     _buildDrawerItem(
                       context: context,
+                      icon: Icons.support_agent_rounded,
+                      title: 'Help & Support',
+                      route: '/support',
+                      isSelected: currentLocation.startsWith('/support'),
+                    ),
+                    _buildDrawerItem(
+                      context: context,
                       icon: Icons.settings_outlined,
                       title: 'Settings',
                       route: '/settings',
