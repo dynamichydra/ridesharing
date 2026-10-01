@@ -27,8 +27,11 @@ import {
   MessageSquareWarning,
   UserCheck,
   ArrowLeftRight,
+  Headphones,
+  HelpCircle,
   type LucideIcon,
 } from "lucide-react";
+
 
 export type NavType = {
   title: string;
@@ -278,5 +281,22 @@ export const navItem: NavType[] = [
     type: "regular",
     roles: ["super_admin", "admin"],
   },
+  {
+    title: "Support Operations Queue",
+    url: "/support/tickets",
+    icon: Headphones,
+    isActive: true,
+    type: "regular",
+    roles: ["super_admin", "admin"],
+  },
+  {
+    title: "Support FAQ & Categories",
+    url: "/support/faqs",
+    icon: HelpCircle,
+    isActive: true,
+    type: "regular",
+    roles: ["super_admin", "admin"],
+  },
 ];
+
 

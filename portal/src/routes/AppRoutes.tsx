@@ -43,6 +43,10 @@ const DispatchOpsPage = lazy(() => import("@/features/dispatch-ops/pages"));
 const CashManagementList = lazy(() => import("@/features/cash-management/pages"));
 const LostItemList = lazy(() => import("@/features/lost-items/pages"));
 const FxRateList = lazy(() => import("@/features/fx/pages"));
+const SupportTicketsPage = lazy(() => import("@/features/support/pages/SupportTicketsPage"));
+const SupportTicketDetailPage = lazy(() => import("@/features/support/pages/SupportTicketDetailPage"));
+const SupportFaqCategoryPage = lazy(() => import("@/features/support/pages/SupportFaqCategoryPage"));
+
 
 const router = createBrowserRouter([
   {
@@ -405,9 +409,40 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      {
+        path: "support/tickets",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
+            <Suspense fallback={<Loader />}>
+              <SupportTicketsPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "support/tickets/:ticketId",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
+            <Suspense fallback={<Loader />}>
+              <SupportTicketDetailPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "support/faqs",
+        element: (
+          <ProtectedRoute allowedRoles={["super_admin", "admin"]}>
+            <Suspense fallback={<Loader />}>
+              <SupportFaqCategoryPage />
+            </Suspense>
+          </ProtectedRoute>
+        ),
+      },
     ],
   },
 ]);
+
 
 
 export function AppRoutes() {
