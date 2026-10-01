@@ -57,6 +57,8 @@ import 'features/subscription/data/datasources/rider_subscription_datasource.dar
 import 'features/subscription/domain/repositories/rider_subscription_repository.dart';
 import 'features/subscription/presentation/bloc/subscription_bloc.dart';
 import 'features/safety/data/datasources/trusted_contacts_datasource.dart';
+import 'features/support/data/datasources/support_datasource.dart';
+
 
 final sl = GetIt.instance;
 
@@ -145,4 +147,13 @@ Future<void> init() async {
   sl.registerLazySingleton<RiderSubscriptionDataSource>(() => RiderSubscriptionDataSourceImpl(sl<DioClient>()));
   sl.registerLazySingleton<RiderSubscriptionRepository>(() => RiderSubscriptionRepositoryImpl(sl<RiderSubscriptionDataSource>()));
   sl.registerFactory(() => SubscriptionBloc(sl<RiderSubscriptionRepository>()));
+
+  // ==========================================
+  // Support Feature
+  // ==========================================
+  sl.registerLazySingleton<SupportDataSource>(() => SupportDataSourceImpl(
+        dioClient: sl<DioClient>(),
+        storageService: sl<StorageService>(),
+      ));
 }
+
