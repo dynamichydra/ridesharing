@@ -24,8 +24,10 @@
 
 import 'dotenv/config';
 import { drizzle } from 'drizzle-orm/node-postgres';
+import { eq, and } from 'drizzle-orm';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
+
 
 // ── schema imports ────────────────────────────────────────────────────────────
 import {
@@ -138,35 +140,42 @@ async function seed() {
     { code: 'hi', name: 'Hindi',   nativeName: 'हिन्दी',   isDefault: false, isActive: true },
   ]).onConflictDoNothing();
 
-  const [india] = await db.insert(countries).values({
+  let [india] = await db.insert(countries).values({
     name: 'India', isoCode: 'IN', dialCode: '+91', currencyCode: 'INR',
     defaultLanguageCode: 'en', timezone: 'Asia/Kolkata', roundingIncrementMinor: 1,
     isDefault: true, isActive: true, sortOrder: 1,
   }).onConflictDoNothing().returning();
+  if (!india) [india] = await db.select().from(countries).where(eq(countries.isoCode, 'IN'));
 
-  const [canada] = await db.insert(countries).values({
+  let [canada] = await db.insert(countries).values({
     name: 'Canada', isoCode: 'CA', dialCode: '+1', currencyCode: 'CAD',
-    defaultLanguageCode: 'en', timezone: 'America/Toronto', roundingIncrementMinor: 5, // cash rounds to the nickel
+    defaultLanguageCode: 'en', timezone: 'America/Toronto', roundingIncrementMinor: 5,
     isDefault: false, isActive: true, sortOrder: 2,
   }).onConflictDoNothing().returning();
+  if (!canada) [canada] = await db.select().from(countries).where(eq(countries.isoCode, 'CA'));
 
-  const [westBengal] = await db.insert(states).values({
+  let [westBengal] = await db.insert(states).values({
     countryId: india?.id, name: 'West Bengal', code: 'WB', isActive: true,
   }).onConflictDoNothing().returning();
+  if (!westBengal) [westBengal] = await db.select().from(states).where(eq(states.code, 'WB'));
 
-  const [ontario] = await db.insert(states).values({
+  let [ontario] = await db.insert(states).values({
     countryId: canada?.id, name: 'Ontario', code: 'ON', isActive: true,
   }).onConflictDoNothing().returning();
+  if (!ontario) [ontario] = await db.select().from(states).where(eq(states.code, 'ON'));
 
-  const [kolkata] = await db.insert(cities).values({
+  let [kolkata] = await db.insert(cities).values({
     stateId: westBengal?.id, countryId: india?.id, name: 'Kolkata',
     timezone: 'Asia/Kolkata', isActive: true, sortOrder: 1,
   }).onConflictDoNothing().returning();
+  if (!kolkata) [kolkata] = await db.select().from(cities).where(eq(cities.name, 'Kolkata'));
 
-  const [toronto] = await db.insert(cities).values({
+  let [toronto] = await db.insert(cities).values({
     stateId: ontario?.id, countryId: canada?.id, name: 'Toronto',
     timezone: 'America/Toronto', isActive: true, sortOrder: 1,
   }).onConflictDoNothing().returning();
+  if (!toronto) [toronto] = await db.select().from(cities).where(eq(cities.name, 'Toronto'));
+
 
   log.ok(`India (default, INR)  → West Bengal → Kolkata`);
   log.ok(`Canada (CAD)          → Ontario → Toronto`);
@@ -241,25 +250,30 @@ async function seed() {
   // ── 2. Vehicle Types (global catalog, flat global rate — no per-country cards) ─
   log.section('2. Vehicle Types (catalog + flat rate)');
 
-  const [vtBike] = await db.insert(vehicleTypes).values({
+  let [vtBike] = await db.insert(vehicleTypes).values({
     name: 'Bike', slug: 'bike', capacity: 1, sortOrder: 1, isActive: true, createdBy: superAdmin?.id,
     baseRateMinor: 1500, perKmRateMinor: 600, perMinRateMinor: 50, minFareMinor: 3000,
   }).onConflictDoNothing().returning();
+  if (!vtBike) [vtBike] = await db.select().from(vehicleTypes).where(eq(vehicleTypes.slug, 'bike'));
 
-  const [vtAuto] = await db.insert(vehicleTypes).values({
+  let [vtAuto] = await db.insert(vehicleTypes).values({
     name: 'Auto', slug: 'auto', capacity: 3, sortOrder: 2, isActive: true, createdBy: superAdmin?.id,
     baseRateMinor: 2500, perKmRateMinor: 1000, perMinRateMinor: 75, minFareMinor: 5000,
   }).onConflictDoNothing().returning();
+  if (!vtAuto) [vtAuto] = await db.select().from(vehicleTypes).where(eq(vehicleTypes.slug, 'auto'));
 
-  const [vtCab] = await db.insert(vehicleTypes).values({
+  let [vtCab] = await db.insert(vehicleTypes).values({
     name: 'Cab', slug: 'cab', capacity: 4, sortOrder: 3, isActive: true, createdBy: superAdmin?.id,
     baseRateMinor: 5000, perKmRateMinor: 1400, perMinRateMinor: 100, minFareMinor: 8000,
   }).onConflictDoNothing().returning();
+  if (!vtCab) [vtCab] = await db.select().from(vehicleTypes).where(eq(vehicleTypes.slug, 'cab'));
 
-  const [vtPremium] = await db.insert(vehicleTypes).values({
+  let [vtPremium] = await db.insert(vehicleTypes).values({
     name: 'Premium Cab', slug: 'premium-cab', capacity: 4, sortOrder: 4, isActive: true, createdBy: superAdmin?.id,
     baseRateMinor: 10000, perKmRateMinor: 2000, perMinRateMinor: 150, minFareMinor: 15000,
   }).onConflictDoNothing().returning();
+  if (!vtPremium) [vtPremium] = await db.select().from(vehicleTypes).where(eq(vehicleTypes.slug, 'premium-cab'));
+
 
   log.ok(`Bike 15+6/km, Auto 25+10/km, Cab 50+14/km, Premium 100+20/km — same flat rate in every country`);
 

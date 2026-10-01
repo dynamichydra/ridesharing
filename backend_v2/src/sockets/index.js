@@ -15,8 +15,10 @@ import { publishEvent, TOPICS } from '../config/kafka.js';
 import { setSocketIO } from '../kafka/consumers/index.js';
 import { handleDriverLocationUpdate } from '../modules/ride/ride.service.js';
 import { upsertDriverCell, removeDriverFromIndex } from '../modules/matching/driver-geo-index.service.js';
+import { registerSupportSocketNamespace } from './support.socket.js';
 
 let ioInstance = null;
+
 const lastDriverDbUpdate = new Map();
 
 export function getSocketStats() {
@@ -432,6 +434,12 @@ export function initSocketIO(fastifyServer, app) {
 
   adminBroadcastTimer.unref?.();
 
-  console.log('✅ Socket.IO initialised (/driver, /rider, /admin)');
+  registerSupportSocketNamespace(io, app);
+
+  console.log('✅ Socket.IO initialised (/driver, /rider, /admin, /support)');
   return io;
+}
+
+export function getIoInstance() {
+  return ioInstance;
 }

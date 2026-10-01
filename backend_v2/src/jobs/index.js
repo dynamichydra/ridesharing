@@ -173,6 +173,37 @@ scheduledRideDispatchWorker.on('failed', (job, err) => {
 });
 
 import { scheduleMatchingReconciliation } from './matching-reconciliation.job.js';
+import { checkSupportSlaBreaches } from './support-sla.job.js';
+import { autoCloseInactiveSupportTickets } from './support-auto-close.job.js';
+import { sendCsatReminders } from './support-csat-reminder.job.js';
+
+const supportJobsQueue = new Queue('support-jobs', { connection });
+
+export async function scheduleSupportJobs() {
+  await supportJobsQueue.obliterate({ force: true }).catch(() => { });
+  await supportJobsQueue.add('check-sla', {}, { repeat: { every: 60_000 } }); // every 60s
+  await supportJobsQueue.add('auto-close', {}, { repeat: { every: 300_000 } }); // every 5m
+  await supportJobsQueue.add('csat-reminder', {}, { repeat: { every: 900_000 } }); // every 15m
+  console.log('✅ Support system background jobs scheduled');
+}
+
+const supportJobsWorker = new Worker(
+  'support-jobs',
+  async (job) => {
+    if (job.name === 'check-sla') {
+      await checkSupportSlaBreaches().catch((err) => console.error('[Job] SLA check failed:', err.message));
+    } else if (job.name === 'auto-close') {
+      await autoCloseInactiveSupportTickets().catch((err) => console.error('[Job] Auto-close failed:', err.message));
+    } else if (job.name === 'csat-reminder') {
+      await sendCsatReminders().catch((err) => console.error('[Job] CSAT reminder failed:', err.message));
+    }
+  },
+  { connection }
+);
+
+supportJobsWorker.on('failed', (job, err) => {
+  console.error('[Job] support-jobs failed:', err.message);
+});
 
 export async function startJobs() {
   await scheduleSubscriptionExpiry();
@@ -185,5 +216,7 @@ export async function startJobs() {
   await scheduleScheduledRideDispatch();
   await scheduleDocumentExpiry();
   await scheduleMatchingReconciliation();
+  await scheduleSupportJobs();
   console.log('✅ BullMQ workers running');
 }
+

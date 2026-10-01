@@ -33,7 +33,12 @@ export const TOPICS = {
   SUBSCRIPTION_EXPIRED: 'subscription.expired',
   SUBSCRIPTION_CANCELLED: 'subscription.cancelled',
   AUDIT_LOG: 'audit.log',
+  SUPPORT_TICKET_CREATED: 'support.ticket.created',
+  SUPPORT_TICKET_UPDATED: 'support.ticket.updated',
+  SUPPORT_MESSAGE_SENT: 'support.message.sent',
+  SUPPORT_SLA_BREACHED: 'support.sla.breached',
 };
+
 
 let _producer = null;
 let _producerFailed = false;

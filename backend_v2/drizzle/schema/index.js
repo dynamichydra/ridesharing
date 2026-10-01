@@ -103,3 +103,10 @@ export * from './airport-queues.js';
 export * from './driver-reservations.js';
 export * from './driver-groups.js';
 export * from './plan-group-pricing.js';
+export * from './support-categories.js';
+export * from './support-faqs.js';
+export * from './support-tickets.js';
+export * from './support-ticket-messages.js';
+export * from './support-ticket-attachments.js';
+export * from './support-csat-ratings.js';
+

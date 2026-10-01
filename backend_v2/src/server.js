@@ -55,8 +55,10 @@ import { lostItemRoutes } from './modules/ride/lost-item.routes.js';
 import { matchingRoutes } from './modules/matching/matching.routes.js';
 import { driverGroupRoutes } from './modules/driver-group/driver-group.routes.js';
 import { fxRoutes } from './modules/fx/fx.routes.js';
+import { supportRoutes } from './modules/support/support.routes.js';
 
 const PREFIX = `/api/${env.API_VERSION}`;
+
 
 async function build() {
   const app = Fastify({
@@ -126,6 +128,8 @@ async function build() {
   await app.register(lostItemRoutes, { prefix: `${PREFIX}/lost-items` });
   await app.register(matchingRoutes, { prefix: `${PREFIX}/matching` });
   await app.register(fxRoutes, { prefix: `${PREFIX}/fx` });
+  await app.register(supportRoutes, { prefix: `${PREFIX}/support` });
+
 
 
 

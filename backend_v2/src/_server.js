@@ -50,8 +50,10 @@ import { emergencyRoutes } from "./modules/emergency/emergency.routes.js";
 import { savedPlaceRoutes } from "./modules/saved-place/saved-place.routes.js";
 import { moderationRoutes } from "./modules/moderation/moderation.routes.js";
 import { driverGroupRoutes } from "./modules/driver-group/driver-group.routes.js";
+import { supportRoutes } from "./modules/support/support.routes.js";
 
 const PORT = parseInt(process.env.PORT || env.PORT || "3000", 10);
+
 const PREFIX = `/api/${env.API_VERSION || "v1"}`;
 
 async function start() {
@@ -134,6 +136,8 @@ async function start() {
     await app.register(moderationRoutes, {
         prefix: `${PREFIX}/admin/moderation`,
     });
+    await app.register(supportRoutes, { prefix: `${PREFIX}/support` });
+
 
     // 4. Base & Health check endpoints
     app.get("/", async () => ({
