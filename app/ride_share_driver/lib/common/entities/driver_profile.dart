@@ -33,6 +33,7 @@ class DriverProfile extends Equatable {
   final int pendingDocuments;
   final bool isOnline;
   final DateTime? createdAt;
+  final List<Map<String, dynamic>> paymentMethods;
 
   const DriverProfile({
     required this.id,
@@ -65,6 +66,7 @@ class DriverProfile extends Equatable {
     this.pendingDocuments = 0,
     this.isOnline = false,
     this.createdAt,
+    this.paymentMethods = const [],
   });
 
   factory DriverProfile.fromJson(Map<String, dynamic> json) {
@@ -120,6 +122,7 @@ class DriverProfile extends Equatable {
       pendingDocuments: (docStats?['pending'] as num?)?.toInt() ?? 0,
       isOnline: json['isOnline'] as bool? ?? false,
       createdAt: dateStr != null ? DateTime.tryParse(dateStr) : null,
+      paymentMethods: json['payment_methods'] != null ? List<Map<String, dynamic>>.from(json['payment_methods']) : [],
     );
   }
 
@@ -179,5 +182,6 @@ class DriverProfile extends Equatable {
         pendingDocuments,
         isOnline,
         createdAt,
+        paymentMethods,
       ];
 }

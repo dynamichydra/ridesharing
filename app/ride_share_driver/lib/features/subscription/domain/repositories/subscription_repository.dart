@@ -5,7 +5,7 @@ import '../entities/initiate_subscription_result.dart';
 abstract class SubscriptionRepository {
   Future<List<SubscriptionPlan>> getPlans(String countryId);
 
-  Future<InitiateSubscriptionResult> initiateSubscription(String planId);
+  Future<InitiateSubscriptionResult> initiateSubscription(String planId, {String? paymentMethodId});
 
   Future<ActiveSubscription> verifySubscription({
     required String planId,

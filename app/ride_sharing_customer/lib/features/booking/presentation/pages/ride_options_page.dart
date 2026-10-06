@@ -9,6 +9,7 @@ import '../widgets/passenger_details_sheet.dart';
 import '../bloc/booking_bloc.dart';
 import '../../../ride_tracking/presentation/bloc/ride_tracking_bloc.dart';
 import '../../../wallet/presentation/bloc/wallet_bloc.dart';
+import '../../../profile/presentation/bloc/profile_bloc.dart';
 
 class RideOptionsPage extends StatefulWidget {
   const RideOptionsPage({super.key});
@@ -20,7 +21,7 @@ class RideOptionsPage extends StatefulWidget {
 class _RideOptionsPageState extends State<RideOptionsPage> {
   bool _isConfirmStep = false;
   bool _isBooking = false;
-  String _paymentMethod = 'Cash'; // 'Cash' or 'Wallet'
+  String _paymentMethod = 'cash'; // 'cash', 'wallet', or 'pm_xxx'
   BookingVehicleOptionsLoaded? _cachedOptions;
   bool _isBookingForSomeoneElse = false;
   PassengerInfo? _passenger;
@@ -62,6 +63,82 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
 
   void _showInsufficientWalletSnackbar(BuildContext context, double walletBalance, double requiredAmount) {
     CustomToast.show(context, 'Not enough balance in your wallet');
+  }
+
+  void _showPaymentMethodSelector(
+      BuildContext context, double walletBalance, String walletCurrency, String rideCurrency, double price) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        final profileState = context.read<ProfileBloc>().state;
+        List<dynamic> paymentMethods = [];
+        if (profileState is ProfileLoaded) {
+          paymentMethods = profileState.userProfile['payment_methods'] as List? ?? [];
+        }
+
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text('Select Payment Method', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF021B47))),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.payments_rounded, color: Color(0xFF009048)),
+                title: const Text('Cash', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Pay to driver', style: TextStyle(fontSize: 12)),
+                trailing: _paymentMethod == 'cash' ? const Icon(Icons.check_circle_rounded, color: Color(0xFF009048)) : null,
+                onTap: () {
+                  setState(() => _paymentMethod = 'cash');
+                  Navigator.pop(ctx);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF009048)),
+                title: const Text('Ryva Wallet', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text('Balance: ${AppConstants.getCurrencySymbol(walletCurrency)}${walletBalance.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
+                trailing: _paymentMethod == 'wallet' ? const Icon(Icons.check_circle_rounded, color: Color(0xFF009048)) : null,
+                onTap: () {
+                  if (walletCurrency.toUpperCase() != rideCurrency.toUpperCase()) {
+                    CustomToast.show(context, 'Wallet currency does not match ride currency');
+                  } else if (walletBalance < price) {
+                    _showInsufficientWalletSnackbar(context, walletBalance, price);
+                  } else {
+                    setState(() => _paymentMethod = 'wallet');
+                    Navigator.pop(ctx);
+                  }
+                },
+              ),
+              if (paymentMethods.isNotEmpty) const Divider(height: 1),
+              for (final pm in paymentMethods)
+                ListTile(
+                  leading: const Icon(Icons.credit_card_rounded, color: Color(0xFF009048)),
+                  title: Text('•••• ${pm['last4'] ?? '****'}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(pm['brand']?.toString().toUpperCase() ?? 'CARD', style: const TextStyle(fontSize: 12)),
+                  trailing: _paymentMethod == pm['id'] ? const Icon(Icons.check_circle_rounded, color: Color(0xFF009048)) : null,
+                  onTap: () {
+                    setState(() => _paymentMethod = pm['id']?.toString() ?? 'cash');
+                    Navigator.pop(ctx);
+                  },
+                ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF0065B3)),
+                title: const Text('Add / Manage Cards', style: TextStyle(color: Color(0xFF0065B3), fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  context.push('/payment-methods');
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -1579,42 +1656,58 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
             child: Row(
               children: [
                 Icon(
-                  _paymentMethod == 'Cash' ? Icons.payments_rounded : Icons.account_balance_wallet_rounded,
+                  _paymentMethod == 'cash' 
+                    ? Icons.payments_rounded 
+                    : (_paymentMethod == 'wallet' ? Icons.account_balance_wallet_rounded : Icons.credit_card_rounded),
                   color: const Color(0xFF009048),
                   size: 22,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _paymentMethod == 'Cash' ? 'Cash' : 'Wallet',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
-                      ),
-                      Text(
-                        _paymentMethod == 'Cash' ? 'Pay to driver' : 'Balance: ${AppConstants.getCurrencySymbol(walletCurrency)}${walletBalance.toStringAsFixed(2)} ($walletCurrency)',
-                        style: const TextStyle(fontSize: 11, color: Color(0xFF8A94A6)),
-                      ),
-                    ],
+                  child: Builder(
+                    builder: (context) {
+                      String title = 'Cash';
+                      String subtitle = 'Pay to driver';
+
+                      if (_paymentMethod == 'wallet') {
+                        title = 'Wallet';
+                        subtitle = 'Balance: ${AppConstants.getCurrencySymbol(walletCurrency)}${walletBalance.toStringAsFixed(2)} ($walletCurrency)';
+                      } else if (_paymentMethod.startsWith('pm_') || _paymentMethod.startsWith('card_')) {
+                        title = 'Saved Card';
+                        subtitle = 'Pay securely via saved card';
+                        // Try to find the card in profile
+                        final profileState = context.read<ProfileBloc>().state;
+                        if (profileState is ProfileLoaded) {
+                          final pms = profileState.userProfile['payment_methods'] as List? ?? [];
+                          for (final pm in pms) {
+                            if (pm['id'] == _paymentMethod) {
+                              title = '•••• ${pm['last4'] ?? '****'}';
+                              subtitle = (pm['brand']?.toString().toUpperCase() ?? 'CARD');
+                              break;
+                            }
+                          }
+                        }
+                      }
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                          ),
+                          Text(
+                            subtitle,
+                            style: const TextStyle(fontSize: 11, color: Color(0xFF8A94A6)),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
                 TextButton(
                   onPressed: () {
-                    final targetMethod = _paymentMethod == 'Cash' ? 'Wallet' : 'Cash';
-                    if (targetMethod == 'Wallet') {
-                      if (walletCurrency.toUpperCase() != state.currencyCode.toUpperCase()) {
-                        CustomToast.show(context, 'Wallet currency (${walletCurrency.toUpperCase()}) does not match ride currency (${state.currencyCode.toUpperCase()})');
-                        return;
-                      }
-                      if (walletBalance < price) {
-                        _showInsufficientWalletSnackbar(context, walletBalance, price);
-                        return;
-                      }
-                    }
-                    setState(() {
-                      _paymentMethod = targetMethod;
-                    });
+                    _showPaymentMethodSelector(context, walletBalance, walletCurrency, state.currencyCode, price);
                   },
                   child: const Text('Change', style: TextStyle(color: Color(0xFF0065B3), fontWeight: FontWeight.bold, fontSize: 13)),
                 ),

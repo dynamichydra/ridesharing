@@ -24,12 +24,12 @@ class SubscriptionRemoteDataSource {
     }
   }
 
-  Future<Map<String, dynamic>> initiateSubscription(String planId) async {
+  Future<Map<String, dynamic>> initiateSubscription(String planId, {String? paymentMethodId}) async {
     try {
       final idempotencyKey = const Uuid().v4();
       final response = await apiClient.dio.post(
         '/subscriptions/initiate',
-        data: {'planId': planId},
+        data: {'planId': planId, if (paymentMethodId != null) 'paymentMethodId': paymentMethodId},
         options: Options(
           headers: {'Idempotency-Key': idempotencyKey},
         ),

@@ -2,7 +2,7 @@ import 'dart:io';
 
 abstract class ProfileRepository {
   Future<Map<String, dynamic>> getUserProfile();
-  Future<void> updateUserProfile(String name, String email, String phone);
+  Future<void> updateUserProfile(String name, String email, String phone, {String? currencyCode});
   Future<List<Map<String, dynamic>>> getRideHistory();
   Future<void> updateSavedPlaces(List<Map<String, dynamic>> places);
   Future<Map<String, dynamic>> addSavedPlace(Map<String, dynamic> place);

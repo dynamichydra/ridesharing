@@ -32,10 +32,13 @@ class MockProfileRepository implements ProfileRepository {
   }
 
   @override
-  Future<void> updateUserProfile(String name, String email, String phone) async {
+  Future<void> updateUserProfile(String name, String email, String phone, {String? currencyCode}) async {
     mockProfile['name'] = name;
     mockProfile['email'] = email;
     mockProfile['phone'] = phone;
+    if (currencyCode != null) {
+      mockProfile['currency_code'] = currencyCode;
+    }
   }
 
   @override

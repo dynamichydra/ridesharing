@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
-import '../../../../core/widgets/custom_toast.dart';
-import '../../../../core/widgets/loading_view.dart';
-import '../../../../core/services/stripe_checkout_launcher.dart';
-import '../../../../core/network/dio_client.dart';
+import '../../../../common/widgets/custom_toast.dart';
+import '../../../subscription/presentation/checkout/stripe_checkout_launcher.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../injection_container.dart';
 import '../bloc/profile_bloc.dart';
 
@@ -23,8 +22,8 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
   Future<void> _addPaymentMethodStripe() async {
     setState(() => _isLoading = true);
     try {
-      final dioClient = sl<DioClient>();
-      final res = await dioClient.dio.post('/api/v1/payment-methods/setup');
+      final apiClient = sl<ApiClient>();
+      final res = await apiClient.dio.post('/api/v1/payment-methods/setup');
       if (res.data['SUCCESS'] == true) {
         final data = res.data['MESSAGE'];
         if (data['gateway'] == 'stripe') {
@@ -70,12 +69,12 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
       body: BlocBuilder<ProfileBloc, ProfileState>(
         builder: (context, state) {
           if (state is ProfileLoading || _isLoading) {
-            return const LoadingView();
+            return const Center(child: CircularProgressIndicator(color: Color(0xFF009048)));
           }
 
           List<dynamic> paymentMethods = [];
           if (state is ProfileLoaded) {
-            paymentMethods = state.userProfile['payment_methods'] ?? [];
+            paymentMethods = state.profile.paymentMethods;
           }
 
           return Column(

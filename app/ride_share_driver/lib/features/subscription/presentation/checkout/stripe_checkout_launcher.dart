@@ -26,4 +26,26 @@ class StripeCheckoutLauncher {
       return false;
     }
   }
+
+  Future<bool> setupPaymentSheet({
+    required String setupIntentClientSecret,
+    required String publishableKey,
+  }) async {
+    Stripe.publishableKey = publishableKey;
+    await Stripe.instance.applySettings();
+
+    await Stripe.instance.initPaymentSheet(
+      paymentSheetParameters: SetupPaymentSheetParameters(
+        setupIntentClientSecret: setupIntentClientSecret,
+        merchantDisplayName: 'Ryva Ride',
+      ),
+    );
+
+    try {
+      await Stripe.instance.presentPaymentSheet();
+      return true;
+    } on StripeException {
+      return false;
+    }
+  }
 }

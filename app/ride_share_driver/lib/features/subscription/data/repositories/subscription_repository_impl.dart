@@ -17,8 +17,8 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
   }
 
   @override
-  Future<InitiateSubscriptionResult> initiateSubscription(String planId) async {
-    final json = await remoteDataSource.initiateSubscription(planId);
+  Future<InitiateSubscriptionResult> initiateSubscription(String planId, {String? paymentMethodId}) async {
+    final json = await remoteDataSource.initiateSubscription(planId, paymentMethodId: paymentMethodId);
 
     // Dev mode: no gateway configured for this currency — the backend
     // activated the subscription immediately and returned the `subscriptions`

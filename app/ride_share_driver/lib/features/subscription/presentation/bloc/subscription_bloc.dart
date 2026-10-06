@@ -19,7 +19,8 @@ class LoadSubscriptionOverview extends SubscriptionEvent {
 
 class PurchasePlanRequested extends SubscriptionEvent {
   final String planId;
-  PurchasePlanRequested({required this.planId});
+  final String? paymentMethodId;
+  PurchasePlanRequested({required this.planId, this.paymentMethodId});
 }
 
 class VerifyPurchaseRequested extends SubscriptionEvent {
@@ -137,7 +138,7 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
   Future<void> _onPurchasePlanRequested(PurchasePlanRequested event, Emitter<SubscriptionState> emit) async {
     emit(PurchaseInProgress());
     try {
-      final result = await subscriptionRepository.initiateSubscription(event.planId);
+      final result = await subscriptionRepository.initiateSubscription(event.planId, paymentMethodId: event.paymentMethodId);
       switch (result) {
         case SubscriptionAlreadyActive(:final subscription):
           _cachedActiveSub = subscription;

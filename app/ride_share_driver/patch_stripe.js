@@ -1,21 +1,18 @@
-import 'package:flutter_stripe/flutter_stripe.dart';
+const fs = require('fs');
+const path = require('path');
 
-class StripeCheckoutLauncher {
-  Future<bool> checkout({
-    required String clientSecret,
-    required String publishableKey,
-  }) async {
-    Stripe.publishableKey = publishableKey;
-    await Stripe.instance.applySettings();
+const p = path.resolve('lib/features/subscription/presentation/checkout/stripe_checkout_launcher.dart');
+const content = fs.readFileSync(p, 'utf8');
 
-    await Stripe.instance.initPaymentSheet(
-      paymentSheetParameters: SetupPaymentSheetParameters(
-        paymentIntentClientSecret: clientSecret,
-        merchantDisplayName: 'Ryva Ride',
-      ),
-    );
-
-    try {
+const newContent = content.replace(
+  `    try {
+      await Stripe.instance.presentPaymentSheet();
+      return true;
+    } on StripeException {
+      return false;
+    }
+  }`,
+  `    try {
       await Stripe.instance.presentPaymentSheet();
       return true;
     } on StripeException {
@@ -43,5 +40,7 @@ class StripeCheckoutLauncher {
     } on StripeException {
       return false;
     }
-  }
-}
+  }`
+);
+
+fs.writeFileSync(p, newContent);

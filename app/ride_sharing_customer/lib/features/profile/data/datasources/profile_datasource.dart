@@ -5,7 +5,7 @@ import '../../../../core/services/storage_service.dart';
 
 abstract class ProfileDataSource {
   Future<Map<String, dynamic>> getUserProfile();
-  Future<void> updateUserProfile(String name, String email, String phone);
+  Future<void> updateUserProfile(String name, String email, String phone, {String? currencyCode});
   Future<List<Map<String, dynamic>>> getRideHistory();
   Future<void> updateSavedPlaces(List<Map<String, dynamic>> places);
   Future<Map<String, dynamic>> addSavedPlace(Map<String, dynamic> place);
@@ -79,18 +79,37 @@ class ProfileDataSourceImpl implements ProfileDataSource {
       }
     }
 
+    // Fetch live payment methods from backend /api/v1/payment-methods
+    try {
+      final pmResponse = await _dioClient.dio.get('/api/v1/payment-methods');
+      if (pmResponse.data['SUCCESS'] == true && pmResponse.data['MESSAGE'] is List) {
+        profile['payment_methods'] = pmResponse.data['MESSAGE'];
+      }
+    } catch (_) {
+      if (profile['payment_methods'] == null || (profile['payment_methods'] as List).isEmpty) {
+        final cached = _storageService.getCachedData(_profileCacheKey);
+        if (cached is Map && cached['payment_methods'] != null) {
+          profile['payment_methods'] = cached['payment_methods'];
+        }
+      }
+    }
+
     await _storageService.cacheData(_profileCacheKey, profile);
     return profile;
   }
 
   @override
-  Future<void> updateUserProfile(String name, String email, String phone) async {
+  Future<void> updateUserProfile(String name, String email, String phone, {String? currencyCode}) async {
     try {
-      final response = await _dioClient.dio.patch('/api/v1/riders/profile', data: {
+      final Map<String, dynamic> data = {
         'name': name,
         'email': email,
         'phone': phone,
-      });
+      };
+      if (currencyCode != null) {
+        data['currencyCode'] = currencyCode;
+      }
+      final response = await _dioClient.dio.patch('/api/v1/riders/profile', data: data);
       if (response.data is Map && response.data['SUCCESS'] == false) {
         throw Exception(response.data['MESSAGE'] ?? 'Failed to update profile.');
       }
@@ -101,6 +120,9 @@ class ProfileDataSourceImpl implements ProfileDataSource {
         'email': email,
         'phone': phone,
       };
+      if (currencyCode != null) {
+        updated['currency_code'] = currencyCode;
+      }
       await _storageService.cacheData(_profileCacheKey, updated);
     } catch (e) {
       if (e is DioException) {

@@ -61,7 +61,7 @@ class DioClient {
   static String get baseUrl =>
          Platform.isAndroid ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
       // Platform.isAndroid ? 'https://rideshareapi.dokume.in' : 'https://rideshareapi.dokume.in';
-      // Platform.isAndroid ? 'https://ryva.duckdns.org' : 'https://ryva.duckdns.org';
+      //    Platform.isAndroid ? 'https://ryva.duckdns.org' : 'https://ryva.duckdns.org';
       // Platform.isAndroid ? 'https://rideshareapi.dokume.in' : 'https://rideshareapi.dokume.in';
 
   /// Socket.IO base URL — just the origin, no path prefix.
