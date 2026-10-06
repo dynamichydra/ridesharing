@@ -109,4 +109,4 @@ export * from './support-tickets.js';
 export * from './support-ticket-messages.js';
 export * from './support-ticket-attachments.js';
 export * from './support-csat-ratings.js';
-
+export * from './payment-methods.js';

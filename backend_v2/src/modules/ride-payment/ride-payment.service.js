@@ -19,7 +19,7 @@ import { publishNotification } from '../notification/notification-events.js';
 // idempotencyKey comes from the client's Idempotency-Key header (required — see
 // ride-payment.routes.js) so a retried/double-submitted initiate request returns the
 // original gateway order instead of creating a second one.
-export async function initiateRidePayment(riderId, rideId, idempotencyKey) {
+export async function initiateRidePayment(riderId, rideId, idempotencyKey, paymentMethodId = null) {
   const effectiveKey = idempotencyKey || `ride_pay_${rideId}_${Date.now()}`;
   return withIdempotency('ride_payment_initiate', effectiveKey, riderId, async () => {
     const ride = await _loadPayableRideForUser(rideId, riderId);
@@ -36,8 +36,9 @@ export async function initiateRidePayment(riderId, rideId, idempotencyKey) {
     const order = await gateway.createOrder({
       amountMinor: payAmountMinor,
       currencyCode: ride.currencyCode,
-      metadata: { rideId, riderId },
+      metadata: { rideId, riderId, paymentMethodId },
       idempotencyKey,
+      paymentMethodId, // newly added parameter for the gateway adapter to consume
     });
 
     const [payment] = await db.insert(payments).values({

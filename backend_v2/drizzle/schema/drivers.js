@@ -54,6 +54,7 @@ export const drivers = pgTable('drivers', {
   subscriptionStatus: subscriptionStatusEnum('subscription_status').default('inactive'),
 
   // active | inactive | expired
+  currencyCode:       varchar('currency_code', { length: 3 }),
   createdAt:          timestamp('created_at').defaultNow(),
   updatedAt:          timestamp('updated_at').defaultNow(),
 }, (t) => ([

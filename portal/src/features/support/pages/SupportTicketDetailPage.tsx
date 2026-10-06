@@ -10,13 +10,10 @@ import {
   User,
   Car,
   Star,
-  CheckCheck,
-  ShieldAlert,
   FileText,
   Image as ImageIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supportApi } from "../api";
-import { subscribeToTicket, sendTicketMessageSocket, sendTypingStart, sendTypingStop } from "../services/supportSocket";
+import { subscribeToTicket, sendTypingStart, sendTypingStop } from "../services/supportSocket";
 import type { SupportTicket, SupportMessage, TicketStatus } from "../types";
 import toast from "react-hot-toast";
 
@@ -92,7 +89,7 @@ export default function SupportTicketDetailPage() {
       onAgentAssigned: ({ agent }) => {
         setTicket((prev) => (prev ? { ...prev, assignedAdminName: agent.name, assignedAdminId: agent.id } : prev));
       },
-      onTypingStart: ({ userId, role }) => {
+      onTypingStart: ({ role }) => {
         if (role !== "agent") {
           setTypingUsers((prev) => Array.from(new Set([...prev, "Customer/Driver"])));
         }
@@ -449,7 +446,7 @@ export default function SupportTicketDetailPage() {
                 </div>
                 <Button
                   variant="outline"
-                  size="xs"
+                  size="sm"
                   className="w-full text-xs"
                   onClick={() => navigate(`/rides?query=${ticket.rideId}`)}
                 >

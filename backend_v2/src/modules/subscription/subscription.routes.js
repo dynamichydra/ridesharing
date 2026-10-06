@@ -32,11 +32,11 @@ export async function subscriptionRoutes(app) {
   // Requires an Idempotency-Key header so a retried/double-submitted request returns the
   // original gateway order instead of creating a second charge attempt.
   app.post('/initiate', { preHandler: [authenticateDriver] }, async (request, reply) => {
-    const { planId } = request.body;
+    const { planId, paymentMethodId } = request.body;
     if (!planId) return sendError(reply, 'planId is required');
     const idempotencyKey = request.headers['idempotency-key'];
     if (!idempotencyKey) return sendError(reply, 'Idempotency-Key header is required', 400);
-    const data = await subService.initiateSubscription(request.user.id, planId, idempotencyKey);
+    const data = await subService.initiateSubscription(request.user.id, planId, idempotencyKey, paymentMethodId);
     return sendSuccess(reply, data);
   });
 

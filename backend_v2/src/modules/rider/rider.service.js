@@ -98,7 +98,7 @@ export async function updateProfile(riderId, data) {
   if (data.profilePhoto && !data.avatar) {
     data.avatar = data.profilePhoto;
   }
-  const allowed = ['name', 'email', 'avatar', 'fcmToken'];
+  const allowed = ['name', 'email', 'avatar', 'fcmToken', 'currencyCode'];
   const updates = Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
 
   if (updates.email) {

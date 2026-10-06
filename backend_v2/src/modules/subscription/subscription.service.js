@@ -431,7 +431,7 @@ export async function deletePlanGroupPricing(id) {
 
 // ── Driver subscription flow ───────────────────────────────────────────────────
 
-export async function initiateSubscription(driverId, planId, idempotencyKey) {
+export async function initiateSubscription(driverId, planId, idempotencyKey, paymentMethodId = null) {
   return withIdempotency('driver_subscription_initiate', idempotencyKey, driverId, async () => {
     const [rawPlan] = await db.select().from(subscriptionPlans)
       .where(and(eq(subscriptionPlans.id, planId), eq(subscriptionPlans.isActive, true))).limit(1);
@@ -462,8 +462,9 @@ export async function initiateSubscription(driverId, planId, idempotencyKey) {
     const order = await gateway.createOrder({
       amountMinor: totalMinor,
       currencyCode: plan.currencyCode,
-      metadata: { driverId, planId, planVersionId: plan.currentVersionId },
+      metadata: { driverId, planId, planVersionId: plan.currentVersionId, paymentMethodId },
       idempotencyKey,
+      paymentMethodId,
     });
 
     const [payment] = await db.insert(payments).values({

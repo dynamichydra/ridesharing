@@ -573,7 +573,7 @@ export async function getProfile(driverId) {
 export async function updateProfile(driverId, data) {
   const allowed = [
     'name', 'email', 'vehicleNumber', 'vehicleModel', 'vehicleYear', 'fcmToken',
-    'dateOfBirth', 'gender', 'referralCode', 'preferredLanguageCode', 'profilePhoto',
+    'dateOfBirth', 'gender', 'referralCode', 'preferredLanguageCode', 'profilePhoto', 'currencyCode'
   ];
   const updates = Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
 

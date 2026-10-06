@@ -1,0 +1,1 @@
+ALTER TABLE "rides" ALTER COLUMN "payment_method" SET DATA TYPE varchar(50) USING "payment_method"::varchar(50);

@@ -4,14 +4,10 @@ import {
   Ticket,
   AlertTriangle,
   Clock,
-  CheckCircle2,
   UserCheck,
   Search,
-  Filter,
   RefreshCw,
-  ExternalLink,
   MessageSquare,
-  Star,
   Plus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -282,6 +278,16 @@ export default function SupportTicketsPage() {
                   <SelectItem value="low">Low</SelectItem>
                 </SelectContent>
               </Select>
+
+              <Select value={slaBreached} onValueChange={(val) => { setSlaBreached(val); setPage(1); }}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="SLA Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All SLA</SelectItem>
+                  <SelectItem value="breached">Breached Only</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </CardHeader>
@@ -340,7 +346,7 @@ export default function SupportTicketsPage() {
                       ) : (
                         <Button
                           variant="ghost"
-                          size="xs"
+                          size="sm"
                           className="text-xs text-blue-600 hover:bg-blue-50"
                           onClick={() => handleQuickAssign(t.id)}
                         >
@@ -351,7 +357,7 @@ export default function SupportTicketsPage() {
                     <TableCell className="text-right">
                       <Button
                         variant="outline"
-                        size="xs"
+                        size="sm"
                         onClick={() => navigate(`/support/tickets/${t.id}`)}
                       >
                         <MessageSquare className="size-3.5 mr-1" /> Open Chat

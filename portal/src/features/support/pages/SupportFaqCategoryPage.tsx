@@ -4,12 +4,7 @@ import {
   FolderTree,
   Plus,
   Edit2,
-  CheckCircle,
-  Eye,
-  ThumbsUp,
-  ThumbsDown,
-  Search,
-  ArrowLeft
+  Eye
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -204,7 +199,7 @@ export default function SupportFaqCategoryPage() {
                         <TableCell className="text-right">
                           <Button
                             variant="ghost"
-                            size="icon-sm"
+                            size="icon"
                             onClick={() => {
                               setEditingFaq(f);
                               setIsFaqOpen(true);
@@ -280,7 +275,7 @@ export default function SupportFaqCategoryPage() {
                           <TableCell className="text-right">
                             <Button
                               variant="ghost"
-                              size="icon-sm"
+                              size="icon"
                               onClick={() => {
                                 setEditingCategory(cat);
                                 setIsCategoryOpen(true);
@@ -302,7 +297,7 @@ export default function SupportFaqCategoryPage() {
                             <TableCell className="text-right">
                               <Button
                                 variant="ghost"
-                                size="icon-sm"
+                                size="icon"
                                 onClick={() => {
                                   setEditingCategory(sub);
                                   setIsCategoryOpen(true);

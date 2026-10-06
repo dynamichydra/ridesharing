@@ -12,7 +12,8 @@ export async function ridePaymentRoutes(app) {
   // original gateway order instead of creating a second charge attempt.
   app.post('/:rideId/initiate', { preHandler: [authenticateRider] }, async (request, reply) => {
     const idempotencyKey = request.headers['idempotency-key'] || `ride_pay_${request.params.rideId}_${Date.now()}`;
-    const data = await ridePaymentService.initiateRidePayment(request.user.id, request.params.rideId, idempotencyKey);
+    const paymentMethodId = request.body?.paymentMethodId || null;
+    const data = await ridePaymentService.initiateRidePayment(request.user.id, request.params.rideId, idempotencyKey, paymentMethodId);
     return sendSuccess(reply, data);
   });
 

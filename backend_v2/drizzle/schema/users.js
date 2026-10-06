@@ -22,6 +22,7 @@ export const users = pgTable('users', {
   stateId:     uuid('state_id').references(() => states.id),
   cityId:      uuid('city_id').references(() => cities.id),
   referralCode: varchar('referral_code', { length: 30 }).unique(),
+  currencyCode: varchar('currency_code', { length: 3 }),
   createdAt:   timestamp('created_at').defaultNow(),
   updatedAt:   timestamp('updated_at').defaultNow(),
 });
