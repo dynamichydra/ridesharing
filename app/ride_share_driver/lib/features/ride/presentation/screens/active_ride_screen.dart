@@ -12,7 +12,6 @@ import '../../data/datasources/ride_remote_datasource.dart';
 import '../../domain/entities/active_ride.dart';
 import '../bloc/ride_bloc.dart';
 import '../widgets/driver_map_view.dart';
-import '../widgets/cash_collection_dialog.dart';
 
 class ActiveRidePage extends StatefulWidget {
   const ActiveRidePage({super.key});
@@ -128,27 +127,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
   }
 
   void _promptCompleteRideWithCashCheck(BuildContext context, ActiveRide ride) {
-    final isCash = ride.paymentMethod?.toLowerCase() == 'cash';
-    if (isCash) {
-      final totalFareNum = ride.finalFareMinor != null
-          ? (ride.finalFareMinor! / 100.0)
-          : (ride.estimatedFareMinor != null
-              ? (ride.estimatedFareMinor! / 100.0)
-              : 0.0);
-      final symbol = CurrencyHelper.getSymbol(ride.currencyCode);
-      final fareText = '$symbol${totalFareNum.toStringAsFixed(2)}';
-
-      CashCollectionDialog.show(
-        context: context,
-        rideId: ride.id,
-        fareText: fareText,
-        onCollectionConfirmed: () {
-          _rideBloc.add(CompleteRideRequested());
-        },
-      );
-    } else {
-      _rideBloc.add(CompleteRideRequested());
-    }
+    _rideBloc.add(CompleteRideRequested());
   }
 
   void _confirmCancelRide(BuildContext context, ActiveRide ride) {
@@ -682,7 +661,6 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
           final fareMinor = state.ride.finalFareMinor ?? state.ride.estimatedFareMinor ?? 0;
           final fareNum = fareMinor / 100.0;
           final fare = fareNum.toStringAsFixed(2);
-          final isWallet = state.ride.paymentMethod?.toLowerCase() == 'wallet';
 
           showModalBottomSheet(
             context: context,
@@ -690,7 +668,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
             enableDrag: false,
             isScrollControlled: true,
             backgroundColor: Colors.transparent,
-            builder: (sheetCtx) => _buildCompletionSheet(sheetCtx, state.ride, fare, isWallet),
+            builder: (sheetCtx) => _buildCompletionSheet(sheetCtx, state.ride, fare),
           );
         } else if (state is RideNoShowSuccess) {
           final feeMinor = state.feeMinor;
@@ -1133,39 +1111,33 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                           margin: const EdgeInsets.only(bottom: 12),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
-                            color: (ride.paymentMethod?.toLowerCase() == 'wallet')
-                                ? const Color(0xFFF0FDF4)
-                                : const Color(0xFFFFFBEB),
+                            color: ride.isCash ? const Color(0xFFFFFBEB) : const Color(0xFFF0FDF4),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: (ride.paymentMethod?.toLowerCase() == 'wallet')
-                                  ? const Color(0xFF86EFAC)
-                                  : const Color(0xFFFDE68A),
+                              color: ride.isCash ? const Color(0xFFFDE68A) : const Color(0xFF86EFAC),
                             ),
                           ),
                           child: Row(
                             children: [
                               Icon(
-                                (ride.paymentMethod?.toLowerCase() == 'wallet')
-                                    ? Icons.account_balance_wallet_rounded
-                                    : Icons.payments_rounded,
+                                ride.isCash
+                                    ? Icons.payments_rounded
+                                    : (ride.isWallet ? Icons.account_balance_wallet_rounded : Icons.credit_card_rounded),
                                 size: 18,
-                                color: (ride.paymentMethod?.toLowerCase() == 'wallet')
-                                    ? const Color(0xFF009048)
-                                    : const Color(0xFFD97706),
+                                color: ride.isCash ? const Color(0xFFD97706) : const Color(0xFF009048),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  (ride.paymentMethod?.toLowerCase() == 'wallet')
-                                      ? 'Payment: Ryva Wallet (Automatic Credit)'
-                                      : 'Payment: Cash (Collect ${CurrencyHelper.getSymbol(ride.currencyCode)}${((ride.finalFareMinor ?? ride.estimatedFareMinor ?? 0) / 100.0).toStringAsFixed(2)} cash from rider)',
+                                  ride.isCash
+                                      ? 'Payment: Cash (Collect ${CurrencyHelper.getSymbol(ride.currencyCode)}${((ride.finalFareMinor ?? ride.estimatedFareMinor ?? 0) / 100.0).toStringAsFixed(2)} cash from rider)'
+                                      : (ride.isWallet
+                                          ? 'Payment: Ryva Wallet (Automatic Credit)'
+                                          : 'Payment: Card / Online (Paid directly to your wallet)'),
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: (ride.paymentMethod?.toLowerCase() == 'wallet')
-                                        ? const Color(0xFF009048)
-                                        : const Color(0xFFB45309),
+                                    color: ride.isCash ? const Color(0xFFB45309) : const Color(0xFF009048),
                                   ),
                                 ),
                               ),
@@ -1396,7 +1368,10 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
     );
   }
 
-  Widget _buildCompletionSheet(BuildContext sheetCtx, ActiveRide ride, String fare, bool isWallet) {
+  Widget _buildCompletionSheet(BuildContext sheetCtx, ActiveRide ride, String fare) {
+    final isCash = ride.isCash;
+    final isWallet = ride.isWallet;
+
     // Determine the amounts
     final int promoMinor = ride.promoDiscountMinor ?? 0;
     final bool hasPromo = promoMinor > 0;
@@ -1478,9 +1453,11 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
               ),
               const SizedBox(height: 4),
               Text(
-                isWallet
-                    ? 'Your net earnings have been credited to your Ryva Wallet.'
-                    : 'Please collect $sym${riderPayableNum.toStringAsFixed(riderPayableNum % 1 == 0 ? 0 : 2)} from the rider.',
+                isCash
+                    ? 'Please collect $sym${riderPayableNum.toStringAsFixed(riderPayableNum % 1 == 0 ? 0 : 2)} from the rider.'
+                    : (isWallet
+                        ? 'Your net earnings have been credited to your Ryva Wallet.'
+                        : 'Paid via Card / Online. Your net earnings have been credited to your Ryva Wallet.'),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 14,
@@ -1495,10 +1472,10 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
                 decoration: BoxDecoration(
-                  color: isWallet ? const Color(0xFFF0FDF4) : const Color(0xFFFEF3C7),
+                  color: isCash ? const Color(0xFFFEF3C7) : const Color(0xFFF0FDF4),
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
-                    color: isWallet ? const Color(0xFFDCFCE7) : const Color(0xFFFDE68A),
+                    color: isCash ? const Color(0xFFFDE68A) : const Color(0xFFDCFCE7),
                   ),
                 ),
                 child: Column(
@@ -1507,35 +1484,39 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          isWallet ? Icons.account_balance_wallet_outlined : Icons.payments_outlined,
-                          color: isWallet ? const Color(0xFF009048) : const Color(0xFFB45309),
+                          isCash
+                              ? Icons.payments_outlined
+                              : (isWallet ? Icons.account_balance_wallet_outlined : Icons.credit_card_rounded),
+                          color: isCash ? const Color(0xFFB45309) : const Color(0xFF009048),
                           size: 18,
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          isWallet ? 'YOUR NET EARNINGS (WALLET)' : 'COLLECT CASH FROM RIDER',
+                          isCash
+                              ? 'COLLECT CASH FROM RIDER'
+                              : (isWallet ? 'YOUR NET EARNINGS (WALLET)' : 'YOUR NET EARNINGS (CARD / ONLINE)'),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.8,
-                            color: isWallet ? const Color(0xFF009048) : const Color(0xFFB45309),
+                            color: isCash ? const Color(0xFFB45309) : const Color(0xFF009048),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      isWallet
-                          ? '$sym${driverEarningsNum.toStringAsFixed(2)}'
-                          : '$sym${riderPayableNum.toStringAsFixed(riderPayableNum % 1 == 0 ? 0 : 2)}',
+                      isCash
+                          ? '$sym${riderPayableNum.toStringAsFixed(riderPayableNum % 1 == 0 ? 0 : 2)}'
+                          : '$sym${driverEarningsNum.toStringAsFixed(2)}',
                       style: TextStyle(
                         fontSize: 34,
                         fontWeight: FontWeight.w900,
-                        color: isWallet ? const Color(0xFF009048) : const Color(0xFF92400E),
+                        color: isCash ? const Color(0xFF92400E) : const Color(0xFF009048),
                         letterSpacing: -0.5,
                       ),
                     ),
-                    if (!isWallet && hasPromo) ...[
+                    if (isCash && hasPromo) ...[
                       const SizedBox(height: 2),
                       Text(
                         '(Total fare: $sym${grossFareNum.toStringAsFixed(grossFareNum % 1 == 0 ? 0 : 2)})',
@@ -1648,7 +1629,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                   onPressed: isProcessing
                       ? null
                       : () async {
-                          if (isWallet) {
+                          if (!isCash) {
                             Navigator.of(sheetCtx).pop();
                             if (context.canPop()) {
                               context.pop();
@@ -1720,7 +1701,7 @@ class _ActiveRidePageState extends State<ActiveRidePage> {
                           ),
                         )
                       : Text(
-                          isWallet ? 'Done' : 'CONFIRM CASH RECEIVED',
+                          isCash ? 'CONFIRM CASH RECEIVED' : 'Done',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,

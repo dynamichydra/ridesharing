@@ -684,11 +684,14 @@ class _DriverDashboardState extends State<DriverDashboard>
               
               _showMoneyAddedAnimation(driverNetNum);
               final symbol = CurrencyHelper.getSymbol(state.ride.currencyCode);
+              final isCash = state.ride.paymentMethod?.toLowerCase() == 'cash';
               final isWallet = state.ride.paymentMethod?.toLowerCase() == 'wallet';
-              if (isWallet) {
+              if (isCash) {
+                CustomToast.show(context, 'Ride Completed! Collect $symbol${totalFareNum.toStringAsFixed(2)} cash from rider');
+              } else if (isWallet) {
                 CustomToast.show(context, 'Ride Completed! $symbol${driverNetNum.toStringAsFixed(2)} credited to your Ryva Wallet');
               } else {
-                CustomToast.show(context, 'Ride Completed! Collect $symbol${totalFareNum.toStringAsFixed(2)} cash from rider');
+                CustomToast.show(context, 'Ride Completed! Card payment of $symbol${driverNetNum.toStringAsFixed(2)} credited to your Ryva Wallet');
               }
             }
           },

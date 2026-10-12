@@ -81,4 +81,51 @@ class RazorpayCheckoutLauncher {
 
     return completer.future;
   }
+
+  Future<RazorpayCheckoutResult> setupCard({
+    required String keyId,
+    required String customerId,
+    required String gatewayOrderId,
+    required String currencyCode,
+  }) {
+    final completer = Completer<RazorpayCheckoutResult>();
+    final razorpay = Razorpay();
+
+    void finish(RazorpayCheckoutResult result) {
+      if (!completer.isCompleted) completer.complete(result);
+      razorpay.clear();
+    }
+
+    razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse r) {
+      if (r.paymentId == null) {
+        finish(RazorpayCheckoutResult.failure('Setup succeeded but the response was incomplete.'));
+        return;
+      }
+      finish(RazorpayCheckoutResult.success(
+        paymentId: r.paymentId!,
+        orderId: r.orderId ?? gatewayOrderId,
+        signature: r.signature ?? '',
+      ));
+    });
+
+    razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse r) {
+      finish(RazorpayCheckoutResult.failure(r.message ?? 'Setup failed.'));
+    });
+
+    razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, (ExternalWalletResponse r) {
+      finish(RazorpayCheckoutResult.failure('External wallets are not supported for setup.'));
+    });
+
+    razorpay.open({
+      'key': keyId,
+      'order_id': gatewayOrderId, // Required for zero-auth or 1 INR verification in Razorpay
+      'customer_id': customerId,
+      'amount': 100, // 1 INR (refunded automatically)
+      'currency': currencyCode,
+      'name': 'Ryva Ride',
+      'description': 'Card Verification (Auto Refunded)',
+    });
+
+    return completer.future;
+  }
 }

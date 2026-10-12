@@ -66,6 +66,10 @@ class ActiveRide {
     this.riderRating,
   });
 
+  bool get isCash => paymentMethod == null || paymentMethod?.toLowerCase() == 'cash';
+  bool get isWallet => paymentMethod?.toLowerCase() == 'wallet';
+  bool get isOnline => paymentMethod != null && paymentMethod!.isNotEmpty && !isCash && !isWallet;
+
   factory ActiveRide.fromJson(Map<String, dynamic> json) {
     int? parseInt(dynamic val) {
       if (val == null) return null;

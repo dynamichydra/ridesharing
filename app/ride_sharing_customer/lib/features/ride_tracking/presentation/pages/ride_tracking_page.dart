@@ -18,6 +18,9 @@ import '../../../chat/data/datasources/ride_chat_datasource.dart';
 import '../../../chat/domain/entities/ride_chat_message.dart';
 import '../../../../injection_container.dart';
 import '../../../../core/network/dio_client.dart';
+import 'package:dio/dio.dart' show Options;
+import '../../../../core/services/stripe_checkout_launcher.dart';
+import '../../../../core/services/razorpay_checkout_launcher.dart';
 
 class RideTrackingPage extends StatefulWidget {
   const RideTrackingPage({super.key});
@@ -31,6 +34,8 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
   final TextEditingController _commentController = TextEditingController();
   bool _isSubmittingRating = false;
   bool _showThankYou = false;
+  bool _isPaying = false;
+  bool _hasAutoTriggeredPayment = false;
 
   late AnimationController _radarController;
   int _unreadChatCount = 0;
@@ -195,6 +200,13 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
           } else if (state is RideTrackingActive && state.trackingState == 'rideCompleted') {
             context.read<WalletBloc>().add(LoadWalletDetails());
             context.read<ProfileBloc>().add(LoadProfile());
+            final isCard = state.paymentMethod != 'wallet' && state.paymentMethod != 'cash';
+            if (isCard && state.paymentStatus != 'paid' && !_hasAutoTriggeredPayment) {
+              _hasAutoTriggeredPayment = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _triggerPaymentFlow(state);
+              });
+            }
           }
         },
         builder: (context, state) {
@@ -1432,13 +1444,17 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                         Row(
                           children: [
                             Icon(
-                              state.paymentMethod == 'wallet' ? Icons.account_balance_wallet_rounded : Icons.payments_rounded,
+                              state.paymentMethod == 'wallet'
+                                  ? Icons.account_balance_wallet_rounded
+                                  : (state.paymentMethod == 'cash' ? Icons.payments_rounded : Icons.credit_card_rounded),
                               color: const Color(0xFF009048),
                               size: 18,
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              state.paymentMethod == 'wallet' ? 'Ryva Wallet (Debited)' : 'Cash',
+                              state.paymentMethod == 'wallet'
+                                  ? 'Ryva Wallet (Debited)'
+                                  : (state.paymentMethod == 'cash' ? 'Cash' : 'Card / Online'),
                               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
                             ),
                           ],
@@ -1448,21 +1464,33 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
 
                     const Spacer(),
 
-                    // "Done" Button -> Opens Screen 10 (Rating Modal)
+                    // "Done" / "Pay Now" Button
                     SizedBox(
                       width: double.infinity,
                       height: 52,
                       child: ElevatedButton(
-                        onPressed: () {
-                          _showRateRideDialog(context, state);
-                        },
+                        onPressed: _isPaying
+                            ? null
+                            : () {
+                                final isCard = state.paymentMethod != 'wallet' && state.paymentMethod != 'cash';
+                                if (isCard && state.paymentStatus != 'paid') {
+                                  _triggerPaymentFlow(state);
+                                } else {
+                                  _showRateRideDialog(context, state);
+                                }
+                              },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF009048),
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                           elevation: 0,
                         ),
-                        child: const Text('Done', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        child: _isPaying
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : Text(
+                                (state.paymentMethod != 'wallet' && state.paymentMethod != 'cash' && state.paymentStatus != 'paid') ? 'Pay Now' : 'Done',
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
                       ),
                     ),
                   ],
@@ -1473,6 +1501,128 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
         ),
       ),
     );
+  }
+
+  Future<void> _triggerPaymentFlow(RideTrackingActive state) async {
+    if (_isPaying) return;
+    setState(() {
+      _isPaying = true;
+    });
+    try {
+      final dioClient = sl<DioClient>();
+      // 1. Initiate
+      final initRes = await dioClient.dio.post(
+        '/api/v1/ride-payments/${state.rideId}/initiate',
+        data: {'paymentMethodId': state.paymentMethod},
+        options: Options(headers: {
+          'Idempotency-Key': 'pay_${state.rideId}_${DateTime.now().millisecondsSinceEpoch}',
+        }),
+      );
+      if (initRes.data['SUCCESS'] != true) {
+        if (mounted) {
+          CustomToast.show(context, initRes.data['MESSAGE']?.toString() ?? 'Payment initiation failed');
+          setState(() {
+            _isPaying = false;
+          });
+        }
+        return;
+      }
+      final payData = initRes.data['MESSAGE'] as Map;
+      if (payData['isPaid'] == true || payData['status'] == 'paid') {
+        if (mounted) {
+          CustomToast.show(context, 'Payment successful!');
+          context.read<RideTrackingBloc>().add(const RideCompleted(paymentStatus: 'paid'));
+          setState(() {
+            _isPaying = false;
+          });
+        }
+        return;
+      }
+      final gateway = payData['gateway']?.toString() ?? '';
+      String? paymentRef;
+      String? orderRef = payData['gatewayOrderId']?.toString();
+      String? signature = 'dev_signature';
+
+      // 2. Launch UI
+      if (gateway == 'stripe') {
+        final launcher = StripeCheckoutLauncher();
+        final paid = await launcher.checkout(
+          clientSecret: payData['clientSecret']?.toString() ?? '',
+          publishableKey: payData['publishableKey']?.toString() ?? '',
+        );
+        if (!paid) {
+          if (mounted) {
+            CustomToast.show(context, 'Payment cancelled');
+            setState(() {
+              _isPaying = false;
+            });
+          }
+          return;
+        }
+        paymentRef = payData['paymentIntentId']?.toString() ?? 'stripe_paid';
+      } else if (gateway == 'razorpay') {
+        final launcher = RazorpayCheckoutLauncher();
+        final amountMinor = (payData['amountMinor'] as num?)?.toInt() ?? ((state.fare) * 100).round();
+        final result = await launcher.checkout(
+          keyId: payData['keyId']?.toString() ?? '',
+          gatewayOrderId: orderRef ?? '',
+          amountMinor: amountMinor,
+          currencyCode: state.currencyCode.isNotEmpty ? state.currencyCode : 'INR',
+          description: 'Ryva Ride Payment',
+        );
+        if (!result.success) {
+          if (mounted) {
+            CustomToast.show(context, 'Payment cancelled: ${result.errorMessage}');
+            setState(() {
+              _isPaying = false;
+            });
+          }
+          return;
+        }
+        paymentRef = result.paymentId;
+        if (result.signature != null && result.signature!.isNotEmpty) {
+          signature = result.signature;
+        }
+      } else {
+        paymentRef = 'dev_paid';
+        orderRef ??= 'dev_order';
+      }
+
+      // 3. Verify
+      await dioClient.dio.post('/api/v1/ride-payments/${state.rideId}/verify', data: {
+        'orderRef': orderRef,
+        'paymentRef': paymentRef,
+        'signature': signature,
+      });
+
+      // Payment successful!
+      if (mounted) {
+        CustomToast.show(context, 'Payment successful!');
+        context.read<RideTrackingBloc>().add(const RideCompleted(paymentStatus: 'paid'));
+        setState(() {
+          _isPaying = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[PaymentFlow] Error: $e');
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('already') || errStr.contains('409')) {
+        if (mounted) {
+          CustomToast.show(context, 'Payment already completed');
+          context.read<RideTrackingBloc>().add(const RideCompleted(paymentStatus: 'paid'));
+          setState(() {
+            _isPaying = false;
+          });
+        }
+        return;
+      }
+      if (mounted) {
+        CustomToast.show(context, 'Payment failed. Please try again.');
+        setState(() {
+          _isPaying = false;
+        });
+      }
+    }
   }
 
   // ===========================================================================

@@ -107,11 +107,12 @@ class RideCompleted extends RideTrackingEvent {
   final double? finalFare;
   final String? currencyCode;
   final Map<String, dynamic>? breakdown;
+  final String? paymentStatus;
 
-  const RideCompleted({this.finalFare, this.currencyCode, this.breakdown});
+  const RideCompleted({this.finalFare, this.currencyCode, this.breakdown, this.paymentStatus});
 
   @override
-  List<Object?> get props => [finalFare, currencyCode, breakdown];
+  List<Object?> get props => [finalFare, currencyCode, breakdown, paymentStatus];
 }
 
 class CancelRide extends RideTrackingEvent {
@@ -245,6 +246,7 @@ class RideTrackingActive extends RideTrackingState {
   final Map<String, dynamic>? breakdown;
   final int? etaMin;
   final double? remainingKm;
+  final String paymentStatus;
 
   const RideTrackingActive({
     required this.rideId,
@@ -272,6 +274,7 @@ class RideTrackingActive extends RideTrackingState {
     this.breakdown,
     this.etaMin,
     this.remainingKm,
+    this.paymentStatus = 'pending',
   });
 
   RideTrackingActive copyWith({
@@ -289,6 +292,7 @@ class RideTrackingActive extends RideTrackingState {
     Map<String, dynamic>? breakdown,
     int? etaMin,
     double? remainingKm,
+    String? paymentStatus,
   }) {
     return RideTrackingActive(
       rideId: rideId,
@@ -316,6 +320,7 @@ class RideTrackingActive extends RideTrackingState {
       breakdown: breakdown ?? this.breakdown,
       etaMin: etaMin ?? this.etaMin,
       remainingKm: remainingKm ?? this.remainingKm,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
     );
   }
 
@@ -421,7 +426,8 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       }
       final currencyCode = data['currencyCode']?.toString() ?? data['currency']?.toString();
       final breakdown = data['breakdown'] is Map ? Map<String, dynamic>.from(data['breakdown'] as Map) : null;
-      add(RideCompleted(finalFare: finalFare, currencyCode: currencyCode, breakdown: breakdown));
+      final paymentStatus = data['paymentStatus']?.toString();
+      add(RideCompleted(finalFare: finalFare, currencyCode: currencyCode, breakdown: breakdown, paymentStatus: paymentStatus));
     });
 
     _rideCancelledSub = _rideTrackingRepository.onRideCancelled.listen((data) {
@@ -1019,6 +1025,7 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
           ? AppConstants.getCurrencySymbol(event.currencyCode)
           : currentState.currencySymbol;
       final breakdown = event.breakdown ?? currentState.breakdown;
+      final paymentStatus = event.paymentStatus ?? currentState.paymentStatus;
 
       final completedState = currentState.copyWith(
         trackingState: 'rideCompleted',
@@ -1027,6 +1034,7 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         currencyCode: currencyCode,
         currencySymbol: currencySymbol,
         breakdown: breakdown,
+        paymentStatus: paymentStatus,
       );
       await _completeRideInCache(completedState);
       try {

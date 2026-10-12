@@ -46,6 +46,10 @@ class RideOffer {
     this.paymentMethod,
   });
 
+  bool get isCash => paymentMethod == null || paymentMethod?.toLowerCase() == 'cash';
+  bool get isWallet => paymentMethod?.toLowerCase() == 'wallet';
+  bool get isOnline => paymentMethod != null && paymentMethod!.isNotEmpty && !isCash && !isWallet;
+
   factory RideOffer.fromJson(Map<String, dynamic> json) {
     double parseDouble(dynamic val) {
       if (val == null) return 0.0;

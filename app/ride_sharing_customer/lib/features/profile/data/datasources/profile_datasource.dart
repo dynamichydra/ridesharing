@@ -82,8 +82,12 @@ class ProfileDataSourceImpl implements ProfileDataSource {
     // Fetch live payment methods from backend /api/v1/payment-methods
     try {
       final pmResponse = await _dioClient.dio.get('/api/v1/payment-methods');
-      if (pmResponse.data['SUCCESS'] == true && pmResponse.data['MESSAGE'] is List) {
-        profile['payment_methods'] = pmResponse.data['MESSAGE'];
+      final pmData = pmResponse.data;
+      // Backend returns { SUCCESS: true, MESSAGE: [...] }
+      final bool isSuccess = pmData['SUCCESS'] == true || pmData['success'] == true;
+      final dynamic rawList = pmData['MESSAGE'] ?? pmData['paymentMethods'];
+      if (isSuccess && rawList is List) {
+        profile['payment_methods'] = rawList;
       }
     } catch (_) {
       if (profile['payment_methods'] == null || (profile['payment_methods'] as List).isEmpty) {

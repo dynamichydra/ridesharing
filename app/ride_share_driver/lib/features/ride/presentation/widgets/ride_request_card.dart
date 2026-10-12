@@ -188,6 +188,44 @@ class _RideRequestCardState extends State<RideRequestCard>
                             letterSpacing: 0.5,
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: offer.isOnline
+                                ? const Color(0xFFE8F5E9)
+                                : (offer.isWallet ? const Color(0xFFE0F2FE) : const Color(0xFFFEF3C7)),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                offer.isOnline
+                                    ? Icons.credit_card_rounded
+                                    : (offer.isWallet ? Icons.account_balance_wallet_rounded : Icons.payments_rounded),
+                                size: 11,
+                                color: offer.isOnline
+                                    ? const Color(0xFF009048)
+                                    : (offer.isWallet ? const Color(0xFF0284C7) : const Color(0xFFD97706)),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                offer.isOnline
+                                    ? 'CARD / ONLINE'
+                                    : (offer.isWallet ? 'WALLET' : 'CASH'),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: offer.isOnline
+                                      ? const Color(0xFF009048)
+                                      : (offer.isWallet ? const Color(0xFF0284C7) : const Color(0xFFD97706)),
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                     Row(
@@ -384,7 +422,41 @@ class _RideRequestCardState extends State<RideRequestCard>
                             ),
                           ],
                         ),
-                        if (offer.hasPromo && (offer.paymentMethod == null || offer.paymentMethod == 'cash') && offer.promoIncentive > 0) ...[
+                        if (offer.isOnline) ...[
+                          const SizedBox(height: 2),
+                          const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.credit_card_rounded, size: 11, color: Color(0xFF009048)),
+                              SizedBox(width: 3),
+                              Text(
+                                'Card / Online (Ryva Wallet)',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF009048),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ] else if (offer.isWallet) ...[
+                          const SizedBox(height: 2),
+                          const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.account_balance_wallet_rounded, size: 11, color: Color(0xFF0284C7)),
+                              SizedBox(width: 3),
+                              Text(
+                                'Ryva Wallet Paid',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0284C7),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ] else if (offer.hasPromo && offer.promoIncentive > 0) ...[
                           const SizedBox(height: 2),
                           Row(
                             mainAxisSize: MainAxisSize.min,
