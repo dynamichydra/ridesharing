@@ -69,6 +69,10 @@ export async function getRiderMe(riderId) {
   // Saved Places
   const places = await db.select().from(savedPlaces).where(eq(savedPlaces.userId, riderId));
 
+  // Payment Methods
+  const { paymentMethods } = await import('../../../drizzle/schema/index.js');
+  const userPaymentMethods = await db.select().from(paymentMethods).where(eq(paymentMethods.userId, riderId));
+
   return {
     ...user,
     userType: 'rider',
@@ -85,6 +89,7 @@ export async function getRiderMe(riderId) {
       status: wallet.status,
     } : null,
     savedPlaces: places || [],
+    payment_methods: userPaymentMethods || [],
   };
 }
 

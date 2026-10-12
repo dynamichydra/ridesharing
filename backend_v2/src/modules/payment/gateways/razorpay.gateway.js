@@ -18,12 +18,20 @@ const client = isRazorpayConfigured
 // already closed, etc.) from whoever's looking at the response. This normalizes that shape
 // into the `{statusCode, message}` convention every other thrown error in this codebase uses.
 // Pure — extracted so the shape-detection is unit-testable without a live network call.
-// Passes through anything that doesn't look like the SDK's normalizeError shape unchanged.
+// Always returns an Error instance so callers can safely use .message
 export function normalizeRazorpayApiError(err) {
   if (err && err.error && typeof err.error === 'object') {
-    return { statusCode: err.statusCode || 502, message: err.error.description || 'Razorpay API error' };
+    const msg = err.error.description || 'Razorpay API error';
+    const e = new Error(msg);
+    e.statusCode = err.statusCode || 502;
+    e.razorpayError = err.error;
+    return e;
   }
-  return err;
+  if (err instanceof Error) return err;
+  // plain object thrown (shouldn't happen but be safe)
+  const e = new Error(err?.message || JSON.stringify(err));
+  if (err?.statusCode) e.statusCode = err.statusCode;
+  return e;
 }
 
 async function _call(promise) {
@@ -158,6 +166,58 @@ export const razorpayGateway = {
       amount: fromMinor(amountMinor, currencyCode),
       currency: currencyCode,
       keyId: env.RAZORPAY_KEY_ID, // client needs this to open Razorpay Checkout
+    };
+  },
+
+  async createSetupIntent({ email, name, phone }) {
+    if (!client) throw new Error("Razorpay is not configured");
+    let customer;
+    try {
+      customer = await _call(client.customers.create({
+        email,
+        name,
+        contact: phone || undefined,
+        fail_existing: 0,
+      }));
+    } catch (e) {
+      if (e.message && e.message.includes('Customer already exists')) {
+        // Fallback: try fetching by phone or email
+        let fetchedCustomers = await _call(client.customers.all({ count: 1, 'contact': phone || undefined }));
+        if (fetchedCustomers && fetchedCustomers.items && fetchedCustomers.items.length > 0) {
+          customer = fetchedCustomers.items[0];
+        } else {
+          fetchedCustomers = await _call(client.customers.all({ count: 1, 'email': email }));
+          if (fetchedCustomers && fetchedCustomers.items && fetchedCustomers.items.length > 0) {
+            customer = fetchedCustomers.items[0];
+          } else {
+            // Bulletproof fallback: create a brand new customer with a unique email
+            const uniqueEmail = `user_${Date.now()}@example.com`;
+            customer = await _call(client.customers.create({
+              email: uniqueEmail,
+              name,
+              contact: phone || undefined,
+              fail_existing: 0,
+            }));
+          }
+        }
+      } else {
+        throw e;
+      }
+    }
+    
+    // Razorpay requires an order to open standard checkout and tokenize a card. 
+    // We create a ₹1.00 auth order (100 paise) which allows card verification and saving.
+    const order = await _call(client.orders.create({
+      amount: 100,
+      currency: 'INR',
+      receipt: `setup_${Date.now()}`.slice(0, 40),
+    }));
+
+    return {
+      gateway: 'razorpay',
+      gatewayCustomerId: customer.id,
+      gatewayOrderId: order.id,
+      keyId: env.RAZORPAY_KEY_ID,
     };
   },
 

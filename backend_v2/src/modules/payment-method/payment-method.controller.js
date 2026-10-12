@@ -1,19 +1,35 @@
 import * as pmService from './payment-method.service.js';
-import { db } from '../../config/db.js';
-import { paymentMethods } from '../../../drizzle/schema/index.js';
-import { eq, and } from 'drizzle-orm';
-import { getGateway } from '../payment/payment.service.js';
+import { selectGateway, getGateway } from '../payment/payment.service.js';
+import { sendSuccess, sendError } from '../../utils/response.js';
 
 export async function createSetupIntent(request, reply) {
   try {
     const { gatewayName, currencyCode } = request.body;
-    const gateway = await getGateway({ currencyCode }); 
-    // Wait, the gateway adapter needs a createSetupIntent or similar method.
-    // Let's implement a simpler approach: the frontend handles card tokenization directly using Stripe/Razorpay SDKs 
-    // and just sends the token/paymentMethodId to the backend to save.
-    reply.send({ success: true, message: 'Setup initiated' });
+    let gateway;
+    if (gatewayName) {
+      gateway = getGateway(gatewayName);
+    } else {
+      gateway = await selectGateway({ currencyCode });
+    }
+
+    if (!gateway) {
+      return sendError(reply, 'No available payment gateway for this currency', 400);
+    }
+
+    if (typeof gateway.createSetupIntent !== 'function') {
+      return sendError(reply, `Gateway ${gateway.name} does not support setup intents`, 400);
+    }
+
+    const user = request.user || {};
+    const intentData = await gateway.createSetupIntent({
+      email: user.email || 'guest@example.com',
+      name: user.name || 'Guest User',
+      phone: user.phone,
+    });
+
+    return sendSuccess(reply, intentData);
   } catch (err) {
-    reply.status(500).send({ success: false, message: err.message });
+    return sendError(reply, err.message || 'Failed to create setup intent', 500);
   }
 }
 
@@ -22,9 +38,9 @@ export async function attachPaymentMethod(request, reply) {
     const userId = request.user?.id;
     const role = request.user?.role; // 'rider' or 'driver'
     const { gateway, gatewayCustomerId, paymentMethodToken, last4, cardBrand, expiryMonth, expiryYear, isDefault } = request.body;
-    
+
     if (!gateway || !paymentMethodToken) {
-      return reply.status(400).send({ success: false, message: 'Gateway and paymentMethodToken are required.' });
+      return sendError(reply, 'Gateway and paymentMethodToken are required.', 400);
     }
 
     const newMethod = await pmService.savePaymentMethod({
@@ -37,12 +53,12 @@ export async function attachPaymentMethod(request, reply) {
       cardBrand,
       expiryMonth,
       expiryYear,
-      isDefault
+      isDefault,
     });
 
-    reply.send({ success: true, paymentMethod: newMethod });
+    return sendSuccess(reply, newMethod);
   } catch (err) {
-    reply.status(500).send({ success: false, message: err.message });
+    return sendError(reply, err.message || 'Failed to attach payment method', 500);
   }
 }
 
@@ -51,9 +67,10 @@ export async function getPaymentMethods(request, reply) {
     const userId = request.user?.id;
     const role = request.user?.role;
     const methods = await pmService.listPaymentMethods(userId, role);
-    reply.send({ success: true, paymentMethods: methods });
+    // Return as list via MESSAGE so the Flutter datasource can read data['MESSAGE']
+    return sendSuccess(reply, methods);
   } catch (err) {
-    reply.status(500).send({ success: false, message: err.message });
+    return sendError(reply, err.message || 'Failed to fetch payment methods', 500);
   }
 }
 
@@ -61,8 +78,8 @@ export async function deletePaymentMethod(request, reply) {
   try {
     const { id } = request.params;
     await pmService.removePaymentMethod(id);
-    reply.send({ success: true, message: 'Payment method removed' });
+    return sendSuccess(reply, 'Payment method removed');
   } catch (err) {
-    reply.status(500).send({ success: false, message: err.message });
+    return sendError(reply, err.message || 'Failed to delete payment method', 500);
   }
 }

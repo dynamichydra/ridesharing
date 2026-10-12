@@ -95,6 +95,21 @@ export const stripeGateway = {
     };
   },
 
+  async createSetupIntent({ email, name }) {
+    if (!client) throw new Error("Stripe is not configured");
+    const customer = await client.customers.create({ email, name });
+    const setupIntent = await client.setupIntents.create({
+      customer: customer.id,
+      payment_method_types: ['card'],
+    });
+    return {
+      gateway: 'stripe',
+      clientSecret: setupIntent.client_secret,
+      publishableKey: env.STRIPE_PUBLISHABLE_KEY,
+      gatewayCustomerId: customer.id,
+    };
+  },
+
   // Stripe has no separate order/payment/signature triad — the client confirms the
   // PaymentIntent directly with Stripe, so verification is just re-checking its status.
   async verifyPayment({ orderRef, paymentRef }) {
