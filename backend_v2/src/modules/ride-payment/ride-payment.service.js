@@ -1,9 +1,10 @@
 import { eq, and, desc, count, isNotNull, inArray } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { rides, payments, users, drivers, cashCollections, subscriptions, subscriptionPlans, countries, driverEarnings } from '../../../drizzle/schema/index.js';
+import { rides, payments, users, drivers, cashCollections, subscriptions, subscriptionPlans, countries, driverEarnings, paymentMethods } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
 import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
+import { resolvePaymentRegion, evaluatePaymentMethodEligibility } from '../payment/payment-region.service.js';
 import { formatMoney } from '../../utils/money.js';
 import { withIdempotency } from '../../utils/idempotency.js';
 import { postTransaction, getOrCreateSystemAccount, getOrCreateWalletAccount } from '../ledger/ledger.service.js';
@@ -22,10 +23,100 @@ import { publishNotification } from '../notification/notification-events.js';
 export async function initiateRidePayment(riderId, rideId, idempotencyKey, paymentMethodId = null) {
   const effectiveKey = idempotencyKey || `ride_pay_${rideId}_${Date.now()}`;
   return withIdempotency('ride_payment_initiate', effectiveKey, riderId, async () => {
+    const [existingRide] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+    if (!existingRide) throw { statusCode: 404, message: 'Ride not found' };
+    if (existingRide.riderId !== riderId) throw { statusCode: 403, message: 'Only the primary rider can pay for this ride' };
+    if (existingRide.paymentStatus === 'paid') {
+      return {
+        status: 'paid',
+        isPaid: true,
+        alreadyPaid: true,
+        currency: existingRide.currencyCode,
+        amount: existingRide.finalFareMinor ? existingRide.finalFareMinor / 100 : 0,
+      };
+    }
+
     const ride = await _loadPayableRideForUser(rideId, riderId);
     const payAmountMinor = ride.finalFareMinor;
 
-    const gateway = gatewayForCurrency(ride.currencyCode);
+    // Authoritative region & eligibility validation on backend
+    const regionConfig = await resolvePaymentRegion({ rideId, riderId });
+
+    // Handle payment with a saved payment method
+    if (paymentMethodId && paymentMethodId !== 'cash' && paymentMethodId !== 'wallet') {
+      const [savedMethod] = await db.select().from(paymentMethods)
+        .where(and(
+          eq(paymentMethods.id, paymentMethodId),
+          eq(paymentMethods.userId, riderId),
+          eq(paymentMethods.isActive, true)
+        ))
+        .limit(1);
+
+      if (!savedMethod) {
+        throw { statusCode: 403, message: 'Invalid or unauthorized payment method' };
+      }
+
+      // Revalidate eligibility in the ride's authoritative region
+      const eligibility = evaluatePaymentMethodEligibility(savedMethod, regionConfig);
+      if (!eligibility.isEligible) {
+        throw {
+          statusCode: 400,
+          code: 'PAYMENT_METHOD_INELIGIBLE',
+          message: `Selected payment method cannot be used for this ride: ${eligibility.ineligibilityReason}`,
+        };
+      }
+
+      const gw = getGateway(savedMethod.gateway);
+      if (gw && typeof gw.chargeSavedMethod === 'function') {
+        const chargeResult = await gw.chargeSavedMethod({
+          amountMinor: payAmountMinor,
+          currencyCode: ride.currencyCode,
+          customerId: savedMethod.gatewayCustomerId,
+          paymentMethodToken: savedMethod.paymentMethodToken,
+          metadata: { rideId, riderId, paymentMethodId: savedMethod.id },
+          idempotencyKey: effectiveKey,
+        });
+
+        const [payment] = await db.insert(payments).values({
+          rideId,
+          subscriptionId: null,
+          countryId: await _requireCountryId(ride),
+          gateway: gw.name,
+          currencyCode: ride.currencyCode,
+          amountMinor: payAmountMinor,
+          status: chargeResult.status === 'succeeded' ? 'succeeded' : 'created',
+          gatewayOrderId: chargeResult.gatewayOrderId,
+          gatewayPaymentId: chargeResult.gatewayPaymentId || null,
+          metadata: { payerId: riderId, paymentMethodId: savedMethod.id },
+        }).returning();
+
+        if (chargeResult.status === 'succeeded') {
+          await _markRidePaid(ride, {
+            method: 'online',
+            gateway: gw.name,
+            gatewayPaymentId: chargeResult.gatewayPaymentId || chargeResult.gatewayOrderId,
+            gatewayOrderId: chargeResult.gatewayOrderId,
+            amountMinor: payAmountMinor,
+            payerId: riderId,
+            paymentAttemptId: payment.id,
+          });
+          return {
+            ...chargeResult,
+            status: 'paid',
+            paymentAttemptId: payment.id,
+            isPaid: true,
+          };
+        }
+
+        await db.update(rides).set({ paymentMethod: savedMethod.id, paymentStatus: 'processing' }).where(eq(rides.id, rideId));
+        return { ...chargeResult, paymentAttemptId: payment.id };
+      }
+    }
+
+    const gateway = regionConfig.primaryGateway
+      ? getGateway(regionConfig.primaryGateway.gateway)
+      : gatewayForCurrency(ride.currencyCode);
+
     if (!gateway) {
       return _markRidePaid(ride, {
         method: 'online', gateway: 'none', gatewayPaymentId: 'dev_payment_' + Date.now(), gatewayOrderId: null,
@@ -38,7 +129,7 @@ export async function initiateRidePayment(riderId, rideId, idempotencyKey, payme
       currencyCode: ride.currencyCode,
       metadata: { rideId, riderId, paymentMethodId },
       idempotencyKey,
-      paymentMethodId, // newly added parameter for the gateway adapter to consume
+      paymentMethodId,
     });
 
     const [payment] = await db.insert(payments).values({
@@ -59,6 +150,13 @@ export async function initiateRidePayment(riderId, rideId, idempotencyKey, payme
 }
 
 export async function verifyRidePayment(riderId, rideId, orderRef, paymentRef, signature) {
+  const [existingRide] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  if (!existingRide) throw { statusCode: 404, message: 'Ride not found' };
+  if (existingRide.riderId !== riderId) throw { statusCode: 403, message: 'Only the primary rider can pay for this ride' };
+  if (existingRide.paymentStatus === 'paid') {
+    return existingRide;
+  }
+
   const ride = await _loadPayableRideForUser(rideId, riderId);
 
   const gateway = gatewayForCurrency(ride.currencyCode);
@@ -91,6 +189,12 @@ export async function recordCashCollection(driverId, rideId, collectedAmountMino
   if (!ride) throw { statusCode: 404, message: 'Ride not found' };
   if (ride.status !== 'completed' && ride.status !== 'started' && ride.status !== 'arrived') {
     throw { statusCode: 409, message: 'Ride is not active or completed' };
+  }
+  if (ride.paymentStatus === 'paid' && ride.paymentMethod !== 'cash') {
+    throw { statusCode: 400, message: 'This ride has already been paid online/wallet and cannot be collected as cash' };
+  }
+  if (ride.paymentMethod === 'wallet') {
+    throw { statusCode: 400, message: 'This ride is paid via Ryva Wallet and cannot be collected as cash' };
   }
 
   const expectedFareMinor = ride.finalFareMinor ?? ride.estimatedFareMinor ?? 0;
@@ -534,13 +638,18 @@ async function _postRideFareLedger(ride, paymentInfo) {
   const commissionMinor = Math.min(Number(rawCommission), payableTotalMinor);
   const driverEarningsMinor = Math.max(0, payableTotalMinor - commissionMinor);
 
-  if (paymentInfo.method === 'online') {
+  const isOnline = paymentInfo.method === 'online' ||
+    paymentInfo.method === 'card' ||
+    (paymentInfo.method !== 'cash' && paymentInfo.method !== 'wallet');
+
+  if (isOnline) {
     if (!ride.driverId) return;
     const driverWallet = await getOrCreateWallet('driver', ride.driverId);
+    const gatewayName = paymentInfo.gateway || 'online';
     const [driverWalletAccount, commissionAccount, clearingAccount, subsidyAccount] = await Promise.all([
       getOrCreateWalletAccount(driverWallet.id, currencyCode, { ownerType: 'driver', ownerId: ride.driverId }),
       getOrCreateSystemAccount('platform_commission_revenue', currencyCode),
-      getOrCreateSystemAccount(`processor_clearing:${paymentInfo.gateway}`, currencyCode),
+      getOrCreateSystemAccount(`processor_clearing:${gatewayName}`, currencyCode),
       platformSubsidyMinor > 0 ? getOrCreateSystemAccount('platform_marketing_subsidy', currencyCode, { accountCategory: 'EXPENSE' }) : null,
     ]);
 

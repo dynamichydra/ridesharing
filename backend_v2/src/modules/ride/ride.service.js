@@ -4,7 +4,9 @@ import { db } from '../../config/db.js';
 import {
   rides, drivers, users, vehicleTypes, ridePassengers, tripShareTokens,
   driverEarnings, rideOffers, rideDriverAssignments, outboxEvents, dispatchJobs,
+  paymentMethods,
 } from '../../../drizzle/schema/index.js';
+import { resolvePaymentRegion, evaluatePaymentMethodEligibility } from '../payment/payment-region.service.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { calculateFare, validateAndLockQuote } from '../fare/fare.service.js';
@@ -166,7 +168,37 @@ export async function requestRide({
   }
 
   const initialStatus = isScheduled ? 'scheduled' : 'searching';
-  const resolvedPaymentMethod = (paymentMethod || 'cash').toLowerCase();
+  let resolvedPaymentMethod = (paymentMethod || 'cash').toLowerCase();
+
+  // If a saved payment method is selected, validate ownership and regional eligibility
+  if (paymentMethod && !['cash', 'wallet', 'online'].includes(paymentMethod.toLowerCase())) {
+    const [savedMethod] = await db.select().from(paymentMethods)
+      .where(and(
+        eq(paymentMethods.id, paymentMethod),
+        eq(paymentMethods.userId, riderId),
+        eq(paymentMethods.isActive, true)
+      ))
+      .limit(1);
+
+    if (!savedMethod) {
+      throw { statusCode: 403, message: 'Invalid or unauthorized payment method' };
+    }
+
+    const regionConfig = await resolvePaymentRegion({
+      countryId: fareData.countryId,
+      currencyCode: fareData.currencyCode,
+    });
+
+    const eligibility = evaluatePaymentMethodEligibility(savedMethod, regionConfig);
+    if (!eligibility.isEligible) {
+      throw {
+        statusCode: 400,
+        code: 'PAYMENT_METHOD_INELIGIBLE',
+        message: `Selected payment method is unavailable for this ride: ${eligibility.ineligibilityReason}`,
+      };
+    }
+    resolvedPaymentMethod = savedMethod.id;
+  }
 
   const [ride] = await db.insert(rides).values({
     riderId, vehicleTypeId,
@@ -1097,6 +1129,16 @@ export async function completeRide(rideId, driverId) {
   await reAddToGeoIndexIfOnline(driverId)
     .catch((err) => console.error('[Ride] reAddToGeoIndexIfOnline failed:', err.message));
 
+  // If payment method is a saved card or online, attempt off-session auto-charge
+  if (ride.paymentMethod && ride.paymentMethod !== 'cash' && ride.paymentMethod !== 'wallet' && ride.paymentStatus !== 'paid') {
+    try {
+      const { initiateRidePayment } = await import('../ride-payment/ride-payment.service.js');
+      await initiateRidePayment(ride.riderId, rideId, `auto_complete_pay_${rideId}`, ride.paymentMethod);
+    } catch (chargeErr) {
+      console.warn(`[Ride] Auto-charge on complete for ride ${rideId}:`, chargeErr.message || chargeErr);
+    }
+  }
+
   // Direct socket broadcast to rider room so customer UI switches to completed state immediately
   try {
     const { getSocketIO } = await import('../../kafka/consumers/index.js');
@@ -1176,7 +1218,10 @@ export async function completeRide(rideId, driverId) {
     .catch((err) => console.error('[Referral] reward error:', err.message));
 
   // Automatically settle ride payments on completion:
-  if (ride.paymentMethod?.toLowerCase() === 'wallet') {
+  const isWalletPayment = ride.paymentMethod?.toLowerCase() === 'wallet';
+  const isCashPayment = !ride.paymentMethod || ride.paymentMethod?.toLowerCase() === 'cash';
+
+  if (isWalletPayment) {
     if (updated.paymentStatus !== 'paid') {
       try {
         const { payRideWithWallet } = await import('../ride-payment/ride-payment.service.js');
@@ -1189,7 +1234,7 @@ export async function completeRide(rideId, driverId) {
         console.error('[Ride] auto wallet settlement on completion error:', err.message);
       }
     }
-  } else {
+  } else if (isCashPayment) {
     // For cash payment, automatically record cash collection so the commission is debited against driver's wallet (negative balance)
     try {
       const { recordCashCollection } = await import('../ride-payment/ride-payment.service.js');
@@ -1200,6 +1245,13 @@ export async function completeRide(rideId, driverId) {
       }
     } catch (err) {
       console.error('[Ride] auto cash commission settlement on completion error:', err.message);
+    }
+  } else {
+    // Online / Card payment: do not record cash collection!
+    const [latestRide] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+    if (latestRide) {
+      updated.paymentStatus = latestRide.paymentStatus;
+      updated.paymentMethod = latestRide.paymentMethod;
     }
   }
 

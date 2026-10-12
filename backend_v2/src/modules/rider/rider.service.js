@@ -71,7 +71,26 @@ export async function getRiderMe(riderId) {
 
   // Payment Methods
   const { paymentMethods } = await import('../../../drizzle/schema/index.js');
-  const userPaymentMethods = await db.select().from(paymentMethods).where(eq(paymentMethods.userId, riderId));
+  const { resolvePaymentRegion, evaluatePaymentMethodEligibility } = await import('../payment/payment-region.service.js');
+  const userPaymentMethods = await db.select().from(paymentMethods)
+    .where(and(eq(paymentMethods.userId, riderId), eq(paymentMethods.isActive, true)))
+    .orderBy(paymentMethods.createdAt);
+
+  const defaultRegion = await resolvePaymentRegion({
+    countryId: user.countryId,
+    currencyCode: user.currencyCode,
+  });
+
+  const annotatedMethods = userPaymentMethods.map((m) => {
+    const eligibility = evaluatePaymentMethodEligibility(m, defaultRegion);
+    return {
+      ...m,
+      isEligible: eligibility.isEligible,
+      ineligibilityCode: eligibility.ineligibilityCode,
+      ineligibilityReason: eligibility.ineligibilityReason,
+      isPreferred: !!m.isDefault,
+    };
+  });
 
   return {
     ...user,
@@ -89,7 +108,7 @@ export async function getRiderMe(riderId) {
       status: wallet.status,
     } : null,
     savedPlaces: places || [],
-    payment_methods: userPaymentMethods || [],
+    payment_methods: annotatedMethods || [],
   };
 }
 

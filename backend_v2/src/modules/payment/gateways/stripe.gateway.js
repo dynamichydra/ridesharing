@@ -95,6 +95,76 @@ export const stripeGateway = {
     };
   },
 
+  async chargeSavedMethod({ amountMinor, currencyCode, customerId, paymentMethodToken, metadata, idempotencyKey }) {
+    if (!client || (paymentMethodToken && (paymentMethodToken.startsWith('pm_test_token_') || paymentMethodToken.startsWith('pm_mock_')))) {
+      return {
+        gateway: 'stripe',
+        gatewayOrderId: `pi_test_${Date.now()}`,
+        gatewayPaymentId: `pi_test_${Date.now()}`,
+        status: 'succeeded',
+        amount: fromMinor(amountMinor, currencyCode),
+        currency: currencyCode,
+      };
+    }
+
+    try {
+      const intentParams = {
+        amount: amountMinor,
+        currency: currencyCode.toLowerCase(),
+        metadata: stringifyMetadata(metadata),
+        payment_method: paymentMethodToken,
+        confirm: true,
+        off_session: true,
+      };
+      if (customerId) {
+        intentParams.customer = customerId;
+      }
+
+      const intent = await client.paymentIntents.create(
+        intentParams,
+        idempotencyKey ? { idempotencyKey: String(idempotencyKey) } : undefined
+      );
+
+      if (intent.status === 'succeeded') {
+        return {
+          gateway: 'stripe',
+          gatewayOrderId: intent.id,
+          gatewayPaymentId: intent.id,
+          status: 'succeeded',
+          amount: fromMinor(amountMinor, currencyCode),
+          currency: currencyCode,
+        };
+      } else if (intent.status === 'requires_action') {
+        return {
+          gateway: 'stripe',
+          gatewayOrderId: intent.id,
+          clientSecret: intent.client_secret,
+          requiresAction: true,
+          status: 'requires_action',
+          amount: fromMinor(amountMinor, currencyCode),
+          currency: currencyCode,
+          publishableKey: env.STRIPE_PUBLISHABLE_KEY,
+        };
+      } else {
+        throw new Error(`Stripe PaymentIntent status: ${intent.status}`);
+      }
+    } catch (err) {
+      if (err.code === 'authentication_required') {
+        return {
+          gateway: 'stripe',
+          gatewayOrderId: err.raw?.payment_intent?.id,
+          clientSecret: err.raw?.payment_intent?.client_secret,
+          requiresAction: true,
+          status: 'requires_action',
+          amount: fromMinor(amountMinor, currencyCode),
+          currency: currencyCode,
+          publishableKey: env.STRIPE_PUBLISHABLE_KEY,
+        };
+      }
+      throw err;
+    }
+  },
+
   async createSetupIntent({ email, name }) {
     if (!client) throw new Error("Stripe is not configured");
     const customer = await client.customers.create({ email, name });

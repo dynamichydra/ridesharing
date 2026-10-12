@@ -20,6 +20,7 @@ const client = isRazorpayConfigured
 // Pure — extracted so the shape-detection is unit-testable without a live network call.
 // Always returns an Error instance so callers can safely use .message
 export function normalizeRazorpayApiError(err) {
+  if (err == null) return err;
   if (err && err.error && typeof err.error === 'object') {
     const msg = err.error.description || 'Razorpay API error';
     const e = new Error(msg);
@@ -166,6 +167,38 @@ export const razorpayGateway = {
       amount: fromMinor(amountMinor, currencyCode),
       currency: currencyCode,
       keyId: env.RAZORPAY_KEY_ID, // client needs this to open Razorpay Checkout
+    };
+  },
+
+  async chargeSavedMethod({ amountMinor, currencyCode, customerId, paymentMethodToken, metadata, idempotencyKey }) {
+    if (!client) {
+      return {
+        gateway: 'razorpay',
+        gatewayOrderId: `order_mock_${Date.now()}`,
+        status: 'succeeded',
+        amount: fromMinor(amountMinor, currencyCode),
+        currency: currencyCode,
+      };
+    }
+
+    const order = await _call(client.orders.create({
+      amount: amountMinor,
+      currency: currencyCode,
+      notes: metadata,
+      customer_id: customerId || undefined,
+      ...(idempotencyKey ? { receipt: String(idempotencyKey).slice(0, 40) } : {}),
+    }));
+
+    return {
+      gateway: 'razorpay',
+      gatewayOrderId: order.id,
+      amount: fromMinor(amountMinor, currencyCode),
+      currency: currencyCode,
+      keyId: env.RAZORPAY_KEY_ID,
+      gatewayCustomerId: customerId,
+      paymentMethodToken,
+      requiresAction: true,
+      status: 'requires_action',
     };
   },
 
