@@ -139,9 +139,13 @@ class BookingDataSourceImpl implements BookingDataSource {
       throw Exception(errorMsg);
     } on DioException catch (e) {
       print('[BookingDataSource] POST /api/v1/fare/available ERROR: $e');
-      final errorMsg =
-          e.response?.data?['MESSAGE']?.toString() ??
-          'No rides available in your area';
+      final errorMsg = e.response?.data?['MESSAGE']?.toString() ??
+          (e.type == DioExceptionType.connectionTimeout ||
+                  e.type == DioExceptionType.receiveTimeout
+              ? 'Server request timed out. Please check your connection and retry.'
+              : e.type == DioExceptionType.connectionError
+                  ? 'Unable to connect to server. Please check your network.'
+                  : 'No rides available in your area');
       throw Exception(errorMsg);
     } catch (e) {
       print('[BookingDataSource] POST /api/v1/fare/available ERROR: $e');

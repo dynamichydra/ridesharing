@@ -330,6 +330,7 @@ class RideTrackingActive extends RideTrackingState {
         pickup, pickupName, destination, destinationName, driverPosition,
         driverBearing, routePoints, trackingState, fare, vehicleName, otp, paymentMethod,
         passenger, trackingUrl, currencyCode, currencySymbol, breakdown, etaMin, remainingKm,
+        paymentStatus,
       ];
 }
 

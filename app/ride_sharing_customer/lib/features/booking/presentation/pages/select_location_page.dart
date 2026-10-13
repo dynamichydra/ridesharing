@@ -67,6 +67,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
   String _pickupAddress = 'Loading address details...';
   String _destName = '';
   String _destAddress = '';
+  bool _isPickupUsingGps = true;
   Timer? _debounceTimer;
 
   // ---- Autocomplete state ----
@@ -169,7 +170,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
       if (currentLoc != null && mounted) {
         setState(() {
           _userGpsLocation = currentLoc;
-          if (_pickupLatLng.latitude == 0 && _pickupLatLng.longitude == 0) {
+          if (_isPickupUsingGps || (_pickupLatLng.latitude == 0 && _pickupLatLng.longitude == 0)) {
             _pickupLatLng = currentLoc;
           }
         });
@@ -179,7 +180,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
         final place = await _geocodingService.reverseGeocode(currentLoc);
         final placeName = _extractPlaceName(place, fallback: 'Current Location');
         final placeAddress = place?.formattedAddress ?? '';
-        if (mounted) {
+        if (mounted && _isPickupUsingGps) {
           setState(() {
             _pickupName = placeName;
             _pickupAddress = placeAddress;
@@ -193,34 +194,72 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
 
       // 2. Subscribe to continuous real-time GPS updates
       _gpsSubscription?.cancel();
-      _gpsSubscription = locationService.getPositionStream(distanceFilter: 5).listen((liveLoc) async {
+      _gpsSubscription = locationService.getPositionStream(distanceFilter: 0).listen((liveLoc) async {
         if (!mounted) return;
+        final bool isMoved = _userGpsLocation == null ||
+            (_userGpsLocation!.latitude - liveLoc.latitude).abs() > 0.00005 ||
+            (_userGpsLocation!.longitude - liveLoc.longitude).abs() > 0.00005;
+
         setState(() {
           _userGpsLocation = liveLoc;
         });
 
-        // If user is using Current Location as pickup, update it dynamically
-        if (_pickupName == 'Current Location' || (_pickupLatLng.latitude == 0 && _pickupLatLng.longitude == 0)) {
-          setState(() {
-            _pickupLatLng = liveLoc;
-          });
-          final place = await _geocodingService.reverseGeocode(liveLoc);
-          final placeName = _extractPlaceName(place, fallback: 'Current Location');
-          final placeAddress = place?.formattedAddress ?? '';
-          if (mounted) {
+        // If user is currently using Current Location for pickup, dynamically update it when GPS coordinates change!
+        if (_isPickupUsingGps) {
+          if (isMoved || (_pickupLatLng.latitude == 0 && _pickupLatLng.longitude == 0)) {
             setState(() {
-              _pickupName = placeName;
-              _pickupAddress = placeAddress;
-              _pickupController.text = placeName;
+              _pickupLatLng = liveLoc;
             });
-          }
-          if (_destLatLng != null && _destName.isNotEmpty) {
-            await _fetchRoute();
+            final place = await _geocodingService.reverseGeocode(liveLoc);
+            final placeName = _extractPlaceName(place, fallback: 'Current Location');
+            final placeAddress = place?.formattedAddress ?? '';
+            if (mounted && _isPickupUsingGps) {
+              setState(() {
+                _pickupName = placeName;
+                _pickupAddress = placeAddress;
+                _pickupController.text = placeName;
+              });
+            }
+            if (_destLatLng != null && _destName.isNotEmpty) {
+              await _fetchRoute();
+            }
           }
         }
       });
     } catch (_) {
       if (mounted && _destLatLng != null && _destName.isNotEmpty) {
+        await _fetchRoute();
+      }
+    }
+  }
+
+  Future<void> _useCurrentGpsLocation() async {
+    setState(() {
+      _isPickupUsingGps = true;
+      _pickupController.text = 'Locating...';
+      _showAutocomplete = false;
+    });
+    _pickupFocusNode.unfocus();
+
+    final locationService = LocationService();
+    final freshLoc = await locationService.getCurrentLocation() ?? _userGpsLocation;
+    if (freshLoc != null && mounted) {
+      setState(() {
+        _pickupLatLng = freshLoc;
+        _userGpsLocation = freshLoc;
+      });
+      _mapController?.animateCamera(CameraUpdate.newLatLng(freshLoc));
+      final place = await _geocodingService.reverseGeocode(freshLoc);
+      final placeName = _extractPlaceName(place, fallback: 'Current Location');
+      final placeAddress = place?.formattedAddress ?? '';
+      if (mounted && _isPickupUsingGps) {
+        setState(() {
+          _pickupName = placeName;
+          _pickupAddress = placeAddress;
+          _pickupController.text = placeName;
+        });
+      }
+      if (_destLatLng != null && _destName.isNotEmpty) {
         await _fetchRoute();
       }
     }
@@ -244,6 +283,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
 
     if (_activeInputTarget == LocationTarget.pickup) {
       setState(() {
+        _isPickupUsingGps = false;
         _pickupLatLng = position;
         _pickupName = placeName;
         _pickupAddress = placeAddress;
@@ -332,6 +372,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
       _pickupName = _destName;
       _pickupAddress = _destAddress;
       _pickupController.text = _destName;
+      _isPickupUsingGps = false;
 
       _destLatLng = tmpLatLng;
       _destName = tmpName;
@@ -350,6 +391,8 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
       _pickupController.clear();
       _pickupName = '';
       _pickupAddress = '';
+      _pickupLatLng = const LatLng(0, 0);
+      _isPickupUsingGps = false;
       _currentRoute = null;
       _searchResults = [];
       _currentStep = SelectionStep.initialSearch;
@@ -512,6 +555,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
 
     if (_activeInputTarget == LocationTarget.pickup) {
       setState(() {
+        _isPickupUsingGps = false;
         _pickupLatLng = coords;
         _pickupName = resolvedName;
         _pickupAddress = resolvedAddress;
@@ -870,6 +914,7 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
               pickup: _pickupLatLng,
               destination: _destLatLng,
               routePoints: routePoints,
+              myLocationEnabled: true,
             ),
           ),
 
@@ -1130,6 +1175,30 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
               bottom: 0,
               child: _buildDynamicBottomSheet(context),
             ),
+
+          // ── 5. Recenter / My Location Button ───────────────────────────────
+          if (!_showAutocomplete)
+            Positioned(
+              right: 16,
+              bottom: _currentStep == SelectionStep.initialSearch ? 160 : 220,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0F172A).withValues(alpha: 0.15),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.my_location_rounded, color: Color(0xFF009048), size: 22),
+                  onPressed: _useCurrentGpsLocation,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1176,6 +1245,54 @@ class _SelectLocationPageState extends State<SelectLocationPage> with SingleTick
             shrinkWrap: true,
             padding: const EdgeInsets.symmetric(vertical: 8),
             children: [
+              if (isPickup) ...[
+                // Current Location Option
+                InkWell(
+                  onTap: _useCurrentGpsLocation,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF009048).withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.my_location_rounded, size: 18, color: Color(0xFF009048)),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Use current location',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF009048),
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Set pickup from live GPS',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.gps_fixed_rounded, size: 16, color: Color(0xFF009048)),
+                      ],
+                    ),
+                  ),
+                ),
+                Divider(height: 1, color: Colors.grey.shade100),
+              ],
               if (savedPlaces.isNotEmpty) ...[
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),

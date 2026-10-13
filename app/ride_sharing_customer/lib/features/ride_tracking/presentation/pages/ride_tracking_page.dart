@@ -36,6 +36,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
   bool _showThankYou = false;
   bool _isPaying = false;
   bool _hasAutoTriggeredPayment = false;
+  bool _isPaidLocally = false;
 
   late AnimationController _radarController;
   int _unreadChatCount = 0;
@@ -201,7 +202,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
             context.read<WalletBloc>().add(LoadWalletDetails());
             context.read<ProfileBloc>().add(LoadProfile());
             final isCard = state.paymentMethod != 'wallet' && state.paymentMethod != 'cash';
-            if (isCard && state.paymentStatus != 'paid' && !_hasAutoTriggeredPayment) {
+            if (isCard && state.paymentStatus != 'paid' && !_isPaidLocally && !_hasAutoTriggeredPayment) {
               _hasAutoTriggeredPayment = true;
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) _triggerPaymentFlow(state);
@@ -1324,6 +1325,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
   Widget _buildRideCompletedReceiptView(BuildContext context, RideTrackingActive state) {
     final price = state.fare;
     final currencySymbol = state.currencySymbol;
+    final bool isPaid = state.paymentStatus == 'paid' || _isPaidLocally;
 
     double? baseFare;
     double? distanceFare;
@@ -1369,7 +1371,24 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
       body: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 32),
+            // Top Bar with Close / Exit Button
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+                    onPressed: () {
+                      context.read<BookingBloc>().add(ClearBooking());
+                      context.read<WalletBloc>().add(LoadWalletDetails());
+                      context.go('/home');
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             // Checkmark Circle Icon
             Container(
               width: 72,
@@ -1390,7 +1409,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
               'Thank you for riding with Ryva Ride.',
               style: TextStyle(fontSize: 14, color: Colors.white70),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 24),
 
             // White Receipt Card
             Expanded(
@@ -1454,9 +1473,19 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                             Text(
                               state.paymentMethod == 'wallet'
                                   ? 'Ryva Wallet (Debited)'
-                                  : (state.paymentMethod == 'cash' ? 'Cash' : 'Card / Online'),
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+                                  : (state.paymentMethod == 'cash'
+                                      ? 'Cash'
+                                      : (isPaid ? 'Card / Online (Paid)' : 'Card / Online')),
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: isPaid ? const Color(0xFF009048) : const Color(0xFF021B47),
+                              ),
                             ),
+                            if (isPaid) ...[
+                              const SizedBox(width: 4),
+                              const Icon(Icons.check_circle_rounded, color: Color(0xFF009048), size: 16),
+                            ],
                           ],
                         ),
                       ],
@@ -1472,8 +1501,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                         onPressed: _isPaying
                             ? null
                             : () {
-                                final isCard = state.paymentMethod != 'wallet' && state.paymentMethod != 'cash';
-                                if (isCard && state.paymentStatus != 'paid') {
+                                if (!isPaid) {
                                   _triggerPaymentFlow(state);
                                 } else {
                                   _showRateRideDialog(context, state);
@@ -1488,11 +1516,27 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                         child: _isPaying
                             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                             : Text(
-                                (state.paymentMethod != 'wallet' && state.paymentMethod != 'cash' && state.paymentStatus != 'paid') ? 'Pay Now' : 'Done',
+                                isPaid ? 'Done — Rate Driver' : 'Pay Now',
                                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                               ),
                       ),
                     ),
+                    if (isPaid) ...[
+                      const SizedBox(height: 10),
+                      Center(
+                        child: TextButton(
+                          onPressed: () {
+                            context.read<BookingBloc>().add(ClearBooking());
+                            context.read<WalletBloc>().add(LoadWalletDetails());
+                            context.go('/home');
+                          },
+                          child: const Text(
+                            'Return to Home',
+                            style: TextStyle(fontSize: 14, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1531,9 +1575,15 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
       if (payData['isPaid'] == true || payData['status'] == 'paid') {
         if (mounted) {
           CustomToast.show(context, 'Payment successful!');
-          context.read<RideTrackingBloc>().add(const RideCompleted(paymentStatus: 'paid'));
           setState(() {
             _isPaying = false;
+            _isPaidLocally = true;
+          });
+          context.read<RideTrackingBloc>().add(const RideCompleted(paymentStatus: 'paid'));
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              _showRateRideDialog(context, state);
+            }
           });
         }
         return;
@@ -1598,9 +1648,15 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
       // Payment successful!
       if (mounted) {
         CustomToast.show(context, 'Payment successful!');
-        context.read<RideTrackingBloc>().add(const RideCompleted(paymentStatus: 'paid'));
         setState(() {
           _isPaying = false;
+          _isPaidLocally = true;
+        });
+        context.read<RideTrackingBloc>().add(const RideCompleted(paymentStatus: 'paid'));
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _showRateRideDialog(context, state);
+          }
         });
       }
     } catch (e) {
@@ -1609,9 +1665,15 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
       if (errStr.contains('already') || errStr.contains('409')) {
         if (mounted) {
           CustomToast.show(context, 'Payment already completed');
-          context.read<RideTrackingBloc>().add(const RideCompleted(paymentStatus: 'paid'));
           setState(() {
             _isPaying = false;
+            _isPaidLocally = true;
+          });
+          context.read<RideTrackingBloc>().add(const RideCompleted(paymentStatus: 'paid'));
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              _showRateRideDialog(context, state);
+            }
           });
         }
         return;
@@ -1656,9 +1718,9 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
                           onPressed: () {
                             Navigator.pop(dialogContext);
                             if (mounted) {
-                              setState(() {
-                                _showThankYou = true;
-                              });
+                              context.read<BookingBloc>().add(ClearBooking());
+                              context.read<WalletBloc>().add(LoadWalletDetails());
+                              context.go('/home');
                             }
                           },
                         ),

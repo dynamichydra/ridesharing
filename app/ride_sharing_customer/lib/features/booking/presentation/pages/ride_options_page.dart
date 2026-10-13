@@ -12,6 +12,10 @@ import '../bloc/booking_bloc.dart';
 import '../../../ride_tracking/presentation/bloc/ride_tracking_bloc.dart';
 import '../../../wallet/presentation/bloc/wallet_bloc.dart';
 import '../../../profile/presentation/bloc/profile_bloc.dart';
+import '../../../../core/services/stripe_checkout_launcher.dart';
+import '../../../../core/services/razorpay_checkout_launcher.dart';
+import '../../../../core/network/dio_client.dart';
+import '../../../../injection_container.dart';
 
 class RideOptionsPage extends StatefulWidget {
   const RideOptionsPage({super.key});
@@ -30,12 +34,47 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
   PassengerInfo? _passenger;
   String? _rideNotes;
 
+  bool _isCardEligibleForCurrency(Map<dynamic, dynamic> pm, String currency) {
+    if (pm['isActive'] == false || pm['revokedAt'] != null) return false;
+    if (pm['ineligibilityCode'] == 'EXPIRED') return false;
+
+    final gw = (pm['gateway'] ?? '').toString().toLowerCase();
+    final isIndianCurrency = currency.toUpperCase() == 'INR';
+
+    if (isIndianCurrency) {
+      return gw == 'razorpay';
+    } else {
+      // International rides (CAD, USD, EUR, GBP, AUD, etc.) -> Stripe!
+      return gw == 'stripe';
+    }
+  }
+
+  String? _getCardIneligibilityReason(Map<dynamic, dynamic> pm, String currency) {
+    if (pm['ineligibilityCode'] == 'EXPIRED') {
+      return pm['ineligibilityReason']?.toString() ?? 'Card is expired';
+    }
+    final gw = (pm['gateway'] ?? '').toString().toLowerCase();
+    final isIndianCurrency = currency.toUpperCase() == 'INR';
+
+    if (isIndianCurrency) {
+      if (gw != 'razorpay') {
+        return 'Stripe cards are only available for international rides';
+      }
+    } else {
+      if (gw != 'stripe') {
+        return 'Razorpay cards can only be used for INR rides within India';
+      }
+    }
+    return null;
+  }
+
   void _evaluateAndPreselectPaymentMethod(String rideCurrency) {
     final profileState = context.read<ProfileBloc>().state;
     if (profileState is! ProfileLoaded) return;
     final pms = profileState.userProfile['payment_methods'] as List? ?? [];
     if (pms.isEmpty) return;
 
+    // 1. First check if user's default/preferred card is eligible for this ride currency
     Map<dynamic, dynamic>? preferredCard;
     for (final pm in pms) {
       if (pm is Map && (pm['isDefault'] == true || pm['isPreferred'] == true)) {
@@ -43,39 +82,193 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
         break;
       }
     }
-    // Fallback to first available saved card if none marked default
-    if (preferredCard == null && pms.isNotEmpty && pms.first is Map) {
-      preferredCard = pms.first as Map;
+
+    if (preferredCard != null && _isCardEligibleForCurrency(preferredCard, rideCurrency)) {
+      setState(() {
+        _paymentMethod = preferredCard!['id'].toString();
+        _preferredUnavailableNotice = null;
+      });
+      return;
     }
 
-    if (preferredCard != null) {
-      final gw = (preferredCard['gateway'] ?? '').toString().toLowerCase();
-      bool isEligible = preferredCard['isEligible'] != false;
-      String reason = preferredCard['ineligibilityReason']?.toString() ?? '';
-
-      if (gw == 'razorpay' && rideCurrency.toUpperCase() != 'INR') {
-        isEligible = false;
-        reason = 'Razorpay only supports INR';
-      } else if (gw == 'stripe' && rideCurrency.toUpperCase() == 'INR') {
-        isEligible = false;
-        reason = 'Stripe is not supported for INR rides';
-      }
-
-      if (isEligible) {
+    // 2. If default card is not eligible for this currency, auto-preselect ANY saved card that IS eligible!
+    // E.g. When traveling to Canada (CAD), auto-select an available Stripe card!
+    for (final pm in pms) {
+      if (pm is Map && _isCardEligibleForCurrency(pm, rideCurrency)) {
         setState(() {
-          _paymentMethod = preferredCard!['id'].toString();
+          _paymentMethod = pm['id'].toString();
           _preferredUnavailableNotice = null;
         });
-      } else {
+        return;
+      }
+    }
+
+    // 3. No eligible card for this currency -> fall back to Cash
+    setState(() {
+      if (_paymentMethod != 'wallet') {
+        _paymentMethod = 'cash';
+      }
+      if (preferredCard != null) {
         final brand = (preferredCard['cardBrand'] ?? 'Card').toString().toUpperCase();
         final last4 = preferredCard['last4'] ?? '****';
-        setState(() {
-          if (_paymentMethod == preferredCard!['id'].toString()) {
-            _paymentMethod = 'cash';
+        final reason = _getCardIneligibilityReason(preferredCard, rideCurrency);
+        _preferredUnavailableNotice =
+            'Your preferred card ($brand •••• $last4) is not available for this $rideCurrency ride. $reason';
+      }
+    });
+  }
+
+  Future<void> _tokenizeCardOnBookingPage({
+    required String gateway,
+    required String currency,
+    required VoidCallback closeSheet,
+  }) async {
+    closeSheet();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF009048)),
+      ),
+    );
+
+    try {
+      final dioClient = sl<DioClient>();
+      final isIndian = currency.toUpperCase() == 'INR';
+      final selectedGateway = gateway.isNotEmpty ? gateway : (isIndian ? 'razorpay' : 'stripe');
+
+      double? lat;
+      double? lng;
+      String? cId;
+      final bookingState = context.read<BookingBloc>().state;
+      if (bookingState is BookingVehicleOptionsLoaded) {
+        lat = bookingState.pickup.latitude;
+        lng = bookingState.pickup.longitude;
+        cId = bookingState.countryId;
+      }
+
+      final res = await dioClient.dio.post(
+        '/api/v1/payment-methods/setup',
+        data: {
+          'gatewayName': selectedGateway,
+          'currencyCode': currency.toUpperCase(),
+          'countryCode': isIndian ? 'IN' : 'CA',
+          if (lat != null) 'pickupLat': lat,
+          if (lng != null) 'pickupLng': lng,
+          if (cId != null && cId.isNotEmpty) 'countryId': cId,
+        },
+      );
+
+      if (mounted) Navigator.pop(context); // Close loading dialog
+
+      if (res.data['SUCCESS'] == true) {
+        final data = res.data['MESSAGE'];
+        final resolvedGw = (data['gateway'] ?? selectedGateway).toString().toLowerCase();
+
+        if (resolvedGw == 'stripe') {
+          final launcher = StripeCheckoutLauncher();
+          final clientSecret = data['clientSecret']?.toString() ?? '';
+          final publishableKey = data['publishableKey']?.toString() ?? '';
+
+          if (clientSecret.isEmpty || publishableKey.isEmpty) {
+            throw Exception('Stripe setup credentials missing');
           }
-          _preferredUnavailableNotice =
-              'Your preferred card ($brand •••• $last4) is not available for this $rideCurrency ride. $reason';
-        });
+
+          final result = await launcher.setupPaymentSheet(
+            setupIntentClientSecret: clientSecret,
+            publishableKey: publishableKey,
+          );
+
+          if (result.success) {
+            final setupIntentId = data['setupIntentId']?.toString() ??
+                clientSecret.split('_secret_').first;
+
+            final attachRes = await dioClient.dio.post(
+              '/api/v1/payment-methods/attach',
+              data: {
+                'gateway': 'stripe',
+                'setupIntentId': setupIntentId,
+                'gatewayCustomerId': data['gatewayCustomerId'],
+                'isDefault': true,
+                'merchantAccountId': data['merchantAccountId'],
+              },
+            );
+
+            if (attachRes.data['SUCCESS'] == true) {
+              final newMethod = attachRes.data['MESSAGE'];
+              final newId = newMethod?['id']?.toString();
+              if (mounted) {
+                CustomToast.show(context, 'Stripe card added and selected for this ride');
+                context.read<ProfileBloc>().add(LoadProfile());
+                if (newId != null && newId.isNotEmpty) {
+                  setState(() {
+                    _paymentMethod = newId;
+                    _preferredUnavailableNotice = null;
+                  });
+                }
+              }
+            } else {
+              if (mounted) {
+                CustomToast.show(context, attachRes.data['MESSAGE']?.toString() ?? 'Failed to attach card');
+              }
+            }
+          } else if (result.isCancelled) {
+            if (mounted) CustomToast.show(context, 'Card setup cancelled');
+          } else {
+            if (mounted) {
+              CustomToast.show(context, result.errorMessage ?? 'Payment setup failed');
+            }
+          }
+        } else if (resolvedGw == 'razorpay') {
+          final launcher = RazorpayCheckoutLauncher();
+          final result = await launcher.setupCard(
+            keyId: data['keyId'],
+            customerId: data['gatewayCustomerId'],
+            gatewayOrderId: data['gatewayOrderId'],
+            currencyCode: 'INR',
+          );
+
+          if (result.success) {
+            final attachRes = await dioClient.dio.post(
+              '/api/v1/payment-methods/attach',
+              data: {
+                'gateway': 'razorpay',
+                'gatewayCustomerId': data['gatewayCustomerId'],
+                'paymentMethodToken': result.paymentId,
+                'last4': '1111',
+                'cardBrand': 'Card',
+                'expiryMonth': '10',
+                'expiryYear': '2027',
+                'isDefault': true,
+                'merchantAccountId': data['merchantAccountId'],
+              },
+            );
+
+            if (attachRes.data['SUCCESS'] == true) {
+              final newMethod = attachRes.data['MESSAGE'];
+              final newId = newMethod?['id']?.toString();
+              if (mounted) {
+                CustomToast.show(context, 'Card added and selected for this ride');
+                context.read<ProfileBloc>().add(LoadProfile());
+                if (newId != null && newId.isNotEmpty) {
+                  setState(() {
+                    _paymentMethod = newId;
+                    _preferredUnavailableNotice = null;
+                  });
+                }
+              }
+            }
+          } else {
+            if (mounted) CustomToast.show(context, 'Payment setup cancelled: ${result.errorMessage}');
+          }
+        }
+      } else {
+        if (mounted) CustomToast.show(context, 'Failed to setup card: ${res.data['MESSAGE']}');
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).maybePop();
+        CustomToast.show(context, 'Error adding card: $e');
       }
     }
   }
@@ -262,17 +455,8 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                             for (final pm in paymentMethods) ...[
                               Builder(
                                 builder: (_) {
-                                  final gw = (pm['gateway'] ?? '').toString().toLowerCase();
-                                  bool isEligible = pm['isEligible'] != false;
-                                  String? reason = pm['ineligibilityReason']?.toString();
-
-                                  if (gw == 'razorpay' && rideCurrency.toUpperCase() != 'INR') {
-                                    isEligible = false;
-                                    reason = 'Razorpay only supports INR';
-                                  } else if (gw == 'stripe' && rideCurrency.toUpperCase() == 'INR') {
-                                    isEligible = false;
-                                    reason = 'Stripe is not available for INR rides';
-                                  }
+                                  final isEligible = _isCardEligibleForCurrency(pm, rideCurrency);
+                                  final reason = _getCardIneligibilityReason(pm, rideCurrency);
 
                                   return _buildCardSheetOption(
                                     ctx: ctx,
@@ -292,49 +476,165 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                                       Navigator.pop(ctx);
                                     },
                                     onDelete: () async {
-                                  final id = pm['id']?.toString() ?? '';
-                                  if (id.isEmpty) return;
-                                  Navigator.pop(ctx);
-                                  final confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (d) => AlertDialog(
-                                      shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(16)),
-                                      title: const Text('Remove Card'),
-                                      content: const Text(
-                                          'Remove this saved payment method?'),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(d, false),
-                                          child: const Text('Cancel'),
+                                      final id = pm['id']?.toString() ?? '';
+                                      if (id.isEmpty) return;
+                                      Navigator.pop(ctx);
+                                      final confirm = await showDialog<bool>(
+                                        context: context,
+                                        builder: (d) => AlertDialog(
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(16)),
+                                          title: const Text('Remove Card'),
+                                          content: const Text(
+                                              'Remove this saved payment method?'),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(d, false),
+                                              child: const Text('Cancel'),
+                                            ),
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(d, true),
+                                              child: const Text('Remove',
+                                                  style: TextStyle(
+                                                      color: Colors.red)),
+                                            ),
+                                          ],
                                         ),
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(d, true),
-                                          child: const Text('Remove',
-                                              style: TextStyle(
-                                                  color: Colors.red)),
-                                        ),
-                                      ],
-                                    ),
+                                      );
+                                      if (confirm == true && mounted) {
+                                        if (_paymentMethod == id) {
+                                          setState(() => _paymentMethod = 'cash');
+                                        }
+                                        context
+                                            .read<ProfileBloc>()
+                                            .add(LoadProfile());
+                                      }
+                                    },
                                   );
-                                  if (confirm == true && mounted) {
-                                    if (_paymentMethod == id) {
-                                      setState(() => _paymentMethod = 'cash');
-                                    }
-                                    context
-                                        .read<ProfileBloc>()
-                                        .add(LoadProfile());
-                                  }
                                 },
-                              );
-                            },
+                              ),
+                            ],
+                          ],
+                          const Padding(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
+                            child: Divider(height: 1),
                           ),
-                        ],
-                          const Divider(height: 1),
-                          // Add / Manage
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 6),
+                            child: Text(
+                              rideCurrency.toUpperCase() == 'INR'
+                                  ? 'ADD DOMESTIC CARD'
+                                  : 'ADD INTERNATIONAL CARD',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF94A3B8),
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ),
+                          // Gateway-specific Add Card action
+                          if (rideCurrency.toUpperCase() == 'INR')
+                            ListTile(
+                              leading: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF009048).withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.credit_card_rounded,
+                                  color: Color(0xFF009048),
+                                  size: 22,
+                                ),
+                              ),
+                              title: const Text(
+                                'Add Card with Razorpay',
+                                style: TextStyle(
+                                  color: Color(0xFF021B47),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              subtitle: const Text(
+                                'Indian debit/credit card (INR)',
+                                style: TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 12,
+                                ),
+                              ),
+                              trailing: const Icon(
+                                Icons.chevron_right_rounded,
+                                color: Color(0xFF94A3B8),
+                              ),
+                              onTap: () {
+                                _tokenizeCardOnBookingPage(
+                                  gateway: 'razorpay',
+                                  currency: rideCurrency,
+                                  closeSheet: () => Navigator.pop(ctx),
+                                );
+                              },
+                            )
+                          else
+                            ListTile(
+                              leading: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.credit_card_rounded,
+                                  color: Color(0xFF6366F1),
+                                  size: 22,
+                                ),
+                              ),
+                              title: Text(
+                                'Add Card with Stripe (${rideCurrency.toUpperCase()})',
+                                style: const TextStyle(
+                                  color: Color(0xFF021B47),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              subtitle: const Text(
+                                'International Visa, Mastercard, Amex',
+                                style: TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 12,
+                                ),
+                              ),
+                              trailing: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'Stripe',
+                                  style: TextStyle(
+                                    color: Color(0xFF6366F1),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                              onTap: () {
+                                _tokenizeCardOnBookingPage(
+                                  gateway: 'stripe',
+                                  currency: rideCurrency,
+                                  closeSheet: () => Navigator.pop(ctx),
+                                );
+                              },
+                            ),
+                          // Manage Saved Cards
                           ListTile(
                             leading: Container(
                               width: 40,
@@ -344,28 +644,31 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(
-                                Icons.add_rounded,
+                                Icons.settings_outlined,
                                 color: Color(0xFF0065B3),
-                                size: 22,
+                                size: 20,
                               ),
                             ),
                             title: const Text(
-                              'Add / Manage Cards',
+                              'Manage Saved Cards',
                               style: TextStyle(
                                 color: Color(0xFF0065B3),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
                               ),
                             ),
-                            onTap: () {
+                            onTap: () async {
                               Navigator.pop(ctx);
-                              context.push('/payment-methods');
+                              await context.push('/payment-methods');
+                              if (mounted) {
+                                context.read<ProfileBloc>().add(LoadProfile());
+                                _evaluateAndPreselectPaymentMethod(rideCurrency);
+                              }
                             },
                           ),
                           const SizedBox(height: 16),
                         ],
-                      ],
-                    ),
+                      ),
                     ),
                   ],
                 );

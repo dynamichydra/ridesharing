@@ -135,6 +135,16 @@ class RideTrackingSocketDataSource {
       }
     });
 
+    // ── Ride payment completed ───────────────────────────────────────────
+    socket.on('ride:payment_completed', (data) {
+      AppLogger.d('[RideTrackingSocket] event: ride:payment_completed -> $data');
+      if (data is Map) {
+        final map = Map<String, dynamic>.from(data);
+        map['paymentStatus'] = 'paid';
+        _rideCompletedController.add(map);
+      }
+    });
+
     // ── Ride cancelled by rider ─────────────────────────────────────────
     socket.on('ride:cancelled', (data) {
       AppLogger.d('[RideTrackingSocket] event: ride:cancelled -> $data');

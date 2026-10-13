@@ -7,6 +7,7 @@ import '../../../../core/services/stripe_checkout_launcher.dart';
 import '../../../../core/services/razorpay_checkout_launcher.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../injection_container.dart';
+import '../../../location/services/location_service.dart';
 import '../bloc/profile_bloc.dart';
 
 class PaymentMethodsPage extends StatefulWidget {
@@ -20,64 +21,316 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
   String _selectedMethodId = 'cash';
   bool _isLoading = false;
 
-  Future<void> _addPaymentMethod() async {
+  void _showAddPaymentMethodSheet() {
+    final profileState = context.read<ProfileBloc>().state;
+    String country = '';
+    String phone = '';
+    if (profileState is ProfileLoaded) {
+      country = (profileState.userProfile['countryCode'] ??
+              profileState.userProfile['country'] ??
+              '')
+          .toString()
+          .toLowerCase();
+      phone = (profileState.userProfile['phone'] ?? '').toString();
+    }
+
+    final bool isLikelyDomestic = country == 'in' || country == 'india' || phone.startsWith('+91');
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFCBD5E1),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const Text(
+                  'Add Payment Card',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0A2540),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Select the region where you plan to use this card. Cards travel with your account.',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                ),
+                const SizedBox(height: 20),
+
+                // International Card (Stripe)
+                InkWell(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _startCardSetup(gateway: 'stripe');
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: !isLikelyDomestic ? const Color(0xFF009048) : const Color(0xFFE2E8F0),
+                        width: !isLikelyDomestic ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF009048).withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.public_rounded, color: Color(0xFF009048), size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text(
+                                    'International Card',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0A2540),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF635BFF).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'STRIPE',
+                                      style: TextStyle(
+                                        color: Color(0xFF635BFF),
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'For Canada, US, Europe, UK & international travels. Supports Visa, Mastercard, Amex.',
+                                style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Domestic India Card (Razorpay)
+                InkWell(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _startCardSetup(gateway: 'razorpay');
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isLikelyDomestic ? const Color(0xFF009048) : const Color(0xFFE2E8F0),
+                        width: isLikelyDomestic ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0284C7).withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.credit_card_rounded, color: Color(0xFF0284C7), size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text(
+                                    'India Domestic Card',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0A2540),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0284C7).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'RAZORPAY',
+                                      style: TextStyle(
+                                        color: Color(0xFF0284C7),
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'For rides within India. Supports domestic cards & tokenization (INR).',
+                                style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _startCardSetup({required String gateway}) async {
+    final profileState = context.read<ProfileBloc>().state;
     setState(() => _isLoading = true);
     try {
       final dioClient = sl<DioClient>();
+      final loc = await LocationService().getCurrentLocation();
 
-      // Determine currency based on the user's profile country code
-      String currencyCode = 'USD'; // default
-      final profileState = context.read<ProfileBloc>().state;
-      if (profileState is ProfileLoaded) {
-        final country = profileState.userProfile['countryCode']?.toString() ??
-            profileState.userProfile['country']?.toString() ??
-            '';
-        final phone = profileState.userProfile['phone']?.toString() ?? '';
-
-        if (country.toLowerCase() == 'in' ||
-            country.toLowerCase() == 'india' ||
-            phone.startsWith('+91')) {
-          currencyCode = 'INR';
-        } else if (country.toLowerCase() == 'ca' ||
-            country.toLowerCase() == 'canada' ||
-            phone.startsWith('+1')) {
-          currencyCode = 'CAD';
+      String currencyCode = gateway == 'stripe' ? 'CAD' : 'INR';
+      String countryCode = gateway == 'stripe' ? 'CA' : 'IN';
+      if (profileState is ProfileLoaded && gateway == 'stripe') {
+        final country = (profileState.userProfile['countryCode'] ??
+                profileState.userProfile['country'] ??
+                '')
+            .toString()
+            .toLowerCase();
+        if (country == 'us' || country == 'united states') {
+          currencyCode = 'USD';
+          countryCode = 'US';
+        } else if (country == 'gb' || country == 'uk' || country == 'united kingdom') {
+          currencyCode = 'GBP';
+          countryCode = 'GB';
         }
+      }
+
+      final Map<String, dynamic> payload = {
+        'gatewayName': gateway,
+        'currencyCode': currencyCode,
+        'countryCode': countryCode,
+      };
+      if (loc != null) {
+        payload['pickupLat'] = loc.latitude;
+        payload['pickupLng'] = loc.longitude;
       }
 
       final res = await dioClient.dio.post(
         '/api/v1/payment-methods/setup',
-        data: {'currencyCode': currencyCode},
+        data: payload,
       );
+
       if (res.data['SUCCESS'] == true) {
         final data = res.data['MESSAGE'];
-        if (data['gateway'] == 'stripe') {
+        final resolvedGateway = (data['gateway'] ?? gateway).toString().toLowerCase();
+
+        if (resolvedGateway == 'stripe') {
           final launcher = StripeCheckoutLauncher();
-          final success = await launcher.setupPaymentSheet(
-            setupIntentClientSecret: data['clientSecret'],
-            publishableKey: data['publishableKey'],
+          final clientSecret = data['clientSecret']?.toString() ?? '';
+          final publishableKey = data['publishableKey']?.toString() ?? '';
+
+          if (clientSecret.isEmpty || publishableKey.isEmpty) {
+            throw Exception('Stripe setup credentials missing from server response');
+          }
+
+          final result = await launcher.setupPaymentSheet(
+            setupIntentClientSecret: clientSecret,
+            publishableKey: publishableKey,
           );
 
-          if (success) {
-            await dioClient.dio.post('/api/v1/payment-methods/attach', data: {
-              'gateway': 'stripe',
-              'gatewayCustomerId': data['gatewayCustomerId'],
-              'paymentMethodToken': 'setup_intent_success',
-              'last4': '4242',
-              'cardBrand': 'Visa',
-              'expiryMonth': '12',
-              'expiryYear': '2028',
-              'isDefault': true,
-              'merchantAccountId': data['merchantAccountId'],
-            });
-            if (mounted) {
-              CustomToast.show(context, 'Payment method added successfully');
-              context.read<ProfileBloc>().add(LoadProfile());
+          if (result.success) {
+            final setupIntentId = data['setupIntentId']?.toString() ??
+                clientSecret.split('_secret_').first;
+
+            final attachRes = await dioClient.dio.post(
+              '/api/v1/payment-methods/attach',
+              data: {
+                'gateway': 'stripe',
+                'setupIntentId': setupIntentId,
+                'gatewayCustomerId': data['gatewayCustomerId'],
+                'isDefault': true,
+                'merchantAccountId': data['merchantAccountId'],
+              },
+            );
+
+            if (attachRes.data['SUCCESS'] == true) {
+              if (mounted) {
+                CustomToast.show(context, 'International card added successfully');
+                context.read<ProfileBloc>().add(LoadProfile());
+              }
+            } else {
+              if (mounted) {
+                CustomToast.show(
+                  context,
+                  attachRes.data['MESSAGE']?.toString() ?? 'Failed to attach card to account',
+                );
+              }
             }
+          } else if (result.isCancelled) {
+            if (mounted) CustomToast.show(context, 'Card setup cancelled');
           } else {
-            if (mounted) CustomToast.show(context, 'Payment setup cancelled or failed');
+            if (mounted) {
+              CustomToast.show(
+                context,
+                result.errorMessage ?? 'Payment setup failed',
+              );
+            }
           }
-        } else if (data['gateway'] == 'razorpay') {
+        } else if (resolvedGateway == 'razorpay') {
           final launcher = RazorpayCheckoutLauncher();
           final result = await launcher.setupCard(
             keyId: data['keyId'],
@@ -87,20 +340,33 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
           );
 
           if (result.success) {
-            await dioClient.dio.post('/api/v1/payment-methods/attach', data: {
-              'gateway': 'razorpay',
-              'gatewayCustomerId': data['gatewayCustomerId'],
-              'paymentMethodToken': result.paymentId,
-              'last4': '1111',
-              'cardBrand': 'Mastercard',
-              'expiryMonth': '10',
-              'expiryYear': '2027',
-              'isDefault': true,
-              'merchantAccountId': data['merchantAccountId'],
-            });
-            if (mounted) {
-              CustomToast.show(context, 'Payment method added successfully');
-              context.read<ProfileBloc>().add(LoadProfile());
+            final attachRes = await dioClient.dio.post(
+              '/api/v1/payment-methods/attach',
+              data: {
+                'gateway': 'razorpay',
+                'gatewayCustomerId': data['gatewayCustomerId'],
+                'paymentMethodToken': result.paymentId,
+                'last4': '1111',
+                'cardBrand': 'Card',
+                'expiryMonth': '10',
+                'expiryYear': '2027',
+                'isDefault': true,
+                'merchantAccountId': data['merchantAccountId'],
+              },
+            );
+
+            if (attachRes.data['SUCCESS'] == true) {
+              if (mounted) {
+                CustomToast.show(context, 'India payment card added successfully');
+                context.read<ProfileBloc>().add(LoadProfile());
+              }
+            } else {
+              if (mounted) {
+                CustomToast.show(
+                  context,
+                  attachRes.data['MESSAGE']?.toString() ?? 'Failed to attach card to account',
+                );
+              }
             }
           } else {
             if (mounted) {
@@ -109,7 +375,7 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
           }
         } else {
           if (mounted) {
-            CustomToast.show(context, 'Gateway ${data['gateway']} setup is not yet supported natively.');
+            CustomToast.show(context, 'Gateway ${data['gateway']} is not yet supported.');
           }
         }
       } else {
@@ -118,7 +384,7 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
         }
       }
     } catch (e) {
-      if (mounted) CustomToast.show(context, 'Failed to initialize setup: $e');
+      if (mounted) CustomToast.show(context, 'Failed to initialize card setup: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -304,7 +570,7 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
                   width: double.infinity,
                   height: 52,
                   child: OutlinedButton.icon(
-                    onPressed: _addPaymentMethod,
+                    onPressed: _showAddPaymentMethodSheet,
                     icon: const Icon(
                       Icons.add_circle_outline_rounded,
                       color: Color(0xFF009048),

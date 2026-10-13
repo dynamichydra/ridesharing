@@ -86,31 +86,36 @@ class LocationService {
       try {
         final Position position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
-          timeLimit: const Duration(seconds: 10),
+          timeLimit: const Duration(seconds: 8),
+          forceAndroidLocationManager: defaultTargetPlatform == TargetPlatform.android,
         );
         return LatLng(position.latitude, position.longitude);
       } catch (_) {
-        final Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.medium,
-          timeLimit: const Duration(seconds: 5),
-        );
-        return LatLng(position.latitude, position.longitude);
+        try {
+          final Position position = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.medium,
+            timeLimit: const Duration(seconds: 5),
+            forceAndroidLocationManager: defaultTargetPlatform == TargetPlatform.android,
+          );
+          return LatLng(position.latitude, position.longitude);
+        } catch (_) {}
       }
-    } catch (e) {
-      try {
-        final Position? lastKnown = await Geolocator.getLastKnownPosition();
-        if (lastKnown != null) {
-          return LatLng(lastKnown.latitude, lastKnown.longitude);
-        }
-      } catch (_) {}
-      return null;
-    }
+    } catch (_) {}
+
+    // Only if live getCurrentPosition fails completely, fallback to lastKnown as last resort
+    try {
+      final Position? lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null) {
+        return LatLng(lastKnown.latitude, lastKnown.longitude);
+      }
+    } catch (_) {}
+    return null;
   }
 
   /// Listens to continuous, real-time location updates from device GPS.
   Stream<LatLng> getPositionStream({
     LocationAccuracy accuracy = LocationAccuracy.high,
-    int distanceFilter = 5,
+    int distanceFilter = 0,
   }) {
     late LocationSettings locationSettings;
 
@@ -118,8 +123,8 @@ class LocationService {
       locationSettings = AndroidSettings(
         accuracy: accuracy,
         distanceFilter: distanceFilter,
-        forceLocationManager: false,
-        intervalDuration: const Duration(seconds: 3),
+        forceLocationManager: true,
+        intervalDuration: const Duration(seconds: 2),
       );
     } else if (defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS) {
@@ -127,7 +132,7 @@ class LocationService {
         accuracy: accuracy,
         activityType: ActivityType.fitness,
         distanceFilter: distanceFilter,
-        pauseLocationUpdatesAutomatically: true,
+        pauseLocationUpdatesAutomatically: false,
       );
     } else {
       locationSettings = LocationSettings(
