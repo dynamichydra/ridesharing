@@ -38,7 +38,7 @@ export async function getRiderMe(riderId) {
   }
 
   // Preferences
-  const [prefs] = await db.select().from(riderPreferences).where(eq(riderPreferences.riderId, riderId)).limit(1);
+  const [prefs] = await db.select().from(riderPreferences).where(eq(riderPreferences.userId, riderId)).limit(1);
 
   // Active Rider Subscription
   const [activeSub] = await db.select({
@@ -51,9 +51,8 @@ export async function getRiderMe(riderId) {
     currencyCode: riderSubscriptions.currencyCode,
     planName: riderSubscriptionPlans.name,
     planType: riderSubscriptionPlans.type,
-    discountPercentage: riderSubscriptionPlans.discountPercentage,
-    maxDiscountMinor: riderSubscriptionPlans.maxDiscountMinor,
-    freeRidesPerMonth: riderSubscriptionPlans.freeRidesPerMonth,
+    priceMinor: riderSubscriptionPlans.priceMinor,
+    features: riderSubscriptionPlans.features,
   }).from(riderSubscriptions)
     .innerJoin(riderSubscriptionPlans, eq(riderSubscriptions.planId, riderSubscriptionPlans.id))
     .where(
@@ -76,18 +75,24 @@ export async function getRiderMe(riderId) {
     .where(and(eq(paymentMethods.userId, riderId), eq(paymentMethods.isActive, true)))
     .orderBy(paymentMethods.createdAt);
 
-  const defaultRegion = await resolvePaymentRegion({
-    countryId: user.countryId,
-    currencyCode: user.currencyCode,
-  });
-
   const annotatedMethods = userPaymentMethods.map((m) => {
-    const eligibility = evaluatePaymentMethodEligibility(m, defaultRegion);
+    let isExpired = false;
+    if (m.expiryMonth && m.expiryYear) {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+      let expYear = parseInt(m.expiryYear, 10);
+      if (expYear < 100) expYear += 2000;
+      const expMonth = parseInt(m.expiryMonth, 10);
+      if (expYear < currentYear || (expYear === currentYear && expMonth < currentMonth)) {
+        isExpired = true;
+      }
+    }
     return {
       ...m,
-      isEligible: eligibility.isEligible,
-      ineligibilityCode: eligibility.ineligibilityCode,
-      ineligibilityReason: eligibility.ineligibilityReason,
+      isEligible: !isExpired,
+      ineligibilityCode: isExpired ? 'EXPIRED' : null,
+      ineligibilityReason: isExpired ? `Card expired in ${m.expiryMonth}/${m.expiryYear}.` : null,
       isPreferred: !!m.isDefault,
     };
   });

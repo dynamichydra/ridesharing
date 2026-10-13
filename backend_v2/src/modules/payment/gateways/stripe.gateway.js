@@ -174,6 +174,7 @@ export const stripeGateway = {
     });
     return {
       gateway: 'stripe',
+      setupIntentId: setupIntent.id,
       clientSecret: setupIntent.client_secret,
       publishableKey: env.STRIPE_PUBLISHABLE_KEY,
       gatewayCustomerId: customer.id,

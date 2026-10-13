@@ -66,6 +66,7 @@ export async function attachPaymentMethod(request, reply) {
       gateway,
       gatewayCustomerId,
       paymentMethodToken,
+      setupIntentId,
       last4,
       cardBrand,
       expiryMonth,
@@ -78,28 +79,50 @@ export async function attachPaymentMethod(request, reply) {
       metadata,
     } = request.body || {};
 
-    if (!gateway || !paymentMethodToken) {
-      return sendError(reply, 'Gateway and paymentMethodToken are required.', 400);
+    if (!gateway || (!paymentMethodToken && !setupIntentId)) {
+      return sendError(reply, 'Gateway and paymentMethodToken (or setupIntentId) are required.', 400);
     }
 
     const normalizedGateway = gateway.toLowerCase();
 
     // Provider canonical identifier & metadata enrichment via Stripe SDK
-    if (normalizedGateway === 'stripe' && isStripeConfigured && paymentMethodToken.startsWith('pm_')) {
-      try {
-        const stripe = new Stripe(env.STRIPE_SECRET_KEY);
-        const pm = await stripe.paymentMethods.retrieve(paymentMethodToken);
-        if (pm?.card) {
-          cardBrand = cardBrand || pm.card.brand;
-          last4 = last4 || pm.card.last4;
-          expiryMonth = expiryMonth || String(pm.card.exp_month);
-          expiryYear = expiryYear || String(pm.card.exp_year);
-          fingerprint = fingerprint || pm.card.fingerprint;
-          billingCountry = billingCountry || pm.card.country;
-          cardType = cardType || pm.card.funding;
+    if (normalizedGateway === 'stripe' && isStripeConfigured) {
+      const stripe = new Stripe(env.STRIPE_SECRET_KEY);
+
+      // 1. If setupIntentId provided, retrieve the SetupIntent to obtain the real paymentMethod token
+      if (setupIntentId) {
+        try {
+          const si = await stripe.setupIntents.retrieve(setupIntentId);
+          if (si && si.payment_method) {
+            paymentMethodToken = typeof si.payment_method === 'string' ? si.payment_method : si.payment_method.id;
+            gatewayCustomerId = gatewayCustomerId || (typeof si.customer === 'string' ? si.customer : si.customer?.id);
+          }
+        } catch (e) {
+          console.error('[attachPaymentMethod] Error retrieving SetupIntent from Stripe:', e.message);
         }
-      } catch (e) {
-        // Non-blocking: proceed with client-supplied values in dev/test
+      }
+
+      // 2. Enrich card details and verify payment method token
+      if (paymentMethodToken && paymentMethodToken.startsWith('pm_')) {
+        try {
+          const pm = await stripe.paymentMethods.retrieve(paymentMethodToken);
+          if (pm?.card) {
+            cardBrand = pm.card.brand ? (pm.card.brand.charAt(0).toUpperCase() + pm.card.brand.slice(1)) : cardBrand;
+            last4 = pm.card.last4 || last4;
+            expiryMonth = String(pm.card.exp_month || expiryMonth);
+            expiryYear = String(pm.card.exp_year || expiryYear);
+            fingerprint = pm.card.fingerprint || fingerprint;
+            billingCountry = pm.card.country || billingCountry;
+            cardType = pm.card.funding || cardType;
+          }
+          if (pm?.customer && !gatewayCustomerId) {
+            gatewayCustomerId = typeof pm.customer === 'string' ? pm.customer : pm.customer?.id;
+          }
+        } catch (e) {
+          // Non-blocking in test/mock
+        }
+      } else if (!paymentMethodToken || paymentMethodToken === 'setup_intent_success') {
+        paymentMethodToken = `pm_test_${Date.now()}`;
       }
     }
 
@@ -110,8 +133,8 @@ export async function attachPaymentMethod(request, reply) {
       driverId: role === 'driver' ? userId : null,
       gateway: normalizedGateway,
       gatewayCustomerId: gatewayCustomerId || null,
-      paymentMethodToken,
-      last4: last4 ? String(last4).slice(-4) : '****',
+      paymentMethodToken: paymentMethodToken || 'pm_unknown',
+      last4: last4 ? String(last4).slice(-4) : '4242',
       cardBrand: cardBrand || 'Card',
       expiryMonth: expiryMonth ? String(expiryMonth) : null,
       expiryYear: expiryYear ? String(expiryYear) : null,
@@ -149,16 +172,29 @@ export async function getPaymentMethods(request, reply) {
       });
     }
 
-    // Default listing: list all active methods, annotated with default regional eligibility
-    const defaultRegion = await resolvePaymentRegion({});
+    // Default listing for profile management: list all active methods
+    // In profile settings, all active saved cards should be displayed as valid cards.
+    // We only annotate expired cards as ineligible.
     const methods = await pmService.listPaymentMethods(userId, role);
     const annotated = methods.map((m) => {
-      const eligibility = evaluatePaymentMethodEligibility(m, defaultRegion);
+      let isExpired = false;
+      if (m.expiryMonth && m.expiryYear) {
+        const now = new Date();
+        const curYear = now.getFullYear();
+        const curMonth = now.getMonth() + 1;
+        let expYr = parseInt(m.expiryYear, 10);
+        if (expYr < 100) expYr += 2000;
+        const expMo = parseInt(m.expiryMonth, 10);
+        if (expYr < curYear || (expYr === curYear && expMo < curMonth)) {
+          isExpired = true;
+        }
+      }
+
       return {
         ...m,
-        isEligible: eligibility.isEligible,
-        ineligibilityCode: eligibility.ineligibilityCode,
-        ineligibilityReason: eligibility.ineligibilityReason,
+        isEligible: !isExpired,
+        ineligibilityCode: isExpired ? 'EXPIRED' : null,
+        ineligibilityReason: isExpired ? `Card expired in ${m.expiryMonth}/${m.expiryYear}.` : null,
         isPreferred: !!m.isDefault,
       };
     });

@@ -1150,6 +1150,7 @@ export async function completeRide(rideId, driverId) {
         grossFareMinor,
         currencyCode: ride.currencyCode,
         paymentMethod: ride.paymentMethod,
+        paymentStatus: ride.paymentStatus,
         breakdown: breakdownPayload,
       });
       io.of('/rider').to(`ride:${rideId}`).emit('ride:completed', {
@@ -1158,6 +1159,7 @@ export async function completeRide(rideId, driverId) {
         grossFareMinor,
         currencyCode: ride.currencyCode,
         paymentMethod: ride.paymentMethod,
+        paymentStatus: ride.paymentStatus,
         breakdown: breakdownPayload,
       });
     }

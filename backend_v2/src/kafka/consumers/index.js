@@ -120,7 +120,7 @@ async function startNotificationConsumer() {
           eventType: payload.eventType || payload.type || null,
           channel, title: title || null, body,
           data: payload.rideId ? { rideId: payload.rideId } : null,
-        }).catch(() => {}); // never crash the consumer over a history-write failure
+        }).catch(() => { }); // never crash the consumer over a history-write failure
       }
     },
   });

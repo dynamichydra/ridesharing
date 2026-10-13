@@ -633,16 +633,16 @@ export async function confirmProfilePhoto(driverId, key) {
 // kept for backward compatibility with any client still calling it.
 export async function submitDocuments(driverId, docs) {
   const [updated] = await db.update(drivers).set({
-    licenseNumber:  docs.licenseNumber,
-    licenseDoc:     docs.licenseDoc,
-    aadharNumber:   docs.aadharNumber,
-    aadharDoc:      docs.aadharDoc,
-    vehicleTypeId:  docs.vehicleTypeId,
-    vehicleNumber:  docs.vehicleNumber,
-    vehicleModel:   docs.vehicleModel,
-    vehiclePhoto:   docs.vehiclePhoto,
+    licenseNumber: docs.licenseNumber,
+    licenseDoc: docs.licenseDoc,
+    aadharNumber: docs.aadharNumber,
+    aadharDoc: docs.aadharDoc,
+    vehicleTypeId: docs.vehicleTypeId,
+    vehicleNumber: docs.vehicleNumber,
+    vehicleModel: docs.vehicleModel,
+    vehiclePhoto: docs.vehiclePhoto,
     approvalStatus: 'pending',
-    updatedAt:      new Date(),
+    updatedAt: new Date(),
   }).where(eq(drivers.id, driverId)).returning();
 
   await publishEvent(TOPICS.AUDIT_LOG, {
@@ -706,11 +706,11 @@ export async function submitApplication(driverId) {
 export async function goOnline(driverId, lat, lng) {
   const [driver] = await db.select({
     approvalStatus: drivers.approvalStatus,
-    isBlocked:      drivers.isBlocked,
+    isBlocked: drivers.isBlocked,
   }).from(drivers).where(eq(drivers.id, driverId)).limit(1);
 
-  if (!driver)                              throw { statusCode: 404, message: 'Driver not found' };
-  if (driver.isBlocked)                     throw { statusCode: 403, message: 'Account is blocked' };
+  if (!driver) throw { statusCode: 404, message: 'Driver not found' };
+  if (driver.isBlocked) throw { statusCode: 403, message: 'Account is blocked' };
   if (driver.approvalStatus !== 'approved') throw { statusCode: 403, message: 'Account not approved yet' };
 
   // Service area boundary check: driver cannot go online outside operational service area
@@ -869,7 +869,7 @@ export async function getDriverDetail(driverId) {
       .orderBy(desc(driverBankAccounts.createdAt))
       .limit(1);
     bankAccount = ba || null;
-  } catch {}
+  } catch { }
 
   // Get recent trips for this driver
   let recentRides = [];
@@ -907,7 +907,7 @@ export async function getDriverDetail(driverId) {
         completedAt: compDate ? compDate.toISOString() : null,
       };
     });
-  } catch {}
+  } catch { }
 
   // Performance totals
   let completedTrips = 0;
@@ -926,7 +926,7 @@ export async function getDriverDetail(driverId) {
     completedTrips = Number(completedRidesResult?.total || 0);
     cancelledTrips = Number(cancelledRidesResult?.total || 0);
     lifetimeEarningsMinor = Number(earningsResult?.totalEarningsMinor || 0);
-  } catch {}
+  } catch { }
 
   const totalRidesCount = Number(driver.totalRides || 0);
   const totalHandled = completedTrips + cancelledTrips;
@@ -1182,7 +1182,7 @@ export async function getDriverCommissionStatus(driverId) {
       countryId: driver.countryId,
       cityId: driver.cityId,
     });
-  } catch {}
+  } catch { }
 
   const standardRate = parseFloat(rule?.nonSubscriberRate || '0.20');
   const subscriberRuleRate = parseFloat(rule?.subscriberRate || '0.05');
