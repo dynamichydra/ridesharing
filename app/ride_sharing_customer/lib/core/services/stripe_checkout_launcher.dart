@@ -78,4 +78,23 @@ class StripeCheckoutLauncher {
       );
     }
   }
+
+  /// Finishes a saved-card charge the backend confirmed off-session but the bank wants
+  /// authenticated (3DS) — the PaymentIntent already carries the saved card, so this only
+  /// runs the authentication step. Returns true once the intent has succeeded.
+  Future<bool> handleNextAction({
+    required String clientSecret,
+    required String publishableKey,
+  }) async {
+    try {
+      Stripe.publishableKey = publishableKey;
+      await Stripe.instance.applySettings();
+      final intent = await Stripe.instance.handleNextAction(clientSecret);
+      return intent.status == PaymentIntentsStatus.Succeeded ||
+          intent.status == PaymentIntentsStatus.RequiresCapture;
+    } on StripeException catch (e) {
+      developer.log('[StripeCheckoutLauncher] StripeException during next action: ${e.error.localizedMessage}');
+      return false;
+    }
+  }
 }

@@ -1,6 +1,7 @@
 import 'package:get_it/get_it.dart';
 import 'core/storage/secure_storage.dart';
 import 'core/network/api_client.dart';
+import 'core/payments/saved_payment_methods_service.dart';
 import 'services/device_id_service.dart';
 import 'services/location_service.dart';
 import 'features/auth/data/datasources/auth_remote_datasource.dart';
@@ -44,6 +45,9 @@ Future<void> init() async {
   // ── Core ──────────────────────────────────────────────────────────────────
   sl.registerLazySingleton<SecureStorage>(() => SecureStorage());
   sl.registerLazySingleton<ApiClient>(() => ApiClient(secureStorage: sl()));
+  sl.registerLazySingleton<SavedPaymentMethodsService>(
+    () => SavedPaymentMethodsService(dio: sl<ApiClient>().dio),
+  );
 
   // ── Services ──────────────────────────────────────────────────────────────
   sl.registerLazySingleton<DeviceIdService>(() => DeviceIdService(secureStorage: sl()));

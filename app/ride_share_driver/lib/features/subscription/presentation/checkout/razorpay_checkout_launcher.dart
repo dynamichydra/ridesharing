@@ -32,12 +32,15 @@ class RazorpayCheckoutResult {
 /// Wraps `razorpay_flutter`'s callback-based checkout in a `Future`, so the
 /// caller can `await` it the same way it awaits the Stripe checkout.
 class RazorpayCheckoutLauncher {
+  /// [customerId] opens Checkout for a saved Razorpay customer so their tokenized cards are
+  /// listed (paying with a saved card — RBI rules still require the CVV/OTP step).
   Future<RazorpayCheckoutResult> checkout({
     required String keyId,
     required String gatewayOrderId,
     required int amountMinor,
     required String currencyCode,
     required String description,
+    String? customerId,
   }) {
     final completer = Completer<RazorpayCheckoutResult>();
     final razorpay = Razorpay();
@@ -70,6 +73,67 @@ class RazorpayCheckoutLauncher {
       'currency': currencyCode,
       'name': 'Ride Share Driver',
       'description': description,
+      if (customerId != null && customerId.isNotEmpty) 'customer_id': customerId,
+    });
+
+    return completer.future;
+  }
+
+  /// Tokenizes a card via the ₹1 setup order from `POST /payment-methods/setup`.
+  /// `customer_id` + `save: 1` is what makes Razorpay store a token for the card; the backend
+  /// reads the token from Razorpay and refunds the ₹1 on `/payment-methods/attach`.
+  Future<RazorpayCheckoutResult> setupCard({
+    required String keyId,
+    required String customerId,
+    required String gatewayOrderId,
+    int amountMinor = 100,
+    String currencyCode = 'INR',
+    Map<String, dynamic>? prefill,
+  }) {
+    final completer = Completer<RazorpayCheckoutResult>();
+    final razorpay = Razorpay();
+
+    void finish(RazorpayCheckoutResult result) {
+      if (!completer.isCompleted) completer.complete(result);
+      razorpay.clear();
+    }
+
+    razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse r) {
+      if (r.paymentId == null) {
+        finish(RazorpayCheckoutResult.failure('Card setup succeeded but the response was incomplete.'));
+        return;
+      }
+      finish(RazorpayCheckoutResult.success(
+        paymentId: r.paymentId!,
+        orderId: r.orderId ?? gatewayOrderId,
+        signature: r.signature ?? '',
+      ));
+    });
+
+    razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse r) {
+      finish(RazorpayCheckoutResult.failure(r.message ?? 'Card setup failed.'));
+    });
+
+    razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, (ExternalWalletResponse r) {
+      finish(RazorpayCheckoutResult.failure('External wallets cannot be saved as a card.'));
+    });
+
+    razorpay.open({
+      'key': keyId,
+      'order_id': gatewayOrderId,
+      'customer_id': customerId,
+      'save': 1,
+      'amount': amountMinor,
+      'currency': currencyCode,
+      'name': 'Ride Share Driver',
+      'description': 'Card verification (₹1, refunded)',
+      'method': {'card': true, 'netbanking': false, 'upi': false, 'wallet': false},
+      if (prefill != null)
+        'prefill': {
+          if (prefill['name'] != null) 'name': prefill['name'],
+          if (prefill['email'] != null) 'email': prefill['email'],
+          if (prefill['phone'] != null) 'contact': prefill['phone'],
+        },
     });
 
     return completer.future;

@@ -10,6 +10,7 @@ import '../../domain/entities/active_subscription.dart';
 import '../bloc/subscription_bloc.dart';
 import '../checkout/razorpay_checkout_launcher.dart';
 import '../checkout/stripe_checkout_launcher.dart';
+import '../../../../core/payments/saved_payment_method_picker.dart';
 
 class SubscriptionPlansScreen extends StatefulWidget {
   final String countryId;
@@ -33,7 +34,10 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
   ActiveSubscription? _activeSubscription;
   String? _loadError;
   bool _isProcessing = false;
-  String _selectedPaymentMethodId = 'wallet'; // Default to wallet or standard gateway
+  // A saved card id, or kPayWithOtherMethod for the gateway's own checkout page.
+  String _selectedPaymentMethodId = kPayWithOtherMethod;
+  String _selectedPaymentMethodLabel = SavedPaymentChoice.other.label;
+  bool _selectionInitialised = false;
 
 
   @override
@@ -50,6 +54,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
         amountMinor: state.data.amountMinor,
         currencyCode: state.data.currencyCode,
         description: state.data.planName,
+        customerId: state.data.customerId,
       );
       if (!mounted) return;
       if (result.success) {
@@ -65,10 +70,16 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
         _bloc.add(PurchaseCancelled());
       }
     } else if (state is StripeCheckoutReady) {
-      final success = await StripeCheckoutLauncher().checkout(
-        clientSecret: state.data.clientSecret,
-        publishableKey: state.data.publishableKey,
-      );
+      final launcher = StripeCheckoutLauncher();
+      final success = state.data.requiresAction
+          ? await launcher.handleNextAction(
+              clientSecret: state.data.clientSecret,
+              publishableKey: state.data.publishableKey,
+            )
+          : await launcher.checkout(
+              clientSecret: state.data.clientSecret,
+              publishableKey: state.data.publishableKey,
+            );
       if (!mounted) return;
       if (success) {
         _bloc.add(VerifyPurchaseRequested(
@@ -90,12 +101,26 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
     final sym = _formatCurrencySymbol(plan.currencyCode);
     final formattedPrice = _formatPrice(plan.priceMajor);
     final isTrial = plan.trialDays > 0;
+    StateSetter? setSheetState;
+
+    if (!_selectionInitialised) {
+      _selectionInitialised = true;
+      SavedPaymentMethodPicker.defaultSelection(currencyCode: plan.currencyCode, countryId: widget.countryId)
+          .then((sel) {
+        if (!mounted || _selectedPaymentMethodId != kPayWithOtherMethod) return;
+        _selectedPaymentMethodId = sel.id;
+        _selectedPaymentMethodLabel = sel.label;
+        setSheetState?.call(() {});
+      });
+    }
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => Container(
+      builder: (sheetCtx) => StatefulBuilder(builder: (sheetCtx, setSheet) {
+        setSheetState = setSheet;
+        return Container(
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
         decoration: const BoxDecoration(
           color: Colors.white,
@@ -308,113 +333,53 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
 
               const SizedBox(height: 24),
 
-              // Payment Method Selector
-              if (_activeSubscription == null || true) ...[
-                const SizedBox(height: 12),
-                const Text('Payment Method', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-                const SizedBox(height: 8),
-                InkWell(
-                  onTap: () {
-                    showModalBottomSheet(
-                      context: sheetCtx,
-                      backgroundColor: Colors.white,
-                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-                      builder: (ctx) {
-                        List<Map<String, dynamic>> pms = [];
-                        final authState = context.read<AuthBloc>().state;
-                        if (authState is Authenticated) {
-                          pms = authState.driver.paymentMethods;
-                        }
-                        
-                        return SafeArea(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Padding(
-                                padding: EdgeInsets.all(16.0),
-                                child: Text('Select Payment Method', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                              ),
-                              const Divider(height: 1),
-                              ListTile(
-                                leading: const Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF009048)),
-                                title: const Text('Ryva Wallet / Default Gateway', style: TextStyle(fontWeight: FontWeight.bold)),
-                                trailing: _selectedPaymentMethodId == 'wallet' ? const Icon(Icons.check_circle_rounded, color: Color(0xFF009048)) : null,
-                                onTap: () {
-                                  setState(() => _selectedPaymentMethodId = 'wallet');
-                                  Navigator.pop(ctx);
-                                },
-                              ),
-                              if (pms.isNotEmpty) const Divider(height: 1),
-                              for (final pm in pms)
-                                ListTile(
-                                  leading: const Icon(Icons.credit_card_rounded, color: Color(0xFF009048)),
-                                  title: Text('•••• ${pm['last4'] ?? '****'}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: Text(pm['brand']?.toString().toUpperCase() ?? 'CARD', style: const TextStyle(fontSize: 12)),
-                                  trailing: _selectedPaymentMethodId == pm['id'] ? const Icon(Icons.check_circle_rounded, color: Color(0xFF009048)) : null,
-                                  onTap: () {
-                                    setState(() => _selectedPaymentMethodId = pm['id']?.toString() ?? 'wallet');
-                                    Navigator.pop(ctx);
-                                  },
-                                ),
-                              const Divider(height: 1),
-                              ListTile(
-                                leading: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF0065B3)),
-                                title: const Text('Add / Manage Cards', style: TextStyle(color: Color(0xFF0065B3), fontWeight: FontWeight.bold)),
-                                onTap: () {
-                                  Navigator.pop(ctx);
-                                  // In real app, push to payment methods page here.
-                                  // For now, it might be in Profile -> Payment Methods.
-                                },
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _selectedPaymentMethodId == 'wallet' ? Icons.account_balance_wallet_rounded : Icons.credit_card_rounded,
-                          color: const Color(0xFF009048),
-                          size: 20,
+              // Payment Method Selector — saved cards (tokenized) or the gateway's checkout page
+              const SizedBox(height: 12),
+              const Text('Payment Method', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () async {
+                  final picked = await SavedPaymentMethodPicker.show(
+                    sheetCtx,
+                    title: 'Pay for ${plan.name}',
+                    selectedId: _selectedPaymentMethodId,
+                    currencyCode: plan.currencyCode,
+                    countryId: widget.countryId,
+                  );
+                  if (picked == null) return;
+                  _selectedPaymentMethodId = picked.id;
+                  _selectedPaymentMethodLabel = picked.label;
+                  setSheet(() {});
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _selectedPaymentMethodId == kPayWithOtherMethod
+                            ? Icons.account_balance_rounded
+                            : Icons.credit_card_rounded,
+                        color: const Color(0xFF009048),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _selectedPaymentMethodLabel,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Builder(
-                            builder: (context) {
-                              if (_selectedPaymentMethodId == 'wallet') {
-                                return const Text('Ryva Wallet / Default Gateway', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600));
-                              }
-                              
-                              String cardText = 'Saved Card';
-                              final authState = context.read<AuthBloc>().state;
-                              if (authState is Authenticated) {
-                                for (final pm in authState.driver.paymentMethods) {
-                                  if (pm['id'] == _selectedPaymentMethodId) {
-                                    cardText = '${pm['brand']?.toString().toUpperCase() ?? 'CARD'} •••• ${pm['last4'] ?? '****'}';
-                                    break;
-                                  }
-                                }
-                              }
-                              return Text(cardText, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600));
-                            },
-                          ),
-                        ),
-                        const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B)),
-                      ],
-                    ),
+                      ),
+                      const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B)),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 24),
-              ],
+              ),
+              const SizedBox(height: 24),
 
               // Action button (Matches Card Color)
               SizedBox(
@@ -431,7 +396,8 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                     Navigator.pop(sheetCtx);
                     _bloc.add(PurchasePlanRequested(
                       planId: plan.id,
-                      paymentMethodId: _selectedPaymentMethodId == 'wallet' ? null : _selectedPaymentMethodId,
+                      paymentMethodId:
+                          _selectedPaymentMethodId == kPayWithOtherMethod ? null : _selectedPaymentMethodId,
                     ));
                   },
                   child: Row(
@@ -467,7 +433,8 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
             ],
           ),
         ),
-      ),
+      );
+      }),
     );
   }
 

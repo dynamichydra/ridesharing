@@ -19,8 +19,7 @@ import '../../../chat/domain/entities/ride_chat_message.dart';
 import '../../../../injection_container.dart';
 import '../../../../core/network/dio_client.dart';
 import 'package:dio/dio.dart' show Options;
-import '../../../../core/services/stripe_checkout_launcher.dart';
-import '../../../../core/services/razorpay_checkout_launcher.dart';
+import '../../../../core/payments/saved_payment_methods_service.dart';
 
 class RideTrackingPage extends StatefulWidget {
   const RideTrackingPage({super.key});
@@ -1593,45 +1592,26 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
       String? orderRef = payData['gatewayOrderId']?.toString();
       String? signature = 'dev_signature';
 
-      // 2. Launch UI
-      if (gateway == 'stripe') {
-        final launcher = StripeCheckoutLauncher();
-        final paid = await launcher.checkout(
-          clientSecret: payData['clientSecret']?.toString() ?? '',
-          publishableKey: payData['publishableKey']?.toString() ?? '',
-        );
-        if (!paid) {
+      // 2. Finish on device — a fresh checkout, or a saved card needing 3DS (Stripe) /
+      // CVV-OTP confirmation against the saved customer (Razorpay).
+      if (gateway == 'stripe' || gateway == 'razorpay') {
+        try {
+          final done = await sl<SavedPaymentMethodsService>().completeGatewayStep(
+            Map<String, dynamic>.from(payData),
+            description: 'Ryva Ride Payment',
+            fallbackCurrency: state.currencyCode.isNotEmpty ? state.currencyCode : 'INR',
+          );
+          orderRef = done.orderRef;
+          paymentRef = done.paymentRef;
+          if (done.signature != null && done.signature!.isNotEmpty) signature = done.signature;
+        } on PaymentFlowException catch (e) {
           if (mounted) {
-            CustomToast.show(context, 'Payment cancelled');
+            CustomToast.show(context, e.cancelled ? 'Payment cancelled' : e.message);
             setState(() {
               _isPaying = false;
             });
           }
           return;
-        }
-        paymentRef = payData['paymentIntentId']?.toString() ?? 'stripe_paid';
-      } else if (gateway == 'razorpay') {
-        final launcher = RazorpayCheckoutLauncher();
-        final amountMinor = (payData['amountMinor'] as num?)?.toInt() ?? ((state.fare) * 100).round();
-        final result = await launcher.checkout(
-          keyId: payData['keyId']?.toString() ?? '',
-          gatewayOrderId: orderRef ?? '',
-          amountMinor: amountMinor,
-          currencyCode: state.currencyCode.isNotEmpty ? state.currencyCode : 'INR',
-          description: 'Ryva Ride Payment',
-        );
-        if (!result.success) {
-          if (mounted) {
-            CustomToast.show(context, 'Payment cancelled: ${result.errorMessage}');
-            setState(() {
-              _isPaying = false;
-            });
-          }
-          return;
-        }
-        paymentRef = result.paymentId;
-        if (result.signature != null && result.signature!.isNotEmpty) {
-          signature = result.signature;
         }
       } else {
         paymentRef = 'dev_paid';

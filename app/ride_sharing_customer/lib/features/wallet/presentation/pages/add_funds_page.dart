@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/services/storage_service.dart';
 import '../../../../core/services/razorpay_checkout_launcher.dart';
 import '../../../../core/services/stripe_checkout_launcher.dart';
+import '../../../../core/payments/saved_payment_methods_service.dart';
 import '../../../../injection_container.dart' as di;
 import '../bloc/wallet_bloc.dart';
 import '../../../../core/widgets/custom_toast.dart';
@@ -19,7 +20,10 @@ class AddFundsPage extends StatefulWidget {
 class _AddFundsPageState extends State<AddFundsPage> {
   late final TextEditingController _amountController;
   late double _selectedAmount;
+  // 'gateway' (fresh checkout) or a saved card id.
   String _selectedMethodType = 'gateway';
+  List<SavedPaymentMethod> _savedCards = [];
+  bool _addingCard = false;
   String _countryCode = 'IN'; // Resolved from wallet API or cached profile
 
   /// Maps ISO 4217 currency code → display symbol.
@@ -68,6 +72,42 @@ class _AddFundsPageState extends State<AddFundsPage> {
     _amountController = TextEditingController(text: '200');
     _selectedAmount = 200.0;
     _resolveUserCountry();
+    _loadSavedCards();
+  }
+
+  // Only cards usable for this wallet's currency/region are offered; the preferred one is
+  // preselected.
+  Future<void> _loadSavedCards({String? selectId}) async {
+    try {
+      final cards = await di.sl<SavedPaymentMethodsService>().list(currencyCode: _currencyCode);
+      if (!mounted) return;
+      final usable = cards.where((c) => c.isEligible).toList();
+      setState(() {
+        _savedCards = usable;
+        if (selectId != null && usable.any((c) => c.id == selectId)) {
+          _selectedMethodType = selectId;
+        } else if (_selectedMethodType == 'gateway' || !usable.any((c) => c.id == _selectedMethodType)) {
+          final preferred = usable.where((c) => c.isDefault).firstOrNull ?? usable.firstOrNull;
+          _selectedMethodType = preferred?.id ?? 'gateway';
+        }
+      });
+    } catch (_) {
+      // Saved cards are optional here — the gateway checkout still works without them.
+    }
+  }
+
+  Future<void> _addCard() async {
+    setState(() => _addingCard = true);
+    try {
+      final saved = await di.sl<SavedPaymentMethodsService>().addCard(currencyCode: _currencyCode);
+      if (!mounted) return;
+      CustomToast.show(context, '${saved.title} saved');
+      await _loadSavedCards(selectId: saved.id);
+    } on PaymentFlowException catch (e) {
+      if (mounted) CustomToast.show(context, e.cancelled ? 'Card setup cancelled' : e.message);
+    } finally {
+      if (mounted) setState(() => _addingCard = false);
+    }
   }
 
   void _resolveUserCountry() {
@@ -128,7 +168,19 @@ class _AddFundsPageState extends State<AddFundsPage> {
   }
 
 
-  List<Map<String, dynamic>> get _paymentMethods {
+  List<Map<String, dynamic>> get _paymentMethods => [
+        for (final card in _savedCards)
+          {
+            'id': card.id,
+            'title': card.title,
+            'subtitle': card.subtitle,
+            'iconData': Icons.credit_card_rounded,
+            'badge': card.isDefault ? 'PREFERRED' : 'SAVED',
+          },
+        ..._gatewayMethods,
+      ];
+
+  List<Map<String, dynamic>> get _gatewayMethods {
     switch (_countryCode) {
       case 'CA':
       case 'US':
@@ -169,6 +221,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
       amountMinor: state.amountMinor,
       currencyCode: state.currencyCode,
       description: state.description,
+      customerId: state.customerId,
     );
 
     if (!mounted) return;
@@ -186,10 +239,10 @@ class _AddFundsPageState extends State<AddFundsPage> {
   }
 
   Future<void> _launchStripe(StripeTopupReady state) async {
-    final success = await StripeCheckoutLauncher().checkout(
-      clientSecret: state.clientSecret,
-      publishableKey: state.publishableKey,
-    );
+    final launcher = StripeCheckoutLauncher();
+    final success = state.requiresAction
+        ? await launcher.handleNextAction(clientSecret: state.clientSecret, publishableKey: state.publishableKey)
+        : await launcher.checkout(clientSecret: state.clientSecret, publishableKey: state.publishableKey);
 
     if (!mounted) return;
 
@@ -221,7 +274,10 @@ class _AddFundsPageState extends State<AddFundsPage> {
     }
 
     context.read<WalletBloc>().add(
-          InitiateWalletTopup(amount: amount),
+          InitiateWalletTopup(
+            amount: amount,
+            paymentMethodId: _selectedMethodType == 'gateway' ? null : _selectedMethodType,
+          ),
         );
   }
 
@@ -264,6 +320,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
             _applyCountryFromCurrency(resolvedCode);
             if (_countryCode != prevCountry) {
               setState(() {}); // Rebuild with correct currency/presets/gateway
+              _loadSavedCards();
             }
           }
         },
@@ -509,14 +566,27 @@ class _AddFundsPageState extends State<AddFundsPage> {
                                 ),
                               ),
                             ),
-                            if (pm != _paymentMethods.last)
+                            if (pm['id'] != _paymentMethods.last['id'])
                               const Divider(height: 1, color: Color(0xFFF1F5F9)),
                           ],
                         );
                       }).toList(),
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: (isLoading || _addingCard) ? null : _addCard,
+                      icon: _addingCard
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.add_card_rounded, size: 18, color: Color(0xFF0065B3)),
+                      label: const Text(
+                        'Save a new card',
+                        style: TextStyle(color: Color(0xFF0065B3), fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
 
                   // Add Money Securely Button
                   SizedBox(

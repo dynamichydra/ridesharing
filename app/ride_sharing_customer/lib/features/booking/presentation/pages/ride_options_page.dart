@@ -12,9 +12,7 @@ import '../bloc/booking_bloc.dart';
 import '../../../ride_tracking/presentation/bloc/ride_tracking_bloc.dart';
 import '../../../wallet/presentation/bloc/wallet_bloc.dart';
 import '../../../profile/presentation/bloc/profile_bloc.dart';
-import '../../../../core/services/stripe_checkout_launcher.dart';
-import '../../../../core/services/razorpay_checkout_launcher.dart';
-import '../../../../core/network/dio_client.dart';
+import '../../../../core/payments/saved_payment_methods_service.dart';
 import '../../../../injection_container.dart';
 
 class RideOptionsPage extends StatefulWidget {
@@ -124,152 +122,38 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
     required VoidCallback closeSheet,
   }) async {
     closeSheet();
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(
-        child: CircularProgressIndicator(color: Color(0xFF009048)),
-      ),
-    );
+    String? countryId;
+    final bookingState = context.read<BookingBloc>().state;
+    if (bookingState is BookingVehicleOptionsLoaded) countryId = bookingState.countryId;
 
     try {
-      final dioClient = sl<DioClient>();
-      final isIndian = currency.toUpperCase() == 'INR';
-      final selectedGateway = gateway.isNotEmpty ? gateway : (isIndian ? 'razorpay' : 'stripe');
-
-      double? lat;
-      double? lng;
-      String? cId;
-      final bookingState = context.read<BookingBloc>().state;
-      if (bookingState is BookingVehicleOptionsLoaded) {
-        lat = bookingState.pickup.latitude;
-        lng = bookingState.pickup.longitude;
-        cId = bookingState.countryId;
-      }
-
-      final res = await dioClient.dio.post(
-        '/api/v1/payment-methods/setup',
-        data: {
-          'gatewayName': selectedGateway,
-          'currencyCode': currency.toUpperCase(),
-          'countryCode': isIndian ? 'IN' : 'CA',
-          if (lat != null) 'pickupLat': lat,
-          if (lng != null) 'pickupLng': lng,
-          if (cId != null && cId.isNotEmpty) 'countryId': cId,
-        },
+      final saved = await sl<SavedPaymentMethodsService>().addCard(
+        gateway: gateway.isNotEmpty ? gateway : null,
+        currencyCode: currency.toUpperCase(),
+        countryId: countryId,
+        makeDefault: true,
       );
+      if (!mounted) return;
+      CustomToast.show(context, '${saved.title} added and selected for this ride');
+      context.read<ProfileBloc>().add(LoadProfile());
+      setState(() {
+        _paymentMethod = saved.id;
+        _preferredUnavailableNotice = null;
+      });
+    } on PaymentFlowException catch (e) {
+      if (mounted) CustomToast.show(context, e.cancelled ? 'Card setup cancelled' : e.message);
+    }
+  }
 
-      if (mounted) Navigator.pop(context); // Close loading dialog
-
-      if (res.data['SUCCESS'] == true) {
-        final data = res.data['MESSAGE'];
-        final resolvedGw = (data['gateway'] ?? selectedGateway).toString().toLowerCase();
-
-        if (resolvedGw == 'stripe') {
-          final launcher = StripeCheckoutLauncher();
-          final clientSecret = data['clientSecret']?.toString() ?? '';
-          final publishableKey = data['publishableKey']?.toString() ?? '';
-
-          if (clientSecret.isEmpty || publishableKey.isEmpty) {
-            throw Exception('Stripe setup credentials missing');
-          }
-
-          final result = await launcher.setupPaymentSheet(
-            setupIntentClientSecret: clientSecret,
-            publishableKey: publishableKey,
-          );
-
-          if (result.success) {
-            final setupIntentId = data['setupIntentId']?.toString() ??
-                clientSecret.split('_secret_').first;
-
-            final attachRes = await dioClient.dio.post(
-              '/api/v1/payment-methods/attach',
-              data: {
-                'gateway': 'stripe',
-                'setupIntentId': setupIntentId,
-                'gatewayCustomerId': data['gatewayCustomerId'],
-                'isDefault': true,
-                'merchantAccountId': data['merchantAccountId'],
-              },
-            );
-
-            if (attachRes.data['SUCCESS'] == true) {
-              final newMethod = attachRes.data['MESSAGE'];
-              final newId = newMethod?['id']?.toString();
-              if (mounted) {
-                CustomToast.show(context, 'Stripe card added and selected for this ride');
-                context.read<ProfileBloc>().add(LoadProfile());
-                if (newId != null && newId.isNotEmpty) {
-                  setState(() {
-                    _paymentMethod = newId;
-                    _preferredUnavailableNotice = null;
-                  });
-                }
-              }
-            } else {
-              if (mounted) {
-                CustomToast.show(context, attachRes.data['MESSAGE']?.toString() ?? 'Failed to attach card');
-              }
-            }
-          } else if (result.isCancelled) {
-            if (mounted) CustomToast.show(context, 'Card setup cancelled');
-          } else {
-            if (mounted) {
-              CustomToast.show(context, result.errorMessage ?? 'Payment setup failed');
-            }
-          }
-        } else if (resolvedGw == 'razorpay') {
-          final launcher = RazorpayCheckoutLauncher();
-          final result = await launcher.setupCard(
-            keyId: data['keyId'],
-            customerId: data['gatewayCustomerId'],
-            gatewayOrderId: data['gatewayOrderId'],
-            currencyCode: 'INR',
-          );
-
-          if (result.success) {
-            final attachRes = await dioClient.dio.post(
-              '/api/v1/payment-methods/attach',
-              data: {
-                'gateway': 'razorpay',
-                'gatewayCustomerId': data['gatewayCustomerId'],
-                'paymentMethodToken': result.paymentId,
-                'last4': '1111',
-                'cardBrand': 'Card',
-                'expiryMonth': '10',
-                'expiryYear': '2027',
-                'isDefault': true,
-                'merchantAccountId': data['merchantAccountId'],
-              },
-            );
-
-            if (attachRes.data['SUCCESS'] == true) {
-              final newMethod = attachRes.data['MESSAGE'];
-              final newId = newMethod?['id']?.toString();
-              if (mounted) {
-                CustomToast.show(context, 'Card added and selected for this ride');
-                context.read<ProfileBloc>().add(LoadProfile());
-                if (newId != null && newId.isNotEmpty) {
-                  setState(() {
-                    _paymentMethod = newId;
-                    _preferredUnavailableNotice = null;
-                  });
-                }
-              }
-            }
-          } else {
-            if (mounted) CustomToast.show(context, 'Payment setup cancelled: ${result.errorMessage}');
-          }
-        }
-      } else {
-        if (mounted) CustomToast.show(context, 'Failed to setup card: ${res.data['MESSAGE']}');
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).maybePop();
-        CustomToast.show(context, 'Error adding card: $e');
-      }
+  Future<void> _removeSavedCard(String id) async {
+    try {
+      await sl<SavedPaymentMethodsService>().remove(id);
+      if (!mounted) return;
+      CustomToast.show(context, 'Payment method removed');
+      if (_paymentMethod == id) setState(() => _paymentMethod = 'cash');
+      context.read<ProfileBloc>().add(LoadProfile());
+    } on PaymentFlowException catch (e) {
+      if (mounted) CustomToast.show(context, e.message);
     }
   }
 
@@ -505,12 +389,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                                         ),
                                       );
                                       if (confirm == true && mounted) {
-                                        if (_paymentMethod == id) {
-                                          setState(() => _paymentMethod = 'cash');
-                                        }
-                                        context
-                                            .read<ProfileBloc>()
-                                            .add(LoadProfile());
+                                        await _removeSavedCard(id);
                                       }
                                     },
                                   );

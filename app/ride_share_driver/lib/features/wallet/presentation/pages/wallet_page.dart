@@ -7,6 +7,7 @@ import '../../../../common/widgets/custom_toast.dart';
 import '../../../../style/appcolors.dart';
 import '../../../../injection_container.dart' as di;
 import '../bloc/wallet_bloc.dart';
+import '../widgets/wallet_payment_sheet.dart';
 import '../../../../presentation/screens/dashboard/driver_main_layout.dart';
 
 import 'dart:async';
@@ -55,6 +56,16 @@ class _WalletPageState extends State<WalletPage> {
     if (isToday) return 'Today, $timeStr';
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return '${dt.day} ${months[dt.month - 1]}, $timeStr';
+  }
+
+  Future<void> _openWalletPayment(WalletPaymentMode mode, String currencyCode, int duesMinor) async {
+    final paid = await WalletPaymentSheet.show(
+      context,
+      mode: mode,
+      currencyCode: currencyCode,
+      duesMinor: duesMinor,
+    );
+    if (paid == true && mounted) _bloc.add(LoadWalletData());
   }
 
   void _showInstantPayoutDialog(BuildContext context, double balance, BankDetails? bankDetails, [String currencyCode = '']) {
@@ -627,8 +638,10 @@ class _WalletPageState extends State<WalletPage> {
             BankDetails? bankDetails;
             List<WalletTransactionItem> txs = [];
             String currencyCode = '';
+            int balanceMinor = 0;
 
             if (state is WalletLoaded) {
+              balanceMinor = state.walletInfo?.balanceMinor ?? 0;
               balance = state.walletInfo?.balanceAmount ?? 0.0;
               isNegative = state.walletInfo?.isNegative ?? false;
               bankDetails = state.bankDetails;
@@ -725,7 +738,7 @@ class _WalletPageState extends State<WalletPage> {
                               if (isNegative) ...[
                                 const SizedBox(height: 4),
                                 const Text(
-                                  'Settle via cash rides or ride earnings',
+                                  'Pay now with a saved card, or settle via ride earnings',
                                   style: TextStyle(fontSize: 11, color: Colors.white70),
                                 ),
                               ],
@@ -744,6 +757,42 @@ class _WalletPageState extends State<WalletPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
+
+                    // 1.1 Pay dues (negative balance) / Add money — saved cards or gateway checkout
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: isNegative
+                          ? ElevatedButton.icon(
+                              onPressed: state is WalletLoaded
+                                  ? () => _openWalletPayment(WalletPaymentMode.dues, currencyCode, -balanceMinor)
+                                  : null,
+                              icon: const Icon(Icons.payments_rounded, size: 20),
+                              label: Text(
+                                'Pay Dues $currencySymbol${balance.abs().toStringAsFixed(2)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFC62828),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                elevation: 0,
+                              ),
+                            )
+                          : OutlinedButton.icon(
+                              onPressed: state is WalletLoaded
+                                  ? () => _openWalletPayment(WalletPaymentMode.topup, currencyCode, 0)
+                                  : null,
+                              icon: const Icon(Icons.add_card_rounded, size: 20),
+                              label: const Text('Add Money', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF009048),
+                                side: const BorderSide(color: Color(0xFF009048), width: 1.2),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                    ),
+                    const SizedBox(height: 10),
 
                     // 2. Action Buttons: Cash Out & Payout History
                     Row(

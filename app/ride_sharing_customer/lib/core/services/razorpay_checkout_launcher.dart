@@ -35,12 +35,15 @@ class RazorpayCheckoutResult {
 }
 
 class RazorpayCheckoutLauncher {
+  /// [customerId] opens Checkout for a saved Razorpay customer so their tokenized cards are
+  /// listed (paying with a saved card — RBI rules still require the CVV/OTP step).
   Future<RazorpayCheckoutResult> checkout({
     required String keyId,
     required String gatewayOrderId,
     required int amountMinor,
     required String currencyCode,
     required String description,
+    String? customerId,
   }) {
     final completer = Completer<RazorpayCheckoutResult>();
     final razorpay = Razorpay();
@@ -77,16 +80,22 @@ class RazorpayCheckoutLauncher {
       'currency': currencyCode,
       'name': 'Ryva Ride',
       'description': description,
+      if (customerId != null && customerId.isNotEmpty) 'customer_id': customerId,
     });
 
     return completer.future;
   }
 
+  /// Tokenizes a card via the ₹1 setup order from `POST /payment-methods/setup`.
+  /// `customer_id` + `save: 1` is what makes Razorpay store a token for the card; the backend
+  /// reads the real token/card details from Razorpay and refunds the ₹1 on `/attach`.
   Future<RazorpayCheckoutResult> setupCard({
     required String keyId,
     required String customerId,
     required String gatewayOrderId,
-    required String currencyCode,
+    int amountMinor = 100,
+    String currencyCode = 'INR',
+    Map<String, dynamic>? prefill,
   }) {
     final completer = Completer<RazorpayCheckoutResult>();
     final razorpay = Razorpay();
@@ -113,17 +122,25 @@ class RazorpayCheckoutLauncher {
     });
 
     razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, (ExternalWalletResponse r) {
-      finish(RazorpayCheckoutResult.failure('External wallets are not supported for setup.'));
+      finish(RazorpayCheckoutResult.failure('External wallets cannot be saved as a card.'));
     });
 
     razorpay.open({
       'key': keyId,
-      'order_id': gatewayOrderId, // Required for zero-auth or 1 INR verification in Razorpay
+      'order_id': gatewayOrderId,
       'customer_id': customerId,
-      'amount': 100, // 1 INR (refunded automatically)
+      'save': 1,
+      'amount': amountMinor,
       'currency': currencyCode,
       'name': 'Ryva Ride',
-      'description': 'Card Verification (Auto Refunded)',
+      'description': 'Card verification (₹1, refunded)',
+      'method': {'card': true, 'netbanking': false, 'upi': false, 'wallet': false},
+      if (prefill != null)
+        'prefill': {
+          if (prefill['name'] != null) 'name': prefill['name'],
+          if (prefill['email'] != null) 'email': prefill['email'],
+          if (prefill['phone'] != null) 'contact': prefill['phone'],
+        },
     });
 
     return completer.future;

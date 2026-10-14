@@ -17,6 +17,7 @@ import '../../features/profile/presentation/pages/edit_profile_page.dart';
 import '../../features/profile/presentation/pages/vehicle_info_page.dart';
 import '../../features/profile/presentation/pages/driver_documents_page.dart';
 import '../../features/profile/presentation/pages/bank_payout_page.dart';
+import '../../features/profile/presentation/pages/payment_methods_page.dart';
 import '../../features/ride/presentation/screens/active_ride_screen.dart';
 import '../../features/chat/presentation/pages/ride_chat_page.dart';
 import '../../features/support/presentation/pages/driver_support_hub_page.dart';
@@ -283,6 +284,11 @@ class AppRouter {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/bank-payout',
         builder: (context, state) => const BankPayoutPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/payment-methods',
+        builder: (context, state) => const PaymentMethodsPage(),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,

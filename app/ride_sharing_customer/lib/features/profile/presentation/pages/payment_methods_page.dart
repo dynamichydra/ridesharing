@@ -3,11 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/widgets/custom_toast.dart';
 import '../../../../core/widgets/loading_view.dart';
-import '../../../../core/services/stripe_checkout_launcher.dart';
-import '../../../../core/services/razorpay_checkout_launcher.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/payments/saved_payment_methods_service.dart';
 import '../../../../injection_container.dart';
-import '../../../location/services/location_service.dart';
 import '../bloc/profile_bloc.dart';
 
 class PaymentMethodsPage extends StatefulWidget {
@@ -237,154 +235,20 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
 
   Future<void> _startCardSetup({required String gateway}) async {
     final profileState = context.read<ProfileBloc>().state;
+    final hasCards = profileState is ProfileLoaded &&
+        ((profileState.userProfile['payment_methods'] as List?)?.isNotEmpty ?? false);
     setState(() => _isLoading = true);
     try {
-      final dioClient = sl<DioClient>();
-      final loc = await LocationService().getCurrentLocation();
-
-      String currencyCode = gateway == 'stripe' ? 'CAD' : 'INR';
-      String countryCode = gateway == 'stripe' ? 'CA' : 'IN';
-      if (profileState is ProfileLoaded && gateway == 'stripe') {
-        final country = (profileState.userProfile['countryCode'] ??
-                profileState.userProfile['country'] ??
-                '')
-            .toString()
-            .toLowerCase();
-        if (country == 'us' || country == 'united states') {
-          currencyCode = 'USD';
-          countryCode = 'US';
-        } else if (country == 'gb' || country == 'uk' || country == 'united kingdom') {
-          currencyCode = 'GBP';
-          countryCode = 'GB';
-        }
-      }
-
-      final Map<String, dynamic> payload = {
-        'gatewayName': gateway,
-        'currencyCode': currencyCode,
-        'countryCode': countryCode,
-      };
-      if (loc != null) {
-        payload['pickupLat'] = loc.latitude;
-        payload['pickupLng'] = loc.longitude;
-      }
-
-      final res = await dioClient.dio.post(
-        '/api/v1/payment-methods/setup',
-        data: payload,
+      final saved = await sl<SavedPaymentMethodsService>().addCard(
+        gateway: gateway,
+        makeDefault: !hasCards,
       );
-
-      if (res.data['SUCCESS'] == true) {
-        final data = res.data['MESSAGE'];
-        final resolvedGateway = (data['gateway'] ?? gateway).toString().toLowerCase();
-
-        if (resolvedGateway == 'stripe') {
-          final launcher = StripeCheckoutLauncher();
-          final clientSecret = data['clientSecret']?.toString() ?? '';
-          final publishableKey = data['publishableKey']?.toString() ?? '';
-
-          if (clientSecret.isEmpty || publishableKey.isEmpty) {
-            throw Exception('Stripe setup credentials missing from server response');
-          }
-
-          final result = await launcher.setupPaymentSheet(
-            setupIntentClientSecret: clientSecret,
-            publishableKey: publishableKey,
-          );
-
-          if (result.success) {
-            final setupIntentId = data['setupIntentId']?.toString() ??
-                clientSecret.split('_secret_').first;
-
-            final attachRes = await dioClient.dio.post(
-              '/api/v1/payment-methods/attach',
-              data: {
-                'gateway': 'stripe',
-                'setupIntentId': setupIntentId,
-                'gatewayCustomerId': data['gatewayCustomerId'],
-                'isDefault': true,
-                'merchantAccountId': data['merchantAccountId'],
-              },
-            );
-
-            if (attachRes.data['SUCCESS'] == true) {
-              if (mounted) {
-                CustomToast.show(context, 'International card added successfully');
-                context.read<ProfileBloc>().add(LoadProfile());
-              }
-            } else {
-              if (mounted) {
-                CustomToast.show(
-                  context,
-                  attachRes.data['MESSAGE']?.toString() ?? 'Failed to attach card to account',
-                );
-              }
-            }
-          } else if (result.isCancelled) {
-            if (mounted) CustomToast.show(context, 'Card setup cancelled');
-          } else {
-            if (mounted) {
-              CustomToast.show(
-                context,
-                result.errorMessage ?? 'Payment setup failed',
-              );
-            }
-          }
-        } else if (resolvedGateway == 'razorpay') {
-          final launcher = RazorpayCheckoutLauncher();
-          final result = await launcher.setupCard(
-            keyId: data['keyId'],
-            customerId: data['gatewayCustomerId'],
-            gatewayOrderId: data['gatewayOrderId'],
-            currencyCode: 'INR',
-          );
-
-          if (result.success) {
-            final attachRes = await dioClient.dio.post(
-              '/api/v1/payment-methods/attach',
-              data: {
-                'gateway': 'razorpay',
-                'gatewayCustomerId': data['gatewayCustomerId'],
-                'paymentMethodToken': result.paymentId,
-                'last4': '1111',
-                'cardBrand': 'Card',
-                'expiryMonth': '10',
-                'expiryYear': '2027',
-                'isDefault': true,
-                'merchantAccountId': data['merchantAccountId'],
-              },
-            );
-
-            if (attachRes.data['SUCCESS'] == true) {
-              if (mounted) {
-                CustomToast.show(context, 'India payment card added successfully');
-                context.read<ProfileBloc>().add(LoadProfile());
-              }
-            } else {
-              if (mounted) {
-                CustomToast.show(
-                  context,
-                  attachRes.data['MESSAGE']?.toString() ?? 'Failed to attach card to account',
-                );
-              }
-            }
-          } else {
-            if (mounted) {
-              CustomToast.show(context, 'Payment setup cancelled: ${result.errorMessage}');
-            }
-          }
-        } else {
-          if (mounted) {
-            CustomToast.show(context, 'Gateway ${data['gateway']} is not yet supported.');
-          }
-        }
-      } else {
-        if (mounted) {
-          CustomToast.show(context, 'Failed to initialize setup: ${res.data['MESSAGE']}');
-        }
+      if (mounted) {
+        CustomToast.show(context, '${saved.title} added successfully');
+        context.read<ProfileBloc>().add(LoadProfile());
       }
-    } catch (e) {
-      if (mounted) CustomToast.show(context, 'Failed to initialize card setup: $e');
+    } on PaymentFlowException catch (e) {
+      if (mounted) CustomToast.show(context, e.cancelled ? 'Card setup cancelled' : e.message);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

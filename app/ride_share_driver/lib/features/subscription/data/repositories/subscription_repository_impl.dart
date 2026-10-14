@@ -20,10 +20,11 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
   Future<InitiateSubscriptionResult> initiateSubscription(String planId, {String? paymentMethodId}) async {
     final json = await remoteDataSource.initiateSubscription(planId, paymentMethodId: paymentMethodId);
 
-    // Dev mode: no gateway configured for this currency — the backend
-    // activated the subscription immediately and returned the `subscriptions`
-    // row directly (it has `status`, not `gateway`).
-    if (json.containsKey('status')) {
+    // Activated immediately — a saved card was charged successfully, or (dev
+    // mode) no gateway is configured for this currency. Either way the backend
+    // returned the `subscriptions` row (it has `status`). Responses that still
+    // need the driver to act carry `requiresAction` and never a `status`.
+    if (json['requiresAction'] != true && json.containsKey('status')) {
       return SubscriptionAlreadyActive(ActiveSubscription.fromJson(json));
     }
 
@@ -39,6 +40,7 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
           currencyCode: json['currency'] as String,
           paymentAttemptId: json['paymentAttemptId'] as String,
           planName: plan?['name'] as String? ?? 'Subscription',
+          customerId: json['gatewayCustomerId'] as String?,
         );
       case 'stripe':
         return StripeCheckoutRequired(
@@ -47,6 +49,7 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
           publishableKey: json['publishableKey'] as String,
           paymentAttemptId: json['paymentAttemptId'] as String,
           planName: plan?['name'] as String? ?? 'Subscription',
+          requiresAction: json['requiresAction'] == true,
         );
       default:
         throw UnknownException('Unsupported payment gateway: ${gateway ?? 'none'}');

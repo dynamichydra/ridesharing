@@ -1,7 +1,7 @@
 abstract class WalletRepository {
   Future<Map<String, dynamic>> getWalletDetails();
   Future<void> addFunds(double amount, String paymentMethodId);
-  Future<Map<String, dynamic>> initiateTopup(double amount);
+  Future<Map<String, dynamic>> initiateTopup(double amount, {String? paymentMethodId});
   Future<void> verifyTopup({
     required String orderRef,
     required String paymentRef,

@@ -8,9 +8,9 @@ sealed class InitiateSubscriptionResult {
   const InitiateSubscriptionResult();
 }
 
-/// No payment gateway is configured for this plan's currency server-side
-/// (dev mode) — the subscription was activated immediately, no checkout
-/// needed.
+/// The subscription was activated immediately, no checkout needed — either a
+/// saved card was charged successfully, or (dev mode) no payment gateway is
+/// configured for this plan's currency server-side.
 class SubscriptionAlreadyActive extends InitiateSubscriptionResult {
   final ActiveSubscription subscription;
   const SubscriptionAlreadyActive(this.subscription);
@@ -32,6 +32,10 @@ class RazorpayCheckoutRequired extends InitiateSubscriptionResult {
   final String paymentAttemptId;
   final String planName;
 
+  /// Set when paying with a saved Razorpay card — Checkout is opened for this customer so
+  /// the saved card is listed (the payer still confirms with CVV/OTP).
+  final String? customerId;
+
   const RazorpayCheckoutRequired({
     required this.gatewayOrderId,
     required this.keyId,
@@ -39,6 +43,7 @@ class RazorpayCheckoutRequired extends InitiateSubscriptionResult {
     required this.currencyCode,
     required this.paymentAttemptId,
     required this.planName,
+    this.customerId,
   });
 }
 
@@ -49,11 +54,16 @@ class StripeCheckoutRequired extends InitiateSubscriptionResult {
   final String paymentAttemptId;
   final String planName;
 
+  /// True when a saved card was charged off-session and the bank asked for 3DS — the app
+  /// only runs the authentication step instead of showing a fresh PaymentSheet.
+  final bool requiresAction;
+
   const StripeCheckoutRequired({
     required this.gatewayOrderId,
     required this.clientSecret,
     required this.publishableKey,
     required this.paymentAttemptId,
     required this.planName,
+    this.requiresAction = false,
   });
 }

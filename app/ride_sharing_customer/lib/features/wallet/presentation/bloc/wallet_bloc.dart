@@ -26,10 +26,13 @@ class AddWalletFunds extends WalletEvent {
 
 class InitiateWalletTopup extends WalletEvent {
   final double amount;
-  const InitiateWalletTopup({required this.amount});
+
+  /// A saved card id — charged directly instead of opening a fresh checkout.
+  final String? paymentMethodId;
+  const InitiateWalletTopup({required this.amount, this.paymentMethodId});
 
   @override
-  List<Object?> get props => [amount];
+  List<Object?> get props => [amount, paymentMethodId];
 }
 
 class VerifyWalletTopup extends WalletEvent {
@@ -93,16 +96,21 @@ class RazorpayTopupReady extends WalletState {
   final String currencyCode;
   final String description;
 
+  /// Set when paying with a saved card: Checkout opens for this Razorpay customer so the
+  /// saved card is listed.
+  final String? customerId;
+
   const RazorpayTopupReady({
     required this.keyId,
     required this.gatewayOrderId,
     required this.amountMinor,
     required this.currencyCode,
     required this.description,
+    this.customerId,
   });
 
   @override
-  List<Object?> get props => [keyId, gatewayOrderId, amountMinor, currencyCode, description];
+  List<Object?> get props => [keyId, gatewayOrderId, amountMinor, currencyCode, description, customerId];
 }
 
 class StripeTopupReady extends WalletState {
@@ -110,14 +118,18 @@ class StripeTopupReady extends WalletState {
   final String publishableKey;
   final String gatewayOrderId;
 
+  /// True when a saved card needs 3DS — only the authentication step runs.
+  final bool requiresAction;
+
   const StripeTopupReady({
     required this.clientSecret,
     required this.publishableKey,
     required this.gatewayOrderId,
+    this.requiresAction = false,
   });
 
   @override
-  List<Object?> get props => [clientSecret, publishableKey, gatewayOrderId];
+  List<Object?> get props => [clientSecret, publishableKey, gatewayOrderId, requiresAction];
 }
 
 class TopupProcessing extends WalletState {}
@@ -184,10 +196,14 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   Future<void> _onInitiateWalletTopup(InitiateWalletTopup event, Emitter<WalletState> emit) async {
     emit(TopupProcessing());
     try {
-      final result = await _walletRepository.initiateTopup(event.amount);
+      final result = await _walletRepository.initiateTopup(event.amount, paymentMethodId: event.paymentMethodId);
       final gateway = (result['gateway'] ?? '').toString().toLowerCase();
 
-      if (gateway == 'razorpay') {
+      if (result['isPaid'] == true) {
+        // Saved card charged off-session — already credited server-side.
+        emit(AddFundsSuccess());
+        add(LoadWalletDetails());
+      } else if (gateway == 'razorpay') {
         final keyId = result['keyId']?.toString() ?? '';
         final orderId = result['gatewayOrderId']?.toString() ?? '';
         final amtMinor = (event.amount * 100).round();
@@ -198,6 +214,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
           amountMinor: amtMinor,
           currencyCode: currency,
           description: 'Wallet Top Up',
+          customerId: result['gatewayCustomerId']?.toString(),
         ));
       } else if (gateway == 'stripe') {
         final clientSecret = result['clientSecret']?.toString() ?? '';
@@ -207,6 +224,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
           clientSecret: clientSecret,
           publishableKey: publishableKey,
           gatewayOrderId: orderId,
+          requiresAction: result['requiresAction'] == true,
         ));
       } else {
         // Dev mode / direct credit

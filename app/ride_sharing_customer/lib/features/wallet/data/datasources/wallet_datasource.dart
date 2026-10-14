@@ -5,7 +5,7 @@ import '../../../../core/services/storage_service.dart';
 abstract class WalletDataSource {
   Future<Map<String, dynamic>> getWalletDetails();
   Future<void> addFunds(double amount, String paymentMethodId);
-  Future<Map<String, dynamic>> initiateTopup(double amount);
+  Future<Map<String, dynamic>> initiateTopup(double amount, {String? paymentMethodId});
   Future<void> verifyTopup({
     required String orderRef,
     required String paymentRef,
@@ -101,12 +101,16 @@ class WalletDataSourceImpl implements WalletDataSource {
   }
 
   @override
-  Future<Map<String, dynamic>> initiateTopup(double amount) async {
+  Future<Map<String, dynamic>> initiateTopup(double amount, {String? paymentMethodId}) async {
     final amountMinor = (amount * 100).round();
     final idempotencyKey = 'topup_${DateTime.now().millisecondsSinceEpoch}';
     final response = await _dioClient.dio.post(
       '/api/v1/wallets/me/topup/initiate',
-      data: {'amountMinor': amountMinor},
+      data: {
+        'amountMinor': amountMinor,
+        // A saved card id charges that card directly; null opens the gateway checkout.
+        if (paymentMethodId != null) 'paymentMethodId': paymentMethodId,
+      },
       options: Options(
         headers: {'Idempotency-Key': idempotencyKey},
       ),

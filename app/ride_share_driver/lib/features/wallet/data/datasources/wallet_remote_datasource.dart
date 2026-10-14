@@ -178,4 +178,73 @@ class WalletRemoteDataSource {
       throw mapDioException(e);
     }
   }
+
+  Map<String, dynamic> _message(Response response, String fallbackError) {
+    final data = response.data as Map<String, dynamic>;
+    if (data['SUCCESS'] != true) {
+      throw ServerException(data['MESSAGE']?.toString() ?? fallbackError);
+    }
+    final msg = data['MESSAGE'];
+    return msg is Map ? Map<String, dynamic>.from(msg) : <String, dynamic>{};
+  }
+
+  /// POST /api/v1/wallets/me/topup/initiate — [paymentMethodId] charges a saved card;
+  /// null opens the gateway's checkout. The response either has `isPaid: true` (credited
+  /// already) or the gateway fields to finish on-device, then [verifyTopup].
+  Future<Map<String, dynamic>> initiateTopup(int amountMinor, {String? paymentMethodId}) async {
+    try {
+      final response = await apiClient.dio.post(
+        '/wallets/me/topup/initiate',
+        data: {
+          'amountMinor': amountMinor,
+          if (paymentMethodId != null) 'paymentMethodId': paymentMethodId,
+        },
+        options: Options(headers: {'Idempotency-Key': const Uuid().v4()}),
+      );
+      return _message(response, 'Top-up failed');
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  /// POST /api/v1/wallets/me/topup/verify — also finishes a dues payment.
+  Future<Map<String, dynamic>> verifyTopup({
+    required String orderRef,
+    required String paymentRef,
+    String? signature,
+  }) async {
+    try {
+      final response = await apiClient.dio.post('/wallets/me/topup/verify', data: {
+        'orderRef': orderRef,
+        'paymentRef': paymentRef,
+        if (signature != null && signature.isNotEmpty) 'signature': signature,
+      });
+      return _message(response, 'Payment verification failed');
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  /// GET /api/v1/wallets/me/dues — { balanceMinor, duesMinor, currencyCode }
+  Future<Map<String, dynamic>> getDues() async {
+    try {
+      return _message(await apiClient.dio.get('/wallets/me/dues'), 'Failed to load dues');
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  /// POST /api/v1/wallets/me/dues/pay — tops the wallet up by exactly the amount owed.
+  Future<Map<String, dynamic>> payDues({String? paymentMethodId}) async {
+    try {
+      final response = await apiClient.dio.post(
+        '/wallets/me/dues/pay',
+        data: {if (paymentMethodId != null) 'paymentMethodId': paymentMethodId},
+        options: Options(headers: {'Idempotency-Key': const Uuid().v4()}),
+      );
+      return _message(response, 'Failed to pay dues');
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
 }

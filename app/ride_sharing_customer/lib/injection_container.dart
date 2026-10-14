@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 // Core
 import 'core/services/storage_service.dart';
 import 'core/network/dio_client.dart';
+import 'core/payments/saved_payment_methods_service.dart';
 import 'core/services/google_routes_service.dart';
 import 'core/services/fcm_service.dart';
 
@@ -78,6 +79,9 @@ Future<void> init() async {
   final dio = Dio();
   sl.registerLazySingleton<Dio>(() => dio);
   sl.registerLazySingleton<DioClient>(() => DioClient(sl<Dio>()));
+  sl.registerLazySingleton<SavedPaymentMethodsService>(
+    () => SavedPaymentMethodsService(dio: sl<DioClient>().dio, pathPrefix: '/api/v1'),
+  );
   sl.registerLazySingleton<GoogleRoutesService>(() => GoogleRoutesService());
   sl.registerLazySingleton<FcmService>(() => FcmService(dioClient: sl<DioClient>(), storageService: sl<StorageService>()));
   sl.registerLazySingleton<TrustedContactsDataSource>(() => TrustedContactsDataSourceImpl(sl<DioClient>()));
