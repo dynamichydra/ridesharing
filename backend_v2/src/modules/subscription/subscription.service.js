@@ -17,6 +17,7 @@ import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { addDays } from '../../utils/time.js';
 import { paginate } from '../../utils/response.js';
 import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
+import { chargeWithSavedMethod, isSavedMethodId, toActionRequiredResponse } from '../payment-method/saved-method-charge.service.js';
 import { gatewayRegistry } from '../payment/registry.js';
 import { getApplicableTaxRules } from '../fare/tax-rules.service.js';
 import { withIdempotency } from '../../utils/idempotency.js';
@@ -454,6 +455,19 @@ export async function initiateSubscription(driverId, planId, idempotencyKey, pay
 
     const gateway = gatewayRegistry.getForCountry(countryIsoCode) || gatewayForCurrency(plan.currencyCode);
     const totalMinor = await addSubscriptionTax(plan.countryId, plan.priceMinor);
+    const planSummary = {
+      id: plan.id,
+      name: plan.name,
+      type: plan.type,
+      durationDays: plan.durationDays,
+      currentVersionId: plan.currentVersionId,
+    };
+
+    if (isSavedMethodId(paymentMethodId)) {
+      return _initiateSubscriptionWithSavedMethod({
+        driverId, planId, plan, planSummary, countryId, totalMinor, paymentMethodId, idempotencyKey,
+      });
+    }
 
     if (!gateway || !gateway.isConfigured) {
       throw { statusCode: 503, message: `Payment gateway for country ${countryIsoCode} (${plan.currencyCode}) is not configured.` };
@@ -481,15 +495,52 @@ export async function initiateSubscription(driverId, planId, idempotencyKey, pay
       ...order,
       gateway: gateway.name,
       paymentAttemptId: payment.id,
-      plan: {
-        id: plan.id,
-        name: plan.name,
-        type: plan.type,
-        durationDays: plan.durationDays,
-        currentVersionId: plan.currentVersionId,
-      },
+      plan: planSummary,
     };
   });
+}
+
+// Saved-card purchase. Success activates immediately and returns the subscription row (the
+// driver app reads a `status` key as "already active"); otherwise returns what the app needs
+// to finish 3DS (Stripe) or Checkout against the saved customer (Razorpay), after which it
+// calls /subscriptions/verify as for any other order.
+async function _initiateSubscriptionWithSavedMethod({
+  driverId, planId, plan, planSummary, countryId, totalMinor, paymentMethodId, idempotencyKey,
+}) {
+  const saved = await chargeWithSavedMethod({
+    ownerId: driverId,
+    role: 'driver',
+    paymentMethodId,
+    amountMinor: totalMinor,
+    currencyCode: plan.currencyCode,
+    regionContext: { countryId, currencyCode: plan.currencyCode },
+    metadata: { driverId, planId, planVersionId: plan.currentVersionId },
+    idempotencyKey,
+  });
+  const { gateway, charge } = saved;
+
+  const [payment] = await db.insert(payments).values({
+    subscriptionId: null,
+    countryId: plan.countryId,
+    gateway: gateway.name,
+    currencyCode: plan.currencyCode,
+    amountMinor: totalMinor,
+    status: 'created',
+    gatewayOrderId: charge.gatewayOrderId,
+    metadata: { payerId: driverId, paymentMethodId: saved.method.id },
+  }).returning();
+
+  if (charge.status === 'succeeded') {
+    const sub = await _activateSubscriptionIdempotent(driverId, planId, plan, totalMinor, {
+      gateway: gateway.name,
+      gatewayPaymentId: charge.gatewayPaymentId || charge.gatewayOrderId,
+      gatewayOrderId: charge.gatewayOrderId,
+      paymentAttemptId: payment.id,
+    });
+    return { ...sub, paidWithSavedMethod: true, paymentMethodId: saved.method.id, plan: planSummary };
+  }
+
+  return toActionRequiredResponse(saved, { paymentAttemptId: payment.id, plan: planSummary });
 }
 
 export async function verifyAndActivate(driverId, planId, orderRef, paymentRef, signature) {
@@ -504,16 +555,20 @@ export async function verifyAndActivate(driverId, planId, orderRef, paymentRef, 
     if (c?.isoCode) countryIsoCode = c.isoCode;
   }
 
-  const gateway = gatewayRegistry.getForCountry(countryIsoCode) || gatewayForCurrency(plan.currencyCode);
+  const [attempt] = await db.select().from(payments)
+    .where(eq(payments.gatewayOrderId, orderRef)).limit(1);
+
+  // The attempt records which gateway the order was created on — a saved card can live on a
+  // different (still region-eligible) gateway than the country default.
+  const gateway = attempt?.gateway
+    ? getGateway(attempt.gateway)
+    : (gatewayRegistry.getForCountry(countryIsoCode) || gatewayForCurrency(plan.currencyCode));
   if (!gateway || !gateway.isConfigured) {
     throw { statusCode: 503, message: `Payment gateway for country ${countryIsoCode} (${plan.currencyCode}) is not configured.` };
   }
 
   const verified = await gateway.verifyPayment({ orderRef, paymentRef, signature });
   if (!verified) throw { statusCode: 400, message: 'Payment verification failed' };
-
-  const [attempt] = await db.select().from(payments)
-    .where(eq(payments.gatewayOrderId, orderRef)).limit(1);
   const totalMinor = attempt?.amountMinor ?? await addSubscriptionTax(plan.countryId, plan.priceMinor);
 
   return _activateSubscriptionIdempotent(driverId, planId, plan, totalMinor, {

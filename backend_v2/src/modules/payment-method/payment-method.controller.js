@@ -1,24 +1,34 @@
-import Stripe from 'stripe';
 import * as pmService from './payment-method.service.js';
 import { selectGateway, getGateway } from '../payment/payment.service.js';
 import {
   resolvePaymentRegion,
-  evaluatePaymentMethodEligibility,
   resolveCustomerPaymentOptions,
+  annotateSavedMethodsForProfile,
   getMerchantAccountId,
 } from '../payment/payment-region.service.js';
 import { sendSuccess, sendError } from '../../utils/response.js';
-import { env, isStripeConfigured } from '../../config/env.js';
+
+function payerRole(request) {
+  const role = request.user?.role;
+  if (role !== 'rider' && role !== 'driver') {
+    throw { statusCode: 403, message: 'Only riders and drivers can manage saved payment methods' };
+  }
+  return role;
+}
 
 export async function createSetupIntent(request, reply) {
   try {
-    const { gatewayName, currencyCode, countryCode, pickupLat, pickupLng, rideId } = request.body || {};
+    const role = payerRole(request);
+    const userId = request.user.id;
+    const { gatewayName, currencyCode, countryCode, countryId, pickupLat, pickupLng, rideId } = request.body || {};
 
     // Authoritative resolution of region & merchant account
     const regionConfig = await resolvePaymentRegion({
       rideId,
+      riderId: role === 'rider' ? userId : null,
       pickupLat,
       pickupLng,
+      countryId,
       countryCode,
       currencyCode,
     });
@@ -40,17 +50,20 @@ export async function createSetupIntent(request, reply) {
       return sendError(reply, `Gateway ${gateway.name} does not support setup intents`, 400);
     }
 
-    const user = request.user || {};
-    const intentData = await gateway.createSetupIntent({
-      email: user.email || 'guest@example.com',
-      name: user.name || 'Guest User',
-      phone: user.phone,
-    });
+    const [contact, existingCustomerId] = await Promise.all([
+      pmService.getPayerContact(userId, role),
+      pmService.findGatewayCustomerId(userId, role, gateway.name),
+    ]);
+
+    const intentData = await gateway.createSetupIntent({ ...contact, customerId: existingCustomerId });
 
     // Attach merchant account ID and region metadata
-    intentData.merchantAccountId = regionConfig.primaryGateway?.merchantAccountId || getMerchantAccountId(gateway.name);
+    intentData.merchantAccountId = regionConfig.primaryGateway?.gateway === gateway.name
+      ? regionConfig.primaryGateway.merchantAccountId
+      : getMerchantAccountId(gateway.name);
     intentData.region = regionConfig.region;
-    intentData.currencyCode = regionConfig.currencyCode;
+    intentData.currencyCode = intentData.currencyCode || regionConfig.currencyCode;
+    intentData.prefill = contact;
 
     return sendSuccess(reply, intentData);
   } catch (err) {
@@ -58,92 +71,48 @@ export async function createSetupIntent(request, reply) {
   }
 }
 
+// Body (Stripe):   { gateway: 'stripe', setupIntentId, gatewayCustomerId?, isDefault? }
+// Body (Razorpay): { gateway: 'razorpay', gatewayCustomerId, razorpayPaymentId, razorpayOrderId,
+//                    razorpaySignature, isDefault? }
+// Card details are resolved from the gateway, never taken from the client.
 export async function attachPaymentMethod(request, reply) {
   try {
-    const userId = request.user?.id;
-    const role = request.user?.role; // 'rider' or 'driver'
-    let {
-      gateway,
-      gatewayCustomerId,
-      paymentMethodToken,
-      setupIntentId,
-      last4,
-      cardBrand,
-      expiryMonth,
-      expiryYear,
-      isDefault,
-      fingerprint,
-      merchantAccountId,
-      billingCountry,
-      cardType,
-      metadata,
-    } = request.body || {};
+    const role = payerRole(request);
+    const userId = request.user.id;
+    const { gateway, isDefault, merchantAccountId, ...rest } = request.body || {};
 
-    if (!gateway || (!paymentMethodToken && !setupIntentId)) {
-      return sendError(reply, 'Gateway and paymentMethodToken (or setupIntentId) are required.', 400);
+    if (!gateway) {
+      return sendError(reply, 'gateway is required.', 400);
     }
 
-    const normalizedGateway = gateway.toLowerCase();
-
-    // Provider canonical identifier & metadata enrichment via Stripe SDK
-    if (normalizedGateway === 'stripe' && isStripeConfigured) {
-      const stripe = new Stripe(env.STRIPE_SECRET_KEY);
-
-      // 1. If setupIntentId provided, retrieve the SetupIntent to obtain the real paymentMethod token
-      if (setupIntentId) {
-        try {
-          const si = await stripe.setupIntents.retrieve(setupIntentId);
-          if (si && si.payment_method) {
-            paymentMethodToken = typeof si.payment_method === 'string' ? si.payment_method : si.payment_method.id;
-            gatewayCustomerId = gatewayCustomerId || (typeof si.customer === 'string' ? si.customer : si.customer?.id);
-          }
-        } catch (e) {
-          console.error('[attachPaymentMethod] Error retrieving SetupIntent from Stripe:', e.message);
-        }
+    const gw = getGateway(gateway.toLowerCase());
+    let resolved;
+    if (typeof gw.resolveSavedMethod === 'function') {
+      resolved = await gw.resolveSavedMethod(rest);
+    } else {
+      // Gateways without server-side lookup (mock) — client fields are all there is.
+      if (!rest.paymentMethodToken) {
+        return sendError(reply, 'paymentMethodToken is required for this gateway.', 400);
       }
-
-      // 2. Enrich card details and verify payment method token
-      if (paymentMethodToken && paymentMethodToken.startsWith('pm_')) {
-        try {
-          const pm = await stripe.paymentMethods.retrieve(paymentMethodToken);
-          if (pm?.card) {
-            cardBrand = pm.card.brand ? (pm.card.brand.charAt(0).toUpperCase() + pm.card.brand.slice(1)) : cardBrand;
-            last4 = pm.card.last4 || last4;
-            expiryMonth = String(pm.card.exp_month || expiryMonth);
-            expiryYear = String(pm.card.exp_year || expiryYear);
-            fingerprint = pm.card.fingerprint || fingerprint;
-            billingCountry = pm.card.country || billingCountry;
-            cardType = pm.card.funding || cardType;
-          }
-          if (pm?.customer && !gatewayCustomerId) {
-            gatewayCustomerId = typeof pm.customer === 'string' ? pm.customer : pm.customer?.id;
-          }
-        } catch (e) {
-          // Non-blocking in test/mock
-        }
-      } else if (!paymentMethodToken || paymentMethodToken === 'setup_intent_success') {
-        paymentMethodToken = `pm_test_${Date.now()}`;
-      }
+      resolved = rest;
     }
-
-    const resolvedMerchantAccount = merchantAccountId || getMerchantAccountId(normalizedGateway);
 
     const newMethod = await pmService.savePaymentMethod({
       userId: role === 'rider' ? userId : null,
       driverId: role === 'driver' ? userId : null,
-      gateway: normalizedGateway,
-      gatewayCustomerId: gatewayCustomerId || null,
-      paymentMethodToken: paymentMethodToken || 'pm_unknown',
-      last4: last4 ? String(last4).slice(-4) : '4242',
-      cardBrand: cardBrand || 'Card',
-      expiryMonth: expiryMonth ? String(expiryMonth) : null,
-      expiryYear: expiryYear ? String(expiryYear) : null,
+      gateway: gw.name,
+      gatewayCustomerId: resolved.gatewayCustomerId || null,
+      paymentMethodToken: resolved.paymentMethodToken,
+      last4: resolved.last4 ? String(resolved.last4).slice(-4) : null,
+      cardBrand: resolved.cardBrand || 'Card',
+      expiryMonth: resolved.expiryMonth ? String(resolved.expiryMonth) : null,
+      expiryYear: resolved.expiryYear ? String(resolved.expiryYear) : null,
       isDefault: isDefault === true,
-      fingerprint: fingerprint || null,
-      merchantAccountId: resolvedMerchantAccount,
-      billingCountry: billingCountry || null,
-      cardType: cardType || 'credit',
-      metadata: metadata || null,
+      fingerprint: resolved.fingerprint || null,
+      merchantAccountId: merchantAccountId || getMerchantAccountId(gw.name),
+      billingCountry: resolved.billingCountry || null,
+      cardType: resolved.cardType || 'credit',
+      metadata: resolved.metadata || null,
     });
 
     return sendSuccess(reply, newMethod);
@@ -154,14 +123,14 @@ export async function attachPaymentMethod(request, reply) {
 
 export async function getPaymentMethods(request, reply) {
   try {
-    const userId = request.user?.id;
-    const role = request.user?.role;
+    const role = payerRole(request);
+    const userId = request.user.id;
     const query = request.query || {};
 
     // If transaction context is supplied, evaluate eligibility per method
-    const hasContext = query.rideId || query.currencyCode || query.countryCode || query.pickupLat;
-    if (hasContext && role === 'rider') {
-      const options = await resolveCustomerPaymentOptions(userId, query);
+    const hasContext = query.rideId || query.currencyCode || query.countryCode || query.countryId || query.pickupLat;
+    if (hasContext) {
+      const options = await resolveCustomerPaymentOptions(userId, query, role);
       return sendSuccess(reply, options.savedMethods, 200, {
         region: options.region,
         currencyCode: options.currencyCode,
@@ -172,34 +141,9 @@ export async function getPaymentMethods(request, reply) {
       });
     }
 
-    // Default listing for profile management: list all active methods
-    // In profile settings, all active saved cards should be displayed as valid cards.
-    // We only annotate expired cards as ineligible.
+    // Default listing for profile management: all active methods, only expired ones flagged.
     const methods = await pmService.listPaymentMethods(userId, role);
-    const annotated = methods.map((m) => {
-      let isExpired = false;
-      if (m.expiryMonth && m.expiryYear) {
-        const now = new Date();
-        const curYear = now.getFullYear();
-        const curMonth = now.getMonth() + 1;
-        let expYr = parseInt(m.expiryYear, 10);
-        if (expYr < 100) expYr += 2000;
-        const expMo = parseInt(m.expiryMonth, 10);
-        if (expYr < curYear || (expYr === curYear && expMo < curMonth)) {
-          isExpired = true;
-        }
-      }
-
-      return {
-        ...m,
-        isEligible: !isExpired,
-        ineligibilityCode: isExpired ? 'EXPIRED' : null,
-        ineligibilityReason: isExpired ? `Card expired in ${m.expiryMonth}/${m.expiryYear}.` : null,
-        isPreferred: !!m.isDefault,
-      };
-    });
-
-    return sendSuccess(reply, annotated);
+    return sendSuccess(reply, annotateSavedMethodsForProfile(methods));
   } catch (err) {
     return sendError(reply, err.message || 'Failed to fetch payment methods', err.statusCode || 500);
   }
@@ -207,9 +151,8 @@ export async function getPaymentMethods(request, reply) {
 
 export async function resolvePaymentOptions(request, reply) {
   try {
-    const userId = request.user?.id;
-    const context = request.body || {};
-    const options = await resolveCustomerPaymentOptions(userId, context);
+    const role = payerRole(request);
+    const options = await resolveCustomerPaymentOptions(request.user.id, request.body || {}, role);
     return sendSuccess(reply, options);
   } catch (err) {
     return sendError(reply, err.message || 'Failed to resolve payment options', err.statusCode || 500);
@@ -218,10 +161,8 @@ export async function resolvePaymentOptions(request, reply) {
 
 export async function setPreferredPaymentMethod(request, reply) {
   try {
-    const userId = request.user?.id;
-    const role = request.user?.role;
-    const { id } = request.params;
-    const updated = await pmService.setPreferredPaymentMethod(id, userId, role);
+    const role = payerRole(request);
+    const updated = await pmService.setPreferredPaymentMethod(request.params.id, request.user.id, role);
     return sendSuccess(reply, updated);
   } catch (err) {
     return sendError(reply, err.message || 'Failed to set preferred payment method', err.statusCode || 500);
@@ -230,10 +171,8 @@ export async function setPreferredPaymentMethod(request, reply) {
 
 export async function deletePaymentMethod(request, reply) {
   try {
-    const userId = request.user?.id;
-    const role = request.user?.role;
-    const { id } = request.params;
-    await pmService.removePaymentMethod(id, userId, role);
+    const role = payerRole(request);
+    await pmService.removePaymentMethod(request.params.id, request.user.id, role);
     return sendSuccess(reply, 'Payment method removed');
   } catch (err) {
     return sendError(reply, err.message || 'Failed to delete payment method', err.statusCode || 500);

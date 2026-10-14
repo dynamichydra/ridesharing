@@ -13,6 +13,8 @@ import { isLocationInServiceArea } from '../zone/zone.service.js';
 import { validateDriverPhoneCountryMatch } from '../auth/auth.service.js';
 import { upsertDriverCell, removeDriverFromIndex } from '../matching/driver-geo-index.service.js';
 import { getOrCreateWallet } from '../wallet/wallet.service.js';
+import { listPaymentMethods } from '../payment-method/payment-method.service.js';
+import { annotateSavedMethodsForProfile } from '../payment/payment-region.service.js';
 
 function getStartOfTodayInTimezone(timeZone = 'UTC') {
   const now = new Date();
@@ -518,6 +520,8 @@ export async function getDriverMe(driverId) {
   // Today Summary
   const todaySummary = await getDashboardSummary(driverId).catch(() => null);
 
+  const savedPaymentMethods = await listPaymentMethods(driverId, 'driver');
+
   const { aadharNumber, aadharDoc, licenseDoc, ...safeDriver } = driver;
 
   return {
@@ -537,6 +541,7 @@ export async function getDriverMe(driverId) {
       status: wallet.status,
     } : null,
     todaySummary: todaySummary?.today || null,
+    payment_methods: annotateSavedMethodsForProfile(savedPaymentMethods),
   };
 }
 
@@ -561,12 +566,15 @@ export async function getProfile(driverId) {
     cityName = ct?.name || null;
   }
 
+  const savedPaymentMethods = await listPaymentMethods(driverId, 'driver');
+
   const { aadharNumber, ...safe } = driver;
   return {
     ...safe,
     countryName,
     stateName,
     cityName,
+    payment_methods: annotateSavedMethodsForProfile(savedPaymentMethods),
   };
 }
 

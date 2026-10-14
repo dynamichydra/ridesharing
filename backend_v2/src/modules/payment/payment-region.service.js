@@ -233,21 +233,12 @@ export function evaluatePaymentMethodEligibility(savedMethod, resolvedConfig) {
   }
 
   // 2. Check card expiration
-  if (savedMethod.expiryMonth && savedMethod.expiryYear) {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1; // 1-12
-    let expYear = parseInt(savedMethod.expiryYear, 10);
-    if (expYear < 100) expYear += 2000;
-    const expMonth = parseInt(savedMethod.expiryMonth, 10);
-
-    if (expYear < currentYear || (expYear === currentYear && expMonth < currentMonth)) {
-      return {
-        isEligible: false,
-        ineligibilityCode: 'EXPIRED',
-        ineligibilityReason: `Card expired in ${savedMethod.expiryMonth}/${savedMethod.expiryYear}.`,
-      };
-    }
+  if (isCardExpired(savedMethod)) {
+    return {
+      isEligible: false,
+      ineligibilityCode: 'EXPIRED',
+      ineligibilityReason: `Card expired in ${savedMethod.expiryMonth}/${savedMethod.expiryYear}.`,
+    };
   }
 
   const methodGateway = (savedMethod.gateway || '').toLowerCase();
@@ -294,16 +285,48 @@ export function evaluatePaymentMethodEligibility(savedMethod, resolvedConfig) {
   };
 }
 
+function isCardExpired(method, now = new Date()) {
+  if (!method.expiryMonth || !method.expiryYear) return false;
+  let expYear = parseInt(method.expiryYear, 10);
+  if (expYear < 100) expYear += 2000;
+  const expMonth = parseInt(method.expiryMonth, 10);
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth() + 1;
+  return expYear < curYear || (expYear === curYear && expMonth < curMonth);
+}
+
+/**
+ * Context-free annotation for profile/management screens: every active saved card is shown
+ * as usable except expired ones. Region eligibility is only decided once there's a transaction
+ * (see resolveCustomerPaymentOptions / evaluatePaymentMethodEligibility).
+ */
+export function annotateSavedMethodsForProfile(methods = []) {
+  return methods.map((m) => {
+    const expired = isCardExpired(m);
+    return {
+      ...m,
+      isEligible: !expired,
+      ineligibilityCode: expired ? 'EXPIRED' : null,
+      ineligibilityReason: expired ? `Card expired in ${m.expiryMonth}/${m.expiryYear}.` : null,
+      isPreferred: !!m.isDefault,
+    };
+  });
+}
+
 /**
  * Resolves full transaction payment configuration, lists saved methods with eligibility annotations,
  * and determines preselected payment method without overwriting customer preferences.
+ * `role` selects whose saved methods to load — riders own rows by userId, drivers by driverId.
  */
-export async function resolveCustomerPaymentOptions(userId, context = {}) {
-  const resolvedConfig = await resolvePaymentRegion({ ...context, riderId: userId });
+export async function resolveCustomerPaymentOptions(userId, context = {}, role = 'rider') {
+  const resolvedConfig = await resolvePaymentRegion({
+    ...context,
+    riderId: role === 'rider' ? userId : null,
+  });
 
-  // Load all active saved payment methods for this user
+  const ownerColumn = role === 'driver' ? paymentMethods.driverId : paymentMethods.userId;
   const savedList = await db.select().from(paymentMethods)
-    .where(and(eq(paymentMethods.userId, userId), eq(paymentMethods.isActive, true)))
+    .where(and(eq(ownerColumn, userId), eq(paymentMethods.isActive, true)))
     .orderBy(paymentMethods.createdAt);
 
   let customerPreferredMethod = null;

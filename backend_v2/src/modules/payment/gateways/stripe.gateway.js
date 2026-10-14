@@ -165,19 +165,71 @@ export const stripeGateway = {
     }
   },
 
-  async createSetupIntent({ email, name }) {
+  // customerId: an existing Stripe customer from one of the payer's other saved cards, so all
+  // their cards hang off one customer. usage 'off_session' is what lets chargeSavedMethod
+  // confirm later without the payer present.
+  async createSetupIntent({ email, name, phone, customerId }) {
     if (!client) throw new Error("Stripe is not configured");
-    const customer = await client.customers.create({ email, name });
+    const resolvedCustomerId = customerId
+      || (await client.customers.create({ email: email || undefined, name, phone: phone || undefined })).id;
     const setupIntent = await client.setupIntents.create({
-      customer: customer.id,
+      customer: resolvedCustomerId,
       payment_method_types: ['card'],
+      usage: 'off_session',
     });
     return {
       gateway: 'stripe',
       setupIntentId: setupIntent.id,
       clientSecret: setupIntent.client_secret,
       publishableKey: env.STRIPE_PUBLISHABLE_KEY,
-      gatewayCustomerId: customer.id,
+      gatewayCustomerId: resolvedCustomerId,
+    };
+  },
+
+  // Turns the client's post-setup callback into the canonical card record to store. Only the
+  // SetupIntent id is trusted from the client — the PaymentMethod id, customer and card
+  // details all come from Stripe. Falls back to the client-supplied fields when Stripe isn't
+  // configured (dev/test).
+  async resolveSavedMethod({ setupIntentId, paymentMethodToken, gatewayCustomerId, ...clientFields }) {
+    if (!client) {
+      return {
+        ...clientFields,
+        gatewayCustomerId: gatewayCustomerId || null,
+        paymentMethodToken: paymentMethodToken && paymentMethodToken !== 'setup_intent_success'
+          ? paymentMethodToken
+          : `pm_test_${Date.now()}`,
+      };
+    }
+
+    let token = paymentMethodToken;
+    let customer = gatewayCustomerId;
+    if (setupIntentId) {
+      const si = await client.setupIntents.retrieve(setupIntentId);
+      if (si.status !== 'succeeded') {
+        throw { statusCode: 400, message: `Card setup not completed (status: ${si.status})` };
+      }
+      token = typeof si.payment_method === 'string' ? si.payment_method : si.payment_method?.id;
+      customer = typeof si.customer === 'string' ? si.customer : si.customer?.id;
+    }
+    if (!token || !token.startsWith('pm_')) {
+      throw { statusCode: 400, message: 'A completed Stripe SetupIntent is required to save a card' };
+    }
+
+    const pm = await client.paymentMethods.retrieve(token);
+    if (!customer && pm.customer) {
+      customer = typeof pm.customer === 'string' ? pm.customer : pm.customer.id;
+    }
+    const card = pm.card || {};
+    return {
+      gatewayCustomerId: customer || null,
+      paymentMethodToken: pm.id,
+      cardBrand: card.brand ? card.brand.charAt(0).toUpperCase() + card.brand.slice(1) : 'Card',
+      last4: card.last4 || null,
+      expiryMonth: card.exp_month ? String(card.exp_month) : null,
+      expiryYear: card.exp_year ? String(card.exp_year) : null,
+      fingerprint: card.fingerprint || null,
+      billingCountry: card.country || null,
+      cardType: card.funding || 'credit',
     };
   },
 

@@ -1,5 +1,5 @@
 import { sendSuccess, sendError, sendList, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin, authenticateAny, authenticateRider } from '../../middleware/authenticate.js';
+import { authenticateAdmin, authenticateAny, authenticateRider, authenticateDriver } from '../../middleware/authenticate.js';
 import * as walletService from './wallet.service.js';
 
 export async function walletRoutes(app) {
@@ -21,15 +21,32 @@ export async function walletRoutes(app) {
     return sendList(reply, rows, pagination);
   });
 
-  // POST /api/v1/wallets/me/topup/initiate  { amountMinor }
+  // POST /api/v1/wallets/me/topup/initiate  { amountMinor, paymentMethodId? }
   // Requires an Idempotency-Key header so a retried/double-submitted request returns the
-  // original gateway order instead of creating a second one.
+  // original gateway order instead of creating a second one. paymentMethodId charges one of
+  // the caller's saved cards instead of opening a new checkout.
   app.post('/me/topup/initiate', { preHandler: [authenticateAny] }, async (request, reply) => {
-    const { amountMinor } = request.body;
+    const { amountMinor, paymentMethodId } = request.body;
     if (!amountMinor) return sendError(reply, 'amountMinor is required');
     const idempotencyKey = request.headers['idempotency-key'];
     if (!idempotencyKey) return sendError(reply, 'Idempotency-Key header is required', 400);
-    const data = await walletService.initiateWalletTopup(request.user, amountMinor, idempotencyKey);
+    const data = await walletService.initiateWalletTopup(request.user, amountMinor, idempotencyKey, paymentMethodId);
+    return sendSuccess(reply, data);
+  });
+
+  // GET /api/v1/wallets/me/dues — driver only: { balanceMinor, duesMinor, currencyCode }
+  app.get('/me/dues', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const data = await walletService.getMyDues(request.user);
+    return sendSuccess(reply, data);
+  });
+
+  // POST /api/v1/wallets/me/dues/pay  { paymentMethodId? } — driver only. Tops the wallet up by
+  // exactly the outstanding amount; finish with /me/topup/verify when the response asks for
+  // client action. Requires an Idempotency-Key header.
+  app.post('/me/dues/pay', { preHandler: [authenticateDriver] }, async (request, reply) => {
+    const idempotencyKey = request.headers['idempotency-key'];
+    if (!idempotencyKey) return sendError(reply, 'Idempotency-Key header is required', 400);
+    const data = await walletService.payMyDues(request.user, idempotencyKey, request.body?.paymentMethodId);
     return sendSuccess(reply, data);
   });
 

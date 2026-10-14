@@ -43,6 +43,32 @@ async function _call(promise) {
   }
 }
 
+const CARD_SETUP_AMOUNT_MINOR = 100; // ₹1
+
+// Pure mapping from Razorpay's payment + token entities to our payment_methods fields —
+// extracted so it's unit-testable without a live Razorpay call.
+export function extractRazorpaySavedCard({ payment = {}, token = {}, customerId }) {
+  const card = token.card || payment.card || {};
+  const network = card.network || null;
+  return {
+    gatewayCustomerId: customerId,
+    paymentMethodToken: token.id || payment.token_id,
+    cardBrand: network ? network.replace(/_/g, ' ') : 'Card',
+    last4: card.last4 || null,
+    expiryMonth: card.expiry_month ? String(card.expiry_month).padStart(2, '0') : null,
+    expiryYear: card.expiry_year ? String(card.expiry_year) : null,
+    // Razorpay exposes no card fingerprint; the token id is already stable per card+customer.
+    fingerprint: null,
+    billingCountry: card.international === false ? 'IN' : null,
+    cardType: card.type || 'credit',
+    metadata: {
+      issuer: card.issuer || null,
+      network,
+      tokenMethod: token.method || payment.method || 'card',
+    },
+  };
+}
+
 export const razorpayGateway = {
   name: 'razorpay',
   isConfigured: isRazorpayConfigured,
@@ -202,56 +228,82 @@ export const razorpayGateway = {
     };
   },
 
-  async createSetupIntent({ email, name, phone }) {
+  // customerId: an existing Razorpay customer from one of the payer's other saved cards —
+  // Razorpay Checkout only lists the tokens of the customer_id it's opened with, so every
+  // card must be saved under the same customer the charge later uses.
+  async createSetupIntent({ email, name, phone, customerId }) {
     if (!client) throw new Error("Razorpay is not configured");
-    let customer;
-    try {
+    let customer = customerId ? { id: customerId } : null;
+    if (!customer) {
+      // fail_existing: 0 returns the existing customer for this contact/email instead of erroring.
       customer = await _call(client.customers.create({
-        email,
         name,
+        email: email || undefined,
         contact: phone || undefined,
         fail_existing: 0,
       }));
-    } catch (e) {
-      if (e.message && e.message.includes('Customer already exists')) {
-        // Fallback: try fetching by phone or email
-        let fetchedCustomers = await _call(client.customers.all({ count: 1, 'contact': phone || undefined }));
-        if (fetchedCustomers && fetchedCustomers.items && fetchedCustomers.items.length > 0) {
-          customer = fetchedCustomers.items[0];
-        } else {
-          fetchedCustomers = await _call(client.customers.all({ count: 1, 'email': email }));
-          if (fetchedCustomers && fetchedCustomers.items && fetchedCustomers.items.length > 0) {
-            customer = fetchedCustomers.items[0];
-          } else {
-            // Bulletproof fallback: create a brand new customer with a unique email
-            const uniqueEmail = `user_${Date.now()}@example.com`;
-            customer = await _call(client.customers.create({
-              email: uniqueEmail,
-              name,
-              contact: phone || undefined,
-              fail_existing: 0,
-            }));
-          }
-        }
-      } else {
-        throw e;
-      }
     }
-    
-    // Razorpay requires an order to open standard checkout and tokenize a card. 
-    // We create a ₹1.00 auth order (100 paise) which allows card verification and saving.
+
+    // Razorpay can only tokenize a card as part of a payment, so setup is a ₹1 order that is
+    // refunded once the token is stored (see resolveSavedMethod). The client must open
+    // Checkout with customer_id + save: 1 for Razorpay to create the token.
     const order = await _call(client.orders.create({
-      amount: 100,
+      amount: CARD_SETUP_AMOUNT_MINOR,
       currency: 'INR',
       receipt: `setup_${Date.now()}`.slice(0, 40),
+      notes: { purpose: 'card_setup', customerId: customer.id },
     }));
 
     return {
       gateway: 'razorpay',
       gatewayCustomerId: customer.id,
       gatewayOrderId: order.id,
+      amountMinor: CARD_SETUP_AMOUNT_MINOR,
+      currencyCode: 'INR',
       keyId: env.RAZORPAY_KEY_ID,
     };
+  },
+
+  // Turns the client's post-setup Checkout callback into the canonical card record to store.
+  // The client only supplies the ids + signature; the token and card details are fetched from
+  // Razorpay, and the payment must belong to the setup order (signature) and the customer.
+  async resolveSavedMethod({ gatewayCustomerId, razorpayPaymentId, razorpayOrderId, razorpaySignature }) {
+    if (!client) throw { statusCode: 503, message: 'Razorpay is not configured' };
+    if (!gatewayCustomerId || !razorpayPaymentId || !razorpayOrderId) {
+      throw { statusCode: 400, message: 'gatewayCustomerId, razorpayPaymentId and razorpayOrderId are required' };
+    }
+    if (!this.verifyPayment({ orderRef: razorpayOrderId, paymentRef: razorpayPaymentId, signature: razorpaySignature })) {
+      throw { statusCode: 400, message: 'Card setup signature verification failed' };
+    }
+
+    const payment = await _call(client.payments.fetch(razorpayPaymentId));
+    if (payment.order_id !== razorpayOrderId) {
+      throw { statusCode: 400, message: 'Payment does not belong to this card setup' };
+    }
+    if (!payment.token_id) {
+      throw {
+        statusCode: 422,
+        message: 'Razorpay did not save this card. Make sure "Save card" is selected and try again.',
+      };
+    }
+
+    const token = await _call(client.customers.fetchToken(gatewayCustomerId, payment.token_id));
+    const saved = extractRazorpaySavedCard({ payment, token, customerId: gatewayCustomerId });
+
+    // Give the ₹1 verification charge back. Best-effort: an uncaptured authorization voids
+    // itself, and a failed refund must not lose the token the payer just created.
+    if (payment.status === 'captured') {
+      try {
+        await _call(client.payments.refund(razorpayPaymentId, {
+          amount: payment.amount,
+          notes: { purpose: 'card_setup_refund' },
+        }));
+      } catch (e) {
+        console.warn(`[Razorpay] card setup refund failed for ${razorpayPaymentId}: ${e.message}`);
+      }
+    }
+
+    return saved;
   },
 
   // orderRef/paymentRef/signature come straight from Razorpay's client-side checkout callback

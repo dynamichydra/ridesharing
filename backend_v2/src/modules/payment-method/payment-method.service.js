@@ -1,19 +1,56 @@
-import { eq, and, or } from 'drizzle-orm';
+import { eq, and, or, desc } from 'drizzle-orm';
 import { db } from '../../config/db.js';
-import { paymentMethods } from '../../../drizzle/schema/index.js';
+import { paymentMethods, users, drivers } from '../../../drizzle/schema/index.js';
 import { getMerchantAccountId } from '../payment/payment-region.service.js';
 
+// Saved methods are owned by either a rider (users.id → userId) or a driver (drivers.id →
+// driverId); every query in this module scopes by exactly one of the two.
+export function ownerCondition(ownerId, role) {
+  return role === 'driver'
+    ? eq(paymentMethods.driverId, ownerId)
+    : eq(paymentMethods.userId, ownerId);
+}
+
+// Name/email/phone for creating the gateway-side customer. JWT payloads don't reliably carry
+// these, and Razorpay matches existing customers by contact — so read them from the DB.
+export async function getPayerContact(ownerId, role) {
+  const table = role === 'driver' ? drivers : users;
+  const [row] = await db.select({ name: table.name, email: table.email, phone: table.phone })
+    .from(table).where(eq(table.id, ownerId)).limit(1);
+  return {
+    name: row?.name || 'Ryva User',
+    email: row?.email || null,
+    phone: row?.phone || null,
+  };
+}
+
+// Reuse the gateway customer from an existing saved method so all of a person's cards hang
+// off one Stripe/Razorpay customer (Razorpay Checkout only lists tokens of the customer_id it
+// is opened with).
+export async function findGatewayCustomerId(ownerId, role, gateway) {
+  const [row] = await db.select({ gatewayCustomerId: paymentMethods.gatewayCustomerId })
+    .from(paymentMethods)
+    .where(and(
+      ownerCondition(ownerId, role),
+      eq(paymentMethods.gateway, gateway),
+      eq(paymentMethods.isActive, true),
+    ))
+    .orderBy(desc(paymentMethods.createdAt))
+    .limit(1);
+  return row?.gatewayCustomerId || null;
+}
+
 export async function savePaymentMethod(data) {
-  const ownerCondition = data.userId
-    ? eq(paymentMethods.userId, data.userId)
-    : eq(paymentMethods.driverId, data.driverId);
+  const ownerScope = data.userId
+    ? ownerCondition(data.userId, 'rider')
+    : ownerCondition(data.driverId, 'driver');
 
   const merchantAccountId = data.merchantAccountId || getMerchantAccountId(data.gateway);
   const fingerprint = data.fingerprint || null;
 
   // 1. Check for duplicate saved card (token or canonical fingerprint within same merchant account)
   const existingConditions = [
-    ownerCondition,
+    ownerScope,
     eq(paymentMethods.gateway, data.gateway),
     eq(paymentMethods.isActive, true),
   ];
@@ -39,7 +76,7 @@ export async function savePaymentMethod(data) {
   if (existing) {
     // If requested as default, update default status while preserving other cards
     if (data.isDefault && !existing.isDefault) {
-      await db.update(paymentMethods).set({ isDefault: false }).where(ownerCondition);
+      await db.update(paymentMethods).set({ isDefault: false }).where(ownerScope);
       const [updated] = await db.update(paymentMethods)
         .set({ isDefault: true, updatedAt: new Date() })
         .where(eq(paymentMethods.id, existing.id))
@@ -51,7 +88,7 @@ export async function savePaymentMethod(data) {
 
   // 2. Unset other defaults if this new one is marked default
   if (data.isDefault) {
-    await db.update(paymentMethods).set({ isDefault: false }).where(ownerCondition);
+    await db.update(paymentMethods).set({ isDefault: false }).where(ownerScope);
   }
 
   // 3. Insert new method, safely handling concurrent race condition (unique index violation code 23505)
@@ -69,7 +106,7 @@ export async function savePaymentMethod(data) {
       // Concurrent insert won the race: retrieve and return the winning row
       const [raceWinner] = await db.select().from(paymentMethods)
         .where(and(
-          ownerCondition,
+          ownerScope,
           eq(paymentMethods.gateway, data.gateway),
           eq(paymentMethods.paymentMethodToken, data.paymentMethodToken),
           eq(paymentMethods.isActive, true),
@@ -77,7 +114,7 @@ export async function savePaymentMethod(data) {
         .limit(1);
       if (raceWinner) {
         if (data.isDefault && !raceWinner.isDefault) {
-          await db.update(paymentMethods).set({ isDefault: false }).where(ownerCondition);
+          await db.update(paymentMethods).set({ isDefault: false }).where(ownerScope);
           const [updated] = await db.update(paymentMethods)
             .set({ isDefault: true, updatedAt: new Date() })
             .where(eq(paymentMethods.id, raceWinner.id))
@@ -92,9 +129,7 @@ export async function savePaymentMethod(data) {
 }
 
 export async function listPaymentMethods(userId, role) {
-  const condition = role === 'rider'
-    ? eq(paymentMethods.userId, userId)
-    : eq(paymentMethods.driverId, userId);
+  const condition = ownerCondition(userId, role);
 
   return db.select().from(paymentMethods)
     .where(and(condition, eq(paymentMethods.isActive, true)))
@@ -102,9 +137,7 @@ export async function listPaymentMethods(userId, role) {
 }
 
 export async function setPreferredPaymentMethod(id, userId, role) {
-  const condition = role === 'rider'
-    ? eq(paymentMethods.userId, userId)
-    : eq(paymentMethods.driverId, userId);
+  const condition = ownerCondition(userId, role);
 
   const [target] = await db.select().from(paymentMethods)
     .where(and(eq(paymentMethods.id, id), condition, eq(paymentMethods.isActive, true)))
@@ -129,9 +162,7 @@ export async function setPreferredPaymentMethod(id, userId, role) {
 }
 
 export async function removePaymentMethod(id, userId, role) {
-  const condition = role === 'rider'
-    ? eq(paymentMethods.userId, userId)
-    : eq(paymentMethods.driverId, userId);
+  const condition = ownerCondition(userId, role);
 
   const [existing] = await db.select().from(paymentMethods)
     .where(and(eq(paymentMethods.id, id), condition))
@@ -155,9 +186,7 @@ export async function removePaymentMethod(id, userId, role) {
 }
 
 export async function getPaymentMethodById(id, userId, role) {
-  const condition = role === 'rider'
-    ? eq(paymentMethods.userId, userId)
-    : eq(paymentMethods.driverId, userId);
+  const condition = ownerCondition(userId, role);
 
   const [method] = await db.select().from(paymentMethods)
     .where(and(eq(paymentMethods.id, id), condition, eq(paymentMethods.isActive, true)))

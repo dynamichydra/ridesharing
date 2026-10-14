@@ -7,6 +7,7 @@ import { paginate } from '../../utils/response.js';
 import { getDefaultCountry } from '../geo/geo.service.js';
 import { postTransaction, getOrCreateSystemAccount, getOrCreateWalletAccount } from '../ledger/ledger.service.js';
 import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
+import { chargeWithSavedMethod, isSavedMethodId, toActionRequiredResponse } from '../payment-method/saved-method-charge.service.js';
 import { withIdempotency } from '../../utils/idempotency.js';
 import { publishNotification } from '../notification/notification-events.js';
 import { formatMoney } from '../../utils/money.js';
@@ -72,7 +73,10 @@ export async function getMyWallet(user) {
 // gateway order instead of creating a second one. Mirrors ride-payment.service.js
 // initiateRidePayment's shape (dev-mode fallback when the currency's gateway has no keys
 // configured, real gateway order otherwise).
-export async function initiateWalletTopup(user, amountMinor, idempotencyKey) {
+//
+// paymentMethodId (optional): one of the owner's saved cards — charged directly instead of
+// opening a fresh checkout. See _topupWithSavedMethod.
+export async function initiateWalletTopup(user, amountMinor, idempotencyKey, paymentMethodId = null) {
   const ownerType = resolveOwnerTypeFromRole(user.role);
   if (!Number.isInteger(amountMinor) || amountMinor <= 0) {
     throw { statusCode: 400, message: 'amountMinor must be a positive integer' };
@@ -81,6 +85,11 @@ export async function initiateWalletTopup(user, amountMinor, idempotencyKey) {
   return withIdempotency('wallet_topup_initiate', idempotencyKey, user.id, async () => {
     const wallet = await getOrCreateWallet(ownerType, user.id);
     const country = await resolveOwnerCountry(ownerType, user.id);
+
+    if (isSavedMethodId(paymentMethodId)) {
+      return _topupWithSavedMethod({ user, ownerType, wallet, country, amountMinor, paymentMethodId, idempotencyKey });
+    }
+
     const gateway = gatewayForCurrency(wallet.currencyCode);
 
     if (!gateway) {
@@ -108,6 +117,79 @@ export async function initiateWalletTopup(user, amountMinor, idempotencyKey) {
 
     return { ...order, paymentAttemptId: payment.id };
   });
+}
+
+// Success credits the wallet immediately ({ isPaid: true, wallet, transaction }); otherwise the
+// client finishes 3DS / Razorpay Checkout and calls /topup/verify with the returned order.
+async function _topupWithSavedMethod({ user, ownerType, wallet, country, amountMinor, paymentMethodId, idempotencyKey }) {
+  const saved = await chargeWithSavedMethod({
+    ownerId: user.id,
+    role: ownerType,
+    paymentMethodId,
+    amountMinor,
+    currencyCode: wallet.currencyCode,
+    regionContext: { countryId: country.id, currencyCode: wallet.currencyCode },
+    metadata: { walletId: wallet.id, ownerType, ownerId: user.id },
+    idempotencyKey,
+  });
+  const { gateway, charge } = saved;
+
+  const [payment] = await db.insert(payments).values({
+    walletId: wallet.id,
+    countryId: country.id,
+    gateway: gateway.name,
+    currencyCode: wallet.currencyCode,
+    amountMinor,
+    status: 'created',
+    gatewayOrderId: charge.gatewayOrderId,
+    metadata: { payerId: user.id, paymentMethodId: saved.method.id },
+  }).returning();
+
+  if (charge.status === 'succeeded') {
+    const credited = await _creditWalletTopup(wallet, country.id, {
+      gateway: gateway.name,
+      gatewayPaymentId: charge.gatewayPaymentId || charge.gatewayOrderId,
+      gatewayOrderId: charge.gatewayOrderId,
+      amountMinor,
+      paymentAttemptId: payment.id,
+    });
+    return {
+      ...credited,
+      isPaid: true,
+      paidWithSavedMethod: true,
+      paymentMethodId: saved.method.id,
+      paymentAttemptId: payment.id,
+    };
+  }
+
+  return toActionRequiredResponse(saved, { paymentAttemptId: payment.id, amountMinor });
+}
+
+// ── Driver dues ──────────────────────────────────────────────────────────────────
+// Cash rides debit the platform's commission from the driver's wallet with allowNegative
+// (see ride-payment.service.js), so "dues" is simply a negative driver wallet balance.
+// Clearing them is a top-up of exactly that amount — same gateway/saved-card paths, same
+// /topup/verify follow-up, same ledger posting.
+
+export function computeDuesMinor(balanceMinor) {
+  return balanceMinor < 0 ? -balanceMinor : 0;
+}
+
+export async function getMyDues(user) {
+  if (user.role !== 'driver') throw { statusCode: 403, message: 'Only drivers have dues' };
+  const wallet = await getOrCreateWallet('driver', user.id);
+  return {
+    walletId: wallet.id,
+    balanceMinor: wallet.balanceMinor,
+    duesMinor: computeDuesMinor(wallet.balanceMinor),
+    currencyCode: wallet.currencyCode,
+  };
+}
+
+export async function payMyDues(user, idempotencyKey, paymentMethodId = null) {
+  const { duesMinor } = await getMyDues(user);
+  if (duesMinor <= 0) throw { statusCode: 409, message: 'You have no outstanding dues' };
+  return initiateWalletTopup(user, duesMinor, idempotencyKey, paymentMethodId);
 }
 
 export async function verifyWalletTopup(user, orderRef, paymentRef, signature) {

@@ -69,33 +69,9 @@ export async function getRiderMe(riderId) {
   const places = await db.select().from(savedPlaces).where(eq(savedPlaces.userId, riderId));
 
   // Payment Methods
-  const { paymentMethods } = await import('../../../drizzle/schema/index.js');
-  const { resolvePaymentRegion, evaluatePaymentMethodEligibility } = await import('../payment/payment-region.service.js');
-  const userPaymentMethods = await db.select().from(paymentMethods)
-    .where(and(eq(paymentMethods.userId, riderId), eq(paymentMethods.isActive, true)))
-    .orderBy(paymentMethods.createdAt);
-
-  const annotatedMethods = userPaymentMethods.map((m) => {
-    let isExpired = false;
-    if (m.expiryMonth && m.expiryYear) {
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth() + 1;
-      let expYear = parseInt(m.expiryYear, 10);
-      if (expYear < 100) expYear += 2000;
-      const expMonth = parseInt(m.expiryMonth, 10);
-      if (expYear < currentYear || (expYear === currentYear && expMonth < currentMonth)) {
-        isExpired = true;
-      }
-    }
-    return {
-      ...m,
-      isEligible: !isExpired,
-      ineligibilityCode: isExpired ? 'EXPIRED' : null,
-      ineligibilityReason: isExpired ? `Card expired in ${m.expiryMonth}/${m.expiryYear}.` : null,
-      isPreferred: !!m.isDefault,
-    };
-  });
+  const { listPaymentMethods } = await import('../payment-method/payment-method.service.js');
+  const { annotateSavedMethodsForProfile } = await import('../payment/payment-region.service.js');
+  const annotatedMethods = annotateSavedMethodsForProfile(await listPaymentMethods(riderId, 'rider'));
 
   return {
     ...user,

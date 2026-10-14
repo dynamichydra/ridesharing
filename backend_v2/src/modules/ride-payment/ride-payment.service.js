@@ -4,7 +4,8 @@ import { rides, payments, users, drivers, cashCollections, subscriptions, subscr
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
 import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
-import { resolvePaymentRegion, evaluatePaymentMethodEligibility } from '../payment/payment-region.service.js';
+import { resolvePaymentRegion } from '../payment/payment-region.service.js';
+import { chargeWithSavedMethod, isSavedMethodId, toActionRequiredResponse } from '../payment-method/saved-method-charge.service.js';
 import { formatMoney } from '../../utils/money.js';
 import { withIdempotency } from '../../utils/idempotency.js';
 import { postTransaction, getOrCreateSystemAccount, getOrCreateWalletAccount } from '../ledger/ledger.service.js';
@@ -43,74 +44,55 @@ export async function initiateRidePayment(riderId, rideId, idempotencyKey, payme
     const regionConfig = await resolvePaymentRegion({ rideId, riderId });
 
     // Handle payment with a saved payment method
-    if (paymentMethodId && paymentMethodId !== 'cash' && paymentMethodId !== 'wallet') {
-      const [savedMethod] = await db.select().from(paymentMethods)
-        .where(and(
-          eq(paymentMethods.id, paymentMethodId),
-          eq(paymentMethods.userId, riderId),
-          eq(paymentMethods.isActive, true)
-        ))
-        .limit(1);
+    if (isSavedMethodId(paymentMethodId)) {
+      const saved = await chargeWithSavedMethod({
+        ownerId: riderId,
+        role: 'rider',
+        paymentMethodId,
+        amountMinor: payAmountMinor,
+        currencyCode: ride.currencyCode,
+        regionContext: { rideId, riderId },
+        metadata: { rideId, riderId },
+        idempotencyKey: effectiveKey,
+      });
+      const { method: savedMethod, gateway: gw, charge: chargeResult } = saved;
 
-      if (!savedMethod) {
-        throw { statusCode: 403, message: 'Invalid or unauthorized payment method' };
-      }
+      const [payment] = await db.insert(payments).values({
+        rideId,
+        subscriptionId: null,
+        countryId: await _requireCountryId(ride),
+        gateway: gw.name,
+        currencyCode: ride.currencyCode,
+        amountMinor: payAmountMinor,
+        status: chargeResult.status === 'succeeded' ? 'succeeded' : 'created',
+        gatewayOrderId: chargeResult.gatewayOrderId,
+        gatewayPaymentId: chargeResult.gatewayPaymentId || null,
+        metadata: { payerId: riderId, paymentMethodId: savedMethod.id },
+      }).returning();
 
-      // Revalidate eligibility in the ride's authoritative region
-      const eligibility = evaluatePaymentMethodEligibility(savedMethod, regionConfig);
-      if (!eligibility.isEligible) {
-        throw {
-          statusCode: 400,
-          code: 'PAYMENT_METHOD_INELIGIBLE',
-          message: `Selected payment method cannot be used for this ride: ${eligibility.ineligibilityReason}`,
+      if (chargeResult.status === 'succeeded') {
+        await _markRidePaid(ride, {
+          method: 'online',
+          gateway: gw.name,
+          gatewayPaymentId: chargeResult.gatewayPaymentId || chargeResult.gatewayOrderId,
+          gatewayOrderId: chargeResult.gatewayOrderId,
+          amountMinor: payAmountMinor,
+          payerId: riderId,
+          paymentAttemptId: payment.id,
+        });
+        return {
+          ...chargeResult,
+          status: 'paid',
+          paymentAttemptId: payment.id,
+          isPaid: true,
         };
       }
 
-      const gw = getGateway(savedMethod.gateway);
-      if (gw && typeof gw.chargeSavedMethod === 'function') {
-        const chargeResult = await gw.chargeSavedMethod({
-          amountMinor: payAmountMinor,
-          currencyCode: ride.currencyCode,
-          customerId: savedMethod.gatewayCustomerId,
-          paymentMethodToken: savedMethod.paymentMethodToken,
-          metadata: { rideId, riderId, paymentMethodId: savedMethod.id },
-          idempotencyKey: effectiveKey,
-        });
-
-        const [payment] = await db.insert(payments).values({
-          rideId,
-          subscriptionId: null,
-          countryId: await _requireCountryId(ride),
-          gateway: gw.name,
-          currencyCode: ride.currencyCode,
-          amountMinor: payAmountMinor,
-          status: chargeResult.status === 'succeeded' ? 'succeeded' : 'created',
-          gatewayOrderId: chargeResult.gatewayOrderId,
-          gatewayPaymentId: chargeResult.gatewayPaymentId || null,
-          metadata: { payerId: riderId, paymentMethodId: savedMethod.id },
-        }).returning();
-
-        if (chargeResult.status === 'succeeded') {
-          await _markRidePaid(ride, {
-            method: 'online',
-            gateway: gw.name,
-            gatewayPaymentId: chargeResult.gatewayPaymentId || chargeResult.gatewayOrderId,
-            gatewayOrderId: chargeResult.gatewayOrderId,
-            amountMinor: payAmountMinor,
-            payerId: riderId,
-            paymentAttemptId: payment.id,
-          });
-          return {
-            ...chargeResult,
-            status: 'paid',
-            paymentAttemptId: payment.id,
-            isPaid: true,
-          };
-        }
-
-        await db.update(rides).set({ paymentMethod: savedMethod.id, paymentStatus: 'processing' }).where(eq(rides.id, rideId));
-        return { ...chargeResult, paymentAttemptId: payment.id };
-      }
+      await db.update(rides).set({ paymentMethod: savedMethod.id, paymentStatus: 'processing' }).where(eq(rides.id, rideId));
+      return {
+        ...toActionRequiredResponse(saved, { paymentAttemptId: payment.id }),
+        status: chargeResult.status,
+      };
     }
 
     const gateway = regionConfig.primaryGateway
