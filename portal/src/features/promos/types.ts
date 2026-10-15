@@ -4,6 +4,9 @@ export type DiscountType =
   | "percentage"
   | "flat_amount";
 
+/** What a code is redeemed against: ride fare discount, or bonus credit on a rider wallet top-up. */
+export type PromoAppliesTo = "ride" | "wallet_topup";
+
 export interface LookupOption {
   id: string;
   name: string;
@@ -24,6 +27,7 @@ export interface Promo {
   usedCount: number;
   perUserLimit?: number | null;
   isFirstRideOnly?: boolean;
+  appliesTo?: PromoAppliesTo;
   startsAt?: string | null;
   expiresAt?: string | null;
   validFrom?: string | null;
@@ -60,6 +64,7 @@ export interface CreatePromoPayload {
   usageLimit?: number | null;
   perUserLimit?: number | null;
   isFirstRideOnly?: boolean;
+  appliesTo?: PromoAppliesTo;
   startsAt?: string | null;
   expiresAt?: string | null;
   validFrom?: string | null;

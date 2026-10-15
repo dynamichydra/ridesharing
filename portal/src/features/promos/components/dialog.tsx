@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreatePromo, useUpdatePromo } from "../hooks";
-import type { Promo, DiscountType, LookupOption } from "../types";
+import type { Promo, DiscountType, LookupOption, PromoAppliesTo } from "../types";
 
 interface PromoDialogProps {
   open: boolean;
@@ -49,6 +49,8 @@ export function PromoDialog({
   const [cityId, setCityId] = useState("");
   const [vehicleTypeId, setVehicleTypeId] = useState("");
   const [isFirstRideOnly, setIsFirstRideOnly] = useState(false);
+  const [appliesTo, setAppliesTo] = useState<PromoAppliesTo>("ride");
+  const isWallet = appliesTo === "wallet_topup";
 
   const createMutation = useCreatePromo();
   const updateMutation = useUpdatePromo();
@@ -84,6 +86,7 @@ export function PromoDialog({
       setCityId(promoToEdit.cityId || "");
       setVehicleTypeId(promoToEdit.vehicleTypeId || "");
       setIsFirstRideOnly(Boolean(promoToEdit.isFirstRideOnly));
+      setAppliesTo(promoToEdit.appliesTo ?? "ride");
     } else {
       setCode("");
       setDescription("");
@@ -98,6 +101,7 @@ export function PromoDialog({
       setCityId("");
       setVehicleTypeId("");
       setIsFirstRideOnly(false);
+      setAppliesTo("ride");
     }
   }, [promoToEdit, open]);
 
@@ -124,8 +128,10 @@ export function PromoDialog({
       expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
       countryId: countryId || null,
       cityId: cityId || null,
-      vehicleTypeId: vehicleTypeId || null,
+      // Vehicle class is meaningless for a wallet top-up.
+      vehicleTypeId: isWallet ? null : vehicleTypeId || null,
       isFirstRideOnly,
+      appliesTo,
     };
 
     if (promoToEdit) {
@@ -166,6 +172,27 @@ export function PromoDialog({
                 onChange={(e) => setDescription(e.target.value)}
               />
             </div>
+          </div>
+
+          {/* Where the code can be redeemed */}
+          <div className="space-y-1.5">
+            <Label>Applies To</Label>
+            <Select value={appliesTo} onValueChange={(val: PromoAppliesTo) => setAppliesTo(val)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ride">Ride fare (discount)</SelectItem>
+                <SelectItem value="wallet_topup">Wallet top-up (bonus credit, riders)</SelectItem>
+              </SelectContent>
+            </Select>
+            {isWallet && (
+              <p className="text-[11px] text-muted-foreground">
+                The rider pays the top-up amount and gets the discount value added on top as bonus wallet
+                credit, once the payment succeeds. Wallet codes can't be used on rides, and ride codes
+                can't be used on top-ups.
+              </p>
+            )}
           </div>
 
           {/* Regional & Category Scoping */}
@@ -211,6 +238,7 @@ export function PromoDialog({
                 id="promo-vehicle"
                 value={vehicleTypeId}
                 onChange={(e) => setVehicleTypeId(e.target.value)}
+                disabled={isWallet}
                 className="w-full h-9 rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <option value="">All Vehicles</option>
@@ -242,8 +270,8 @@ export function PromoDialog({
             <div className="space-y-1.5">
               <Label htmlFor="val">
                 {String(discountType).toLowerCase() === "percentage"
-                  ? "Discount Percentage (%) *"
-                  : "Flat Amount (Units) *"}
+                  ? isWallet ? "Bonus Percentage (%) *" : "Discount Percentage (%) *"
+                  : isWallet ? "Flat Bonus (Units) *" : "Flat Amount (Units) *"}
               </Label>
               <Input
                 id="val"
@@ -259,7 +287,7 @@ export function PromoDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="minFare">Min Fare Required</Label>
+              <Label htmlFor="minFare">{isWallet ? "Min Top-up Amount" : "Min Fare Required"}</Label>
               <Input
                 id="minFare"
                 type="number"
@@ -269,7 +297,7 @@ export function PromoDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="maxDiscount">Max Discount Cap</Label>
+              <Label htmlFor="maxDiscount">{isWallet ? "Max Bonus Cap" : "Max Discount Cap"}</Label>
               <Input
                 id="maxDiscount"
                 type="number"

@@ -28,6 +28,11 @@ export function getPromoColumns({
             <span className="font-mono font-bold text-foreground tracking-wider bg-accent/60 px-2 py-0.5 rounded border border-border w-fit text-xs">
               {row.original.code}
             </span>
+            {row.original.appliesTo === "wallet_topup" && (
+              <Badge variant="outline" className="text-[10px] bg-sky-500/10 text-sky-600 border-sky-500/30 px-1.5 py-0">
+                Wallet Top-up
+              </Badge>
+            )}
             {row.original.isFirstRideOnly && (
               <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/30 gap-1 px-1.5 py-0">
                 <Sparkles className="h-2.5 w-2.5" /> 1st Ride
@@ -67,13 +72,13 @@ export function getPromoColumns({
         if (isPercentage) {
           return (
             <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 font-semibold">
-              {val}% OFF
+              {val}% {row.original.appliesTo === "wallet_topup" ? "BONUS" : "OFF"}
             </Badge>
           );
         }
         return (
           <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-semibold">
-            ₹{(val / 100).toFixed(2)} FLAT
+            ₹{(val / 100).toFixed(2)} {row.original.appliesTo === "wallet_topup" ? "BONUS" : "FLAT"}
           </Badge>
         );
       },
