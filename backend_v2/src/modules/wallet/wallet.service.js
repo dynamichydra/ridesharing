@@ -76,7 +76,9 @@ export async function getMyWallet(user) {
 //
 // paymentMethodId (optional): one of the owner's saved cards — charged directly instead of
 // opening a fresh checkout. See _topupWithSavedMethod.
-export async function initiateWalletTopup(user, amountMinor, idempotencyKey, paymentMethodId = null) {
+// promoCode (optional, riders only): a wallet_topup coupon. Validated now and stored on the
+// payment attempt; the bonus itself is only credited once the top-up is paid.
+export async function initiateWalletTopup(user, amountMinor, idempotencyKey, paymentMethodId = null, promoCode = null) {
   const ownerType = resolveOwnerTypeFromRole(user.role);
   if (!Number.isInteger(amountMinor) || amountMinor <= 0) {
     throw { statusCode: 400, message: 'amountMinor must be a positive integer' };
@@ -85,9 +87,12 @@ export async function initiateWalletTopup(user, amountMinor, idempotencyKey, pay
   return withIdempotency('wallet_topup_initiate', idempotencyKey, user.id, async () => {
     const wallet = await getOrCreateWallet(ownerType, user.id);
     const country = await resolveOwnerCountry(ownerType, user.id);
+    const coupon = promoCode
+      ? await _resolveTopupCoupon(user, ownerType, wallet, country, amountMinor, promoCode)
+      : null;
 
     if (isSavedMethodId(paymentMethodId)) {
-      return _topupWithSavedMethod({ user, ownerType, wallet, country, amountMinor, paymentMethodId, idempotencyKey });
+      return _topupWithSavedMethod({ user, ownerType, wallet, country, amountMinor, paymentMethodId, idempotencyKey, coupon });
     }
 
     const gateway = gatewayForCurrency(wallet.currencyCode);
@@ -95,7 +100,7 @@ export async function initiateWalletTopup(user, amountMinor, idempotencyKey, pay
     if (!gateway) {
       // Dev mode — this currency's gateway has no keys configured, credit directly.
       return _creditWalletTopup(wallet, country.id, {
-        gateway: 'none', gatewayPaymentId: 'dev_topup_' + Date.now(), gatewayOrderId: null, amountMinor,
+        gateway: 'none', gatewayPaymentId: 'dev_topup_' + Date.now(), gatewayOrderId: null, amountMinor, coupon,
       });
     }
 
@@ -113,15 +118,84 @@ export async function initiateWalletTopup(user, amountMinor, idempotencyKey, pay
       amountMinor,
       status: 'created',
       gatewayOrderId: order.gatewayOrderId,
+      metadata: coupon ? { coupon } : null,
     }).returning();
 
-    return { ...order, paymentAttemptId: payment.id };
+    return { ...order, paymentAttemptId: payment.id, coupon };
   });
+}
+
+// ── Wallet top-up coupons (riders) ───────────────────────────────────────────────
+
+async function _resolveTopupCoupon(user, ownerType, wallet, country, amountMinor, promoCode) {
+  if (ownerType !== 'rider') throw { statusCode: 400, message: 'Coupons are only available for rider wallets' };
+  const { validatePromoCode } = await import('../promo/promo.service.js');
+  const result = await validatePromoCode(promoCode, amountMinor, user.id, {
+    appliesTo: 'wallet_topup',
+    countryId: country.id,
+    currencyCode: wallet.currencyCode,
+  });
+  return {
+    promoId: result.promoId,
+    code: result.code,
+    description: result.description,
+    bonusMinor: result.discountAmountMinor,
+  };
+}
+
+// Preview for the Add Money screen: what a coupon would add on top of amountMinor.
+export async function previewTopupCoupon(user, amountMinor, promoCode) {
+  if (!Number.isInteger(amountMinor) || amountMinor <= 0) {
+    throw { statusCode: 400, message: 'amountMinor must be a positive integer' };
+  }
+  const ownerType = resolveOwnerTypeFromRole(user.role);
+  const wallet = await getOrCreateWallet(ownerType, user.id);
+  const country = await resolveOwnerCountry(ownerType, user.id);
+  const coupon = await _resolveTopupCoupon(user, ownerType, wallet, country, amountMinor, promoCode);
+  return {
+    ...coupon,
+    amountMinor,
+    creditMinor: amountMinor + coupon.bonusMinor,
+    currencyCode: wallet.currencyCode,
+  };
+}
+
+// Dr promo expense, Cr wallet — only if the coupon can still be redeemed (limits are
+// re-checked under lock; see redeemWalletTopupPromo). Ledger-idempotent per payment.
+async function _creditTopupBonus(wallet, paymentId, coupon) {
+  if (!coupon?.promoId || !(coupon.bonusMinor > 0) || !wallet.riderId) return null;
+  const { redeemWalletTopupPromo } = await import('../promo/promo.service.js');
+  const usage = await redeemWalletTopupPromo({
+    promoId: coupon.promoId, userId: wallet.riderId, paymentId, bonusMinor: coupon.bonusMinor,
+  });
+  if (!usage) return null;
+
+  const [walletAccount, expenseAccount] = await Promise.all([
+    getOrCreateWalletAccount(wallet.id, wallet.currencyCode),
+    getOrCreateSystemAccount('promo_expense:wallet_topup', wallet.currencyCode),
+  ]);
+  const { walletUpdates } = await postTransaction({
+    businessType: 'wallet_topup_bonus',
+    idempotencyKey: `wallet_topup_bonus:${paymentId}`,
+    referenceType: 'wallet', referenceId: wallet.id,
+    entries: [
+      { accountId: expenseAccount.id, direction: 'debit', amountMinor: coupon.bonusMinor, currencyCode: wallet.currencyCode },
+      {
+        accountId: walletAccount.id, direction: 'credit', amountMinor: coupon.bonusMinor, currencyCode: wallet.currencyCode,
+        reason: 'wallet_topup_bonus', description: `Coupon ${coupon.code} bonus`,
+      },
+    ],
+  });
+  return {
+    code: coupon.code,
+    bonusMinor: coupon.bonusMinor,
+    wallet: walletUpdates.find((u) => u.wallet.id === wallet.id)?.wallet ?? null,
+  };
 }
 
 // Success credits the wallet immediately ({ isPaid: true, wallet, transaction }); otherwise the
 // client finishes 3DS / Razorpay Checkout and calls /topup/verify with the returned order.
-async function _topupWithSavedMethod({ user, ownerType, wallet, country, amountMinor, paymentMethodId, idempotencyKey }) {
+async function _topupWithSavedMethod({ user, ownerType, wallet, country, amountMinor, paymentMethodId, idempotencyKey, coupon = null }) {
   const saved = await chargeWithSavedMethod({
     ownerId: user.id,
     role: ownerType,
@@ -142,7 +216,7 @@ async function _topupWithSavedMethod({ user, ownerType, wallet, country, amountM
     amountMinor,
     status: 'created',
     gatewayOrderId: charge.gatewayOrderId,
-    metadata: { payerId: user.id, paymentMethodId: saved.method.id },
+    metadata: { payerId: user.id, paymentMethodId: saved.method.id, ...(coupon ? { coupon } : {}) },
   }).returning();
 
   if (charge.status === 'succeeded') {
@@ -152,6 +226,7 @@ async function _topupWithSavedMethod({ user, ownerType, wallet, country, amountM
       gatewayOrderId: charge.gatewayOrderId,
       amountMinor,
       paymentAttemptId: payment.id,
+      coupon,
     });
     return {
       ...credited,
@@ -162,7 +237,7 @@ async function _topupWithSavedMethod({ user, ownerType, wallet, country, amountM
     };
   }
 
-  return toActionRequiredResponse(saved, { paymentAttemptId: payment.id, amountMinor });
+  return toActionRequiredResponse(saved, { paymentAttemptId: payment.id, amountMinor, coupon });
 }
 
 // ── Driver dues ──────────────────────────────────────────────────────────────────
@@ -208,6 +283,7 @@ export async function verifyWalletTopup(user, orderRef, paymentRef, signature) {
   return _creditWalletTopup(wallet, attempt.countryId, {
     gateway: gateway.name, gatewayPaymentId: paymentRef, gatewayOrderId: orderRef,
     amountMinor: attempt.amountMinor, paymentAttemptId: attempt.id,
+    coupon: attempt.metadata?.coupon || null,
   });
 }
 
@@ -215,12 +291,13 @@ export async function verifyWalletTopup(user, orderRef, paymentRef, signature) {
 // online ride fare's clearing leg (ride-payment.service.js _postRideFareLedger), just without
 // a commission split since a top-up isn't a fare.
 async function _creditWalletTopup(wallet, countryId, paymentInfo) {
+  let paymentId = paymentInfo.paymentAttemptId;
   if (paymentInfo.paymentAttemptId) {
     await db.update(payments)
       .set({ status: 'captured', gatewayPaymentId: paymentInfo.gatewayPaymentId, updatedAt: new Date() })
       .where(eq(payments.id, paymentInfo.paymentAttemptId));
   } else {
-    await db.insert(payments).values({
+    const [inserted] = await db.insert(payments).values({
       walletId: wallet.id,
       countryId,
       gateway: paymentInfo.gateway,
@@ -229,7 +306,9 @@ async function _creditWalletTopup(wallet, countryId, paymentInfo) {
       status: 'captured',
       gatewayOrderId: paymentInfo.gatewayOrderId,
       gatewayPaymentId: paymentInfo.gatewayPaymentId,
-    });
+      metadata: paymentInfo.coupon ? { coupon: paymentInfo.coupon } : null,
+    }).returning();
+    paymentId = inserted.id;
   }
 
   const [walletAccount, clearingAccount] = await Promise.all([
@@ -251,7 +330,12 @@ async function _creditWalletTopup(wallet, countryId, paymentInfo) {
   });
 
   const walletUpdate = walletUpdates.find((u) => u.wallet.id === wallet.id);
-  const result = { wallet: walletUpdate?.wallet ?? wallet, transaction: walletUpdate?.walletTransaction ?? null };
+  const bonus = await _creditTopupBonus(wallet, paymentId, paymentInfo.coupon);
+  const result = {
+    wallet: bonus?.wallet ?? walletUpdate?.wallet ?? wallet,
+    transaction: walletUpdate?.walletTransaction ?? null,
+    bonus: bonus ? { code: bonus.code, bonusMinor: bonus.bonusMinor } : null,
+  };
 
   const ownerType = wallet.driverId ? 'driver' : 'rider';
   const ownerId = wallet.driverId || wallet.riderId;

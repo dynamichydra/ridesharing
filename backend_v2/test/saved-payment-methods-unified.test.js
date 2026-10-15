@@ -83,3 +83,11 @@ test('driver dues are the negative part of the wallet balance', () => {
   assert.equal(computeDuesMinor(0), 0);
   assert.equal(computeDuesMinor(1200), 0);
 });
+
+test('wallet top-up coupon bonus: percentage with cap, flat never exceeds the top-up', async () => {
+  const { computePromoAmountMinor } = await import('../src/modules/promo/promo.service.js');
+  assert.equal(computePromoAmountMinor({ discountType: 'percentage', discountValue: 10 }, 50000), 5000);
+  assert.equal(computePromoAmountMinor({ discountType: 'percentage', discountValue: 10, maxDiscountMinor: 2000 }, 50000), 2000);
+  assert.equal(computePromoAmountMinor({ discountType: 'flat_amount', discountValue: 10000 }, 50000), 10000);
+  assert.equal(computePromoAmountMinor({ discountType: 'flat_amount', discountValue: 10000 }, 5000), 5000);
+});

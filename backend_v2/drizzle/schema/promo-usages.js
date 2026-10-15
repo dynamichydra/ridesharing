@@ -2,15 +2,19 @@ import { pgTable, uuid, integer, timestamp, unique } from 'drizzle-orm/pg-core';
 import { promos } from './promos.js';
 import { users } from './users.js';
 import { rides } from './rides.js';
+import { payments } from './payments.js';
 
 export const promoUsages = pgTable('promo_usages', {
   id: uuid('id').primaryKey().defaultRandom(),
   promoId: uuid('promo_id').references(() => promos.id).notNull(),
   userId: uuid('user_id').references(() => users.id).notNull(),
-  rideId: uuid('ride_id').references(() => rides.id).notNull(),
+  // Exactly one of rideId (ride promo) / paymentId (wallet top-up coupon) is set.
+  rideId: uuid('ride_id').references(() => rides.id),
+  paymentId: uuid('payment_id').references(() => payments.id),
   discountAmountMinor: integer('discount_amount_minor').notNull(),
   usedAt: timestamp('used_at').defaultNow().notNull(),
 }, (t) => ([
   unique().on(t.promoId, t.rideId),
+  unique().on(t.promoId, t.paymentId),
 ]));
 

@@ -5,7 +5,7 @@ import * as promoService from './promo.service.js';
 export async function promoRoutes(app) {
 
   // ── Rider — Available Promo Codes ──────────────────────────────────────────
-  // GET /api/v1/promos/available
+  // GET /api/v1/promos/available?appliesTo=ride|wallet_topup (default ride)
   app.get('/available', { preHandler: [authenticateRider] }, async (request, reply) => {
     const data = await promoService.listAvailablePromosForUser(request.user?.id, request.query || {});
     return sendSuccess(reply, data);
@@ -51,6 +51,7 @@ export async function promoRoutes(app) {
     const filters = {
       isActive: request.query.isActive,
       countryId: request.query.countryId,
+      appliesTo: request.query.appliesTo,
     };
     const { rows, pagination } = await promoService.listPromos(filters, page, limit, offset);
     return sendList(reply, rows, pagination);

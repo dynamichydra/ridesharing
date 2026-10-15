@@ -20,6 +20,9 @@ export const promos = pgTable('promos', {
   countryId: uuid('country_id').references(() => countries.id), // null = all countries
   cityId: uuid('city_id').references(() => cities.id), // null = all cities in country
   vehicleTypeId: uuid('vehicle_type_id').references(() => vehicleTypes.id), // null = all vehicle classes
+  // What the code can be redeemed against: 'ride' (fare discount) or 'wallet_topup' (bonus
+  // wallet credit on a rider top-up). Kept separate so a ride code can't mint wallet credit.
+  appliesTo: varchar('applies_to', { length: 20 }).default('ride').notNull(),
   isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

@@ -21,16 +21,25 @@ export async function walletRoutes(app) {
     return sendList(reply, rows, pagination);
   });
 
-  // POST /api/v1/wallets/me/topup/initiate  { amountMinor, paymentMethodId? }
+  // POST /api/v1/wallets/me/topup/coupon  { amountMinor, code } — rider only. Previews the
+  // bonus a wallet_topup coupon would add; nothing is reserved until the top-up is paid.
+  app.post('/me/topup/coupon', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const { amountMinor, code } = request.body || {};
+    if (!code) return sendError(reply, 'code is required', 400);
+    const data = await walletService.previewTopupCoupon(request.user, amountMinor, code);
+    return sendSuccess(reply, data);
+  });
+
+  // POST /api/v1/wallets/me/topup/initiate  { amountMinor, paymentMethodId?, promoCode? }
   // Requires an Idempotency-Key header so a retried/double-submitted request returns the
   // original gateway order instead of creating a second one. paymentMethodId charges one of
   // the caller's saved cards instead of opening a new checkout.
   app.post('/me/topup/initiate', { preHandler: [authenticateAny] }, async (request, reply) => {
-    const { amountMinor, paymentMethodId } = request.body;
+    const { amountMinor, paymentMethodId, promoCode } = request.body;
     if (!amountMinor) return sendError(reply, 'amountMinor is required');
     const idempotencyKey = request.headers['idempotency-key'];
     if (!idempotencyKey) return sendError(reply, 'Idempotency-Key header is required', 400);
-    const data = await walletService.initiateWalletTopup(request.user, amountMinor, idempotencyKey, paymentMethodId);
+    const data = await walletService.initiateWalletTopup(request.user, amountMinor, idempotencyKey, paymentMethodId, promoCode);
     return sendSuccess(reply, data);
   });
 

@@ -10,6 +10,19 @@ import { getOrCreateWalletAccount, getOrCreateSystemAccount, postTransaction } f
 
 // ── Rider — Validate Promo Code ───────────────────────────────────────────────
 
+export const PROMO_APPLIES_TO = ['ride', 'wallet_topup'];
+
+function normalizeAppliesTo(value) {
+  const v = String(value || 'ride').toLowerCase();
+  if (!PROMO_APPLIES_TO.includes(v)) {
+    throw { statusCode: 400, message: `appliesTo must be one of: ${PROMO_APPLIES_TO.join(', ')}` };
+  }
+  return v;
+}
+
+// fareMinor is the amount the code is applied against — the ride fare, or the top-up amount
+// for a wallet_topup coupon (where discountAmountMinor is the bonus credited, not a discount).
+// context.appliesTo defaults to 'ride', so ride callers never accept wallet coupons and vice versa.
 export async function validatePromoCode(code, fareMinor, userId, contextOrCountryId = null) {
   if (!code) throw { statusCode: 400, message: 'Promo code is required' };
   if (fareMinor == null || fareMinor < 0) throw { statusCode: 400, message: 'fareMinor must be a non-negative integer' };
@@ -17,20 +30,33 @@ export async function validatePromoCode(code, fareMinor, userId, contextOrCountr
   let countryId = null;
   let cityId = null;
   let vehicleTypeId = null;
+  let appliesTo = 'ride';
+  let currencyCode = null;
 
   if (contextOrCountryId && typeof contextOrCountryId === 'object') {
     countryId = contextOrCountryId.countryId || null;
     cityId = contextOrCountryId.cityId || null;
     vehicleTypeId = contextOrCountryId.vehicleTypeId || null;
+    appliesTo = normalizeAppliesTo(contextOrCountryId.appliesTo);
+    currencyCode = contextOrCountryId.currencyCode || null;
   } else {
     countryId = contextOrCountryId;
   }
+  const isWalletTopup = appliesTo === 'wallet_topup';
 
   const cleanCode = String(code).trim().toUpperCase();
   const [promo] = await db.select().from(promos).where(eq(promos.code, cleanCode)).limit(1);
 
   if (!promo || !promo.isActive) {
     throw { statusCode: 404, message: 'Invalid or inactive promo code' };
+  }
+  if ((promo.appliesTo || 'ride') !== appliesTo) {
+    throw {
+      statusCode: 400,
+      message: isWalletTopup
+        ? 'This code is for rides and cannot be used on wallet top-ups'
+        : 'This code can only be used when adding money to your wallet',
+    };
   }
 
   const now = new Date();
@@ -67,9 +93,12 @@ export async function validatePromoCode(code, fareMinor, userId, contextOrCountr
   }
 
   if (fareMinor < promo.minFareMinor) {
+    const min = currencyCode ? formatMoney(promo.minFareMinor, currencyCode) : promo.minFareMinor;
     throw {
       statusCode: 400,
-      message: `Minimum fare of ${promo.minFareMinor} required for this promo code`,
+      message: isWalletTopup
+        ? `Add at least ${min} to use this coupon`
+        : `Minimum fare of ${min} required for this promo code`,
     };
   }
 
@@ -94,13 +123,7 @@ export async function validatePromoCode(code, fareMinor, userId, contextOrCountr
     }
   }
 
-  let discountAmountMinor = 0;
-  if (promo.discountType === 'percentage') {
-    const rawDiscount = Math.round(fareMinor * (promo.discountValue / 100));
-    discountAmountMinor = promo.maxDiscountMinor ? Math.min(rawDiscount, promo.maxDiscountMinor) : rawDiscount;
-  } else if (promo.discountType === 'flat_amount') {
-    discountAmountMinor = Math.min(fareMinor, promo.discountValue);
-  }
+  const discountAmountMinor = computePromoAmountMinor(promo, fareMinor);
 
   const finalFareMinor = Math.max(0, fareMinor - discountAmountMinor);
 
@@ -113,14 +136,28 @@ export async function validatePromoCode(code, fareMinor, userId, contextOrCountr
     discountAmountMinor,
     originalFareMinor: fareMinor,
     finalFareMinor,
+    appliesTo,
     alreadyApplied: false,
   };
 }
 
-export async function listAvailablePromosForUser(userId, { countryId = null, cityId = null, vehicleTypeId = null } = {}) {
+// Percentage (optionally capped) or flat amount, never more than the base amount.
+export function computePromoAmountMinor(promo, baseMinor) {
+  if (promo.discountType === 'percentage') {
+    const raw = Math.round(baseMinor * (promo.discountValue / 100));
+    return promo.maxDiscountMinor ? Math.min(raw, promo.maxDiscountMinor) : raw;
+  }
+  if (promo.discountType === 'flat_amount') {
+    return Math.min(baseMinor, promo.discountValue);
+  }
+  return 0;
+}
+
+export async function listAvailablePromosForUser(userId, { countryId = null, cityId = null, vehicleTypeId = null, appliesTo = 'ride' } = {}) {
   const now = new Date();
   const conditions = [
     eq(promos.isActive, true),
+    eq(promos.appliesTo, normalizeAppliesTo(appliesTo)),
     or(isNull(promos.validFrom), lte(promos.validFrom, now)),
     or(isNull(promos.validUntil), gte(promos.validUntil, now)),
   ];
@@ -163,6 +200,7 @@ export async function listAvailablePromosForUser(userId, { countryId = null, cit
       maxDiscountMinor: p.maxDiscountMinor,
       minFareMinor: p.minFareMinor,
       validUntil: p.validUntil,
+      appliesTo: p.appliesTo,
       perUserLimit: p.perUserLimit,
       isFirstRideOnly: p.isFirstRideOnly,
       userUsedCount,
@@ -195,6 +233,33 @@ export async function recordPromoUsage(promoId, userId, rideId, discountAmountMi
     }
 
     return inserted || null;
+  });
+}
+
+// Wallet top-up coupon redemption, called when the top-up is credited (not when it's
+// initiated — an abandoned checkout must not burn the code). Re-checks the global and
+// per-user limits under a row lock on the promo, since several top-ups can be initiated with
+// the same code before any of them is paid. Returns the usage row, or null when the bonus
+// must not be granted (limit hit meanwhile, or this payment was already recorded).
+export async function redeemWalletTopupPromo({ promoId, userId, paymentId, bonusMinor }) {
+  return db.transaction(async (tx) => {
+    const [promo] = await tx.select().from(promos).where(eq(promos.id, promoId)).limit(1).for('update');
+    if (!promo || !promo.isActive || promo.appliesTo !== 'wallet_topup') return null;
+    if (promo.usageLimit != null && promo.usedCount >= promo.usageLimit) return null;
+
+    const [{ used }] = await tx.select({ used: count() }).from(promoUsages)
+      .where(and(eq(promoUsages.promoId, promoId), eq(promoUsages.userId, userId)));
+    if (Number(used) >= promo.perUserLimit) return null;
+
+    const [inserted] = await tx.insert(promoUsages).values({
+      promoId, userId, paymentId, discountAmountMinor: bonusMinor,
+    }).onConflictDoNothing().returning();
+    if (!inserted) return null;
+
+    await tx.update(promos)
+      .set({ usedCount: sql`${promos.usedCount} + 1`, updatedAt: new Date() })
+      .where(eq(promos.id, promoId));
+    return inserted;
   });
 }
 
@@ -334,6 +399,7 @@ export async function createPromo(data) {
 
   const [promo] = await db.insert(promos).values({
     code: cleanCode,
+    appliesTo: normalizeAppliesTo(data.appliesTo),
     description: data.description || null,
     discountType,
     discountValue,
@@ -367,6 +433,7 @@ export async function listPromos(filters, page, limit, offset) {
   if (filters.countryId) conditions.push(eq(promos.countryId, filters.countryId));
   if (filters.cityId) conditions.push(eq(promos.cityId, filters.cityId));
   if (filters.vehicleTypeId) conditions.push(eq(promos.vehicleTypeId, filters.vehicleTypeId));
+  if (filters.appliesTo) conditions.push(eq(promos.appliesTo, normalizeAppliesTo(filters.appliesTo)));
   const where = conditions.length ? and(...conditions) : undefined;
 
   const [{ total }] = await db.select({ total: count() }).from(promos).where(where);
@@ -413,6 +480,7 @@ export async function updatePromo(id, updates) {
   if (updates.cityId !== undefined) patch.cityId = updates.cityId || null;
   if (updates.vehicleTypeId !== undefined) patch.vehicleTypeId = updates.vehicleTypeId || null;
   if (updates.isFirstRideOnly !== undefined) patch.isFirstRideOnly = Boolean(updates.isFirstRideOnly);
+  if (updates.appliesTo !== undefined) patch.appliesTo = normalizeAppliesTo(updates.appliesTo);
 
   if (updates.discountType) {
     const rawType = String(updates.discountType).toLowerCase();
