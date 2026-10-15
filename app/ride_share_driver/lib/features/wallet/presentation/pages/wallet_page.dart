@@ -758,41 +758,30 @@ class _WalletPageState extends State<WalletPage> {
                     ),
                     const SizedBox(height: 16),
 
-                    // 1.1 Pay dues (negative balance) / Add money — saved cards or gateway checkout
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: isNegative
-                          ? ElevatedButton.icon(
-                              onPressed: state is WalletLoaded
-                                  ? () => _openWalletPayment(WalletPaymentMode.dues, currencyCode, -balanceMinor)
-                                  : null,
-                              icon: const Icon(Icons.payments_rounded, size: 20),
-                              label: Text(
-                                'Pay Dues $currencySymbol${balance.abs().toStringAsFixed(2)}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFC62828),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                elevation: 0,
-                              ),
-                            )
-                          : OutlinedButton.icon(
-                              onPressed: state is WalletLoaded
-                                  ? () => _openWalletPayment(WalletPaymentMode.topup, currencyCode, 0)
-                                  : null,
-                              icon: const Icon(Icons.add_card_rounded, size: 20),
-                              label: const Text('Add Money', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF009048),
-                                side: const BorderSide(color: Color(0xFF009048), width: 1.2),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                              ),
-                            ),
-                    ),
-                    const SizedBox(height: 10),
+                    // 1.1 Pay dues — only when the balance is negative (cash-ride commission owed)
+                    if (isNegative) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: state is WalletLoaded
+                              ? () => _openWalletPayment(WalletPaymentMode.dues, currencyCode, -balanceMinor)
+                              : null,
+                          icon: const Icon(Icons.payments_rounded, size: 20),
+                          label: Text(
+                            'Pay Dues $currencySymbol${balance.abs().toStringAsFixed(2)}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFC62828),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: 0,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
 
                     // 2. Action Buttons: Cash Out & Payout History
                     Row(
@@ -838,7 +827,7 @@ class _WalletPageState extends State<WalletPage> {
 
                     // 2.1 Commission & Settlement Info Banner
                     InkWell(
-                      onTap: () => context.push('/earnings'),
+                      onTap: () => DriverMainLayout.switchToTab(2),
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

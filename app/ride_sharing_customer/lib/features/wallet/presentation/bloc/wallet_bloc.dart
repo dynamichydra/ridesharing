@@ -29,10 +29,13 @@ class InitiateWalletTopup extends WalletEvent {
 
   /// A saved card id — charged directly instead of opening a fresh checkout.
   final String? paymentMethodId;
-  const InitiateWalletTopup({required this.amount, this.paymentMethodId});
+
+  /// Wallet top-up coupon; the bonus is credited server-side once the payment succeeds.
+  final String? promoCode;
+  const InitiateWalletTopup({required this.amount, this.paymentMethodId, this.promoCode});
 
   @override
-  List<Object?> get props => [amount, paymentMethodId];
+  List<Object?> get props => [amount, paymentMethodId, promoCode];
 }
 
 class VerifyWalletTopup extends WalletEvent {
@@ -196,7 +199,11 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
   Future<void> _onInitiateWalletTopup(InitiateWalletTopup event, Emitter<WalletState> emit) async {
     emit(TopupProcessing());
     try {
-      final result = await _walletRepository.initiateTopup(event.amount, paymentMethodId: event.paymentMethodId);
+      final result = await _walletRepository.initiateTopup(
+        event.amount,
+        paymentMethodId: event.paymentMethodId,
+        promoCode: event.promoCode,
+      );
       final gateway = (result['gateway'] ?? '').toString().toLowerCase();
 
       if (result['isPaid'] == true) {

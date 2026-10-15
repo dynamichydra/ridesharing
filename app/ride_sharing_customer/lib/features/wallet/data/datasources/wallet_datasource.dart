@@ -5,7 +5,9 @@ import '../../../../core/services/storage_service.dart';
 abstract class WalletDataSource {
   Future<Map<String, dynamic>> getWalletDetails();
   Future<void> addFunds(double amount, String paymentMethodId);
-  Future<Map<String, dynamic>> initiateTopup(double amount, {String? paymentMethodId});
+  Future<Map<String, dynamic>> initiateTopup(double amount, {String? paymentMethodId, String? promoCode});
+  Future<List<Map<String, dynamic>>> getTopupCoupons();
+  Future<Map<String, dynamic>> previewTopupCoupon(double amount, String code);
   Future<void> verifyTopup({
     required String orderRef,
     required String paymentRef,
@@ -101,7 +103,7 @@ class WalletDataSourceImpl implements WalletDataSource {
   }
 
   @override
-  Future<Map<String, dynamic>> initiateTopup(double amount, {String? paymentMethodId}) async {
+  Future<Map<String, dynamic>> initiateTopup(double amount, {String? paymentMethodId, String? promoCode}) async {
     final amountMinor = (amount * 100).round();
     final idempotencyKey = 'topup_${DateTime.now().millisecondsSinceEpoch}';
     final response = await _dioClient.dio.post(
@@ -110,6 +112,8 @@ class WalletDataSourceImpl implements WalletDataSource {
         'amountMinor': amountMinor,
         // A saved card id charges that card directly; null opens the gateway checkout.
         if (paymentMethodId != null) 'paymentMethodId': paymentMethodId,
+        // Wallet coupon — bonus is credited by the server once the top-up is paid.
+        if (promoCode != null) 'promoCode': promoCode,
       },
       options: Options(
         headers: {'Idempotency-Key': idempotencyKey},
@@ -122,6 +126,46 @@ class WalletDataSourceImpl implements WalletDataSource {
       return Map<String, dynamic>.from(raw);
     }
     return {};
+  }
+
+  // Backend error text (e.g. "This promo code has expired") instead of Dio's generic message.
+  Exception _apiError(DioException e, String fallback) {
+    final data = e.response?.data;
+    return Exception(data is Map && data['MESSAGE'] != null ? data['MESSAGE'].toString() : fallback);
+  }
+
+  /// GET /api/v1/promos/available?appliesTo=wallet_topup — coupons the rider can use on top-ups.
+  @override
+  Future<List<Map<String, dynamic>>> getTopupCoupons() async {
+    try {
+      final response = await _dioClient.dio.get(
+        '/api/v1/promos/available',
+        queryParameters: {'appliesTo': 'wallet_topup'},
+      );
+      final raw = response.data is Map ? response.data['MESSAGE'] : null;
+      if (raw is! List) return [];
+      return raw.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+    } on DioException catch (e) {
+      throw _apiError(e, 'Failed to load coupons');
+    }
+  }
+
+  /// POST /api/v1/wallets/me/topup/coupon — { code, bonusMinor, creditMinor, currencyCode }.
+  @override
+  Future<Map<String, dynamic>> previewTopupCoupon(double amount, String code) async {
+    try {
+      final response = await _dioClient.dio.post(
+        '/api/v1/wallets/me/topup/coupon',
+        data: {'amountMinor': (amount * 100).round(), 'code': code},
+      );
+      final data = response.data;
+      if (data is Map && data['SUCCESS'] == true && data['MESSAGE'] is Map) {
+        return Map<String, dynamic>.from(data['MESSAGE'] as Map);
+      }
+      throw Exception(data is Map ? data['MESSAGE']?.toString() ?? 'Invalid coupon' : 'Invalid coupon');
+    } on DioException catch (e) {
+      throw _apiError(e, 'Invalid coupon');
+    }
   }
 
   @override

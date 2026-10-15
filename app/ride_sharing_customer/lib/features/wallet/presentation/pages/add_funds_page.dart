@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -8,6 +9,7 @@ import '../../../../core/services/stripe_checkout_launcher.dart';
 import '../../../../core/payments/saved_payment_methods_service.dart';
 import '../../../../injection_container.dart' as di;
 import '../bloc/wallet_bloc.dart';
+import '../../domain/repositories/wallet_repository.dart';
 import '../../../../core/widgets/custom_toast.dart';
 
 class AddFundsPage extends StatefulWidget {
@@ -24,6 +26,11 @@ class _AddFundsPageState extends State<AddFundsPage> {
   String _selectedMethodType = 'gateway';
   List<SavedPaymentMethod> _savedCards = [];
   bool _addingCard = false;
+
+  // Wallet top-up coupon preview from the server ({code, bonusMinor, creditMinor, ...}).
+  Map<String, dynamic>? _appliedCoupon;
+  String? _couponError;
+  Timer? _couponRecheck;
   String _countryCode = 'IN'; // Resolved from wallet API or cached profile
 
   /// Maps ISO 4217 currency code → display symbol.
@@ -210,8 +217,315 @@ class _AddFundsPageState extends State<AddFundsPage> {
 
   @override
   void dispose() {
+    _couponRecheck?.cancel();
     _amountController.dispose();
     super.dispose();
+  }
+
+  // ── Coupons ──────────────────────────────────────────────────────────────────
+
+  String _money(num minor) => '$_currencySymbol${(minor / 100).toStringAsFixed(minor % 100 == 0 ? 0 : 2)}';
+
+  /// Validates [code] for the current amount; returns an error message or null on success.
+  Future<String?> _applyCoupon(String code) async {
+    final amount = double.tryParse(_amountController.text.trim()) ?? 0;
+    if (amount <= 0) return 'Enter an amount first';
+    try {
+      final preview = await di.sl<WalletRepository>().previewTopupCoupon(amount, code.trim().toUpperCase());
+      if (!mounted) return null;
+      setState(() {
+        _appliedCoupon = preview;
+        _couponError = null;
+      });
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  void _removeCoupon() {
+    _couponRecheck?.cancel();
+    setState(() {
+      _appliedCoupon = null;
+      _couponError = null;
+    });
+  }
+
+  // The bonus depends on the amount (percentage, minimum top-up), so re-check after edits.
+  void _scheduleCouponRecheck() {
+    final code = _appliedCoupon?['code']?.toString();
+    if (code == null) return;
+    _couponRecheck?.cancel();
+    _couponRecheck = Timer(const Duration(milliseconds: 500), () async {
+      final error = await _applyCoupon(code);
+      if (error != null && mounted) {
+        setState(() {
+          _appliedCoupon = null;
+          _couponError = '$code removed: $error';
+        });
+      }
+    });
+  }
+
+  Future<void> _openCouponSheet() async {
+    final codeController = TextEditingController();
+    String? sheetError;
+    bool applying = false;
+    final couponsFuture = di.sl<WalletRepository>().getTopupCoupons();
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          Future<void> apply(String code) async {
+            if (code.trim().isEmpty) return;
+            setSheet(() {
+              applying = true;
+              sheetError = null;
+            });
+            final error = await _applyCoupon(code);
+            if (!ctx.mounted) return;
+            if (error == null) {
+              Navigator.pop(ctx);
+            } else {
+              setSheet(() {
+                applying = false;
+                sheetError = error;
+              });
+            }
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            child: SafeArea(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.75),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(color: const Color(0xFFCBD5E1), borderRadius: BorderRadius.circular(4)),
+                        ),
+                      ),
+                      const Text('Apply Coupon',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0A2540))),
+                      const SizedBox(height: 4),
+                      const Text('Get bonus money credited to your wallet with this top-up.',
+                          style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: codeController,
+                              textCapitalization: TextCapitalization.characters,
+                              style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
+                              decoration: InputDecoration(
+                                hintText: 'Enter coupon code',
+                                isDense: true,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onSubmitted: apply,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            height: 46,
+                            child: ElevatedButton(
+                              onPressed: applying ? null : () => apply(codeController.text),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF009048),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: applying
+                                  ? const SizedBox(
+                                      width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  : const Text('Apply', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (sheetError != null) ...[
+                        const SizedBox(height: 8),
+                        Text(sheetError!, style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626))),
+                      ],
+                      const SizedBox(height: 18),
+                      const Text('AVAILABLE COUPONS',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF94A3B8), letterSpacing: 0.8)),
+                      const SizedBox(height: 8),
+                      Flexible(
+                        child: FutureBuilder<List<Map<String, dynamic>>>(
+                          future: couponsFuture,
+                          builder: (ctx, snap) {
+                            if (snap.connectionState != ConnectionState.done) {
+                              return const Padding(
+                                padding: EdgeInsets.all(20),
+                                child: Center(child: CircularProgressIndicator(color: Color(0xFF009048))),
+                              );
+                            }
+                            final coupons = snap.data ?? [];
+                            if (coupons.isEmpty) {
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: Text('No wallet coupons available right now',
+                                    style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+                              );
+                            }
+                            return ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: coupons.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 8),
+                              itemBuilder: (ctx, i) => _buildCouponTile(
+                                coupons[i],
+                                onApply: applying ? null : () => apply(coupons[i]['code'].toString()),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCouponTile(Map<String, dynamic> coupon, {VoidCallback? onApply}) {
+    final canApply = coupon['canApply'] != false;
+    final isPercent = coupon['discountType'] == 'percentage';
+    final value = (coupon['discountValue'] as num?) ?? 0;
+    final cap = coupon['maxDiscountMinor'] as num?;
+    final minMinor = (coupon['minFareMinor'] as num?) ?? 0;
+    final headline = isPercent
+        ? '$value% extra${cap != null ? ' (up to ${_money(cap)})' : ''}'
+        : '${_money(value)} extra';
+
+    return Opacity(
+      opacity: canApply ? 1 : 0.5,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.local_offer_rounded, color: Color(0xFF009048), size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(coupon['code']?.toString() ?? '',
+                      style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, color: Color(0xFF0A2540))),
+                  const SizedBox(height: 2),
+                  Text(headline, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF009048))),
+                  if ((coupon['description']?.toString() ?? '').isNotEmpty)
+                    Text(coupon['description'].toString(), style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                  if (minMinor > 0)
+                    Text('Min. top-up ${_money(minMinor)}', style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+                ],
+              ),
+            ),
+            canApply
+                ? TextButton(
+                    onPressed: onApply,
+                    child: const Text('APPLY', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF009048))),
+                  )
+                : Text(coupon['statusLabel']?.toString() ?? 'Unavailable',
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCouponCard() {
+    final coupon = _appliedCoupon;
+    if (coupon == null) {
+      return InkWell(
+        onTap: _openCouponSheet,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.local_offer_outlined, color: Color(0xFF009048), size: 22),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text('Apply Coupon',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0A2540))),
+                  ),
+                  Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                ],
+              ),
+              if (_couponError != null) ...[
+                const SizedBox(height: 6),
+                Text(_couponError!, style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626))),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    final bonus = (coupon['bonusMinor'] as num?) ?? 0;
+    final credit = (coupon['creditMinor'] as num?) ?? 0;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFBBF7D0), width: 1.2),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("'${coupon['code']}' applied",
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF166534))),
+                const SizedBox(height: 2),
+                Text('${_money(bonus)} bonus • ${_money(credit)} will be added to your wallet',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF15803D))),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: _removeCoupon,
+            child: const Text('Remove', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _launchRazorpay(RazorpayTopupReady state) async {
@@ -277,6 +591,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
           InitiateWalletTopup(
             amount: amount,
             paymentMethodId: _selectedMethodType == 'gateway' ? null : _selectedMethodType,
+            promoCode: _appliedCoupon?['code']?.toString(),
           ),
         );
   }
@@ -309,7 +624,10 @@ class _AddFundsPageState extends State<AddFundsPage> {
           } else if (state is StripeTopupReady) {
             _launchStripe(state);
           } else if (state is AddFundsSuccess) {
-            CustomToast.show(context, 'Funds added successfully!');
+            CustomToast.show(
+              context,
+              _appliedCoupon != null ? 'Funds added with ${_appliedCoupon!['code']} bonus!' : 'Funds added successfully!',
+            );
             context.pop();
           } else if (state is WalletError) {
             CustomToast.show(context, state.message);
@@ -387,6 +705,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
                                   setState(() {
                                     _selectedAmount = double.tryParse(val) ?? 0.0;
                                   });
+                                  _scheduleCouponRecheck();
                                 },
                               ),
                             ),
@@ -418,6 +737,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
                                     _selectedAmount = preset;
                                     _amountController.text = preset.toStringAsFixed(0);
                                   });
+                                  _scheduleCouponRecheck();
                                 },
                                 child: Container(
                                   height: 40,
@@ -447,6 +767,10 @@ class _AddFundsPageState extends State<AddFundsPage> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 16),
+
+                  // Wallet top-up coupon (bonus credit)
+                  _buildCouponCard(),
                   const SizedBox(height: 24),
 
                   // Select Payment Method Section
