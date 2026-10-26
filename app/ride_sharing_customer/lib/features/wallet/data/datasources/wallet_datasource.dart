@@ -1,3 +1,5 @@
+import '../../../../injection_container.dart';
+import '../../../../core/session/rider_session_service.dart';
 import 'package:dio/dio.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/services/storage_service.dart';
@@ -34,7 +36,7 @@ class WalletDataSourceImpl implements WalletDataSource {
       final data = Map<String, dynamic>.from(rawData as Map);
       final int balanceMinor = (data['balanceMinor'] as num?)?.toInt() ?? 0;
       final double balance = balanceMinor / 100.0;
-      final String currency = data['currencyCode']?.toString() ?? 'INR';
+      final String currency = data['currencyCode']?.toString() ?? sl<RiderSessionService>().paymentProfile.currencyCode;
 
       List<Map<String, dynamic>> txsList = [];
       try {
@@ -86,7 +88,7 @@ class WalletDataSourceImpl implements WalletDataSource {
       return {
         'id': '',
         'balance': 0.0,
-        'currency': 'INR',
+        'currency': sl<RiderSessionService>().paymentProfile.currencyCode,
         'transactions': <Map<String, dynamic>>[],
       };
     }

@@ -6,6 +6,8 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../../injection_container.dart';
 import '../../../../core/services/storage_service.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/region/region_guard.dart';
+import '../../../../core/session/rider_session_service.dart';
 import '../../../ride_tracking/presentation/bloc/ride_tracking_bloc.dart';
 import '../bloc/auth_bloc.dart';
 
@@ -72,6 +74,19 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
     }
 
     if ((permission == LocationPermission.always || permission == LocationPermission.whileInUse) && serviceEnabled) {
+      // India/Canada lock: a fresh GPS fix + server check gates everyone, logged in or not.
+      final region = await sl<RegionGuard>().verify();
+      if (!mounted) return;
+      if (!region.allowed && !region.needsLocationPermission) {
+        context.go('/region-unavailable', extra: region);
+        return;
+      }
+      if (!region.allowed) {
+        context.go('/location-permission', extra: () {
+          if (mounted) _requestLocationPermission();
+        });
+        return;
+      }
       setState(() {
         _isPermissionGranted = true;
       });
@@ -93,6 +108,27 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
     if (_pendingState is AuthAuthenticated) {
       Future.delayed(const Duration(milliseconds: 1000), () async {
         if (!mounted) return;
+
+        // Re-verify the locally stored name/email/country/currency with the API on every
+        // launch; the server's copy replaces the local one.
+        final check = await sl<RiderSessionService>().verify();
+        if (!mounted) return;
+        switch (check.status) {
+          case SessionCheckStatus.loggedOut:
+            context.read<AuthBloc>().add(LoggedOut());
+            context.go('/login');
+            return;
+          case SessionCheckStatus.blocked:
+          case SessionCheckStatus.unverified:
+            context.go('/region-unavailable', extra: RegionResult.blocked(check.code, check.message));
+            return;
+          case SessionCheckStatus.verified:
+            if (!check.profileComplete) {
+              context.go('/signup'); // name/email never completed
+              return;
+            }
+        }
+
         final storage = sl<StorageService>();
         final activeRide = storage.getCachedData('active_ride_tracking');
         if (activeRide != null && activeRide is Map) {

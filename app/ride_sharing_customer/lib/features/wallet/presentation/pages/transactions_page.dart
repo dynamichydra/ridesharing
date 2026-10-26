@@ -1,3 +1,5 @@
+import '../../../../injection_container.dart';
+import '../../../../core/session/rider_session_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -37,23 +39,6 @@ class _TransactionsPageState extends State<TransactionsPage>
     return months[(month - 1).clamp(0, 11)];
   }
 
-  /// Maps an ISO 4217 currency code to a display symbol.
-  static String _currencySymbolFor(String code) {
-    switch (code.toUpperCase()) {
-      case 'CAD':
-      case 'USD':
-        return '\$';
-      case 'GBP':
-        return '£';
-      case 'EUR':
-        return '€';
-      case 'AED':
-        return 'د.إ';
-      case 'INR':
-      default:
-        return '₹';
-    }
-  }
 
   String _formatTime(DateTime dt) {
     final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
@@ -398,11 +383,9 @@ class _TransactionsPageState extends State<TransactionsPage>
         builder: (context, state) {
           List<Map<String, dynamic>> allTxs = [];
           String currencySymbol = '';
-          String currencyCode = '';
           if (state is WalletLoaded) {
             allTxs = _parseTransactions(state.transactions);
-            currencyCode = state.currency;
-            currencySymbol = _currencySymbolFor(currencyCode);
+            currencySymbol = sl<RiderSessionService>().paymentProfile.currencySymbol; // wallet is in the account currency
           }
 
           // Apply date range filter if selected

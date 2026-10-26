@@ -28,12 +28,11 @@ class UpdateProfileDetails extends ProfileEvent {
   final String name;
   final String email;
   final String phone;
-  final String? currencyCode;
 
-  const UpdateProfileDetails({required this.name, required this.email, required this.phone, this.currencyCode});
+  const UpdateProfileDetails({required this.name, required this.email, required this.phone});
 
   @override
-  List<Object?> get props => [name, email, phone, currencyCode];
+  List<Object?> get props => [name, email, phone];
 }
 
 class LoadRideHistoryEvent extends ProfileEvent {}
@@ -181,7 +180,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   Future<void> _onUpdateProfileDetails(UpdateProfileDetails event, Emitter<ProfileState> emit) async {
     emit(ProfileLoading());
     try {
-      await _profileRepository.updateUserProfile(event.name, event.email, event.phone, currencyCode: event.currencyCode);
+      await _profileRepository.updateUserProfile(event.name, event.email, event.phone);
       emit(ProfileUpdateSuccess());
       add(LoadProfile());
     } catch (e) {

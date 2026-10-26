@@ -18,9 +18,9 @@ class ProfileRepositoryImpl implements ProfileRepository {
   }
 
   @override
-  Future<void> updateUserProfile(String name, String email, String phone, {String? currencyCode}) async {
+  Future<void> updateUserProfile(String name, String email, String phone) async {
     try {
-      await _profileDataSource.updateUserProfile(name, email, phone, currencyCode: currencyCode);
+      await _profileDataSource.updateUserProfile(name, email, phone);
     } catch (e) {
       throw ServerFailure(e.toString());
     }

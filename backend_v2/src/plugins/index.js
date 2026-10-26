@@ -98,6 +98,7 @@ export async function registerPlugins(app) {
       MESSAGE: env.NODE_ENV === 'production' && statusCode === 500
         ? 'Internal server error'
         : error.message,
+      ...(typeof error.code === 'string' && statusCode < 500 ? { CODE: error.code } : {}),
     });
   });
 }

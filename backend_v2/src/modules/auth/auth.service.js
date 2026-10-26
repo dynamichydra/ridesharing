@@ -125,27 +125,67 @@ export async function sendOtp(phone, role = 'rider') {
   return { sent: true };
 }
 
-export async function verifyRiderOtp(phone, otp, app) {
+// regionCountry: ISO code from the caller's verified region token (rider-region.service.js);
+// the rider's account country (and currency) is pinned to it — the phone was already checked
+// to match. place: { cityId, stateId } where they were verified — becomes the home city/state
+// of a new rider, and fills them in for an existing rider who has none yet.
+export async function verifyRiderOtp(phone, otp, app, regionCountry = null, place = null) {
   const valid = await verifyOtp(phone, otp);
   if (!valid) throw { statusCode: 400, message: 'Invalid or expired OTP' };
+
+  let country = null;
+  if (regionCountry) {
+    [country] = await db.select().from(countries).where(eq(countries.isoCode, regionCountry)).limit(1);
+  }
 
   let [user] = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
   const isNew = !user;
 
   if (!user) {
-    [user] = await db.insert(users).values({ phone, isVerified: true }).returning();
+    [user] = await db.insert(users).values({
+      phone,
+      isVerified: true,
+      countryId: country?.id ?? null,
+      currencyCode: country?.currencyCode ?? null,
+      stateId: place?.stateId ?? null,
+      cityId: place?.cityId ?? null,
+    }).returning();
   } else {
-    await db.update(users).set({ isVerified: true }).where(eq(users.id, user.id));
+    // An account belongs to the country it signed up in — it can't be used (or moved) elsewhere.
+    if (country && user.countryId && user.countryId !== country.id) {
+      const { accountCountryMismatchMessage } = await import('./rider-region.service.js');
+      const [home] = await db.select({ iso: countries.isoCode }).from(countries).where(eq(countries.id, user.countryId)).limit(1);
+      throw {
+        statusCode: 403,
+        code: 'ACCOUNT_COUNTRY_MISMATCH',
+        message: accountCountryMismatchMessage(home?.iso?.toUpperCase(), country.isoCode.toUpperCase()),
+      };
+    }
+    const patch = { isVerified: true };
+    if (country && !user.countryId) Object.assign(patch, { countryId: country.id });
+    if (country && !user.currencyCode) patch.currencyCode = country.currencyCode;
+    if (place?.cityId && !user.cityId) {
+      patch.cityId = place.cityId;
+      patch.stateId = place.stateId;
+    }
+    [user] = await db.update(users).set(patch).where(eq(users.id, user.id)).returning();
   }
 
-  const accessToken = app.jwt.sign({ id: user.id, role: 'rider', phone });
+  // `country` is the account's home country — the region middleware rejects requests made
+  // from anywhere else (middleware/authenticate.js).
+  const accessToken = app.jwt.sign({ id: user.id, role: 'rider', phone, country: country?.isoCode ?? null });
   const refreshToken = app.jwt.sign(
     { id: user.id, role: 'rider' },
     { secret: env.JWT_REFRESH_SECRET, expiresIn: env.JWT_REFRESH_EXPIRES_IN },
   );
   await redis.setex(REDIS_KEYS.refreshToken(user.id), 30 * 86400, refreshToken);
 
-  return { accessToken, refreshToken, isNew, user };
+  return {
+    accessToken, refreshToken, isNew, user,
+    country: country
+      ? { id: country.id, name: country.name, isoCode: country.isoCode, dialCode: country.dialCode, currencyCode: country.currencyCode }
+      : null,
+  };
 }
 
 // ── Driver mobile auth (device-scoped) ─────────────────────────────────────────
@@ -340,7 +380,16 @@ export async function refreshTokens(token, app) {
   const stored = await redis.get(REDIS_KEYS.refreshToken(payload.id, deviceId));
   if (!stored || stored !== token) throw { statusCode: 401, message: 'Refresh token revoked' };
 
-  const accessToken = app.jwt.sign({ id: payload.id, role: payload.role });
+  const claims = { id: payload.id, role: payload.role };
+  if (payload.role === 'rider') {
+    const [rider] = await db.select({ phone: users.phone, country: countries.isoCode })
+      .from(users).leftJoin(countries, eq(users.countryId, countries.id))
+      .where(eq(users.id, payload.id)).limit(1);
+    // read by the rider region check (middleware/authenticate.js)
+    if (rider?.phone) claims.phone = rider.phone;
+    if (rider?.country) claims.country = rider.country;
+  }
+  const accessToken = app.jwt.sign(claims);
   return { accessToken };
 }
 

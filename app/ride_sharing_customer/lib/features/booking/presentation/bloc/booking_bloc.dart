@@ -1,6 +1,8 @@
  import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../../../injection_container.dart';
+import '../../../../core/session/rider_session_service.dart';
 import '../../../../core/utils/location_helper.dart';
 import '../../../../core/constants/constants.dart';
 import '../../domain/entities/vehicle.dart';
@@ -390,10 +392,14 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
         fares[typeId] = fareValue;
       }
 
-      final String currencyCode = estimates.first['currencyCode']?.toString() ?? estimates.first['currency']?.toString() ?? 'INR';
+      // Fares come in the ride's currency, which the server only allows to be the account's own
+      // (INR for India, CAD for Canada). The app-wide symbol stays the account's — not reset here.
+      final account = sl<RiderSessionService>().paymentProfile;
+      final String currencyCode = estimates.first['currencyCode']?.toString() ??
+          estimates.first['currency']?.toString() ??
+          account.currencyCode;
       final String currencySymbol = AppConstants.getCurrencySymbol(currencyCode);
       final String firstCountryId = estimates.first['countryId']?.toString() ?? '';
-      AppConstants.currencySymbol = currencySymbol;
 
       emit(BookingVehicleOptionsLoaded(
         pickup: event.pickup,

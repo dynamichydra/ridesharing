@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/services/storage_service.dart';
+import '../../../../core/session/rider_session_service.dart';
+import '../../../../injection_container.dart';
 
 abstract class AuthDataSource {
   Future<void> login(String phone);
@@ -65,14 +67,11 @@ class AuthDataSourceImpl implements AuthDataSource {
     }
 
     try {
-      final countryCode = _storageService.getCountryCode();
-      final countryName = countryCode == 'CA' ? 'Canada' : 'India';
-
+      // The account's country comes from the X-Region-Token header (server-verified location),
+      // not from anything the app claims.
       final response = await _dioClient.dio.post('/api/v1/auth/rider/verify-otp', data: {
         'phone': phone,
         'otp': code,
-        'countryCode': countryCode,
-        'country': countryName,
       });
 
       if (response.data['SUCCESS'] == true) {
@@ -92,6 +91,10 @@ class AuthDataSourceImpl implements AuthDataSource {
         }
         if (userId.isNotEmpty) {
           await _storageService.saveUserId(userId);
+        }
+        // Local copy of name/email/country/currency — re-verified on every app open.
+        if (user is Map) {
+          await sl<RiderSessionService>().saveFromLogin(user, country is Map ? country : null);
         }
         if (country is Map && country['isoCode'] != null) {
           await _storageService.setCountryCode(country['isoCode'].toString().toUpperCase());
@@ -124,18 +127,16 @@ class AuthDataSourceImpl implements AuthDataSource {
   @override
   Future<void> registerProfileDetails(String name, String email) async {
     try {
-      final countryCode = _storageService.getCountryCode();
-      final countryName = countryCode == 'CA' ? 'Canada' : 'India';
-
+      // Country/state/city/currency are assigned by the server from the verified location at
+      // OTP verify — the app doesn't send (and can't change) them.
       final response = await _dioClient.dio.patch('/api/v1/riders/profile', data: {
         'name': name,
         'email': email,
-        'countryCode': countryCode,
-        'country': countryName,
       });
       if (response.data['SUCCESS'] != true) {
         throw Exception(response.data['MESSAGE'] ?? 'Failed to complete profile registration.');
       }
+      await sl<RiderSessionService>().updateProfile(name: name, email: email);
     } catch (e) {
       if (e is DioException) {
         if (e.response != null) {
@@ -160,6 +161,7 @@ class AuthDataSourceImpl implements AuthDataSource {
       await _dioClient.dio.post('/api/v1/auth/logout');
     } catch (_) {}
     await _storageService.clearAuth();
+    await sl<RiderSessionService>().clear(); // drop the in-memory account/currency/gateway too
   }
 }
 

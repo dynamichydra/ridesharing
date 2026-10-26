@@ -5,6 +5,7 @@ import '../../../../core/widgets/custom_toast.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/payments/saved_payment_methods_service.dart';
+import '../../../../core/session/rider_session_service.dart';
 import '../../../../injection_container.dart';
 import '../bloc/profile_bloc.dart';
 
@@ -19,219 +20,10 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
   String _selectedMethodId = 'cash';
   bool _isLoading = false;
 
-  void _showAddPaymentMethodSheet() {
-    final profileState = context.read<ProfileBloc>().state;
-    String country = '';
-    String phone = '';
-    if (profileState is ProfileLoaded) {
-      country = (profileState.userProfile['countryCode'] ??
-              profileState.userProfile['country'] ??
-              '')
-          .toString()
-          .toLowerCase();
-      phone = (profileState.userProfile['phone'] ?? '').toString();
-    }
+  // The account's country fixes the gateway (India → Razorpay, Canada → Stripe).
+  RiderPaymentProfile get _profile => sl<RiderSessionService>().paymentProfile;
 
-    final bool isLikelyDomestic = country == 'in' || country == 'india' || phone.startsWith('+91');
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFCBD5E1),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const Text(
-                  'Add Payment Card',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0A2540),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Select the region where you plan to use this card. Cards travel with your account.',
-                  style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-                ),
-                const SizedBox(height: 20),
-
-                // International Card (Stripe)
-                InkWell(
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _startCardSetup(gateway: 'stripe');
-                  },
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: !isLikelyDomestic ? const Color(0xFF009048) : const Color(0xFFE2E8F0),
-                        width: !isLikelyDomestic ? 1.5 : 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF009048).withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.public_rounded, color: Color(0xFF009048), size: 24),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Text(
-                                    'International Card',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF0A2540),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF635BFF).withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Text(
-                                      'STRIPE',
-                                      style: TextStyle(
-                                        color: Color(0xFF635BFF),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'For Canada, US, Europe, UK & international travels. Supports Visa, Mastercard, Amex.',
-                                style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Domestic India Card (Razorpay)
-                InkWell(
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _startCardSetup(gateway: 'razorpay');
-                  },
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isLikelyDomestic ? const Color(0xFF009048) : const Color(0xFFE2E8F0),
-                        width: isLikelyDomestic ? 1.5 : 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0284C7).withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.credit_card_rounded, color: Color(0xFF0284C7), size: 24),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Text(
-                                    'India Domestic Card',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF0A2540),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF0284C7).withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Text(
-                                      'RAZORPAY',
-                                      style: TextStyle(
-                                        color: Color(0xFF0284C7),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'For rides within India. Supports domestic cards & tokenization (INR).',
-                                style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
+  void _showAddPaymentMethodSheet() => _startCardSetup(gateway: _profile.gateway);
 
   Future<void> _startCardSetup({required String gateway}) async {
     final profileState = context.read<ProfileBloc>().state;
@@ -367,13 +159,13 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: const Color(0xFFBBF7D0)),
                       ),
-                      child: const Row(
+                      child: Row(
                         children: [
-                          Icon(Icons.public_rounded, color: Color(0xFF16A34A), size: 20),
-                          SizedBox(width: 10),
+                          const Icon(Icons.public_rounded, color: Color(0xFF16A34A), size: 20),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'Your saved cards travel with you! Cards valid in your current region are ready for checkout.',
+                              'Your ${_profile.countryCode == 'CA' ? 'Canadian' : 'Indian'} account pays in ${_profile.currencyCode} with ${_profile.gatewayName}. Cards are saved securely with ${_profile.gatewayName}.',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Color(0xFF166534),
@@ -439,9 +231,9 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
                       Icons.add_circle_outline_rounded,
                       color: Color(0xFF009048),
                     ),
-                    label: const Text(
-                      'Add Credit/Debit Card',
-                      style: TextStyle(
+                    label: Text(
+                      'Add Card (${_profile.gatewayName})',
+                      style: const TextStyle(
                         color: Color(0xFF0A2540),
                         fontWeight: FontWeight.bold,
                         fontSize: 15,

@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/services/storage_service.dart';
 import '../../../../core/services/razorpay_checkout_launcher.dart';
 import '../../../../core/services/stripe_checkout_launcher.dart';
 import '../../../../core/payments/saved_payment_methods_service.dart';
+import '../../../../core/session/rider_session_service.dart';
 import '../../../../injection_container.dart' as di;
 import '../bloc/wallet_bloc.dart';
 import '../../domain/repositories/wallet_repository.dart';
@@ -31,54 +31,23 @@ class _AddFundsPageState extends State<AddFundsPage> {
   Map<String, dynamic>? _appliedCoupon;
   String? _couponError;
   Timer? _couponRecheck;
-  String _countryCode = 'IN'; // Resolved from wallet API or cached profile
+  // Currency, presets and gateway all come from the account's country (India → INR/Razorpay,
+  // Canada → CAD/Stripe) — never from the wallet cache, phone prefix or location.
+  RiderPaymentProfile get _profile => di.sl<RiderSessionService>().paymentProfile;
+  bool get _isCanada => _profile.countryCode == 'CA';
 
-  /// Maps ISO 4217 currency code → display symbol.
-  static String _currencySymbolFor(String code) {
-    switch (code.toUpperCase()) {
-      case 'CAD':
-      case 'USD':
-        return '\$';
-      case 'GBP':
-        return '£';
-      case 'EUR':
-        return '€';
-      case 'AED':
-        return 'د.إ';
-      case 'INR':
-      default:
-        return '₹';
-    }
-  }
+  List<double> get _presets =>
+      _isCanada ? [10.0, 20.0, 50.0, 100.0, 200.0] : [100.0, 200.0, 500.0, 1000.0, 2000.0];
 
-  List<double> get _presets {
-    switch (_countryCode) {
-      case 'CA':
-      case 'US':
-        return [10.0, 20.0, 50.0, 100.0, 200.0];
-      case 'GB':
-        return [10.0, 20.0, 50.0, 100.0, 200.0];
-      default: // IN and others
-        return [100.0, 200.0, 500.0, 1000.0, 2000.0];
-    }
-  }
-
-  String get _currencySymbol => _currencySymbolFor(_currencyCode);
-  String get _currencyCode {
-    switch (_countryCode) {
-      case 'CA': return 'CAD';
-      case 'US': return 'USD';
-      case 'GB': return 'GBP';
-      default:   return 'INR';
-    }
-  }
+  String get _currencySymbol => _profile.currencySymbol;
+  String get _currencyCode => _profile.currencyCode;
 
   @override
   void initState() {
     super.initState();
     _amountController = TextEditingController(text: '200');
     _selectedAmount = 200.0;
-    _resolveUserCountry();
+    _applyDefaultAmount();
     _loadSavedCards();
   }
 
@@ -86,7 +55,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
   // preselected.
   Future<void> _loadSavedCards({String? selectId}) async {
     try {
-      final cards = await di.sl<SavedPaymentMethodsService>().list(currencyCode: _currencyCode);
+      final cards = await di.sl<SavedPaymentMethodsService>().list();
       if (!mounted) return;
       final usable = cards.where((c) => c.isEligible).toList();
       setState(() {
@@ -106,7 +75,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
   Future<void> _addCard() async {
     setState(() => _addingCard = true);
     try {
-      final saved = await di.sl<SavedPaymentMethodsService>().addCard(currencyCode: _currencyCode);
+      final saved = await di.sl<SavedPaymentMethodsService>().addCard(gateway: _profile.gateway);
       if (!mounted) return;
       CustomToast.show(context, '${saved.title} saved');
       await _loadSavedCards(selectId: saved.id);
@@ -117,55 +86,8 @@ class _AddFundsPageState extends State<AddFundsPage> {
     }
   }
 
-  void _resolveUserCountry() {
-    try {
-      final storage = di.sl<StorageService>();
-
-      // 1. First check cached wallet data (authoritative from server /api/v1/wallets/me)
-      final cachedWallet = storage.getCachedData('cached_wallet_data');
-      if (cachedWallet is Map && cachedWallet['currency'] != null) {
-        _applyCountryFromCurrency(cachedWallet['currency'].toString());
-        return;
-      }
-
-      // 2. Fallback to stored user profile phone / country code
-      final cachedProfile = storage.getCachedData('cached_profile_data');
-      if (cachedProfile is Map && cachedProfile['phone'] != null) {
-        final phone = cachedProfile['phone'].toString();
-        if (phone.startsWith('+1')) {
-          _countryCode = 'CA';
-        } else if (phone.startsWith('+91')) {
-          _countryCode = 'IN';
-        }
-      } else {
-        final storedCountry = storage.getCountryCode().toUpperCase();
-        _countryCode = storedCountry.isNotEmpty ? storedCountry : 'IN';
-      }
-    } catch (_) {}
-
-    _applyDefaultAmount();
-  }
-
-  void _applyCountryFromCurrency(String currencyCode) {
-    switch (currencyCode.toUpperCase()) {
-      case 'CAD':
-        _countryCode = 'CA';
-        break;
-      case 'USD':
-        _countryCode = 'US';
-        break;
-      case 'GBP':
-        _countryCode = 'GB';
-        break;
-      case 'INR':
-      default:
-        _countryCode = 'IN';
-    }
-    _applyDefaultAmount();
-  }
-
   void _applyDefaultAmount() {
-    if (_countryCode == 'IN') {
+    if (!_isCanada) {
       _selectedAmount = 200.0;
       _amountController.text = '200';
     } else {
@@ -187,23 +109,16 @@ class _AddFundsPageState extends State<AddFundsPage> {
         ..._gatewayMethods,
       ];
 
-  List<Map<String, dynamic>> get _gatewayMethods {
-    switch (_countryCode) {
-      case 'CA':
-      case 'US':
-      case 'GB':
-      case 'AU':
-        return [
+  List<Map<String, dynamic>> get _gatewayMethods => [
+        if (_profile.gateway == 'stripe')
           {
             'id': 'gateway',
             'gateway': 'stripe',
             'title': 'Credit / Debit Card',
             'subtitle': 'Visa, Mastercard, American Express, Apple Pay',
             'iconData': Icons.credit_card_rounded,
-          },
-        ];
-      default: // India
-        return [
+          }
+        else
           {
             'id': 'gateway',
             'gateway': 'razorpay',
@@ -211,9 +126,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
             'subtitle': 'GPay, PhonePe, Paytm, Cards & NetBanking',
             'iconData': Icons.account_balance_wallet_rounded,
           },
-        ];
-    }
-  }
+      ];
 
   @override
   void dispose() {
@@ -581,7 +494,7 @@ class _AddFundsPageState extends State<AddFundsPage> {
     }
 
     final double? amount = double.tryParse(text);
-    final minAmount = _countryCode == 'CA' ? 1.0 : 10.0;
+    final minAmount = _isCanada ? 1.0 : 10.0;
     if (amount == null || amount < minAmount) {
       CustomToast.show(context, 'Minimum amount to add is $_currencySymbol$minAmount');
       return;
@@ -631,15 +544,6 @@ class _AddFundsPageState extends State<AddFundsPage> {
             context.pop();
           } else if (state is WalletError) {
             CustomToast.show(context, state.message);
-          } else if (state is WalletLoaded) {
-            // Update country/currency in case cache was stale at initState
-            final resolvedCode = state.currency;
-            final prevCountry = _countryCode;
-            _applyCountryFromCurrency(resolvedCode);
-            if (_countryCode != prevCountry) {
-              setState(() {}); // Rebuild with correct currency/presets/gateway
-              _loadSavedCards();
-            }
           }
         },
         builder: (context, walletState) {

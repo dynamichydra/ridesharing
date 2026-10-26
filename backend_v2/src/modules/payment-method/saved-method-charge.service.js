@@ -2,8 +2,9 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { paymentMethods } from '../../../drizzle/schema/index.js';
 import { getGateway } from '../payment/payment.service.js';
-import { resolvePaymentRegion, evaluatePaymentMethodEligibility } from '../payment/payment-region.service.js';
+import { resolvePaymentRegion, evaluatePaymentMethodEligibility, annotateSavedMethodsForProfile } from '../payment/payment-region.service.js';
 import { ownerCondition } from './payment-method.service.js';
+import { getRiderPaymentProfile, assertRiderGateway, assertRiderCurrency } from '../rider/rider-payment-profile.js';
 
 // Pseudo method ids the clients send for non-card tenders — never a payment_methods row.
 const NON_CARD_METHOD_IDS = new Set(['cash', 'wallet', 'online', 'default']);
@@ -50,8 +51,17 @@ export async function chargeWithSavedMethod({
     throw { statusCode: 403, message: 'Invalid or unauthorized payment method' };
   }
 
-  const regionConfig = await resolvePaymentRegion(regionContext);
-  const eligibility = evaluatePaymentMethodEligibility(method, regionConfig);
+  // Riders: the account's fixed gateway/currency replace region routing entirely — only card
+  // expiry is left to check. Drivers keep the region/routing eligibility rules.
+  let eligibility;
+  if (role === 'rider') {
+    const profile = await getRiderPaymentProfile(ownerId);
+    assertRiderGateway(profile, method.gateway);
+    assertRiderCurrency(profile, currencyCode);
+    eligibility = annotateSavedMethodsForProfile([method])[0];
+  } else {
+    eligibility = evaluatePaymentMethodEligibility(method, await resolvePaymentRegion(regionContext));
+  }
   if (!eligibility.isEligible) {
     throw {
       statusCode: 400,

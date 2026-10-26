@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../../../../core/widgets/error_view.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../../core/utils/phone_format.dart';
 import '../bloc/profile_bloc.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -123,7 +124,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                profile['phone'] as String? ?? '+91 98765 43210',
+                                formatPhoneDisplay(profile['phone'] as String? ?? '+91 98765 43210'),
                                 style: const TextStyle(
                                   fontSize: 13,
                                   color: Color(0xFF8A94A6),

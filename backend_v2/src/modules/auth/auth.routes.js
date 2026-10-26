@@ -1,6 +1,31 @@
 import { sendSuccess, sendError } from '../../utils/response.js';
 import { authenticateDriver } from '../../middleware/authenticate.js';
 import * as authService from './auth.service.js';
+import {
+  checkRiderRegion,
+  issueRegionToken,
+  verifyRegionToken,
+  assertPhoneMatchesRegion,
+  isRegionEnforcementEnabled,
+  riderPhoneCountry,
+  countryFromCoordinates,
+  resolveServiceCity,
+  regionPlaceFromToken,
+  RIDER_COUNTRIES,
+  RegionError,
+} from './rider-region.service.js';
+
+function sendRegionError(reply, err) {
+  return reply.status(err.statusCode || 403).send({ SUCCESS: false, MESSAGE: err.message, CODE: err.code });
+}
+
+// Rider OTP calls must carry the region token from /rider/region-check; returns its country.
+function riderRegionFromRequest(app, request) {
+  if (!isRegionEnforcementEnabled()) {
+    return riderPhoneCountry(request.body?.phone) || 'IN';
+  }
+  return verifyRegionToken(app, request.body?.regionToken || request.headers['x-region-token'], request.ip);
+}
 
 export async function authRoutes(app) {
 
@@ -62,19 +87,75 @@ export async function authRoutes(app) {
     return sendSuccess(reply, data);
   });
 
-  // POST /api/v1/auth/rider/send-otp
+  // ── Rider — region lock (India / Canada only) ───────────────────────────────
+
+  // POST /api/v1/auth/rider/region-check
+  // { lat, lng, accuracyM, fixAgeMs, isMocked, isVpn } → { countryCode, countryName, dialCode, regionToken }
+  // Called by the rider app on every launch/resume and before login. The country comes from
+  // the server's own reverse geocode + IP check, never from the client.
+  app.post('/rider/region-check', async (request, reply) => {
+    try {
+      const body = request.body || {};
+      let region;
+      if (isRegionEnforcementEnabled()) {
+        region = await checkRiderRegion({ ...body, ip: request.ip });
+      } else {
+        // Dev bypass: still pick a supported country so the phone rules apply.
+        let iso = null;
+        let place = null;
+        const hasFix = Number.isFinite(Number(body.lat)) && Number.isFinite(Number(body.lng));
+        try {
+          if (hasFix) iso = await countryFromCoordinates(Number(body.lat), Number(body.lng));
+        } catch { /* ignore in dev */ }
+        iso = RIDER_COUNTRIES.includes(iso) ? iso : 'IN';
+        if (hasFix) place = await resolveServiceCity(Number(body.lat), Number(body.lng));
+        region = {
+          allowed: true,
+          countryCode: iso,
+          countryName: iso === 'IN' ? 'India' : 'Canada',
+          dialCode: iso === 'IN' ? '+91' : '+1',
+          cityId: place?.cityId ?? null,
+          cityName: place?.cityName ?? null,
+          stateId: place?.stateId ?? null,
+        };
+      }
+      const regionToken = issueRegionToken(app, region, request.ip);
+      return sendSuccess(reply, { ...region, regionToken, expiresInSeconds: 30 * 60 });
+    } catch (err) {
+      if (err instanceof RegionError) return sendRegionError(reply, err);
+      throw err;
+    }
+  });
+
+  // POST /api/v1/auth/rider/send-otp  { phone, regionToken }
   app.post('/rider/send-otp', async (request, reply) => {
-    const { phone } = request.body;
+    const { phone } = request.body || {};
     if (!phone) return sendError(reply, 'Phone is required');
+    try {
+      const regionCountry = riderRegionFromRequest(app, request);
+      assertPhoneMatchesRegion(phone, regionCountry);
+    } catch (err) {
+      if (err instanceof RegionError) return sendRegionError(reply, err);
+      throw err;
+    }
     await authService.sendOtp(phone, 'rider');
     return sendSuccess(reply, 'OTP sent successfully');
   });
 
-  // POST /api/v1/auth/rider/verify-otp
+  // POST /api/v1/auth/rider/verify-otp  { phone, otp, regionToken }
   app.post('/rider/verify-otp', async (request, reply) => {
-    const { phone, otp } = request.body;
+    const { phone, otp } = request.body || {};
     if (!phone || !otp) return sendError(reply, 'Phone and OTP are required');
-    const data = await authService.verifyRiderOtp(phone, otp, app);
+    let regionCountry;
+    try {
+      regionCountry = riderRegionFromRequest(app, request);
+      assertPhoneMatchesRegion(phone, regionCountry);
+    } catch (err) {
+      if (err instanceof RegionError) return sendRegionError(reply, err);
+      throw err;
+    }
+    const place = regionPlaceFromToken(app, request.body?.regionToken || request.headers['x-region-token'], regionCountry);
+    const data = await authService.verifyRiderOtp(phone, otp, app, regionCountry, place);
     return sendSuccess(reply, data);
   });
 

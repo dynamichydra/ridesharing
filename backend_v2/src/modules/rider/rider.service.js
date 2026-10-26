@@ -93,6 +93,69 @@ export async function getRiderMe(riderId) {
   };
 }
 
+/**
+ * What the rider app keeps locally (name, email, country, currency) — re-fetched on every app
+ * open so the local copy is always the server's. Rejects blocked accounts, and accounts being
+ * used outside their home country (regionCountry = the verified X-Region-Token country; null
+ * when the region lock is off for local development).
+ */
+export async function getRiderSession(riderId, regionCountry = null) {
+  const [user] = await db.select().from(users).where(eq(users.id, riderId)).limit(1);
+  if (!user) throw { statusCode: 401, code: 'ACCOUNT_NOT_FOUND', message: 'Account not found. Please log in again.' };
+  if (user.isBlocked || user.status === 'suspended' || user.status === 'deleted') {
+    throw { statusCode: 403, code: 'ACCOUNT_BLOCKED', message: 'This account has been suspended. Please contact support.' };
+  }
+
+  let country = null;
+  if (user.countryId) {
+    [country] = await db.select().from(countries).where(eq(countries.id, user.countryId)).limit(1);
+  }
+  if (regionCountry && country && country.isoCode.toUpperCase() !== regionCountry) {
+    const { accountCountryMismatchMessage } = await import('../auth/rider-region.service.js');
+    throw {
+      statusCode: 403,
+      code: 'ACCOUNT_COUNTRY_MISMATCH',
+      message: accountCountryMismatchMessage(country.isoCode.toUpperCase(), regionCountry),
+    };
+  }
+
+  const { paymentProfileForCountry } = await import('./rider-payment-profile.js');
+  const { listPaymentMethods } = await import('../payment-method/payment-method.service.js');
+  const profile = paymentProfileForCountry(country?.isoCode);
+  if (!profile) {
+    // Accounts from before country assignment: a fresh login (verify-OTP) pins the country
+    // from the verified location, so send the rider back through it.
+    throw { statusCode: 401, code: 'ACCOUNT_COUNTRY_MISSING', message: 'Please log in again to continue.' };
+  }
+  const savedCards = profile ? await listPaymentMethods(riderId, 'rider') : [];
+
+  return {
+    id: user.id,
+    name: user.name || '',
+    email: user.email || '',
+    phone: user.phone,
+    countryCode: country?.isoCode?.toUpperCase() ?? null,
+    countryName: country?.name ?? null,
+    dialCode: country?.dialCode ?? null,
+    // Fixed by the account's country (rider-payment-profile.js) — the app must not derive these.
+    currencyCode: profile?.currencyCode ?? null,
+    currencySymbol: profile?.currencySymbol ?? null,
+    paymentGateway: profile?.gateway ?? null,
+    savedPaymentMethods: savedCards
+      .filter((m) => m.gateway === profile?.gateway)
+      .map((m) => ({
+        id: m.id,
+        gateway: m.gateway,
+        cardBrand: m.cardBrand,
+        last4: m.last4,
+        expiryMonth: m.expiryMonth,
+        expiryYear: m.expiryYear,
+        isDefault: !!m.isDefault,
+      })),
+    profileComplete: Boolean(user.name && user.email),
+  };
+}
+
 export async function getProfile(riderId) {
   const [user] = await db.select().from(users).where(eq(users.id, riderId)).limit(1);
   if (!user) throw { statusCode: 404, message: 'User not found' };
@@ -103,7 +166,8 @@ export async function updateProfile(riderId, data) {
   if (data.profilePhoto && !data.avatar) {
     data.avatar = data.profilePhoto;
   }
-  const allowed = ['name', 'email', 'avatar', 'fcmToken', 'currencyCode'];
+  // currencyCode is not rider-editable — it's set from the rider's country at signup.
+  const allowed = ['name', 'email', 'avatar', 'fcmToken'];
   const updates = Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
 
   if (updates.email) {

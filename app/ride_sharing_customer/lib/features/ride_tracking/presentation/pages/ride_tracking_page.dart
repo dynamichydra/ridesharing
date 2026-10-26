@@ -1,3 +1,4 @@
+import '../../../../core/session/rider_session_service.dart';
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -1599,7 +1600,7 @@ class _RideTrackingPageState extends State<RideTrackingPage> with SingleTickerPr
           final done = await sl<SavedPaymentMethodsService>().completeGatewayStep(
             Map<String, dynamic>.from(payData),
             description: 'Ryva Ride Payment',
-            fallbackCurrency: state.currencyCode.isNotEmpty ? state.currencyCode : 'INR',
+            fallbackCurrency: state.currencyCode.isNotEmpty ? state.currencyCode : sl<RiderSessionService>().paymentProfile.currencyCode,
           );
           orderRef = done.orderRef;
           paymentRef = done.paymentRef;

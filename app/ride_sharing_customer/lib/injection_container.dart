@@ -6,6 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'core/services/storage_service.dart';
 import 'core/network/dio_client.dart';
 import 'core/payments/saved_payment_methods_service.dart';
+import 'core/region/region_guard.dart';
+import 'core/session/rider_session_service.dart';
 import 'core/services/google_routes_service.dart';
 import 'core/services/fcm_service.dart';
 
@@ -79,8 +81,27 @@ Future<void> init() async {
   final dio = Dio();
   sl.registerLazySingleton<Dio>(() => dio);
   sl.registerLazySingleton<DioClient>(() => DioClient(sl<Dio>()));
+  sl.registerLazySingleton<RegionGuard>(() => RegionGuard(sl<StorageService>()));
+  sl.registerLazySingleton<RiderSessionService>(
+    () => RiderSessionService(sl<DioClient>(), sl<StorageService>(), sl<FlutterSecureStorage>()),
+  );
   sl.registerLazySingleton<SavedPaymentMethodsService>(
-    () => SavedPaymentMethodsService(dio: sl<DioClient>().dio, pathPrefix: '/api/v1'),
+    () => SavedPaymentMethodsService(
+      dio: sl<DioClient>().dio,
+      pathPrefix: '/api/v1',
+      onMethodsChanged: (methods) => sl<RiderSessionService>().updateSavedPaymentMethods([
+        for (final m in methods)
+          {
+            'id': m.id,
+            'gateway': m.gateway,
+            'cardBrand': m.cardBrand,
+            'last4': m.last4,
+            'expiryMonth': m.expiryMonth,
+            'expiryYear': m.expiryYear,
+            'isDefault': m.isDefault,
+          },
+      ]),
+    ),
   );
   sl.registerLazySingleton<GoogleRoutesService>(() => GoogleRoutesService());
   sl.registerLazySingleton<FcmService>(() => FcmService(dioClient: sl<DioClient>(), storageService: sl<StorageService>()));

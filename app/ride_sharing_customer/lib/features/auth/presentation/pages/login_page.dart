@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:geocoding/geocoding.dart' as geo;
-import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
-import 'package:permission_handler/permission_handler.dart';
-import '../../../../core/constants/constants.dart';
-import '../../../../core/services/storage_service.dart';
+import '../../../../core/region/region_guard.dart';
 import '../../../../core/widgets/custom_toast.dart';
 import '../../../../injection_container.dart';
 import '../bloc/auth_bloc.dart';
@@ -20,235 +17,50 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
-  CountryConfig _selectedCountry = CountryConfig.supportedCountries.first;
+
+  // The country comes from the server-verified location (RegionGuard), never from the rider:
+  // there is no picker, and the backend rejects numbers from any other country.
+  RegionResult? _region;
   bool _isCheckingLocation = true;
-  bool _hasLocationPermission = false;
 
   @override
   void initState() {
     super.initState();
-    _checkLocationAndDetectCountry();
+    _resolveRegion();
   }
 
-  Future<void> _checkLocationAndDetectCountry() async {
-    setState(() {
-      _isCheckingLocation = true;
-    });
-
-    try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        await openAppSettings();
-        permission = await Geolocator.checkPermission();
-      }
-
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        setState(() {
-          _isCheckingLocation = false;
-          _hasLocationPermission = false;
-        });
-        return;
-      }
-
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        await Geolocator.openLocationSettings();
-        serviceEnabled = await Geolocator.isLocationServiceEnabled();
-        if (!serviceEnabled) {
-          setState(() {
-            _isCheckingLocation = false;
-            _hasLocationPermission = false;
-          });
-          return;
-        }
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.low,
-      );
-
-      final placemarks = await geo.Geocoding().placemarkFromCoordinates(
-        position.latitude,
-        position.longitude,
-      );
-
-      String isoCode = 'IN';
-      if (placemarks.isNotEmpty && placemarks.first.isoCountryCode != null) {
-        isoCode = placemarks.first.isoCountryCode!.toUpperCase();
-      }
-
-      final matched = CountryConfig.supportedCountries.firstWhere(
-        (c) => c.isoCode == isoCode,
-        orElse: () => isoCode == 'CA' || isoCode == 'US'
-            ? CountryConfig.supportedCountries.firstWhere((c) => c.isoCode == 'CA')
-            : CountryConfig.supportedCountries.firstWhere((c) => c.isoCode == 'IN'),
-      );
-
-      final resolvedIso = (matched.isoCode == 'CA' || matched.isoCode == 'US') ? 'CA' : 'IN';
-      try {
-        sl<StorageService>().setCountryCode(resolvedIso);
-      } catch (_) {}
-
-      setState(() {
-        _selectedCountry = matched;
-        _hasLocationPermission = true;
-        _isCheckingLocation = false;
-      });
-    } catch (e) {
-      final permission = await Geolocator.checkPermission();
-      final hasPerm = permission == LocationPermission.always ||
-          permission == LocationPermission.whileInUse;
-
-      setState(() {
-        _hasLocationPermission = hasPerm;
-        _isCheckingLocation = false;
-      });
+  Future<void> _resolveRegion() async {
+    setState(() => _isCheckingLocation = true);
+    final guard = sl<RegionGuard>();
+    final current = guard.current;
+    final result = (current != null && current.allowed) ? current : await guard.verify();
+    if (!mounted) return;
+    if (!result.allowed) {
+      context.go('/region-unavailable', extra: result);
+      return;
     }
+    setState(() {
+      _region = result;
+      _isCheckingLocation = false;
+    });
   }
 
-  void _showCountryPickerBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (BuildContext context) {
-        String searchQuery = '';
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            final filteredCountries = CountryConfig.supportedCountries.where((c) {
-              final query = searchQuery.toLowerCase();
-              return c.name.toLowerCase().contains(query) ||
-                  c.dialCode.contains(query) ||
-                  c.isoCode.toLowerCase().contains(query);
-            }).toList();
+  bool get _isCanada => _region?.countryCode == 'CA';
 
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.7,
-              padding: const EdgeInsets.only(top: 16),
-              child: Column(
-                children: [
-                  // Bottom Sheet Handle Bar
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Select Country / Region',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0A2540),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Search Bar
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                    child: TextField(
-                      onChanged: (value) {
-                        setModalState(() {
-                          searchQuery = value;
-                        });
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'Search country or code...',
-                        prefixIcon: const Icon(Icons.search, color: Color(0xFF4A5568)),
-                        filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Divider(height: 1),
-                  // Full-width Country List
-                  Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      itemCount: filteredCountries.length,
-                      separatorBuilder: (context, index) => const Divider(
-                        height: 1,
-                        indent: 64,
-                        endIndent: 20,
-                        color: Color(0xFFF1F5F9),
-                      ),
-                      itemBuilder: (context, index) {
-                        final country = filteredCountries[index];
-                        final isSelected = country.isoCode == _selectedCountry.isoCode;
-                        final flagEmoji = country.isoCode.toUpperCase().replaceAllMapped(
-                              RegExp(r'[A-Z]'),
-                              (match) => String.fromCharCode(
-                                  match.group(0)!.codeUnitAt(0) + 127397),
-                            );
+  String get _flag => (_region?.countryCode ?? 'IN').replaceAllMapped(
+        RegExp(r'[A-Z]'),
+        (m) => String.fromCharCode(m.group(0)!.codeUnitAt(0) + 127397),
+      );
 
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 4,
-                          ),
-                          leading: Text(
-                            flagEmoji,
-                            style: const TextStyle(fontSize: 26),
-                          ),
-                          title: Text(
-                            country.name,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                              color: isSelected ? const Color(0xFF009048) : const Color(0xFF0A2540),
-                            ),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                country.dialCode,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: isSelected ? const Color(0xFF009048) : const Color(0xFF64748B),
-                                ),
-                              ),
-                              if (isSelected) ...[
-                                const SizedBox(width: 8),
-                                const Icon(Icons.check_circle, color: Color(0xFF009048), size: 20),
-                              ],
-                            ],
-                          ),
-                          onTap: () {
-                            setState(() {
-                              _selectedCountry = country;
-                            });
-                            Navigator.pop(context);
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+  String? _validatePhone(String? value) {
+    final digits = (value ?? '').trim();
+    if (digits.isEmpty) return 'Please enter your phone number';
+    // if (_isCanada) {
+    //   if (!RegExp(r'^[2-9]\d{2}[2-9]\d{6}$').hasMatch(digits)) return 'Enter a valid 10-digit Canadian number';
+    // } else {
+    //   if (!RegExp(r'^[6-9]\d{9}$').hasMatch(digits)) return 'Enter a valid 10-digit Indian mobile number';
+    // }
+    return null;
   }
 
   @override
@@ -258,21 +70,9 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _submit() {
-    if (_formKey.currentState!.validate()) {
-      final input = _phoneController.text.trim();
-      String phone = input;
-      if (!phone.startsWith('+')) {
-        String digits = input.replaceAll(RegExp(r'\D'), '');
-        if (digits.startsWith('0')) {
-          digits = digits.substring(1);
-        }
-        phone = '${_selectedCountry.dialCode}$digits';
-      }
-      try {
-        sl<StorageService>().setCountryCode(_selectedCountry.isoCode);
-      } catch (_) {}
-      context.read<AuthBloc>().add(LoginSubmitted(phone));
-    }
+    if (_region == null || !_formKey.currentState!.validate()) return;
+    final phone = '${_region!.dialCode}${_phoneController.text.trim()}';
+    context.read<AuthBloc>().add(LoginSubmitted(phone));
   }
 
   @override
@@ -381,45 +181,27 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                               child: Row(
                                 children: [
-                                   // Interactive Country Prefix Picker that opens a wide, full-name Bottom Sheet picker
-                                   InkWell(
-                                     onTap: _showCountryPickerBottomSheet,
-                                     borderRadius: BorderRadius.circular(12),
-                                     child: Padding(
-                                       padding: const EdgeInsets.symmetric(
-                                         horizontal: 14.0,
-                                         vertical: 14.0,
-                                       ),
-                                       child: Row(
-                                         mainAxisSize: MainAxisSize.min,
-                                         children: [
-                                           Text(
-                                             _selectedCountry.isoCode.toUpperCase().replaceAllMapped(
-                                                   RegExp(r'[A-Z]'),
-                                                   (match) => String.fromCharCode(
-                                                       match.group(0)!.codeUnitAt(0) + 127397),
-                                                 ),
-                                             style: const TextStyle(fontSize: 18),
-                                           ),
-                                           const SizedBox(width: 6),
-                                           Text(
-                                             _selectedCountry.dialCode,
-                                             style: const TextStyle(
-                                               fontSize: 16,
-                                               fontWeight: FontWeight.bold,
-                                               color: Color(0xFF0A2540),
-                                             ),
-                                           ),
-                                           const SizedBox(width: 4),
-                                           const Icon(
-                                             Icons.arrow_drop_down,
-                                             color: Color(0xFF4A5568),
-                                             size: 20,
-                                           ),
-                                         ],
-                                       ),
-                                     ),
-                                   ),
+                                  // Locked dial code — from the verified location, not selectable
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 14.0),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(_flag, style: const TextStyle(fontSize: 18)),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          _region?.dialCode ?? '',
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF0A2540),
+                                          ),
+                                        ),
+                                        // const SizedBox(width: 4),
+                                        // const Icon(Icons.lock_outline_rounded, color: Color(0xFF94A3B8), size: 14),
+                                      ],
+                                    ),
+                                  ),
                                   // Vertical Divider
                                   Container(
                                     height: 24,
@@ -430,8 +212,12 @@ class _LoginPageState extends State<LoginPage> {
                                   Expanded(
                                     child: TextFormField(
                                       controller: _phoneController,
-                                      enabled: _hasLocationPermission && !_isCheckingLocation,
-                                      keyboardType: TextInputType.phone,
+                                      enabled: _region != null && !_isCheckingLocation,
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                        LengthLimitingTextInputFormatter(10),
+                                      ],
                                       style: const TextStyle(
                                         fontSize: 16,
                                         color: Color(0xFF0A2540),
@@ -451,46 +237,32 @@ class _LoginPageState extends State<LoginPage> {
                                         errorBorder: InputBorder.none,
                                         disabledBorder: InputBorder.none,
                                       ),
-                                      validator: (value) {
-                                        if (!_hasLocationPermission) {
-                                          return 'Location permission required';
-                                        }
-                                        if (value == null ||
-                                            value.trim().isEmpty) {
-                                          return 'Please enter your phone number';
-                                        }
-                                        final trimmed = value.trim();
-                                        if (trimmed.startsWith('+')) {
-                                          final fullPhoneRegex = RegExp(r'^\+[1-9]\d{6,14}$');
-                                          if (!fullPhoneRegex.hasMatch(trimmed)) {
-                                            return 'Enter valid phone number in E.164 format';
-                                          }
-                                        } else {
-                                          final localPhoneRegex = RegExp(r'^\d{7,12}$');
-                                          if (!localPhoneRegex.hasMatch(trimmed)) {
-                                            return 'Enter a valid mobile number (7 to 12 digits)';
-                                          }
-                                        }
-                                        return null;
-                                      },
+                                      validator: _validatePhone,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
+                            if (_region != null) ...[
+                              // const SizedBox(height: 8),
+                              // Padding(
+                              //   padding: const EdgeInsets.only(left: 4),
+                              //   child: Text(
+                              //     'You are in ${_region!.countryName} — only ${_region!.countryName} (${_region!.dialCode}) numbers can be used here.',
+                              //     style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                              //   ),
+                              // ),
+                            ],
                             const SizedBox(height: 20),
                             // Send OTP Button
                             SizedBox(
                               width: double.infinity,
                               height: 56,
                               child: ElevatedButton(
-                                onPressed: (isLoading || _isCheckingLocation || !_hasLocationPermission)
-                                    ? (_hasLocationPermission ? null : _checkLocationAndDetectCountry)
-                                    : _submit,
+                                onPressed: (isLoading || _isCheckingLocation || _region == null) ? null : _submit,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: _hasLocationPermission
-                                      ? const Color(0xFF009048)
-                                      : const Color(0xFF94A3B8),
+                                  backgroundColor: const Color(0xFF009048),
+                                  disabledBackgroundColor: const Color(0xFF94A3B8),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(16),
                                   ),
@@ -505,16 +277,7 @@ class _LoginPageState extends State<LoginPage> {
                                           valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                         ),
                                       )
-                                    : !_hasLocationPermission
-                                        ? const Text(
-                                            'Allow Location to Continue',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          )
-                                        : isLoading
+                                    : isLoading
                                             ? const SizedBox(
                                                 width: 24,
                                                 height: 24,

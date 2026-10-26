@@ -7,6 +7,7 @@ import {
   getMerchantAccountId,
 } from '../payment/payment-region.service.js';
 import { sendSuccess, sendError } from '../../utils/response.js';
+import { getRiderPaymentProfile, assertRiderGateway } from '../rider/rider-payment-profile.js';
 
 function payerRole(request) {
   const role = request.user?.role;
@@ -20,7 +21,21 @@ export async function createSetupIntent(request, reply) {
   try {
     const role = payerRole(request);
     const userId = request.user.id;
-    const { gatewayName, currencyCode, countryCode, countryId, pickupLat, pickupLng, rideId } = request.body || {};
+    let { gatewayName, currencyCode, countryCode, countryId, pickupLat, pickupLng, rideId } = request.body || {};
+
+    // Riders: the account's country fixes the gateway and currency (rider-payment-profile.js);
+    // whatever region/gateway the app sends is ignored, and a different gateway is refused.
+    if (role === 'rider') {
+      const profile = await getRiderPaymentProfile(userId);
+      assertRiderGateway(profile, gatewayName);
+      gatewayName = profile.gateway;
+      countryCode = profile.countryCode;
+      currencyCode = profile.currencyCode;
+      countryId = null;
+      pickupLat = null;
+      pickupLng = null;
+      rideId = null;
+    }
 
     // Authoritative resolution of region & merchant account
     const regionConfig = await resolvePaymentRegion({
@@ -84,6 +99,9 @@ export async function attachPaymentMethod(request, reply) {
     if (!gateway) {
       return sendError(reply, 'gateway is required.', 400);
     }
+    if (role === 'rider') {
+      assertRiderGateway(await getRiderPaymentProfile(userId), gateway);
+    }
 
     const gw = getGateway(gateway.toLowerCase());
     let resolved;
@@ -127,6 +145,13 @@ export async function getPaymentMethods(request, reply) {
     const userId = request.user.id;
     const query = request.query || {};
 
+    // Riders: one fixed gateway per account — a card on any other gateway is never usable.
+    if (role === 'rider') {
+      const profile = await getRiderPaymentProfile(userId);
+      const methods = await pmService.listPaymentMethods(userId, role);
+      return sendSuccess(reply, annotateForRiderProfile(methods, profile));
+    }
+
     // If transaction context is supplied, evaluate eligibility per method
     const hasContext = query.rideId || query.currencyCode || query.countryCode || query.countryId || query.pickupLat;
     if (hasContext) {
@@ -147,6 +172,19 @@ export async function getPaymentMethods(request, reply) {
   } catch (err) {
     return sendError(reply, err.message || 'Failed to fetch payment methods', err.statusCode || 500);
   }
+}
+
+export function annotateForRiderProfile(methods, profile) {
+  return annotateSavedMethodsForProfile(methods).map((m) => (
+    m.isEligible && m.gateway !== profile.gateway
+      ? {
+        ...m,
+        isEligible: false,
+        ineligibilityCode: 'GATEWAY_NOT_ALLOWED',
+        ineligibilityReason: `Your account pays with ${profile.gateway === 'razorpay' ? 'Razorpay' : 'Stripe'} only.`,
+      }
+      : m
+  ));
 }
 
 export async function resolvePaymentOptions(request, reply) {

@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/custom_toast.dart';
+import '../../../../core/utils/phone_format.dart';
 import '../bloc/auth_bloc.dart';
 
 class OtpPage extends StatefulWidget {
@@ -180,7 +181,7 @@ class _OtpPageState extends State<OtpPage> {
                       const SizedBox(height: 6),
                       Center(
                         child: Text(
-                          widget.phoneNumber.isNotEmpty ? widget.phoneNumber : "+91 98765 43210",
+                          widget.phoneNumber.isNotEmpty ? formatPhoneDisplay(widget.phoneNumber) : "+91 98765 43210",
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,

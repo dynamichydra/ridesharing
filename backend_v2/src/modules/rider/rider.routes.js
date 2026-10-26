@@ -11,6 +11,13 @@ export async function riderRoutes(app) {
     return sendSuccess(reply, data);
   });
 
+  // GET /api/v1/riders/session — name/email/country/currency for the app's local copy,
+  // re-verified on every launch (see getRiderSession).
+  app.get('/session', { preHandler: [authenticateRider] }, async (request, reply) => {
+    const data = await riderService.getRiderSession(request.user.id, request.riderRegion ?? null);
+    return sendSuccess(reply, data);
+  });
+
   app.get('/profile', { preHandler: [authenticateRider] }, async (request, reply) => {
     const data = await riderService.getProfile(request.user.id);
     return sendSuccess(reply, data);

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/custom_toast.dart';
+import '../../../../core/utils/phone_format.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../bloc/profile_bloc.dart';
 
@@ -21,7 +22,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
   late TextEditingController _emailController;
   late TextEditingController _phoneController;
   String _phonePrefix = '+91 ';
-  String _currencyCode = 'INR';
   bool _initialized = false;
 
   @override
@@ -93,8 +93,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
             UpdateProfileDetails(
               name: _nameController.text.trim(),
               email: _emailController.text.trim(),
-              phone: '$_phonePrefix${_phoneController.text.trim()}',
-              currencyCode: _currencyCode,
+              // E.164 without the display space
+              phone: '${_phonePrefix.trim()}${_phoneController.text.trim()}',
             ),
           );
     }
@@ -219,25 +219,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
               final email = state.userProfile['email'] as String? ?? 'john.doe@email.com';
               final fullPhone = state.userProfile['phone'] as String? ?? '+91 98765 43210';
 
-              String phonePrefix = '+91 ';
-              String phoneBody = fullPhone;
-
-              if (fullPhone.startsWith('+')) {
-                final spaceIndex = fullPhone.indexOf(' ');
-                if (spaceIndex != -1) {
-                  phonePrefix = fullPhone.substring(0, spaceIndex + 1);
-                  phoneBody = fullPhone.substring(spaceIndex + 1);
-                } else if (fullPhone.length > 3) {
-                  phonePrefix = fullPhone.substring(0, 3) + ' ';
-                  phoneBody = fullPhone.substring(3);
-                }
-              }
+              // '+91 ' / '+1 ' shown as the field prefix, the rest as the number.
+              final (dial, phoneBody) = splitDialCode(fullPhone);
+              final phonePrefix = dial.isEmpty ? '' : '$dial ';
 
               _nameController = TextEditingController(text: name);
               _emailController = TextEditingController(text: email);
               _phoneController = TextEditingController(text: phoneBody);
               _phonePrefix = phonePrefix;
-              _currencyCode = state.userProfile['currency_code']?.toString().toUpperCase() ?? 'INR';
               _initialized = true;
             }
 
@@ -398,71 +387,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         controller: _phoneController,
                         keyboardType: TextInputType.phone,
                         prefixText: _phonePrefix,
-                      ),
-
-                      // Currency Preference Card
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            const Padding(
-                              padding: EdgeInsets.only(right: 12.0),
-                              child: Icon(Icons.payments_outlined, color: Color(0xFF009048), size: 22),
-                            ),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Padding(
-                                    padding: EdgeInsets.only(top: 8),
-                                    child: Text(
-                                      'Preferred Currency',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Color(0xFF718096),
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                  DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      value: _currencyCode,
-                                      isExpanded: true,
-                                      icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF0A2540)),
-                                      style: const TextStyle(
-                                        fontSize: 15,
-                                        color: Color(0xFF0A2540),
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                      items: const [
-                                        DropdownMenuItem(value: 'INR', child: Text('INR (₹)')),
-                                        DropdownMenuItem(value: 'USD', child: Text('USD (\$)')),
-                                        DropdownMenuItem(value: 'EUR', child: Text('EUR (€)')),
-                                        DropdownMenuItem(value: 'GBP', child: Text('GBP (£)')),
-                                        DropdownMenuItem(value: 'CAD', child: Text('CAD (\$)')),
-                                      ],
-                                      onChanged: (String? newValue) {
-                                        if (newValue != null) {
-                                          setState(() {
-                                            _currencyCode = newValue;
-                                          });
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
                       ),
 
                       const SizedBox(height: 12),

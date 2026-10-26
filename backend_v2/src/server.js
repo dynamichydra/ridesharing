@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
-import { env } from './config/env.js';
+import { env, assertRequiredEnv } from './config/env.js';
 import {
   redis, redisPub,
   redisSub
@@ -156,6 +156,7 @@ async function build() {
 }
 
 async function start() {
+  assertRequiredEnv(); // refuse to boot without required/safe secrets
   const app = await build();
   await app.ready();
 

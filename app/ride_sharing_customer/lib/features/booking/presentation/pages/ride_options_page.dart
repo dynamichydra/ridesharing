@@ -12,6 +12,7 @@ import '../bloc/booking_bloc.dart';
 import '../../../ride_tracking/presentation/bloc/ride_tracking_bloc.dart';
 import '../../../wallet/presentation/bloc/wallet_bloc.dart';
 import '../../../profile/presentation/bloc/profile_bloc.dart';
+import '../../../../core/session/rider_session_service.dart';
 import '../../../../core/payments/saved_payment_methods_service.dart';
 import '../../../../injection_container.dart';
 
@@ -32,36 +33,22 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
   PassengerInfo? _passenger;
   String? _rideNotes;
 
+  // The account's country fixes currency + gateway (India → INR/Razorpay, Canada →
+  // CAD/Stripe); the ride's currency plays no part in which cards can be used.
+  RiderPaymentProfile get _profile => sl<RiderSessionService>().paymentProfile;
+
   bool _isCardEligibleForCurrency(Map<dynamic, dynamic> pm, String currency) {
     if (pm['isActive'] == false || pm['revokedAt'] != null) return false;
     if (pm['ineligibilityCode'] == 'EXPIRED') return false;
-
-    final gw = (pm['gateway'] ?? '').toString().toLowerCase();
-    final isIndianCurrency = currency.toUpperCase() == 'INR';
-
-    if (isIndianCurrency) {
-      return gw == 'razorpay';
-    } else {
-      // International rides (CAD, USD, EUR, GBP, AUD, etc.) -> Stripe!
-      return gw == 'stripe';
-    }
+    return (pm['gateway'] ?? '').toString().toLowerCase() == _profile.gateway;
   }
 
   String? _getCardIneligibilityReason(Map<dynamic, dynamic> pm, String currency) {
     if (pm['ineligibilityCode'] == 'EXPIRED') {
       return pm['ineligibilityReason']?.toString() ?? 'Card is expired';
     }
-    final gw = (pm['gateway'] ?? '').toString().toLowerCase();
-    final isIndianCurrency = currency.toUpperCase() == 'INR';
-
-    if (isIndianCurrency) {
-      if (gw != 'razorpay') {
-        return 'Stripe cards are only available for international rides';
-      }
-    } else {
-      if (gw != 'stripe') {
-        return 'Razorpay cards can only be used for INR rides within India';
-      }
+    if ((pm['gateway'] ?? '').toString().toLowerCase() != _profile.gateway) {
+      return 'Your account pays with ${_profile.gatewayName} only';
     }
     return null;
   }
@@ -122,15 +109,10 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
     required VoidCallback closeSheet,
   }) async {
     closeSheet();
-    String? countryId;
-    final bookingState = context.read<BookingBloc>().state;
-    if (bookingState is BookingVehicleOptionsLoaded) countryId = bookingState.countryId;
-
     try {
       final saved = await sl<SavedPaymentMethodsService>().addCard(
-        gateway: gateway.isNotEmpty ? gateway : null,
-        currencyCode: currency.toUpperCase(),
-        countryId: countryId,
+        gateway: _profile.gateway,
+        currencyCode: _profile.currencyCode,
         makeDefault: true,
       );
       if (!mounted) return;
@@ -405,11 +387,9 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                           Padding(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 20, vertical: 6),
-                            child: Text(
-                              rideCurrency.toUpperCase() == 'INR'
-                                  ? 'ADD DOMESTIC CARD'
-                                  : 'ADD INTERNATIONAL CARD',
-                              style: const TextStyle(
+                            child: const Text(
+                              'ADD CARD',
+                              style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF94A3B8),
@@ -417,8 +397,8 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                               ),
                             ),
                           ),
-                          // Gateway-specific Add Card action
-                          if (rideCurrency.toUpperCase() == 'INR')
+                          // Add a card on the account's gateway
+                          if (_profile.gateway == 'razorpay')
                             ListTile(
                               leading: Container(
                                 width: 40,
@@ -476,7 +456,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                                 ),
                               ),
                               title: Text(
-                                'Add Card with Stripe (${rideCurrency.toUpperCase()})',
+                                'Add Card with Stripe (${_profile.currencyCode})',
                                 style: const TextStyle(
                                   color: Color(0xFF021B47),
                                   fontWeight: FontWeight.bold,
@@ -778,7 +758,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
   Widget build(BuildContext context) {
     final walletState = context.watch<WalletBloc>().state;
     double walletBalance = 0.0;
-    String walletCurrency = 'INR';
+    String walletCurrency = _profile.currencyCode;
     if (walletState is WalletLoaded) {
       walletBalance = walletState.balance;
       walletCurrency = walletState.currency;
@@ -831,7 +811,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
               final curr = _cachedOptions?.currencyCode ??
                   (context.read<BookingBloc>().state is BookingVehicleOptionsLoaded
                       ? (context.read<BookingBloc>().state as BookingVehicleOptionsLoaded).currencyCode
-                      : 'INR');
+                      : _profile.currencyCode);
               _evaluateAndPreselectPaymentMethod(curr);
             }
           },
@@ -858,8 +838,8 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
                   paymentMethod: state.paymentMethod,
                   passenger: state.passenger,
                   trackingUrl: state.trackingUrl,
-                  currencyCode: _cachedOptions?.currencyCode ?? 'INR',
-                  currencySymbol: _cachedOptions?.currencySymbol ?? '₹',
+                  currencyCode: _cachedOptions?.currencyCode ?? _profile.currencyCode,
+                  currencySymbol: _cachedOptions?.currencySymbol ?? _profile.currencySymbol,
                   breakdown: state.selectedVehicle.breakdown,
                   distanceKm: state.selectedVehicle.distanceKm,
                   etaMin: state.selectedVehicle.etaMinutes,

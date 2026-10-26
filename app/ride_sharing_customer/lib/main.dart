@@ -4,9 +4,8 @@ import 'package:responsive_framework/responsive_framework.dart';
 import 'injection_container.dart' as di;
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_bloc.dart';
-import 'core/services/storage_service.dart';
-import 'core/constants/constants.dart';
 import 'routes.dart';
+import 'core/session/rider_session_service.dart';
 
 // Import Blocs
 import 'features/auth/presentation/bloc/auth_bloc.dart';
@@ -30,6 +29,7 @@ void main() async {
   }
 
   await di.init();
+  AppRoutes.listenForRegionBlocks();
   try {
     await di.sl<FcmService>().initialize();
   } catch (e) {
@@ -40,10 +40,8 @@ void main() async {
     AppRoutes.router.push(route);
   };
 
-  // Set currency code from storage
-  final storageService = di.sl<StorageService>();
-  final code = storageService.getCountryCode();
-  AppConstants.currencySymbol = code == 'CA' ? '\$' : '₹';
+  // Stored rider session → currency/gateway for the whole app (re-verified with the API at splash).
+  await di.sl<RiderSessionService>().load();
 
   runApp(const MyApp());
 }

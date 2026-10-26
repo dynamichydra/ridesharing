@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
+import '../../../../injection_container.dart';
+import '../../../../core/session/rider_session_service.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/services/storage_service.dart';
 
 abstract class ProfileDataSource {
   Future<Map<String, dynamic>> getUserProfile();
-  Future<void> updateUserProfile(String name, String email, String phone, {String? currencyCode});
+  Future<void> updateUserProfile(String name, String email, String phone);
   Future<List<Map<String, dynamic>>> getRideHistory();
   Future<void> updateSavedPlaces(List<Map<String, dynamic>> places);
   Future<Map<String, dynamic>> addSavedPlace(Map<String, dynamic> place);
@@ -103,16 +105,13 @@ class ProfileDataSourceImpl implements ProfileDataSource {
   }
 
   @override
-  Future<void> updateUserProfile(String name, String email, String phone, {String? currencyCode}) async {
+  Future<void> updateUserProfile(String name, String email, String phone) async {
     try {
       final Map<String, dynamic> data = {
         'name': name,
         'email': email,
         'phone': phone,
       };
-      if (currencyCode != null) {
-        data['currencyCode'] = currencyCode;
-      }
       final response = await _dioClient.dio.patch('/api/v1/riders/profile', data: data);
       if (response.data is Map && response.data['SUCCESS'] == false) {
         throw Exception(response.data['MESSAGE'] ?? 'Failed to update profile.');
@@ -124,10 +123,8 @@ class ProfileDataSourceImpl implements ProfileDataSource {
         'email': email,
         'phone': phone,
       };
-      if (currencyCode != null) {
-        updated['currency_code'] = currencyCode;
-      }
       await _storageService.cacheData(_profileCacheKey, updated);
+      await sl<RiderSessionService>().updateProfile(name: name, email: email);
     } catch (e) {
       if (e is DioException) {
         if (e.response != null && e.response?.data is Map) {

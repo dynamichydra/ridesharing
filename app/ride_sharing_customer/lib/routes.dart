@@ -12,6 +12,8 @@ import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/presentation/pages/signup_page.dart';
 import 'features/auth/presentation/pages/otp_page.dart';
 import 'features/auth/presentation/pages/forgot_password_page.dart';
+import 'features/auth/presentation/pages/region_unavailable_page.dart';
+import 'core/region/region_guard.dart';
 import 'features/home/presentation/pages/home_page.dart';
 import 'features/booking/presentation/pages/select_location_page.dart';
 import 'features/booking/presentation/pages/ride_options_page.dart';
@@ -42,6 +44,7 @@ class AppRoutes {
   static const String signup = '/signup';
   static const String otp = '/otp';
   static const String forgotPassword = '/forgot-password';
+  static const String regionUnavailable = '/region-unavailable';
   static const String home = '/home';
   static const String selectLocation = '/select-location';
   static const String rideOptions = '/ride-options';
@@ -74,6 +77,8 @@ class AppRoutes {
     navigatorKey: _rootNavigatorKey,
     initialLocation: splash,
     redirect: (context, state) async {
+      // The region block screen is reachable logged in or out and must never be redirected away.
+      if (state.matchedLocation == regionUnavailable) return null;
       final storage = sl<StorageService>();
       final token = await storage.getToken();
       final isLoggedIn = token != null;
@@ -115,6 +120,10 @@ class AppRoutes {
         },
       ),
       GoRoute(path: login, builder: (context, state) => const LoginPage()),
+      GoRoute(
+        path: regionUnavailable,
+        builder: (context, state) => RegionUnavailablePage(result: state.extra as RegionResult?),
+      ),
       GoRoute(path: signup, builder: (context, state) => const SignupPage()),
       GoRoute(
         path: otp,
@@ -281,5 +290,15 @@ class AppRoutes {
       ),
     ],
   );
+
+  /// Sends the rider to the region block screen whenever a check fails after start-up
+  /// (resume, or the API rejecting a request with a region error code).
+  static void listenForRegionBlocks() {
+    sl<RegionGuard>().onBlocked.listen((result) {
+      if (result.needsLocationPermission) return; // splash/permission page handles this
+      final current = router.routerDelegate.currentConfiguration.uri.path;
+      if (current != regionUnavailable) router.go(regionUnavailable, extra: result);
+    });
+  }
 }
 

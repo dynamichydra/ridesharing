@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/constants.dart';
 import '../../../../core/widgets/custom_toast.dart';
+import '../../../../core/region/region_guard.dart';
+import '../../../../injection_container.dart';
 import '../bloc/auth_bloc.dart';
 
 class SignupPage extends StatefulWidget {
@@ -33,6 +35,46 @@ class _SignupPageState extends State<SignupPage> {
             ),
           );
     }
+  }
+
+  Widget _buildLocationCard() {
+    final region = sl<RegionGuard>().current;
+    if (region == null || !region.allowed) return const SizedBox.shrink();
+    final flag = (region.countryCode ?? 'IN').replaceAllMapped(
+      RegExp(r'[A-Z]'),
+      (m) => String.fromCharCode(m.group(0)!.codeUnitAt(0) + 127397),
+    );
+    final place = [region.cityName, region.countryName].whereType<String>().where((s) => s.isNotEmpty).join(', ');
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Text(flag, style: const TextStyle(fontSize: 22)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Location', style: TextStyle(fontSize: 12, color: Color(0xFF718096))),
+                const SizedBox(height: 2),
+                Text(place,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF0A2540))),
+                const SizedBox(height: 2),
+                const Text('Set automatically from your current location',
+                    style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+              ],
+            ),
+          ),
+          const Icon(Icons.lock_outline_rounded, color: Color(0xFF94A3B8), size: 18),
+        ],
+      ),
+    );
   }
 
   Widget _buildInputCard({
@@ -259,6 +301,10 @@ class _SignupPageState extends State<SignupPage> {
                         return null;
                       },
                     ),
+                    const SizedBox(height: 16),
+
+                    // Location — assigned automatically from the verified GPS location
+                    _buildLocationCard(),
                     const SizedBox(height: 20),
 
                     // Safety Shield Banner Card

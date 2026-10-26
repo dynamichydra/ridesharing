@@ -68,6 +68,7 @@ class StorageService {
       await _secureStorage.delete(key: _tokenKey);
       await _secureStorage.delete(key: _refreshTokenKey);
       await _secureStorage.delete(key: _userIdKey);
+      await _secureStorage.delete(key: 'rider_session'); // RiderSessionService's copy
     } catch (_) {
       try {
         await _secureStorage.deleteAll();

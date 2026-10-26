@@ -1,3 +1,5 @@
+import '../../../../injection_container.dart';
+import '../../../../core/session/rider_session_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../domain/repositories/wallet_repository.dart';
@@ -214,7 +216,7 @@ class WalletBloc extends Bloc<WalletEvent, WalletState> {
         final keyId = result['keyId']?.toString() ?? '';
         final orderId = result['gatewayOrderId']?.toString() ?? '';
         final amtMinor = (event.amount * 100).round();
-        final currency = result['currency']?.toString() ?? 'INR';
+        final currency = result['currency']?.toString() ?? sl<RiderSessionService>().paymentProfile.currencyCode;
         emit(RazorpayTopupReady(
           keyId: keyId,
           gatewayOrderId: orderId,

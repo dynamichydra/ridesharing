@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
 import '../services/storage_service.dart';
+import '../region/region_guard.dart';
 import '../../injection_container.dart';
 
 import 'interceptors/http_log_interceptor.dart';
@@ -23,9 +24,37 @@ class DioClient {
           if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';
           }
+          // India/Canada region lock: the server rejects rider calls (and OTP login) without a
+          // fresh region token. RegionGuard re-verifies when the cached one is near expiry.
+          final regionToken = await sl<RegionGuard>().validToken();
+          if (regionToken != null) {
+            options.headers['X-Region-Token'] = regionToken;
+          }
           return handler.next(options);
         },
         onError: (DioException error, handler) async {
+          final body = error.response?.data;
+          final code = body is Map ? body['CODE']?.toString() : null;
+          if (error.response?.statusCode == 403 && code != null && RegionGuard.regionErrorCodes.contains(code)) {
+            final guard = sl<RegionGuard>();
+            // Expired/missing token: re-check once and replay the request.
+            if (code == 'REGION_CHECK_REQUIRED' && error.requestOptions.extra['regionRetried'] != true) {
+              final result = await guard.verify();
+              if (result.allowed) {
+                final opts = error.requestOptions..extra['regionRetried'] = true;
+                try {
+                  return handler.resolve(await dio.fetch(opts));
+                } on DioException catch (retryError) {
+                  return handler.next(retryError);
+                }
+              }
+              if (!result.needsLocationPermission) guard.reportBlocked(result);
+            } else {
+              guard.reportBlocked(RegionResult.blocked(code, body is Map ? body['MESSAGE']?.toString() : null));
+            }
+            return handler.next(error);
+          }
+
           if (error.response?.statusCode == 401 &&
               !error.requestOptions.path.contains('/api/v1/auth/refresh') &&
               !error.requestOptions.path.contains('/api/v1/auth/rider/verify-otp')) {

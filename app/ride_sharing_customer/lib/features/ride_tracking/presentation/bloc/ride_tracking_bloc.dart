@@ -1,3 +1,4 @@
+import '../../../../core/session/rider_session_service.dart';
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
@@ -543,14 +544,14 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
               final driverObj = activeObj['driver'] is Map ? Map<String, dynamic>.from(activeObj['driver'] as Map) : null;
               map = {
                 'rideId': activeObj['id'].toString(),
-                'pickupLat': (activeObj['pickupLat'] as num?)?.toDouble() ?? 0.0,
-                'pickupLng': (activeObj['pickupLng'] as num?)?.toDouble() ?? 0.0,
-                'dropLat': (activeObj['dropLat'] as num?)?.toDouble() ?? 0.0,
-                'dropLng': (activeObj['dropLng'] as num?)?.toDouble() ?? 0.0,
+                'pickupLat': _asDouble(activeObj['pickupLat']) ?? 0.0,
+                'pickupLng': _asDouble(activeObj['pickupLng']) ?? 0.0,
+                'dropLat': _asDouble(activeObj['dropLat']) ?? 0.0,
+                'dropLng': _asDouble(activeObj['dropLng']) ?? 0.0,
                 'pickupName': activeObj['pickupAddress']?.toString() ?? 'Pickup Location',
                 'destinationName': activeObj['dropoffAddress']?.toString() ?? 'Destination',
                 'vehicleName': activeObj['vehicleType']?['name']?.toString() ?? 'Vehicle',
-                'fare': (activeObj['estimatedFare'] as num?)?.toDouble() ?? (activeObj['finalFare'] as num?)?.toDouble() ?? 0.0,
+                'fare': _asDouble(activeObj['estimatedFare']) ?? _asDouble(activeObj['finalFare']) ?? 0.0,
                 'paymentMethod': activeObj['paymentMethod']?.toString() ?? 'cash',
                 'trackingState': (activeObj['status']?.toString().toLowerCase() == 'searching') ? 'searching' : 'rideInProgress',
                 'otp': activeObj['startOtp']?.toString() ?? '',
@@ -558,7 +559,7 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
                 'breakdown': activeObj['fareSnapshot']?['breakdown'] ?? activeObj['breakdown'],
                 if (driverObj != null) 'driver': {
                   'name': driverObj['name'] ?? 'Driver',
-                  'rating': (driverObj['rating'] as num?)?.toDouble() ?? 4.9,
+                  'rating': _asDouble(driverObj['rating']) ?? 4.9,
                   'avatar': driverObj['profilePhoto'] ?? '',
                   'vehicle': driverObj['vehicleModel'] ?? '',
                   'plate_number': driverObj['vehicleNumber'] ?? '',
@@ -600,24 +601,24 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       }
 
       final pickup = LatLng(
-        (map['pickupLat'] as num).toDouble(),
-        (map['pickupLng'] as num).toDouble(),
+        (_asDouble(map['pickupLat']) ?? 0.0),
+        (_asDouble(map['pickupLng']) ?? 0.0),
       );
       final destination = LatLng(
-        (map['dropLat'] as num).toDouble(),
-        (map['dropLng'] as num).toDouble(),
+        (_asDouble(map['dropLat']) ?? 0.0),
+        (_asDouble(map['dropLng']) ?? 0.0),
       );
       final pickupName = map['pickupName']?.toString() ?? 'Pickup';
       final destinationName = map['destinationName']?.toString() ?? 'Destination';
       final vehicleName = map['vehicleName']?.toString() ?? 'Car';
-      final fare = (map['fare'] as num).toDouble();
+      final fare = (_asDouble(map['fare']) ?? 0.0);
       final paymentMethod = map['paymentMethod']?.toString() ?? 'cash';
       final trackingState = map['trackingState']?.toString() ?? 'searching';
 
       final String currencyCode = map['currencyCode']?.toString() ??
           map['fareSnapshot']?['currencyCode']?.toString() ??
           map['fareSnapshot']?['currency']?.toString() ??
-          'INR';
+          sl<RiderSessionService>().paymentProfile.currencyCode;
       final String currencySymbol = map['currencySymbol']?.toString() ??
           AppConstants.getCurrencySymbol(currencyCode);
       final Map<String, dynamic>? breakdown = (map['fareSnapshot']?['breakdown'] ?? map['breakdown']) is Map
@@ -644,8 +645,8 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         currencyCode: currencyCode,
         currencySymbol: currencySymbol,
         breakdown: breakdown,
-        distanceKm: (map['fareSnapshot']?['distanceKm'] as num?)?.toDouble(),
-        etaMin: (map['fareSnapshot']?['durationMin'] as num?)?.toInt(),
+        distanceKm: _asDouble(map['fareSnapshot']?['distanceKm']),
+        etaMin: _asInt(map['fareSnapshot']?['durationMin']),
       );
 
       await _rideTrackingRepository.connectToRide(rideId);
@@ -680,8 +681,8 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
       } else {
         final driver = Map<String, dynamic>.from(map['driver'] as Map);
         final driverPosition = LatLng(
-          (driver['lat'] as num).toDouble(),
-          (driver['lng'] as num).toDouble(),
+          (_asDouble(driver['lat']) ?? 0.0),
+          (_asDouble(driver['lng']) ?? 0.0),
         );
         final points = await _rideTrackingRepository.fetchRoutePoints(
           driverPosition,
@@ -695,7 +696,7 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         emit(RideTrackingActive(
           rideId: rideId,
           driverName: driver['name']?.toString() ?? 'Ramesh Kumar',
-          driverRating: (driver['rating'] as num?)?.toDouble() ?? 4.8,
+          driverRating: _asDouble(driver['rating']) ?? 4.8,
           driverAvatar: driver['avatar']?.toString() ?? '',
           driverVehicle: driver['vehicle']?.toString() ?? 'Hero Splendor+ • KA 01 AB 1234',
           plateNumber: driver['plateNumber']?.toString() ?? 'KA 01 AB 1234',
@@ -1054,7 +1055,7 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
         final walletCached = storage.getCachedData('cached_wallet_data');
         if (walletCached != null) {
           final walletMap = Map<String, dynamic>.from(walletCached as Map);
-          final double balance = (walletMap['balance'] as num).toDouble();
+          final double balance = (_asDouble(walletMap['balance']) ?? 0.0);
           final double nextBalance = balance - activeRide.fare;
           
           final transactions = (walletMap['transactions'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -1143,3 +1144,8 @@ class RideTrackingBloc extends Bloc<RideTrackingEvent, RideTrackingState> {
     return super.close();
   }
 }
+
+// API numbers can arrive as JSON numbers or strings — Postgres decimal columns (coordinates,
+// ratings, fares) serialize as "22.57300000". Casting those with `as num?` throws.
+double? _asDouble(dynamic v) => v is num ? v.toDouble() : (v is String ? double.tryParse(v) : null);
+int? _asInt(dynamic v) => v is num ? v.toInt() : (v is String ? (int.tryParse(v) ?? double.tryParse(v)?.toInt()) : null);

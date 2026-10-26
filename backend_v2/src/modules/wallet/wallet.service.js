@@ -7,6 +7,7 @@ import { paginate } from '../../utils/response.js';
 import { getDefaultCountry } from '../geo/geo.service.js';
 import { postTransaction, getOrCreateSystemAccount, getOrCreateWalletAccount } from '../ledger/ledger.service.js';
 import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
+import { getRiderPaymentProfile } from '../rider/rider-payment-profile.js';
 import { chargeWithSavedMethod, isSavedMethodId, toActionRequiredResponse } from '../payment-method/saved-method-charge.service.js';
 import { withIdempotency } from '../../utils/idempotency.js';
 import { publishNotification } from '../notification/notification-events.js';
@@ -65,7 +66,13 @@ function resolveOwnerTypeFromRole(role) {
 
 export async function getMyWallet(user) {
   const ownerType = resolveOwnerTypeFromRole(user.role);
-  return getOrCreateWallet(ownerType, user.id);
+  const wallet = await getOrCreateWallet(ownerType, user.id);
+  if (ownerType !== 'rider') return wallet;
+  try {
+    return await _alignRiderWalletCurrency(wallet, await getRiderPaymentProfile(user.id));
+  } catch {
+    return wallet; // funded wallet in the wrong currency — shown as-is; top-ups explain the problem
+  }
 }
 
 // idempotencyKey comes from the client's Idempotency-Key header (required — see
@@ -85,8 +92,10 @@ export async function initiateWalletTopup(user, amountMinor, idempotencyKey, pay
   }
 
   return withIdempotency('wallet_topup_initiate', idempotencyKey, user.id, async () => {
-    const wallet = await getOrCreateWallet(ownerType, user.id);
+    let wallet = await getOrCreateWallet(ownerType, user.id);
     const country = await resolveOwnerCountry(ownerType, user.id);
+    const riderProfile = ownerType === 'rider' ? await getRiderPaymentProfile(user.id) : null;
+    if (riderProfile) wallet = await _alignRiderWalletCurrency(wallet, riderProfile);
     const coupon = promoCode
       ? await _resolveTopupCoupon(user, ownerType, wallet, country, amountMinor, promoCode)
       : null;
@@ -95,7 +104,10 @@ export async function initiateWalletTopup(user, amountMinor, idempotencyKey, pay
       return _topupWithSavedMethod({ user, ownerType, wallet, country, amountMinor, paymentMethodId, idempotencyKey, coupon });
     }
 
-    const gateway = gatewayForCurrency(wallet.currencyCode);
+    // Riders always pay with their account's gateway (India → Razorpay, Canada → Stripe).
+    const gateway = riderProfile
+      ? (getGateway(riderProfile.gateway).isConfigured ? getGateway(riderProfile.gateway) : null)
+      : gatewayForCurrency(wallet.currencyCode);
 
     if (!gateway) {
       // Dev mode — this currency's gateway has no keys configured, credit directly.
@@ -123,6 +135,24 @@ export async function initiateWalletTopup(user, amountMinor, idempotencyKey, pay
 
     return { ...order, paymentAttemptId: payment.id, coupon };
   });
+}
+
+// A rider wallet holds the account currency (INR for India, CAD for Canada). A wallet created
+// before the account had a country may carry the platform default — fix it while it's empty;
+// a funded wallet in the wrong currency needs an admin, never a silent conversion.
+async function _alignRiderWalletCurrency(wallet, profile) {
+  if (wallet.currencyCode === profile.currencyCode) return wallet;
+  if (wallet.balanceMinor !== 0) {
+    throw {
+      statusCode: 409,
+      code: 'WALLET_CURRENCY_MISMATCH',
+      message: `Your wallet is in ${wallet.currencyCode} but your account uses ${profile.currencyCode}. Please contact support.`,
+    };
+  }
+  const [fixed] = await db.update(wallets)
+    .set({ currencyCode: profile.currencyCode, updatedAt: new Date() })
+    .where(eq(wallets.id, wallet.id)).returning();
+  return fixed;
 }
 
 // ── Wallet top-up coupons (riders) ───────────────────────────────────────────────

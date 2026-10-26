@@ -3,8 +3,8 @@ import { db } from '../../config/db.js';
 import { rides, payments, users, drivers, cashCollections, subscriptions, subscriptionPlans, countries, driverEarnings, paymentMethods } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
-import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
-import { resolvePaymentRegion } from '../payment/payment-region.service.js';
+import { getGateway } from '../payment/payment.service.js';
+import { getRiderPaymentProfile, assertRiderCurrency } from '../rider/rider-payment-profile.js';
 import { chargeWithSavedMethod, isSavedMethodId, toActionRequiredResponse } from '../payment-method/saved-method-charge.service.js';
 import { formatMoney } from '../../utils/money.js';
 import { withIdempotency } from '../../utils/idempotency.js';
@@ -40,8 +40,9 @@ export async function initiateRidePayment(riderId, rideId, idempotencyKey, payme
     const ride = await _loadPayableRideForUser(rideId, riderId);
     const payAmountMinor = ride.finalFareMinor;
 
-    // Authoritative region & eligibility validation on backend
-    const regionConfig = await resolvePaymentRegion({ rideId, riderId });
+    // The rider's account fixes currency + gateway (India → INR/Razorpay, Canada → CAD/Stripe).
+    const profile = await getRiderPaymentProfile(riderId);
+    assertRiderCurrency(profile, ride.currencyCode);
 
     // Handle payment with a saved payment method
     if (isSavedMethodId(paymentMethodId)) {
@@ -95,9 +96,8 @@ export async function initiateRidePayment(riderId, rideId, idempotencyKey, payme
       };
     }
 
-    const gateway = regionConfig.primaryGateway
-      ? getGateway(regionConfig.primaryGateway.gateway)
-      : gatewayForCurrency(ride.currencyCode);
+    const accountGateway = getGateway(profile.gateway);
+    const gateway = accountGateway.isConfigured ? accountGateway : null; // null → dev-mode direct credit
 
     if (!gateway) {
       return _markRidePaid(ride, {
@@ -141,7 +141,9 @@ export async function verifyRidePayment(riderId, rideId, orderRef, paymentRef, s
 
   const ride = await _loadPayableRideForUser(rideId, riderId);
 
-  const gateway = gatewayForCurrency(ride.currencyCode);
+  const profile = await getRiderPaymentProfile(riderId);
+  const accountGateway = getGateway(profile.gateway);
+  const gateway = accountGateway.isConfigured ? accountGateway : null;
   if (!gateway) {
     return _markRidePaid(ride, {
       method: 'online', gateway: 'none', gatewayPaymentId: paymentRef, gatewayOrderId: orderRef,

@@ -32,6 +32,7 @@
     "fastify": "^5.8.5",
     "fastify-raw-body": "^5.0.0",
     "firebase-admin": "^14.1.0",
+    "geoip-lite": "^2.0.3",
     "h3-js": "^4.5.0",
     "ioredis": "^5.11.1",
     "kafkajs": "^2.2.4",

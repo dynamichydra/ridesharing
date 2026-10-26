@@ -72,7 +72,18 @@ class SavedPaymentMethodsService {
   final Dio dio;
   final String pathPrefix;
 
-  SavedPaymentMethodsService({required this.dio, this.pathPrefix = ''});
+  /// Called with the fresh card list after a card is added or removed (the rider app keeps a
+  /// local copy in its session).
+  final Future<void> Function(List<SavedPaymentMethod> methods)? onMethodsChanged;
+
+  SavedPaymentMethodsService({required this.dio, this.pathPrefix = '', this.onMethodsChanged});
+
+  Future<void> _notifyChanged() async {
+    if (onMethodsChanged == null) return;
+    try {
+      await onMethodsChanged!(await list());
+    } catch (_) {}
+  }
 
   String get _base => '$pathPrefix/payment-methods';
 
@@ -172,6 +183,7 @@ class SavedPaymentMethodsService {
         'isDefault': makeDefault,
         'merchantAccountId': setup['merchantAccountId'],
       }));
+      await _notifyChanged();
       return SavedPaymentMethod.fromJson(saved);
     } on DioException catch (e) {
       throw PaymentFlowException(_dioMessage(e));
@@ -192,6 +204,7 @@ class SavedPaymentMethodsService {
       if (res.data is! Map || res.data['SUCCESS'] != true) {
         throw PaymentFlowException(res.data is Map ? res.data['MESSAGE']?.toString() ?? 'Failed to remove card' : 'Failed to remove card');
       }
+      await _notifyChanged();
     } on DioException catch (e) {
       throw PaymentFlowException(_dioMessage(e));
     }
