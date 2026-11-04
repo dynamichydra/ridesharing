@@ -4,7 +4,7 @@ import { riderSubscriptionPlans, riderSubscriptions, payments } from '../../../d
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { addDays } from '../../utils/time.js';
 import { paginate } from '../../utils/response.js';
-import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
+import { getGateway, gatewayForCurrency, assertPaymentDevBypassAllowed, verifyGatewayPayment } from '../payment/payment.service.js';
 import { getApplicableTaxRules } from '../fare/tax-rules.service.js';
 import { withIdempotency } from '../../utils/idempotency.js';
 import { postTransaction, getOrCreateSystemAccount } from '../ledger/ledger.service.js';
@@ -92,7 +92,8 @@ export async function initiateSubscription(riderId, planId, idempotencyKey) {
     const totalMinor = await addPlanTax(plan.countryId, plan.priceMinor);
 
     if (!gateway) {
-      // Dev mode — this currency's gateway has no keys configured, activate directly
+      // No gateway keys for this currency: refused unless the local dev bypass is on.
+      assertPaymentDevBypassAllowed('rider subscription');
       return _activateSubscription(riderId, planId, plan, totalMinor, {
         gateway: 'none', gatewayPaymentId: 'dev_payment_' + Date.now(), gatewayOrderId: null,
       });
@@ -113,6 +114,8 @@ export async function initiateSubscription(riderId, planId, idempotencyKey) {
       amountMinor: totalMinor,
       status: 'created',
       gatewayOrderId: order.gatewayOrderId,
+      // Read back by verifyAndActivate — binds this order to this rider and this plan.
+      metadata: { riderId, planId },
     }).returning();
 
     return {
@@ -127,23 +130,36 @@ export async function verifyAndActivate(riderId, planId, orderRef, paymentRef, s
   const [plan] = await db.select().from(riderSubscriptionPlans).where(eq(riderSubscriptionPlans.id, planId)).limit(1);
   if (!plan) throw { statusCode: 404, message: 'Plan not found' };
 
-  const gateway = gatewayForCurrency(plan.currencyCode);
-  if (!gateway) {
-    const totalMinor = await addPlanTax(plan.countryId, plan.priceMinor);
-    return _activateSubscriptionIdempotent(riderId, planId, plan, totalMinor, {
-      gateway: 'none', gatewayPaymentId: paymentRef, gatewayOrderId: orderRef,
-    });
-  }
+  const expectedMinor = await addPlanTax(plan.countryId, plan.priceMinor);
 
-  const verified = await gateway.verifyPayment({ orderRef, paymentRef, signature });
-  if (!verified) throw { statusCode: 400, message: 'Payment verification failed' };
-
+  // The order must be one we created for this rider and this plan, for at least this plan's
+  // price — otherwise a cheaper plan's (or another rider's) payment could activate it.
   const [attempt] = await db.select().from(payments)
     .where(eq(payments.gatewayOrderId, orderRef)).limit(1);
-  const totalMinor = attempt?.amountMinor ?? await addPlanTax(plan.countryId, plan.priceMinor);
+  if (!attempt) throw { statusCode: 404, message: 'No payment was started with that order' };
+  if (attempt.metadata?.riderId && attempt.metadata.riderId !== riderId) {
+    throw { statusCode: 403, message: 'This payment belongs to a different account' };
+  }
+  if (attempt.metadata?.planId && attempt.metadata.planId !== planId) {
+    throw { statusCode: 409, message: 'This payment was made for a different plan' };
+  }
+  if (Number(attempt.amountMinor) < expectedMinor) {
+    throw { statusCode: 409, message: 'Payment amount does not match the plan price' };
+  }
 
-  return _activateSubscriptionIdempotent(riderId, planId, plan, totalMinor, {
-    gateway: gateway.name, gatewayPaymentId: paymentRef, gatewayOrderId: orderRef, paymentAttemptId: attempt?.id,
+  const gateway = getGateway(attempt.gateway);
+  if (!gateway.isConfigured) {
+    assertPaymentDevBypassAllowed('rider subscription');
+  } else {
+    const verified = await verifyGatewayPayment(gateway, {
+      orderRef, paymentRef, signature,
+      expectedAmountMinor: attempt.amountMinor, expectedCurrency: attempt.currencyCode,
+    });
+    if (!verified) throw { statusCode: 400, message: 'Payment verification failed' };
+  }
+
+  return _activateSubscriptionIdempotent(riderId, planId, plan, attempt.amountMinor, {
+    gateway: gateway.name, gatewayPaymentId: paymentRef, gatewayOrderId: orderRef, paymentAttemptId: attempt.id,
   });
 }
 
@@ -295,10 +311,12 @@ export async function processWebhookEvent(event) {
 
   const [attempt] = await db.select().from(payments)
     .where(eq(payments.gatewayOrderId, event.orderRef)).limit(1);
-  const totalMinor = attempt?.amountMinor ?? await addPlanTax(plan.countryId, plan.priceMinor);
-  await _activateSubscriptionIdempotent(riderId, planId, plan, totalMinor, {
+  if (!attempt) return; // not an order we created for a subscription
+  if (event.amountMinor != null && Number(event.amountMinor) !== Number(attempt.amountMinor)) return;
+  if (Number(attempt.amountMinor) < await addPlanTax(plan.countryId, plan.priceMinor)) return;
+  await _activateSubscriptionIdempotent(riderId, planId, plan, attempt.amountMinor, {
     gateway: event.gatewayName, gatewayPaymentId: event.paymentRef, gatewayOrderId: event.orderRef,
-    paymentAttemptId: attempt?.id,
+    paymentAttemptId: attempt.id,
   });
 }
 

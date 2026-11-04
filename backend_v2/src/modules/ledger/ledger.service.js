@@ -108,23 +108,26 @@ export async function getOrCreateChartAccount({
  * [{ accountId, direction: 'debit'|'credit', amountMinor, currencyCode }, ...] — resolve
  * account ids via getOrCreateSystemAccount/getOrCreateWalletAccount before calling this.
  */
-export async function postTransaction({ businessType, idempotencyKey, entries, referenceType, referenceId, metadata }) {
+// Pass `tx` to post inside a caller's transaction (e.g. a payout reservation that must debit
+// the wallet atomically with its own row lock); otherwise it runs in its own transaction.
+export async function postTransaction({ businessType, idempotencyKey, entries, referenceType, referenceId, metadata, tx: outerTx = null }) {
   if (idempotencyKey) {
-    const existing = await getTransactionByIdempotencyKey(idempotencyKey);
+    const existing = await getTransactionByIdempotencyKey(idempotencyKey, outerTx);
     if (existing) return existing;
   }
 
   const check = validateBalancedEntries(entries);
   if (!check.balanced) throw { statusCode: 422, message: `Unbalanced ledger transaction: ${check.message}` };
 
-  return db.transaction(async (tx) => {
+  const run = outerTx ? (fn) => outerTx.transaction(fn) : (fn) => db.transaction(fn);
+  return run(async (tx) => {
     let transaction;
     try {
       [transaction] = await tx.insert(ledgerTransactions)
         .values({ businessType, idempotencyKey, referenceType, referenceId, metadata })
         .returning();
     } catch (err) {
-      if (err.code === '23505' && idempotencyKey) {
+      if (err.code === '23505' && idempotencyKey && !outerTx) {
         // Lost a concurrent race on the same idempotency key — replay the winner's result.
         const existing = await getTransactionByIdempotencyKey(idempotencyKey);
         if (existing) return existing;
@@ -144,11 +147,12 @@ export async function postTransaction({ businessType, idempotencyKey, entries, r
   });
 }
 
-async function getTransactionByIdempotencyKey(idempotencyKey) {
-  const [transaction] = await db.select().from(ledgerTransactions)
+async function getTransactionByIdempotencyKey(idempotencyKey, conn = db) {
+  const runner = conn || db;
+  const [transaction] = await runner.select().from(ledgerTransactions)
     .where(eq(ledgerTransactions.idempotencyKey, idempotencyKey)).limit(1);
   if (!transaction) return null;
-  const entries = await db.select().from(ledgerEntries).where(eq(ledgerEntries.transactionId, transaction.id));
+  const entries = await runner.select().from(ledgerEntries).where(eq(ledgerEntries.transactionId, transaction.id));
   return { transaction, entries, walletUpdates: [] };
 }
 

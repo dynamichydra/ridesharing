@@ -64,7 +64,7 @@ export default function SupportTicketsPage() {
 
       setTickets(res.MESSAGE || []);
       if (res.PAGINATION) {
-        setTotalItems(res.PAGINATION.total || res.COUNT || 0);
+        setTotalItems(res.PAGINATION?.totalItems ?? res.COUNT ?? 0);
         setTotalPages(res.PAGINATION.totalPages || 1);
       }
     } catch (err: any) {

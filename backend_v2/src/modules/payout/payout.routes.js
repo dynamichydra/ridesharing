@@ -1,5 +1,5 @@
 import { sendSuccess, sendError, sendList, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin, authenticateDriver } from '../../middleware/authenticate.js';
+import { authenticateAdmin, authenticateDriver, authenticateSuperAdmin } from '../../middleware/authenticate.js';
 import * as payoutService from './payout.service.js';
 import { receiveWebhookEvent } from '../../jobs/webhook-processing.job.js';
 
@@ -32,7 +32,7 @@ export async function payoutRoutes(app) {
   // POST /api/v1/payouts/instant  { driverId }
   // Requires an Idempotency-Key header so a retried/double-submitted request pays out once,
   // not twice.
-  app.post('/instant', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/instant', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { driverId } = request.body;
     if (!driverId) return sendError(reply, 'driverId is required');
     const idempotencyKey = request.headers['idempotency-key'];
@@ -42,7 +42,7 @@ export async function payoutRoutes(app) {
   });
 
   // POST /api/v1/payouts/batch/:gateway — manual trigger alongside the scheduled weekly job
-  app.post('/batch/:gateway', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/batch/:gateway', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await payoutService.runPayoutBatch(request.params.gateway);
     return sendSuccess(reply, data);
   });

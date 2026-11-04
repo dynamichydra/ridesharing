@@ -1,6 +1,5 @@
 import { useUser } from "@/hooks/use-user";
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import FullPageLoader from "./fullpage-loader";
 
 type Protected = {
@@ -8,27 +7,22 @@ type Protected = {
   allowedRoles?: string[];
 };
 
+// Redirects *before* rendering, so protected pages never mount (and fire API calls) for a
+// signed-out user or the wrong role. The role comes from /admin/me (see useUser); the backend
+// enforces the same rules independently.
 function ProtectedRoute({ children, allowedRoles }: Protected) {
-  const navigate = useNavigate();
   const { user, isLoading } = useUser();
-
-  useEffect(() => {
-    if (isLoading) return;
-
-    // If not logged in
-    if (!user || !user.access_token) {
-      navigate("/login");
-      return;
-    }
-
-    // Role verification (if needed in future)
-    if (allowedRoles && !allowedRoles.includes(user.role)) {
-      navigate("/");
-    }
-  }, [user, isLoading, allowedRoles, navigate]);
 
   if (isLoading) {
     return <FullPageLoader />;
+  }
+
+  if (!user || !user.access_token) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;

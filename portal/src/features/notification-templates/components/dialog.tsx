@@ -15,6 +15,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { RichTextEditor } from "@/components/rich-text-editor/RichTextEditor";
 import { useCreateNotificationTemplate, useUpdateNotificationTemplate, useNotificationEvents, usePreviewNotificationTemplate } from "../hooks";
 import type { NotificationChannel, NotificationTemplate } from "../types";
+import DOMPurify from "dompurify";
 
 const CHANNEL_OPTIONS: { value: NotificationChannel; label: string }[] = [
   { value: "push", label: "Push" },
@@ -217,7 +218,7 @@ export function PreviewTemplateDialog({ open, onOpenChange, template }: PreviewD
               {template?.channel === "email" ? (
                 <div
                   className="border border-border rounded-md p-3 bg-card"
-                  dangerouslySetInnerHTML={{ __html: preview.bodyHtml }}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(preview.bodyHtml ?? "") }}
                 />
               ) : (
                 <div className="border border-border rounded-md p-3 bg-card whitespace-pre-wrap">{preview.bodyHtml}</div>

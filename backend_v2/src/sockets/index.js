@@ -8,7 +8,8 @@
 
 import { Server } from 'socket.io';
 import { db } from '../config/db.js';
-import { drivers } from '../../drizzle/schema/index.js';
+import { drivers, rides } from '../../drizzle/schema/index.js';
+import { devToolsEnabled, isProduction, corsOrigins } from '../config/env.js';
 import { eq } from 'drizzle-orm';
 import { redis, REDIS_KEYS } from '../config/redis.js';
 import { publishEvent, TOPICS } from '../config/kafka.js';
@@ -73,7 +74,9 @@ export function initSocketIO(fastifyServer, app) {
   // Bug 2 fix: pass Fastify's raw Node.js http.Server directly
   const io = new Server(fastifyServer, {
     cors: {
-      origin: process.env.SOCKET_CORS_ORIGIN || '*',
+      // Same allow-list as REST (CORS_ORIGINS). Native mobile clients send no Origin and
+      // aren't affected.
+      origin: corsOrigins.length ? corsOrigins : !isProduction,
       methods: ['GET', 'POST'],
       credentials: true,
     },
@@ -85,42 +88,45 @@ export function initSocketIO(fastifyServer, app) {
   ioInstance = io;
   setSocketIO(io);
 
-  // ── Public / Root namespace ────────────────────────────────────────────────
-  io.on('connection', (socket) => {
-    console.log(`[Socket/root] connected: ${socket.id}`);
-    socket.emit('welcome', {
-      message: 'Connected to RideShare Socket.IO Server',
-      socketId: socket.id,
-      timestamp: new Date().toISOString(),
+  // Public echo/ping namespaces exist only for local socket debugging (ENABLE_DEV_TOOLS).
+  if (devToolsEnabled) {
+    // ── Public / Root namespace ────────────────────────────────────────────────
+    io.on('connection', (socket) => {
+      console.log(`[Socket/root] connected: ${socket.id}`);
+      socket.emit('welcome', {
+        message: 'Connected to RideShare Socket.IO Server',
+        socketId: socket.id,
+        timestamp: new Date().toISOString(),
+      });
+  
+      socket.on('ping', (data) => {
+        socket.emit('pong', { ...(typeof data === 'object' ? data : {}), serverTime: new Date().toISOString() });
+      });
+  
+      socket.on('echo', (data) => {
+        socket.emit('echo_reply', { data, serverTime: new Date().toISOString() });
+      });
     });
-
-    socket.on('ping', (data) => {
-      socket.emit('pong', { ...(typeof data === 'object' ? data : {}), serverTime: new Date().toISOString() });
+  
+    // ── /test public test namespace ───────────────────────────────────────────
+    const testNS = io.of('/test');
+    testNS.on('connection', (socket) => {
+      console.log(`[Socket/test] connected: ${socket.id}`);
+      socket.emit('welcome', {
+        message: 'Connected to RideShare Test Namespace',
+        socketId: socket.id,
+        timestamp: new Date().toISOString(),
+      });
+  
+      socket.on('ping', (data) => {
+        socket.emit('pong', { ...(typeof data === 'object' ? data : {}), serverTime: new Date().toISOString() });
+      });
+  
+      socket.on('echo', (data) => {
+        socket.emit('echo_reply', { data, serverTime: new Date().toISOString() });
+      });
     });
-
-    socket.on('echo', (data) => {
-      socket.emit('echo_reply', { data, serverTime: new Date().toISOString() });
-    });
-  });
-
-  // ── /test public test namespace ───────────────────────────────────────────
-  const testNS = io.of('/test');
-  testNS.on('connection', (socket) => {
-    console.log(`[Socket/test] connected: ${socket.id}`);
-    socket.emit('welcome', {
-      message: 'Connected to RideShare Test Namespace',
-      socketId: socket.id,
-      timestamp: new Date().toISOString(),
-    });
-
-    socket.on('ping', (data) => {
-      socket.emit('pong', { ...(typeof data === 'object' ? data : {}), serverTime: new Date().toISOString() });
-    });
-
-    socket.on('echo', (data) => {
-      socket.emit('echo_reply', { data, serverTime: new Date().toISOString() });
-    });
-  });
+  }
 
   // ── /driver namespace ──────────────────────────────────────────────────────
   const driverNS = io.of('/driver');
@@ -169,10 +175,19 @@ export function initSocketIO(fastifyServer, app) {
     });
 
     // ── location_update ────────────────────────────────────────────────────
-    socket.on('location_update', async ({ lat, lng, accuracy, speedKmh, recordedAt }) => {
+    socket.on('location_update', async ({ lat, lng, accuracy, speedKmh, recordedAt } = {}) => {
       try {
-        const now = recordedAt ? new Date(recordedAt) : new Date();
-        const nowMs = now.getTime();
+        lat = Number(lat);
+        lng = Number(lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) {
+          return socket.emit('error', { code: 'INVALID_LOCATION', message: 'lat/lng are invalid' });
+        }
+        // Trust the device clock only when it's close to ours — a skewed or forged timestamp
+        // would otherwise make a stale position look fresh to the matching freshness check.
+        const clientMs = recordedAt ? new Date(recordedAt).getTime() : NaN;
+        const serverMs = Date.now();
+        const nowMs = Number.isFinite(clientMs) && Math.abs(serverMs - clientMs) <= 60_000 ? clientMs : serverMs;
+        const now = new Date(nowMs);
 
         // Always update Redis live position (TTL 30s) with freshness timestamp
         await redis.setex(REDIS_KEYS.driverLocation(driverId), 30, JSON.stringify({ lat, lng, updatedAt: nowMs }));
@@ -191,7 +206,7 @@ export function initSocketIO(fastifyServer, app) {
 
         // Bug 3 fix: handleDriverLocationUpdate reads {rideId,riderId} from Redis
         //            and calls the correct tracking phase (approach or trip)
-        await handleDriverLocationUpdate(driverId, lat, lng, { accuracy, speedKmh, recordedAt });
+        await handleDriverLocationUpdate(driverId, lat, lng, { accuracy, speedKmh, recordedAt: now.toISOString() });
       } catch (err) {
         console.error('[Socket/driver] location_update error:', err.message);
       }
@@ -281,9 +296,20 @@ export function initSocketIO(fastifyServer, app) {
     socket.join(`rider:${riderId}`);
     console.log(`[Socket/rider] connected: ${riderId}`);
 
-    socket.on('ride:subscribe', ({ rideId }) => {
-      socket.join(`ride:${rideId}`);
-      socket.emit('ride:subscribed', { rideId });
+    // The ride room carries live driver location and the start OTP — only the ride's own
+    // rider may join it.
+    socket.on('ride:subscribe', async ({ rideId } = {}) => {
+      try {
+        if (!rideId) return socket.emit('ride:subscribe_error', { message: 'rideId is required' });
+        const [ride] = await db.select({ riderId: rides.riderId }).from(rides).where(eq(rides.id, rideId)).limit(1);
+        if (!ride || ride.riderId !== riderId) {
+          return socket.emit('ride:subscribe_error', { rideId, message: 'Not your ride' });
+        }
+        socket.join(`ride:${rideId}`);
+        socket.emit('ride:subscribed', { rideId });
+      } catch (err) {
+        socket.emit('ride:subscribe_error', { rideId, message: 'Could not subscribe to ride' });
+      }
     });
 
     socket.on('ride:unsubscribe', ({ rideId }) => {
@@ -442,4 +468,21 @@ export function initSocketIO(fastifyServer, app) {
 
 export function getIoInstance() {
   return ioInstance;
+}
+
+/**
+ * Multi-instance support: with the Redis adapter, an emit on any instance reaches sockets
+ * connected to every instance (the Kafka ride bridge runs on one instance per message).
+ * Called from server.js after Redis connects; a single instance works without it.
+ */
+export async function attachRedisAdapter() {
+  if (!ioInstance) return false;
+  const { createAdapter } = await import('@socket.io/redis-adapter');
+  const pubClient = redis.duplicate();
+  const subClient = redis.duplicate();
+  if (pubClient.status === 'wait') await pubClient.connect();
+  if (subClient.status === 'wait') await subClient.connect();
+  ioInstance.adapter(createAdapter(pubClient, subClient));
+  console.log('✅ Socket.IO Redis adapter attached');
+  return true;
 }

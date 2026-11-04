@@ -1,9 +1,10 @@
 import { Queue, Worker } from 'bullmq';
+import { scheduleRepeating } from './scheduler.js';
 import { and, eq, inArray, lte, sql } from 'drizzle-orm';
 import { redis } from '../config/redis.js';
 import { db } from '../config/db.js';
 import { outboxEvents } from '../../drizzle/schema/index.js';
-import { publishEvent, TOPICS } from '../config/kafka.js';
+import { publishEvent, publishEventStrict, TOPICS } from '../config/kafka.js';
 
 const connection = redis;
 
@@ -61,7 +62,7 @@ async function claimBatch() {
 async function deliver(row) {
   try {
     await withTimeout(
-      publishEvent(row.topic, row.payload, row.eventKey ?? row.aggregateId),
+      publishEventStrict(row.topic, row.payload, row.eventKey ?? row.aggregateId),
       PUBLISH_TIMEOUT_MS,
       `publishEvent timed out after ${PUBLISH_TIMEOUT_MS}ms (topic '${row.topic}')`,
     );
@@ -102,24 +103,23 @@ export async function relayBatch() {
 const outboxRelayQueue = new Queue('outbox-relay', { connection });
 
 export async function scheduleOutboxRelay() {
-  await outboxRelayQueue.obliterate({ force: true }).catch(() => { });
-  await outboxRelayQueue.add('tick', {});
+  // A single scheduler shared by every instance (a self-re-adding tick used to multiply with
+  // each restart once queues were no longer obliterated on boot).
+  await scheduleRepeating(outboxRelayQueue, 'tick', { every: IDLE_DELAY_MS });
   console.log('✅ Outbox relay job scheduled');
 }
 
-// Self-rescheduling instead of a fixed BullMQ `repeat` interval: drains fast under load
-// (re-ticks in BUSY_DELAY_MS when a full batch was claimed) and backs off when idle
-// (IDLE_DELAY_MS), rather than either busy-polling Redis or lagging behind at a fixed cadence.
+// Each tick keeps draining while full batches come back (busy), up to a bound so one tick
+// can't run forever; idle ticks return after one empty claim. Multiple instances are safe —
+// claimBatch() uses FOR UPDATE SKIP LOCKED.
+const MAX_BATCHES_PER_TICK = 20;
 const outboxRelayWorker = new Worker(
   'outbox-relay',
   async () => {
-    // The next tick is always re-added, even if this one throws (e.g. a transient DB error) —
-    // otherwise a single failed tick would silently stop the relay for good.
-    let drained = false;
-    try {
-      drained = await relayBatch();
-    } finally {
-      await outboxRelayQueue.add('tick', {}, { delay: drained ? BUSY_DELAY_MS : IDLE_DELAY_MS });
+    for (let i = 0; i < MAX_BATCHES_PER_TICK; i++) {
+      const full = await relayBatch();
+      if (!full) break;
+      await new Promise((r) => setTimeout(r, BUSY_DELAY_MS));
     }
   },
   { connection, concurrency: 1 },

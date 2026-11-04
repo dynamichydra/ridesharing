@@ -109,7 +109,9 @@ export async function rideRoutes(app) {
   app.post('/:id/tip', { preHandler: [authenticateRider] }, async (request, reply) => {
     const { tipAmountMinor } = request.body || {};
     if (!tipAmountMinor || tipAmountMinor <= 0) return sendError(reply, 'tipAmountMinor must be a positive integer');
-    const data = await rideService.tipDriver(request.params.id, request.user.id, tipAmountMinor);
+    const data = await rideService.tipDriver(
+      request.params.id, request.user.id, tipAmountMinor, request.headers['idempotency-key'] || null,
+    );
     return sendSuccess(reply, data);
   });
 

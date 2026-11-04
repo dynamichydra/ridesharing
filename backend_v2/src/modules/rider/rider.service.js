@@ -1,4 +1,5 @@
 import { eq, desc, count, and, or, ilike, ne } from 'drizzle-orm';
+import { invalidateAccountStatus } from '../../middleware/authenticate.js';
 import { db } from '../../config/db.js';
 import {
   users,
@@ -182,6 +183,7 @@ export async function updateProfile(riderId, data) {
 
   updates.updatedAt = new Date();
   const [updated] = await db.update(users).set(updates).where(eq(users.id, riderId)).returning();
+  if ('isBlocked' in updates) await invalidateAccountStatus('rider', riderId);
   return updated;
 }
 

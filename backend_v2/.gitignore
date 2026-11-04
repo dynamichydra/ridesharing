@@ -7,3 +7,6 @@ uploads/
 
 .vercel
 .env*
+
+# Archives — a committed zip once leaked .env (see docs/PRODUCTION_READINESS_AUDIT.md)
+*.zip

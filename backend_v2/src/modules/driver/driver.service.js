@@ -13,6 +13,7 @@ import { isLocationInServiceArea } from '../zone/zone.service.js';
 import { validateDriverPhoneCountryMatch } from '../auth/auth.service.js';
 import { upsertDriverCell, removeDriverFromIndex } from '../matching/driver-geo-index.service.js';
 import { getOrCreateWallet } from '../wallet/wallet.service.js';
+import { invalidateAccountStatus } from '../../middleware/authenticate.js';
 import { listPaymentMethods } from '../payment-method/payment-method.service.js';
 import { annotateSavedMethodsForProfile } from '../payment/payment-region.service.js';
 

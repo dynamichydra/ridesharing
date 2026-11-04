@@ -1,4 +1,4 @@
-import { eq, desc, count, and, or, sql, gte, lte } from 'drizzle-orm';
+import { eq, desc, count, and, or, sql, gte, lte, inArray } from 'drizzle-orm';
 import crypto from 'crypto';
 import { db } from '../../config/db.js';
 import {
@@ -42,7 +42,11 @@ import { removeDriverFromIndex, upsertDriverCell } from '../matching/driver-geo-
 import { bufferGpsPing } from '../trip-gps/gps-ping.service.js';
 import { resolveRideCommission } from '../ride-payment/ride-payment.service.js';
 
+import { toPublicDriver } from '../../utils/public-dto.js';
 import { finalizeTripDistance } from '../trip-gps/finalize-trip.job.js';
+
+// Minimum time a driver must wait at pickup before declaring a rider no-show.
+const NO_SHOW_MIN_WAIT_SEC = parseInt(process.env.NO_SHOW_MIN_WAIT_SEC || '300', 10);
 
 /** Driver-facing ride payloads must never carry the rider's start OTP. */
 function stripOtp(ride) {
@@ -292,7 +296,8 @@ export async function cancelScheduledRide(rideId, riderId) {
     cancelledBy: 'rider',
     cancelReason: 'Cancelled scheduled ride',
     cancelledAt: new Date(),
-  }).where(eq(rides.id, rideId)).returning();
+  }).where(and(eq(rides.id, rideId), eq(rides.status, 'scheduled'))).returning();
+  if (!updated) throw { statusCode: 409, message: 'Ride status changed — please refresh' };
 
   await recordStatusChange({
     rideId, fromStatus: 'scheduled', toStatus: 'cancelled',
@@ -308,17 +313,20 @@ export async function cancelRideByRider(rideId, riderId, reason) {
   if (!ride) throw { statusCode: 404, message: 'Ride not found' };
   if (ride.riderId !== riderId) throw { statusCode: 403, message: 'Not your ride' };
 
-  const cancellable = ['searching', 'accepted', 'arriving'];
+  const cancellable = ['searching', 'accepted', 'arriving', 'arrived'];
   if (!cancellable.includes(ride.status)) {
     throw { statusCode: 409, message: `Cannot cancel a ride in status: ${ride.status}` };
   }
 
+  // Guarded on the status we just read: a driver accepting/starting at the same moment wins
+  // or loses cleanly instead of both updates "succeeding".
   const [updated] = await db.update(rides).set({
     status: 'cancelled',
     cancelledBy: 'rider',
     cancelReason: reason || 'Cancelled by rider',
     cancelledAt: new Date(),
-  }).where(eq(rides.id, rideId)).returning();
+  }).where(and(eq(rides.id, rideId), eq(rides.status, ride.status))).returning();
+  if (!updated) throw { statusCode: 409, message: 'Ride status changed — please refresh' };
 
   await recordStatusChange({
     rideId, fromStatus: ride.status, toStatus: 'cancelled',
@@ -517,7 +525,7 @@ export async function acceptRide(rideId, driverId, options = {}) {
   const activeRaw = await redis.get(REDIS_KEYS.driverRideActive(driverId));
   if (activeRaw) throw { statusCode: 409, message: 'You already have an active ride' };
 
-  const startOtp = String(Math.floor(1000 + Math.random() * 9000));
+  const startOtp = String(crypto.randomInt(1000, 10000));
 
   let updatedRide = null;
   let acceptedOffer = null;
@@ -664,12 +672,12 @@ export async function acceptRide(rideId, driverId, options = {}) {
     if (io) {
       io.of('/rider').to(`rider:${updatedRide.riderId}`).emit('ride:driver_assigned', {
         rideId,
-        driver: driverDetails,
+        driver: toPublicDriver(driverDetails),
         startOtp,
       });
       io.of('/rider').to(`ride:${rideId}`).emit('ride:driver_assigned', {
         rideId,
-        driver: driverDetails,
+        driver: toPublicDriver(driverDetails),
         startOtp,
       });
       io.of('/driver').to(`ride:candidates:${rideId}`).emit('ride:taken', {
@@ -684,12 +692,7 @@ export async function acceptRide(rideId, driverId, options = {}) {
   const { signalRideAccepted } = await import('../matching/matching.service.js');
   await signalRideAccepted(rideId).catch(() => {});
 
-  await publishEvent(TOPICS.RIDE_ACCEPTED, {
-    id: rideId, rideId, driverId,
-    driver: driverDetails,
-    riderId: updatedRide.riderId,
-    startOtp,
-  });
+  // RIDE_ACCEPTED itself is delivered by the outbox row written in the transaction above.
 
   await publishEvent(TOPICS.NOTIF_PUSH, {
     userType: 'rider', userId: updatedRide.riderId,
@@ -735,7 +738,9 @@ export async function markDriverArrived(rideId, driverId) {
     status: 'arrived',
     driverArrivedAt: arrivedAt,
     waitingStartedAt: arrivedAt,
-  }).where(eq(rides.id, rideId)).returning();
+  }).where(and(eq(rides.id, rideId), eq(rides.driverId, driverId), inArray(rides.status, ['accepted', 'arriving']))).returning();
+  if (!updated) throw { statusCode: 409, message: 'Ride status changed — please refresh' };
+  await redis.del(`ride:status:${rideId}`);
 
   await recordStatusChange({
     rideId, fromStatus: ride.status, toStatus: 'arrived',
@@ -777,12 +782,28 @@ export async function cancelNoShow(rideId, driverId, reason = 'rider_no_show') {
     throw { statusCode: 409, message: `Cannot declare no-show for ride in status: ${ride.status}. Driver must mark arrived first.` };
   }
 
+  if (!ride.driverArrivedAt) {
+    throw { statusCode: 409, message: 'Arrival time was not recorded — cannot declare a no-show' };
+  }
   const now = Date.now();
-  const arrivedTime = ride.driverArrivedAt ? new Date(ride.driverArrivedAt).getTime() : now;
-  const waitingDurationSec = Math.floor((now - arrivedTime) / 1000);
+  const waitingDurationSec = Math.floor((now - new Date(ride.driverArrivedAt).getTime()) / 1000);
+  // A driver must actually wait before charging the rider a no-show fee.
+  if (waitingDurationSec < NO_SHOW_MIN_WAIT_SEC) {
+    const remaining = NO_SHOW_MIN_WAIT_SEC - waitingDurationSec;
+    throw {
+      statusCode: 409, code: 'NO_SHOW_TOO_EARLY',
+      message: `Please wait for the rider — no-show can be declared in ${Math.ceil(remaining / 60)} min`,
+      remainingSeconds: remaining,
+    };
+  }
 
-  // Standard no-show fee
-  const noShowFeeMinor = Math.max(5000, Math.round((ride.estimatedFareMinor || 10000) * 0.5));
+  // The city's configured cancellation fee (fare snapshot) when present, else 50% of the
+  // estimate with a floor.
+  const configuredFeeMinor = ride.fareSnapshot?.breakdown?.rateCard?.cancellationFeeMinor
+    ?? ride.fareSnapshot?.breakdown?.cancellationFeeMinor;
+  const noShowFeeMinor = Number.isInteger(configuredFeeMinor) && configuredFeeMinor > 0
+    ? configuredFeeMinor
+    : Math.max(5000, Math.round((ride.estimatedFareMinor || 10000) * 0.5));
   const driverShareMinor = Math.round(noShowFeeMinor * 0.8); // 80% to driver
   const commissionMinor = noShowFeeMinor - driverShareMinor; // 20% platform
 
@@ -795,7 +816,8 @@ export async function cancelNoShow(rideId, driverId, reason = 'rider_no_show') {
     noShowFeeMinor,
     finalFareMinor: noShowFeeMinor,
     paymentStatus: 'pending',
-  }).where(eq(rides.id, rideId)).returning();
+  }).where(and(eq(rides.id, rideId), eq(rides.driverId, driverId), eq(rides.status, 'arrived'))).returning();
+  if (!updated) throw { statusCode: 409, message: 'Ride status changed — please refresh' };
 
   await recordStatusChange({
     rideId, fromStatus: 'arrived', toStatus: 'cancelled',
@@ -811,8 +833,9 @@ export async function cancelNoShow(rideId, driverId, reason = 'rider_no_show') {
     grossFareMinor: noShowFeeMinor,
     platformCommissionMinor: commissionMinor,
     netFareMinor: driverShareMinor,
-    currencyCode: ride.currencyCode || 'USD',
-    status: 'available',
+    currencyCode: ride.currencyCode,
+    // Not withdrawable until the fee is actually collected from the rider.
+    status: 'pending',
   });
 
   // Cleanup tracking and free driver
@@ -885,7 +908,7 @@ export async function startRide(rideId, driverId, otp) {
     console.error('[Ride] initTripTracking failed:', err.message),
   );
 
-  await publishEvent(TOPICS.RIDE_STARTED, { id: rideId, rideId, driverId, riderId });
+  // RIDE_STARTED itself is delivered by the outbox row written in the transaction above.
   await publishEvent(TOPICS.NOTIF_PUSH, {
     userType: 'rider', userId: riderId,
     type: 'RIDE_STARTED',
@@ -895,93 +918,121 @@ export async function startRide(rideId, driverId, otp) {
   return stripOtp(updated);
 }
 
-export async function tipDriver(rideId, riderId, tipAmountMinor) {
+// Tips are paid from the rider's wallet: debited and credited to the driver's wallet in one
+// ledger transaction, under a row lock on the ride, before anything is shown as earned.
+const TIP_DEDUPE_SECONDS = 10;
+
+export async function tipDriver(rideId, riderId, tipAmountMinor, idempotencyKey = null) {
   if (!tipAmountMinor || !Number.isInteger(tipAmountMinor) || tipAmountMinor <= 0) {
     throw { statusCode: 400, message: 'tipAmountMinor must be a positive integer' };
   }
 
-  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
-  if (!ride) throw { statusCode: 404, message: 'Ride not found' };
-  if (ride.riderId !== riderId) throw { statusCode: 403, message: 'Unauthorized: Not your ride' };
-  if (ride.status !== 'completed') {
-    throw { statusCode: 400, message: `Tips can only be added for completed rides (current status: ${ride.status})` };
+  // A double-tapped "tip" without an Idempotency-Key must not charge twice.
+  const dedupeKey = `tip:dedupe:${rideId}:${idempotencyKey || tipAmountMinor}`;
+  const fresh = await redis.set(dedupeKey, '1', 'EX', TIP_DEDUPE_SECONDS, 'NX');
+  if (!fresh) throw { statusCode: 409, message: 'This tip is already being processed' };
+
+  const [preview] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  if (!preview) throw { statusCode: 404, message: 'Ride not found' };
+  if (preview.riderId !== riderId) throw { statusCode: 403, message: 'Unauthorized: Not your ride' };
+  if (!preview.driverId) throw { statusCode: 400, message: 'No driver assigned to this ride' };
+  if (!preview.currencyCode) throw { statusCode: 422, message: 'Ride has no currency' };
+  const currencyCode = preview.currencyCode;
+
+  const { getOrCreateWallet } = await import('../wallet/wallet.service.js');
+  const { getOrCreateWalletAccount, postTransaction } = await import('../ledger/ledger.service.js');
+  const [riderWallet, driverWallet] = await Promise.all([
+    getOrCreateWallet('rider', riderId),
+    getOrCreateWallet('driver', preview.driverId),
+  ]);
+  if (riderWallet.currencyCode !== currencyCode || driverWallet.currencyCode !== currencyCode) {
+    throw { statusCode: 422, message: 'Tip currency does not match your wallet currency' };
   }
-  if (!ride.driverId) throw { statusCode: 400, message: 'No driver assigned to this ride' };
+  const [riderAccount, driverAccount] = await Promise.all([
+    getOrCreateWalletAccount(riderWallet.id, currencyCode, { ownerType: 'rider', ownerId: riderId }),
+    getOrCreateWalletAccount(driverWallet.id, currencyCode, { ownerType: 'driver', ownerId: preview.driverId }),
+  ]);
 
-  // Update ride tip amount
-  const newTipTotal = (ride.tipMinor || 0) + tipAmountMinor;
-  await db.update(rides).set({
-    tipMinor: newTipTotal,
-  }).where(eq(rides.id, rideId));
+  let newTipTotal;
+  await db.transaction(async (tx) => {
+    const [ride] = await tx.select().from(rides).where(eq(rides.id, rideId)).for('update').limit(1);
+    if (ride.status !== 'completed') {
+      throw { statusCode: 400, message: `Tips can only be added for completed rides (current status: ${ride.status})` };
+    }
+    const fareMinor = ride.finalFareMinor || ride.estimatedFareMinor || 0;
+    const maxTipMinor = Math.max(fareMinor * 2, 50000);
+    if (tipAmountMinor > maxTipMinor) {
+      throw { statusCode: 400, message: `Tip cannot exceed ${formatMoney(maxTipMinor, currencyCode)}` };
+    }
 
-  // Update or insert driver earnings entry
-  const [existingEarning] = await db.select().from(driverEarnings).where(eq(driverEarnings.rideId, rideId)).limit(1);
-  if (existingEarning) {
-    await db.update(driverEarnings).set({
-      tipMinor: (existingEarning.tipMinor || 0) + tipAmountMinor,
-      netFareMinor: existingEarning.netFareMinor + tipAmountMinor,
-      updatedAt: new Date(),
-    }).where(eq(driverEarnings.id, existingEarning.id));
-  } else {
-    await db.insert(driverEarnings).values({
-      driverId: ride.driverId,
-      rideId,
-      grossFareMinor: tipAmountMinor,
-      platformCommissionMinor: 0,
-      netFareMinor: tipAmountMinor,
-      tipMinor: tipAmountMinor,
-      currencyCode: ride.currencyCode || 'USD',
-      status: 'available',
-    });
-  }
-
-  // Double-entry ledger settlement: credit driver wallet
-  try {
-    const { getOrCreateAccount, postTransaction } = await import('../ledger/ledger.service.js');
-    const driverAccount = await getOrCreateAccount({
-      code: `DRIVER_WALLET_${ride.driverId}`,
-      currencyCode: ride.currencyCode || 'USD',
-      ownerType: 'driver',
-      ownerId: ride.driverId,
-    });
-    const platformTipHolding = await getOrCreateAccount({
-      code: 'PLATFORM_TIP_CLEARING',
-      currencyCode: ride.currencyCode || 'USD',
-      accountCategory: 'LIABILITY',
-    });
-
+    const previousTipMinor = ride.tipMinor || 0;
+    // Throws 422 if the rider's wallet can't cover the tip (no negative rider balances).
     await postTransaction({
-      businessType: 'RIDE_TIP',
-      idempotencyKey: `tip-${rideId}-${Date.now()}`,
-      entries: [
-        { accountId: platformTipHolding.id, direction: 'debit', amountMinor: tipAmountMinor, currencyCode: ride.currencyCode || 'USD' },
-        { accountId: driverAccount.id, direction: 'credit', amountMinor: tipAmountMinor, currencyCode: ride.currencyCode || 'USD' },
-      ],
+      tx,
+      businessType: 'ride_tip',
+      idempotencyKey: `ride_tip:${rideId}:${idempotencyKey || `${previousTipMinor}:${tipAmountMinor}`}`,
       referenceType: 'ride',
       referenceId: rideId,
       metadata: { rideId, riderId, driverId: ride.driverId, tipAmountMinor },
+      entries: [
+        {
+          accountId: riderAccount.id, direction: 'debit', amountMinor: tipAmountMinor, currencyCode,
+          reason: 'ride_tip', description: `Tip for ride ${rideId}`,
+        },
+        {
+          accountId: driverAccount.id, direction: 'credit', amountMinor: tipAmountMinor, currencyCode,
+          reason: 'ride_tip', description: `Tip for ride ${rideId}`,
+        },
+      ],
     });
-  } catch (err) {
-    console.error('[Ride] Tipping ledger posting error:', err.message);
-  }
+
+    newTipTotal = previousTipMinor + tipAmountMinor;
+    await tx.update(rides).set({ tipMinor: newTipTotal }).where(eq(rides.id, rideId));
+
+    const [existingEarning] = await tx.select().from(driverEarnings).where(eq(driverEarnings.rideId, rideId)).limit(1);
+    if (existingEarning) {
+      await tx.update(driverEarnings).set({
+        tipMinor: (existingEarning.tipMinor || 0) + tipAmountMinor,
+        netFareMinor: existingEarning.netFareMinor + tipAmountMinor,
+        updatedAt: new Date(),
+      }).where(eq(driverEarnings.id, existingEarning.id));
+    } else {
+      await tx.insert(driverEarnings).values({
+        driverId: ride.driverId,
+        rideId,
+        grossFareMinor: tipAmountMinor,
+        platformCommissionMinor: 0,
+        netFareMinor: tipAmountMinor,
+        tipMinor: tipAmountMinor,
+        currencyCode,
+        status: 'available',
+      });
+    }
+  }).catch(async (err) => {
+    await redis.del(dedupeKey).catch(() => {});
+    if (err?.statusCode === 422 && /negative/i.test(err.message || '')) {
+      throw { statusCode: 422, code: 'INSUFFICIENT_WALLET_BALANCE', message: 'Not enough wallet balance for this tip. Please top up your wallet.' };
+    }
+    throw err;
+  });
 
   // Notify driver in real-time
   const { getSocketIO } = await import('../../kafka/consumers/index.js');
   const io = getSocketIO();
   if (io) {
-    io.of('/driver').to(`driver:${ride.driverId}`).emit('driver:tip_received', {
+    io.of('/driver').to(`driver:${preview.driverId}`).emit('driver:tip_received', {
       rideId,
       tipAmountMinor,
       totalTipMinor: newTipTotal,
-      currencyCode: ride.currencyCode || 'USD',
+      currencyCode,
     });
   }
 
   await publishEvent(TOPICS.NOTIF_PUSH, {
-    userType: 'driver', userId: ride.driverId,
+    userType: 'driver', userId: preview.driverId,
     type: 'TIP_RECEIVED',
     title: 'You received a tip! 💰',
-    body: `A rider tipped you ${formatMoney(tipAmountMinor, ride.currencyCode)} for ride #${rideId.slice(0, 8)}.`,
+    body: `A rider tipped you ${formatMoney(tipAmountMinor, currencyCode)} for ride #${rideId.slice(0, 8)}.`,
   });
 
   return {
@@ -989,7 +1040,8 @@ export async function tipDriver(rideId, riderId, tipAmountMinor) {
     rideId,
     tipAmountMinor,
     totalTipMinor: newTipTotal,
-    currencyCode: ride.currencyCode || 'USD',
+    currencyCode,
+    paidFrom: 'wallet',
   };
 }
 
@@ -1054,7 +1106,9 @@ export async function completeRide(rideId, driverId) {
       platformCommissionMinor,
       netFareMinor: driverEarningsMinor,
       currencyCode: ride.currencyCode || 'INR',
-      status: 'available',
+      // Online/card/wallet fares only become available once payment is captured
+      // (ride-payment.service.js _markRidePaid flips this to 'available').
+      status: !ride.paymentMethod || ride.paymentMethod === 'cash' ? 'available' : 'pending',
     });
 
     const commissionData = commission ? { ruleId: commission.ruleId, ...commission, grossFareMinor, commissionMinor: platformCommissionMinor, driverEarningsMinor } : {
@@ -1105,9 +1159,13 @@ export async function completeRide(rideId, driverId) {
         rideId,
         driverId,
         riderId: ride.riderId,
+        finalFare: fromMinor(finalFareMinor, ride.currencyCode),
         finalFareMinor,
+        grossFare: fromMinor(grossFareMinor, ride.currencyCode),
         grossFareMinor,
+        driverEarnings: fromMinor(driverEarningsMinor, ride.currencyCode),
         driverEarningsMinor,
+        currency: ride.currencyCode,
         currencyCode: ride.currencyCode,
         breakdown: breakdownPayload,
       },
@@ -1176,18 +1234,7 @@ export async function completeRide(rideId, driverId) {
     console.error('[Ride] finalizeTripDistance failed:', err.message),
   );
 
-  await publishEvent(TOPICS.RIDE_COMPLETED, {
-    id: rideId, rideId, driverId, riderId: ride.riderId,
-    finalFare: fromMinor(finalFareMinor, ride.currencyCode),
-    finalFareMinor,
-    grossFare: fromMinor(grossFareMinor, ride.currencyCode),
-    grossFareMinor,
-    driverEarnings: fromMinor(driverEarningsMinor, ride.currencyCode),
-    driverEarningsMinor,
-    currency: ride.currencyCode,
-    currencyCode: ride.currencyCode,
-    breakdown: breakdownPayload,
-  });
+  // RIDE_COMPLETED itself is delivered by the outbox row written in the transaction above.
 
   await publishEvent(TOPICS.NOTIF_PUSH, {
     userType: 'rider', userId: ride.riderId,
@@ -1273,14 +1320,17 @@ export async function cancelRideByDriver(rideId, driverId, reason) {
     and(eq(rides.id, rideId), eq(rides.driverId, driverId)),
   ).limit(1);
   if (!ride) throw { statusCode: 404, message: 'Ride not found' };
-  if (['started', 'completed'].includes(ride.status)) {
-    throw { statusCode: 409, message: 'Cannot cancel a started or completed ride' };
+  const reassignable = ['accepted', 'arriving', 'arrived'];
+  if (!reassignable.includes(ride.status)) {
+    throw { statusCode: 409, message: `Cannot cancel a ride in status: ${ride.status}` };
   }
 
-  await db.update(rides).set({
-    status: 'searching', driverId: null,
-    cancelledBy: null, cancelReason: null, acceptedAt: null,
-  }).where(eq(rides.id, rideId));
+  // Conditional on the status we just read, so a concurrent start/cancel can't be overwritten.
+  const [reopened] = await db.update(rides).set({
+    status: 'searching', driverId: null, startOtp: null,
+    cancelledBy: null, cancelReason: null, acceptedAt: null, driverArrivedAt: null, waitingStartedAt: null,
+  }).where(and(eq(rides.id, rideId), eq(rides.driverId, driverId), inArray(rides.status, reassignable))).returning();
+  if (!reopened) throw { statusCode: 409, message: 'Ride status changed — please refresh' };
 
   await recordStatusChange({
     rideId, fromStatus: ride.status, toStatus: 'searching',
@@ -1289,9 +1339,16 @@ export async function cancelRideByDriver(rideId, driverId, reason) {
   });
 
   await redis.del(REDIS_KEYS.driverRideActive(driverId));
+  await redis.del(`ride:status:${rideId}`);
   await cleanupRideTracking(rideId);
   await reAddToGeoIndexIfOnline(driverId)
     .catch((err) => console.error('[Ride] reAddToGeoIndexIfOnline failed:', err.message));
+
+  // Re-dispatch: the ride goes back through matching, without offering it to the driver who
+  // just dropped it (cooldown outlasts the whole wave sequence).
+  const { setDriverCooldown } = await import('../matching/candidate-filter.service.js');
+  await setDriverCooldown(rideId, driverId, 15 * 60).catch(() => {});
+  startMatchingProcess(reopened);
 
   // Direct real-time socket emit to rider so customer UI updates immediately
   try {
@@ -1807,7 +1864,8 @@ export async function cancelRideByAdmin(rideId, adminId, reason) {
     cancelledBy: 'admin',
     cancelReason: reason || 'Cancelled by admin',
     cancelledAt: new Date(),
-  }).where(eq(rides.id, rideId)).returning();
+  }).where(and(eq(rides.id, rideId), eq(rides.status, ride.status))).returning();
+  if (!updated) throw { statusCode: 409, message: 'Ride status changed — please refresh' };
 
   await recordStatusChange({
     rideId, fromStatus: ride.status, toStatus: 'cancelled',

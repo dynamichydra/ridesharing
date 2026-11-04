@@ -1,6 +1,6 @@
 import Razorpay from 'razorpay';
-import { createHmac } from 'crypto';
-import { env, isRazorpayConfigured, isRazorpayXConfigured } from '../../../config/env.js';
+import { createHmac, timingSafeEqual } from 'crypto';
+import { env, isRazorpayConfigured, isRazorpayXConfigured, paymentDevBypassEnabled } from '../../../config/env.js';
 import { fromMinor } from '../../../utils/money.js';
 
 const client = isRazorpayConfigured
@@ -44,6 +44,11 @@ async function _call(promise) {
 }
 
 const CARD_SETUP_AMOUNT_MINOR = 100; // ₹1
+
+function safeEqualHex(expectedHex, givenHex) {
+  if (typeof givenHex !== 'string' || givenHex.length !== expectedHex.length) return false;
+  return timingSafeEqual(Buffer.from(expectedHex, 'hex'), Buffer.from(givenHex, 'hex'));
+}
 
 // Pure mapping from Razorpay's payment + token entities to our payment_methods fields —
 // extracted so it's unit-testable without a live Razorpay call.
@@ -307,19 +312,38 @@ export const razorpayGateway = {
   },
 
   // orderRef/paymentRef/signature come straight from Razorpay's client-side checkout callback
+  // Signature only — proves Razorpay issued this payment for this order. Use
+  // verifyCapturedPayment() wherever money is credited: it also checks status and amount.
   verifyPayment({ orderRef, paymentRef, signature }) {
-    if (env.NODE_ENV !== 'production' && (signature === 'dev_signature' || signature === 'test_signature')) {
+    if (paymentDevBypassEnabled && (signature === 'dev_signature' || signature === 'test_signature')) {
       return true;
     }
+    if (!env.RAZORPAY_KEY_SECRET || !orderRef || !paymentRef) return false;
     const expected = createHmac('sha256', env.RAZORPAY_KEY_SECRET)
       .update(`${orderRef}|${paymentRef}`).digest('hex');
-    return expected === signature;
+    return safeEqualHex(expected, signature);
+  },
+
+  // Signature + the payment as Razorpay reports it: same order, captured/authorized, and the
+  // exact amount and currency we expected — so a cheap payment's proof can't settle a bigger bill.
+  async verifyCapturedPayment({ orderRef, paymentRef, signature, expectedAmountMinor, expectedCurrency }) {
+    if (!this.verifyPayment({ orderRef, paymentRef, signature })) return false;
+    if (paymentDevBypassEnabled && (signature === 'dev_signature' || signature === 'test_signature')) return true;
+    if (!client) return false;
+    const payment = await _call(client.payments.fetch(paymentRef));
+    if (payment.order_id !== orderRef) return false;
+    if (!['captured', 'authorized'].includes(payment.status)) return false;
+    if (expectedAmountMinor != null && Number(payment.amount) !== Number(expectedAmountMinor)) return false;
+    if (expectedCurrency && String(payment.currency).toUpperCase() !== String(expectedCurrency).toUpperCase()) return false;
+    return true;
   },
 
   verifyWebhookSignature(rawBody, signature) {
-    const expected = createHmac('sha256', env.RAZORPAY_WEBHOOK_SECRET || '')
+    // No secret configured = nothing can be verified; never fall back to an empty HMAC key.
+    if (!env.RAZORPAY_WEBHOOK_SECRET || !signature) return false;
+    const expected = createHmac('sha256', env.RAZORPAY_WEBHOOK_SECRET)
       .update(rawBody).digest('hex');
-    return expected === signature;
+    return safeEqualHex(expected, signature);
   },
 
   parseWebhookEvent(rawBody) {
@@ -368,6 +392,8 @@ export const razorpayGateway = {
       kind: 'payment_captured',
       paymentRef: entity.id,
       orderRef: entity.order_id,
+      amountMinor: entity.amount,
+      currencyCode: entity.currency?.toUpperCase(),
       metadata: entity.notes,
       // Razorpay webhook payloads have no reliable top-level unique id — synthesize one from
       // the event type + payment id for dedup (see webhook_events schema).

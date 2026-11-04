@@ -1,4 +1,4 @@
-import { env, isSmtpConfigured } from '../config/env.js';
+import { env, isSmtpConfigured, isProduction } from '../config/env.js';
 
 let _transporter = null;
 async function getTransporter() {
@@ -19,6 +19,8 @@ async function getTransporter() {
 // in this codebase before this — utils/emailOtp.js's OTP path only ever console.log'd.
 export async function sendEmail({ to, subject, html }) {
   if (!isSmtpConfigured) {
+    // Never print message bodies in production — they can carry login codes.
+    if (isProduction) throw new Error('Email provider (SMTP) is not configured');
     console.log(`[EMAIL DEV] → ${to} | ${subject}\n${html}`);
     return;
   }

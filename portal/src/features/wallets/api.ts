@@ -7,6 +7,8 @@ import type {
   WalletOwnerType,
   AdjustWalletPayload,
   AdjustWalletResult,
+  WalletTopupInitiateResult,
+  WalletTopupVerifyResult,
 } from "./types";
 
 const BASE_URL = "/wallets";
@@ -43,4 +45,20 @@ export const walletsApi = {
   // POST /wallets/driver/:driverId/adjust | /wallets/rider/:riderId/adjust  (Admin)
   adjust: (ownerType: WalletOwnerType, ownerId: string, payload: AdjustWalletPayload) =>
     apiClient.post<AdjustWalletResult>(`${BASE_URL}/${ownerType}/${ownerId}/adjust`, payload),
+
+  // POST /wallets/me/topup/initiate  { amountMinor }  — creates a gateway order on the backend
+  // Requires an Idempotency-Key header; the caller must supply one.
+  initiateTopup: (amountMinor: number, idempotencyKey: string) =>
+    apiClient.post<WalletTopupInitiateResult>(
+      `${BASE_URL}/me/topup/initiate`,
+      { amountMinor },
+      { headers: { "Idempotency-Key": idempotencyKey } },
+    ),
+
+  // POST /wallets/me/topup/verify  { orderRef, paymentRef, signature }  — verify & credit wallet
+  verifyTopup: (orderRef: string, paymentRef: string, signature?: string) =>
+    apiClient.post<WalletTopupVerifyResult>(
+      `${BASE_URL}/me/topup/verify`,
+      { orderRef, paymentRef, signature },
+    ),
 };

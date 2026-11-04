@@ -1,5 +1,8 @@
+import { randomInt } from 'crypto';
 import { redis, REDIS_KEYS } from '../config/redis.js';
-import { env } from '../config/env.js';
+import { isSmtpConfigured, isProduction } from '../config/env.js';
+import { sendEmail } from './email.js';
+import { hashCode, codesMatch } from './otp.js';
 
 const CODE_TTL_SECONDS = 600;  // 10 minutes
 const RESEND_COOLDOWN_SECONDS = 30;
@@ -8,7 +11,7 @@ const MAX_VERIFY_ATTEMPTS = 5;
 const LOCKOUT_SECONDS = 900;
 
 function generateCode() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(randomInt(100000, 1000000));
 }
 
 async function assertCanSendCode(email) {
@@ -27,19 +30,22 @@ async function assertCanSendCode(email) {
 }
 
 async function sendEmailCode(email, code) {
-  // No transactional email provider wired up yet — log in dev, no-op otherwise.
-  // Swap this for SES/SendGrid/Postmark when a provider is chosen.
-  if (env.NODE_ENV !== 'production') {
-    console.log(`📧 Verification code for ${email}: ${code}`);
+  if (!isSmtpConfigured) {
+    if (isProduction) throw { statusCode: 503, message: 'Email sign-in is temporarily unavailable' };
+    console.log(`📧 [DEV] Verification code for ${email}: ${code}`);
     return;
   }
-  console.warn(`Email provider not configured — could not send code to ${email}`);
+  await sendEmail({
+    to: email,
+    subject: 'Your RideShare verification code',
+    html: `<p>Your verification code is <strong>${code}</strong>. It expires in 10 minutes.</p>`,
+  });
 }
 
 export async function sendEmailVerification(email) {
   await assertCanSendCode(email);
   const code = generateCode();
-  await redis.setex(REDIS_KEYS.emailCode(email), CODE_TTL_SECONDS, code);
+  await redis.setex(REDIS_KEYS.emailCode(email), CODE_TTL_SECONDS, hashCode(code));
   await sendEmailCode(email, code);
   await redis.setex(REDIS_KEYS.otpResendCooldown(email), RESEND_COOLDOWN_SECONDS, '1');
   await redis.multi()
@@ -54,7 +60,7 @@ export async function verifyEmailCode(email, code) {
   if (locked) throw { statusCode: 429, code: 'OTP_MAX_ATTEMPTS', message: 'Too many attempts. Try again later.' };
 
   const stored = await redis.get(REDIS_KEYS.emailCode(email));
-  if (!stored || stored !== code) {
+  if (!codesMatch(stored, code)) {
     const attempts = await redis.incr(REDIS_KEYS.otpAttempts(email));
     await redis.expire(REDIS_KEYS.otpAttempts(email), LOCKOUT_SECONDS);
     if (attempts >= MAX_VERIFY_ATTEMPTS) {

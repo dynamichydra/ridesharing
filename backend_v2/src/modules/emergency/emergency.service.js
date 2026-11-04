@@ -7,6 +7,7 @@ import { redis, REDIS_KEYS } from '../../config/redis.js';
 import { paginate } from '../../utils/response.js';
 import { publishNotification } from '../notification/notification-events.js';
 import { moment } from '../../utils/time.js';
+import { sendSms } from '../../utils/sms.js';
 
 // ── Trusted Contacts ─────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ export async function triggerSosAlert(rideId, requester, { lat, lng } = {}) {
     throw { statusCode: 403, message: 'Not authorized to trigger SOS for this ride' };
   }
 
-  const activeStatuses = ['searching', 'accepted', 'arriving', 'started'];
+  const activeStatuses = ['searching', 'accepted', 'arriving', 'arrived', 'started'];
   if (!activeStatuses.includes(ride.status)) {
     throw { statusCode: 400, message: `Cannot trigger SOS for a ride in status: ${ride.status}` };
   }
@@ -91,16 +92,30 @@ export async function triggerSosAlert(rideId, requester, { lat, lng } = {}) {
   const [rider] = await db.select({ name: users.name, phone: users.phone })
     .from(users).where(eq(users.id, ride.riderId)).limit(1);
 
+  // Sent directly (not via Kafka) to each contact's own number, so an SOS never depends on the
+  // event pipeline being up. One contact failing must not stop the others.
+  const mapsLink = alertLat && alertLng ? ` Location: https://maps.google.com/?q=${alertLat},${alertLng}` : '';
+  const smsBody = `EMERGENCY ALERT: ${rider?.name || 'Your contact'} has pressed the SOS button during a ride.${mapsLink} Pickup: ${ride.pickupAddress || 'N/A'}. Drop: ${ride.dropAddress || 'N/A'}.`;
+  const notified = [];
   for (const contact of contacts) {
-    await publishEvent(TOPICS.NOTIF_SMS, {
-      userId: ride.riderId,
-      userType: 'rider',
-      type: 'SOS_EMERGENCY_ALERT',
-      phone: contact.phone,
-      title: 'EMERGENCY SOS ALERT',
-      body: `EMERGENCY ALERT: ${rider?.name || 'Your contact'} has pressed the SOS button during ride ${rideId}. Pickup: ${ride.pickupAddress || 'N/A'}. Drop: ${ride.dropAddress || 'N/A'}.`,
-      rideId,
-    }).catch(() => {});
+    try {
+      await sendSms(contact.phone, smsBody);
+      notified.push(contact.id);
+    } catch (err) {
+      console.error(`[SOS] SMS to trusted contact ${contact.id} failed for alert ${alert.id}:`, err.message);
+    }
+  }
+
+  // Real-time alert to every admin dashboard — ops must see an SOS immediately.
+  try {
+    const { broadcastToAdmin } = await import('../../sockets/index.js');
+    broadcastToAdmin('sos:triggered', {
+      alertId: alert.id, rideId, userId: requester.id, userType: requester.role,
+      lat: alertLat, lng: alertLng, riderName: rider?.name || null, riderPhone: rider?.phone || null,
+      contactsNotified: notified.length, triggeredAt: alert.createdAt || new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[SOS] admin broadcast failed:', err.message);
   }
 
   await publishEvent(TOPICS.AUDIT_LOG, {

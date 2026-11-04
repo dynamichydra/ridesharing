@@ -1,5 +1,5 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin, authenticateRider } from '../../middleware/authenticate.js';
+import { authenticateAdmin, authenticateRider, authenticateSuperAdmin } from '../../middleware/authenticate.js';
 import { calculateFare, estimateAllTypes } from './fare.service.js';
 import { createFareQuote, getQuoteById } from './quotes/quote.service.js';
 import { listAll } from '../vehicle-type/vehicle-type.service.js';
@@ -173,7 +173,7 @@ export async function fareRoutes(app) {
     return sendSuccess(reply, data);
   });
 
-  app.post('/rules', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/rules', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { name, ruleType, multiplier } = request.body;
     if (!name || !ruleType || !multiplier) {
       return sendError(reply, 'name, ruleType and multiplier are required');
@@ -182,17 +182,17 @@ export async function fareRoutes(app) {
     return sendSuccess(reply, data, 201);
   });
 
-  app.patch('/rules/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/rules/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await fareRulesService.update(request.params.id, request.body);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/rules/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/rules/:id/enable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await fareRulesService.setActive(request.params.id, true, request.user.id);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/rules/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/rules/:id/disable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await fareRulesService.setActive(request.params.id, false, request.user.id);
     return sendSuccess(reply, data);
   });
@@ -205,7 +205,7 @@ export async function fareRoutes(app) {
     return sendList(reply, rows, pagination);
   });
 
-  app.post('/tax-rules', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/tax-rules', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { countryId, name, appliesTo, rate } = request.body;
     if (!countryId || !name || !appliesTo || rate == null) {
       return sendError(reply, 'countryId, name, appliesTo and rate are required');
@@ -214,12 +214,12 @@ export async function fareRoutes(app) {
     return sendSuccess(reply, data, 201);
   });
 
-  app.patch('/tax-rules/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/tax-rules/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await taxRulesService.update(request.params.id, request.body);
     return sendSuccess(reply, data);
   });
 
-  app.delete('/tax-rules/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.delete('/tax-rules/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await taxRulesService.remove(request.params.id);
     return sendSuccess(reply, data);
   });

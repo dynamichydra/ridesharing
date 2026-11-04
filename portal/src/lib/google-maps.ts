@@ -6,8 +6,9 @@ declare global {
   }
 }
 
-export const GOOGLE_MAPS_KEY =
-  import.meta.env.VITE_GOOGLE_MAPS_KEY || "AIzaSyCa9c3EMWliRd2AUcZA-LpJF7VwhEjsd7g";
+// Set VITE_GOOGLE_MAPS_KEY per environment (see .env.example) and restrict the key to the
+// portal's domain in Google Cloud — never hard-code a fallback key in source.
+export const GOOGLE_MAPS_KEY: string = import.meta.env.VITE_GOOGLE_MAPS_KEY || "";
 
 let googleMapsPromise: Promise<void> | null = null;
 
@@ -27,6 +28,10 @@ export function loadGoogleMapsScript(apiKey: string = GOOGLE_MAPS_KEY): Promise<
 
   if (googleMapsPromise) {
     return googleMapsPromise;
+  }
+
+  if (!apiKey) {
+    return Promise.reject(new Error("Google Maps is not configured (VITE_GOOGLE_MAPS_KEY is missing)"));
   }
 
   googleMapsPromise = new Promise<void>((resolve, reject) => {

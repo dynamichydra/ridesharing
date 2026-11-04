@@ -35,10 +35,14 @@ export async function findDriverByPhone(phone) {
   if (digitsOnly.length === 10) variations.push(`+91${digitsOnly}`, `+1${digitsOnly}`);
 
   if (variations.length > 0) {
-    const [matched] = await db.select().from(drivers)
+    const matches = await db.select().from(drivers)
       .where(or(...variations.map((v) => eq(drivers.phone, v))))
-      .limit(1);
-    if (matched) return matched;
+      .limit(2);
+    // A bare 10-digit number can be Indian (+91) or North American (+1) — never guess.
+    if (matches.length > 1) {
+      throw { statusCode: 409, code: 'PHONE_AMBIGUOUS', message: 'Enter your phone number with the country code, e.g. +919876543210' };
+    }
+    if (matches.length === 1) return matches[0];
   }
 
   return null;
@@ -200,9 +204,7 @@ export async function driverMobileStart(phone, deviceId, countryCodeOrId = null)
 
   await assertCanSendOtp(phone);
 
-  console.log(`[DriverAuth:driverMobileStart] phone="${phone}", deviceId="${deviceId}", country="${countryCodeOrId || 'unspecified'}"`);
   const existing = await findDriverByPhone(phone);
-  console.log(`[DriverAuth:driverMobileStart] existing driver found:`, existing ? `id=${existing.id}, name=${existing.name}, status=${existing.registrationStatus}` : 'NONE');
 
   const otp = generateOtp();
   await storeOtp(phone, otp);
@@ -252,23 +254,17 @@ export async function driverMobileVerify(phone, otp, deviceId, platform, fcmToke
   const valid = await verifyOtp(phone, otp);
   if (!valid) throw { statusCode: 400, code: 'OTP_INVALID', message: 'Invalid or expired OTP' };
 
-  console.log(`[DriverAuth:driverMobileVerify] phone="${phone}", otp="${otp}", deviceId="${deviceId}"`);
   let driver = await findDriverByPhone(phone);
   const isNew = !driver;
 
   if (!driver) {
-    console.log(`[DriverAuth:driverMobileVerify] No existing driver. Creating new driver for phone="${phone}"...`);
     [driver] = await db.insert(drivers).values({
       phone: normalizePhone(phone), registrationStatus: 'mobile_verified', registrationStep: 1,
     }).returning();
-    console.log(`[DriverAuth:driverMobileVerify] Created new driver id="${driver.id}".`);
   } else if (driver.registrationStatus === 'new') {
-    console.log(`[DriverAuth:driverMobileVerify] Existing driver with status "new". Updating to mobile_verified...`);
     [driver] = await db.update(drivers).set({
       registrationStatus: 'mobile_verified', registrationStep: Math.max(driver.registrationStep, 1),
     }).where(eq(drivers.id, driver.id)).returning();
-  } else {
-    console.log(`[DriverAuth:driverMobileVerify] Found existing driver id="${driver.id}", name="${driver.name}", status="${driver.registrationStatus}", step=${driver.registrationStep}`);
   }
 
   if (driver.isBlocked) throw { statusCode: 403, code: 'ACCOUNT_SUSPENDED', message: 'This account is suspended' };
@@ -327,21 +323,18 @@ export async function verifyDriverOtp(phone, otp, app) {
   const valid = await verifyOtp(phone, otp);
   if (!valid) throw { statusCode: 400, message: 'Invalid or expired OTP' };
 
-  console.log(`[DriverAuth:verifyDriverOtp] verifying OTP for phone="${phone}"...`);
   let driver = await findDriverByPhone(phone);
   const isNew = !driver;
 
   if (!driver) {
-    console.log(`[DriverAuth:verifyDriverOtp] No existing driver found for phone="${phone}". Creating NEW blank driver row...`);
     [driver] = await db.insert(drivers).values({
       phone: normalizePhone(phone),
       registrationStatus: 'mobile_verified',
       registrationStep: 1,
     }).returning();
-    console.log(`[DriverAuth:verifyDriverOtp] Inserted new driver id="${driver.id}", phone="${driver.phone}".`);
-  } else {
-    console.log(`[DriverAuth:verifyDriverOtp] Found existing driver id="${driver.id}", name="${driver.name}", phone="${driver.phone}". No new row created.`);
   }
+
+  if (driver.isBlocked) throw { statusCode: 403, code: 'ACCOUNT_SUSPENDED', message: 'This account is suspended' };
 
   const accessToken = app.jwt.sign({ id: driver.id, role: 'driver', phone: driver.phone });
   const refreshToken = app.jwt.sign(
@@ -381,6 +374,17 @@ export async function refreshTokens(token, app) {
   if (!stored || stored !== token) throw { statusCode: 401, message: 'Refresh token revoked' };
 
   const claims = { id: payload.id, role: payload.role };
+  if (payload.role === 'driver') {
+    const [driver] = await db.select({ isBlocked: drivers.isBlocked, phone: drivers.phone })
+      .from(drivers).where(eq(drivers.id, payload.id)).limit(1);
+    if (!driver || driver.isBlocked) throw { statusCode: 403, code: 'ACCOUNT_SUSPENDED', message: 'This account is suspended' };
+    if (deviceId) {
+      const [device] = await db.select({ isRevoked: driverDevices.isRevoked }).from(driverDevices)
+        .where(and(eq(driverDevices.driverId, payload.id), eq(driverDevices.deviceId, deviceId))).limit(1);
+      if (device?.isRevoked) throw { statusCode: 401, message: 'Refresh token revoked' };
+    }
+    if (driver.phone) claims.phone = driver.phone;
+  }
   if (payload.role === 'rider') {
     const [rider] = await db.select({ phone: users.phone, country: countries.isoCode })
       .from(users).leftJoin(countries, eq(users.countryId, countries.id))
@@ -399,13 +403,27 @@ export async function logout(userId, deviceId) {
 
 // ── Admin auth (bcrypt) ───────────────────────────────────────────────────────
 
-export async function adminLogin(email, password, app) {
-  const [admin] = await db.select().from(admins).where(eq(admins.email, email)).limit(1);
-  if (!admin) throw { statusCode: 401, message: 'Invalid credentials' };
+const ADMIN_MAX_FAILED_LOGINS = 5;
+const ADMIN_LOCKOUT_SECONDS = 900;
+// Compared against when the email doesn't exist, so response time doesn't reveal valid emails.
+const DUMMY_BCRYPT_HASH = bcrypt.hashSync('not-a-real-password', 10);
 
-  const valid = await bcrypt.compare(password, admin.password);
-  if (!valid) throw { statusCode: 401, message: 'Invalid credentials' };
+export async function adminLogin(email, password, app) {
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const failKey = `admin:login:fail:${normalizedEmail}`;
+  const failures = parseInt((await redis.get(failKey)) || '0', 10);
+  if (failures >= ADMIN_MAX_FAILED_LOGINS) {
+    throw { statusCode: 429, code: 'LOGIN_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' };
+  }
+
+  const [admin] = await db.select().from(admins).where(sql`lower(${admins.email}) = ${normalizedEmail}`).limit(1);
+  const valid = await bcrypt.compare(password, admin?.password || DUMMY_BCRYPT_HASH);
+  if (!admin || !valid) {
+    await redis.multi().incr(failKey).expire(failKey, ADMIN_LOCKOUT_SECONDS).exec();
+    throw { statusCode: 401, message: 'Invalid credentials' };
+  }
   if (!admin.isActive) throw { statusCode: 403, message: 'Account disabled' };
+  await redis.del(failKey);
 
   await db.update(admins).set({ lastLoginAt: new Date() }).where(eq(admins.id, admin.id));
 

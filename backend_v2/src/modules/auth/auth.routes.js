@@ -27,12 +27,16 @@ function riderRegionFromRequest(app, request) {
   return verifyRegionToken(app, request.body?.regionToken || request.headers['x-region-token'], request.ip);
 }
 
+// Per-IP limits on top of the per-phone/email OTP caps (utils/otp.js) — stops SMS pumping across
+// many numbers and password guessing across many admin emails.
+const perIpLimit = (max) => ({ config: { rateLimit: { max, timeWindow: '1 minute' } } });
+
 export async function authRoutes(app) {
 
   // ── Driver — mobile (device-scoped) ─────────────────────────────────────────
 
   // POST /api/v1/auth/driver/mobile/start
-  app.post('/driver/mobile/start', async (request, reply) => {
+  app.post('/driver/mobile/start', perIpLimit(5), async (request, reply) => {
     const { phone, deviceId, countryCode, countryId } = request.body || {};
     if (!phone || !deviceId) return sendError(reply, 'phone and deviceId are required');
     const data = await authService.driverMobileStart(phone, deviceId, countryCode || countryId);
@@ -40,7 +44,7 @@ export async function authRoutes(app) {
   });
 
   // POST /api/v1/auth/driver/mobile/resend
-  app.post('/driver/mobile/resend', async (request, reply) => {
+  app.post('/driver/mobile/resend', perIpLimit(5), async (request, reply) => {
     const { phone } = request.body;
     if (!phone) return sendError(reply, 'phone is required');
     const data = await authService.driverMobileResend(phone);
@@ -48,7 +52,7 @@ export async function authRoutes(app) {
   });
 
   // POST /api/v1/auth/driver/mobile/verify
-  app.post('/driver/mobile/verify', async (request, reply) => {
+  app.post('/driver/mobile/verify', perIpLimit(10), async (request, reply) => {
     const { phone, otp, deviceId, platform, fcmToken } = request.body;
     if (!phone || !otp || !deviceId) return sendError(reply, 'phone, otp and deviceId are required');
     const data = await authService.driverMobileVerify(phone, otp, deviceId, platform, fcmToken, request.ip, app);
@@ -58,7 +62,7 @@ export async function authRoutes(app) {
   // ── Driver — email (device-scoped) ──────────────────────────────────────────
 
   // POST /api/v1/auth/driver/email/start
-  app.post('/driver/email/start', async (request, reply) => {
+  app.post('/driver/email/start', perIpLimit(5), async (request, reply) => {
     const { email } = request.body;
     if (!email) return sendError(reply, 'email is required');
     const data = await authService.driverEmailStart(email);
@@ -66,7 +70,7 @@ export async function authRoutes(app) {
   });
 
   // POST /api/v1/auth/driver/email/verify
-  app.post('/driver/email/verify', async (request, reply) => {
+  app.post('/driver/email/verify', perIpLimit(10), async (request, reply) => {
     const { email, code, deviceId, platform, fcmToken } = request.body;
     if (!email || !code || !deviceId) return sendError(reply, 'email, code and deviceId are required');
     const data = await authService.driverEmailVerify(email, code, deviceId, platform, fcmToken, request.ip, app);
@@ -93,7 +97,7 @@ export async function authRoutes(app) {
   // { lat, lng, accuracyM, fixAgeMs, isMocked, isVpn } → { countryCode, countryName, dialCode, regionToken }
   // Called by the rider app on every launch/resume and before login. The country comes from
   // the server's own reverse geocode + IP check, never from the client.
-  app.post('/rider/region-check', async (request, reply) => {
+  app.post('/rider/region-check', perIpLimit(30), async (request, reply) => {
     try {
       const body = request.body || {};
       let region;
@@ -128,7 +132,7 @@ export async function authRoutes(app) {
   });
 
   // POST /api/v1/auth/rider/send-otp  { phone, regionToken }
-  app.post('/rider/send-otp', async (request, reply) => {
+  app.post('/rider/send-otp', perIpLimit(5), async (request, reply) => {
     const { phone } = request.body || {};
     if (!phone) return sendError(reply, 'Phone is required');
     try {
@@ -143,7 +147,7 @@ export async function authRoutes(app) {
   });
 
   // POST /api/v1/auth/rider/verify-otp  { phone, otp, regionToken }
-  app.post('/rider/verify-otp', async (request, reply) => {
+  app.post('/rider/verify-otp', perIpLimit(10), async (request, reply) => {
     const { phone, otp } = request.body || {};
     if (!phone || !otp) return sendError(reply, 'Phone and OTP are required');
     let regionCountry;
@@ -160,7 +164,7 @@ export async function authRoutes(app) {
   });
 
   // POST /api/v1/auth/driver/send-otp
-  app.post('/driver/send-otp', async (request, reply) => {
+  app.post('/driver/send-otp', perIpLimit(5), async (request, reply) => {
     const { phone } = request.body;
     if (!phone) return sendError(reply, 'Phone is required');
     await authService.sendOtp(phone, 'driver');
@@ -168,7 +172,7 @@ export async function authRoutes(app) {
   });
 
   // POST /api/v1/auth/driver/verify-otp
-  app.post('/driver/verify-otp', async (request, reply) => {
+  app.post('/driver/verify-otp', perIpLimit(10), async (request, reply) => {
     const { phone, otp } = request.body;
     if (!phone || !otp) return sendError(reply, 'Phone and OTP are required');
     const data = await authService.verifyDriverOtp(phone, otp, app);
@@ -176,7 +180,7 @@ export async function authRoutes(app) {
   });
 
   // POST /api/v1/auth/refresh
-  app.post('/refresh', async (request, reply) => {
+  app.post('/refresh', perIpLimit(30), async (request, reply) => {
     const { refreshToken } = request.body;
     if (!refreshToken) return sendError(reply, 'Refresh token required');
     const data = await authService.refreshTokens(refreshToken, app);
@@ -190,7 +194,7 @@ export async function authRoutes(app) {
   });
 
   // POST /api/v1/auth/admin/login
-  app.post('/admin/login', async (request, reply) => {
+  app.post('/admin/login', perIpLimit(10), async (request, reply) => {
     const { email, password } = request.body;
     if (!email || !password) return sendError(reply, 'Email and password are required');
     const data = await authService.adminLogin(email, password, app);

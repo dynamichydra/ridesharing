@@ -6,7 +6,7 @@ import { enqueueEvent } from '../../utils/outbox.js';
 import { paginate } from '../../utils/response.js';
 import { getDefaultCountry } from '../geo/geo.service.js';
 import { postTransaction, getOrCreateSystemAccount, getOrCreateWalletAccount } from '../ledger/ledger.service.js';
-import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
+import { getGateway, gatewayForCurrency, assertPaymentDevBypassAllowed, verifyGatewayPayment } from '../payment/payment.service.js';
 import { getRiderPaymentProfile } from '../rider/rider-payment-profile.js';
 import { chargeWithSavedMethod, isSavedMethodId, toActionRequiredResponse } from '../payment-method/saved-method-charge.service.js';
 import { withIdempotency } from '../../utils/idempotency.js';
@@ -110,7 +110,8 @@ export async function initiateWalletTopup(user, amountMinor, idempotencyKey, pay
       : gatewayForCurrency(wallet.currencyCode);
 
     if (!gateway) {
-      // Dev mode — this currency's gateway has no keys configured, credit directly.
+      // No gateway keys for this currency: refused unless the local dev bypass is on.
+      assertPaymentDevBypassAllowed('wallet top-up');
       return _creditWalletTopup(wallet, country.id, {
         gateway: 'none', gatewayPaymentId: 'dev_topup_' + Date.now(), gatewayOrderId: null, amountMinor, coupon,
       });
@@ -307,7 +308,10 @@ export async function verifyWalletTopup(user, orderRef, paymentRef, signature) {
   if (attempt.status === 'captured') throw { statusCode: 409, message: 'This top-up has already been credited' };
 
   const gateway = getGateway(attempt.gateway);
-  const verified = await gateway.verifyPayment({ orderRef, paymentRef, signature });
+  const verified = await verifyGatewayPayment(gateway, {
+    orderRef, paymentRef, signature,
+    expectedAmountMinor: attempt.amountMinor, expectedCurrency: attempt.currencyCode,
+  });
   if (!verified) throw { statusCode: 400, message: 'Payment verification failed' };
 
   return _creditWalletTopup(wallet, attempt.countryId, {

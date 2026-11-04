@@ -1,4 +1,5 @@
 import { Queue, Worker } from 'bullmq';
+import { scheduleRepeating } from './scheduler.js';
 import { redis } from '../config/redis.js';
 import { expireOverdueSubscriptions } from '../modules/subscription/subscription.service.js';
 import { flushRidePings, listActiveGpsRides } from '../modules/trip-gps/gps-ping.service.js';
@@ -16,13 +17,7 @@ const connection = redis;
 const subscriptionQueue = new Queue('subscription-expiry', { connection });
 
 export async function scheduleSubscriptionExpiry() {
-  // Remove old repeatable job if exists, then add fresh
-  await subscriptionQueue.obliterate({ force: true }).catch(() => { });
-  await subscriptionQueue.add(
-    'check-expiry',
-    {},
-    { repeat: { pattern: '0 0 * * *' } }, // midnight every day
-  );
+  await scheduleRepeating(subscriptionQueue, 'check-expiry', { pattern: '0 0 * * *' }); // midnight every day
   console.log('✅ Subscription expiry job scheduled (daily midnight)');
 }
 
@@ -70,8 +65,7 @@ rideTimeoutWorker.on('failed', (job, err) => {
 const gpsFlushQueue = new Queue('gps-ping-flush', { connection });
 
 export async function scheduleGpsFlush() {
-  await gpsFlushQueue.obliterate({ force: true }).catch(() => { });
-  await gpsFlushQueue.add('flush-active-trips', {}, { repeat: { every: 60_000 } }); // every 60s
+  await scheduleRepeating(gpsFlushQueue, 'flush-active-trips', { every: 60_000 }); // every 60s
   console.log('✅ GPS ping flush job scheduled (every 60s)');
 }
 
@@ -99,8 +93,7 @@ gpsFlushWorker.on('failed', (job, err) => {
 const ledgerVerificationQueue = new Queue('ledger-verification', { connection });
 
 export async function scheduleLedgerVerification() {
-  await ledgerVerificationQueue.obliterate({ force: true }).catch(() => { });
-  await ledgerVerificationQueue.add('verify', {}, { repeat: { pattern: '0 * * * *' } }); // hourly
+  await scheduleRepeating(ledgerVerificationQueue, 'verify', { pattern: '0 * * * *' }); // hourly
   console.log('✅ Ledger verification job scheduled (hourly)');
 }
 
@@ -129,8 +122,7 @@ import { checkDocumentExpirations } from './document-expiry.job.js';
 const documentExpiryQueue = new Queue('document-expiry', { connection });
 
 export async function scheduleDocumentExpiry() {
-  await documentExpiryQueue.obliterate({ force: true }).catch(() => { });
-  await documentExpiryQueue.add('check-doc-expirations', {}, { repeat: { pattern: '0 1 * * *' } }); // 1 AM daily
+  await scheduleRepeating(documentExpiryQueue, 'check-doc-expirations', { pattern: '0 1 * * *' }); // 1 AM daily
   console.log('✅ Document expiry check job scheduled (daily at 01:00)');
 }
 
@@ -153,8 +145,7 @@ documentExpiryWorker.on('failed', (job, err) => {
 const scheduledRideDispatchQueue = new Queue('scheduled-ride-dispatch', { connection });
 
 export async function scheduleScheduledRideDispatch() {
-  await scheduledRideDispatchQueue.obliterate({ force: true }).catch(() => { });
-  await scheduledRideDispatchQueue.add('dispatch-due-rides', {}, { repeat: { every: 30_000 } }); // every 30s
+  await scheduleRepeating(scheduledRideDispatchQueue, 'dispatch-due-rides', { every: 30_000 }); // every 30s
   console.log('✅ Scheduled ride dispatch job scheduled (every 30s)');
 }
 
@@ -180,10 +171,9 @@ import { sendCsatReminders } from './support-csat-reminder.job.js';
 const supportJobsQueue = new Queue('support-jobs', { connection });
 
 export async function scheduleSupportJobs() {
-  await supportJobsQueue.obliterate({ force: true }).catch(() => { });
-  await supportJobsQueue.add('check-sla', {}, { repeat: { every: 60_000 } }); // every 60s
-  await supportJobsQueue.add('auto-close', {}, { repeat: { every: 300_000 } }); // every 5m
-  await supportJobsQueue.add('csat-reminder', {}, { repeat: { every: 900_000 } }); // every 15m
+  await scheduleRepeating(supportJobsQueue, 'check-sla', { every: 60_000 }); // every 60s
+  await scheduleRepeating(supportJobsQueue, 'auto-close', { every: 300_000 }); // every 5m
+  await scheduleRepeating(supportJobsQueue, 'csat-reminder', { every: 900_000 }); // every 15m
   console.log('✅ Support system background jobs scheduled');
 }
 

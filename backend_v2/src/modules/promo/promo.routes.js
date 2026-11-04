@@ -1,5 +1,5 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
-import { authenticateRider, authenticateAdmin } from '../../middleware/authenticate.js';
+import { authenticateRider, authenticateAdmin, authenticateSuperAdmin } from '../../middleware/authenticate.js';
 import * as promoService from './promo.service.js';
 
 export async function promoRoutes(app) {
@@ -40,7 +40,7 @@ export async function promoRoutes(app) {
 
   // ── Admin — Promo CRUD ───────────────────────────────────────────────────────
   // POST /api/v1/promos
-  app.post('/', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await promoService.createPromo(request.body || {});
     return sendSuccess(reply, data, 201);
   });
@@ -58,13 +58,13 @@ export async function promoRoutes(app) {
   });
 
   // PATCH /api/v1/promos/:id
-  app.patch('/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await promoService.updatePromo(request.params.id, request.body || {});
     return sendSuccess(reply, data);
   });
 
   // DELETE /api/v1/promos/:id
-  app.delete('/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.delete('/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await promoService.deletePromo(request.params.id);
     return sendSuccess(reply, data);
   });

@@ -2,8 +2,32 @@ import { eq, and, asc, lte, or, isNull } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { paymentProviderRoutes, providerHealth } from '../../../drizzle/schema/index.js';
 import { gatewayRegistry } from './registry.js';
+import { paymentDevBypassEnabled } from '../../config/env.js';
 import { razorpayGateway } from './gateways/razorpay.gateway.js';
 import { stripeGateway } from './gateways/stripe.gateway.js';
+
+/**
+ * Money paths fail closed: with no gateway keys configured there is nothing to charge, so the
+ * request is refused — unless PAYMENTS_DEV_BYPASS=true outside production (config/env.js),
+ * where local testing may credit without a real charge.
+ */
+export function assertPaymentDevBypassAllowed(context = 'payment') {
+  if (!paymentDevBypassEnabled) {
+    throw {
+      statusCode: 503,
+      code: 'PAYMENT_GATEWAY_UNAVAILABLE',
+      message: `Online payment is temporarily unavailable (${context}). Please try another payment method.`,
+    };
+  }
+}
+
+/** Signature + captured status + exact amount/currency, for gateways that support it. */
+export async function verifyGatewayPayment(gateway, { orderRef, paymentRef, signature, expectedAmountMinor, expectedCurrency }) {
+  if (typeof gateway.verifyCapturedPayment === 'function') {
+    return gateway.verifyCapturedPayment({ orderRef, paymentRef, signature, expectedAmountMinor, expectedCurrency });
+  }
+  return gateway.verifyPayment({ orderRef, paymentRef, signature });
+}
 
 export function getGateway(name) {
   const gateway = gatewayRegistry.get(name);

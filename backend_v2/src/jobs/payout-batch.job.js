@@ -1,4 +1,5 @@
 import { Queue, Worker } from 'bullmq';
+import { scheduleRepeating } from './scheduler.js';
 import { redis } from '../config/redis.js';
 import { runPayoutBatch } from '../modules/payout/payout.service.js';
 
@@ -7,8 +8,7 @@ const connection = redis;
 const payoutBatchQueue = new Queue('payout-batch', { connection });
 
 export async function schedulePayoutBatch() {
-  await payoutBatchQueue.obliterate({ force: true }).catch(() => { });
-  await payoutBatchQueue.add('run', {}, { repeat: { pattern: '0 3 * * 1' } }); // weekly, Monday 03:00
+  await scheduleRepeating(payoutBatchQueue, 'run', { pattern: '0 3 * * 1' }); // weekly, Monday 03:00
   console.log('✅ Payout batch job scheduled (weekly, Monday 03:00)');
 }
 

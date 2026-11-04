@@ -1,7 +1,7 @@
 import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { matchingPolicies } from '../../../drizzle/schema/index.js';
-import { redis } from '../../config/redis.js';
+import { redis, scanKeys } from '../../config/redis.js';
 
 /**
  * Matching Policy Service
@@ -136,7 +136,7 @@ export async function upsertMatchingPolicy(data) {
   }
 
   // Invalidate policy cache
-  const keys = await redis.keys('matching:policy:*');
+  const keys = await scanKeys('matching:policy:*');
   if (keys.length > 0) {
     await redis.del(...keys);
   }
@@ -154,7 +154,7 @@ export async function deleteMatchingPolicy(id) {
     .returning();
 
   // Invalidate policy cache
-  const keys = await redis.keys('matching:policy:*');
+  const keys = await scanKeys('matching:policy:*');
   if (keys.length > 0) {
     await redis.del(...keys);
   }

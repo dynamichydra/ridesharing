@@ -20,6 +20,17 @@ function parse(msg) {
   try { return JSON.parse(msg.value.toString()); } catch { return null; }
 }
 
+// Kept so shutdown can disconnect cleanly (offsets committed, group rebalanced promptly).
+const _consumers = [];
+function trackConsumer(consumer) {
+  _consumers.push(consumer);
+  return consumer;
+}
+
+export async function stopAllConsumers() {
+  await Promise.allSettled(_consumers.map((c) => c.disconnect()));
+}
+
 let _io = null;
 export function setSocketIO(io) { _io = io; }
 export function getSocketIO() { return _io; }
@@ -72,7 +83,7 @@ async function resolveContact(userId, userType, field) {
 }
 
 async function startNotificationConsumer() {
-  const consumer = kafka.consumer({ groupId: 'notification-service' });
+  const consumer = trackConsumer(kafka.consumer({ groupId: 'notification-service' }));
   await consumer.connect();
   await consumer.subscribe({ topics: [TOPICS.NOTIF_PUSH, TOPICS.NOTIF_SMS, TOPICS.NOTIF_EMAIL] });
 
@@ -107,7 +118,8 @@ async function startNotificationConsumer() {
           data: { type: payload.eventType || payload.type || '', rideId: payload.rideId || '' },
         });
       } else if (channel === 'sms') {
-        const phone = payload.userId ? await resolveContact(payload.userId, payload.userType, 'phone') : null;
+        // An explicit phone (e.g. an SOS trusted contact) wins over the account's own number.
+        const phone = payload.phone || (payload.userId ? await resolveContact(payload.userId, payload.userType, 'phone') : null);
         if (phone) await sendSms(phone, body);
       } else if (channel === 'email') {
         const email = payload.userId ? await resolveContact(payload.userId, payload.userType, 'email') : null;
@@ -130,7 +142,7 @@ async function startNotificationConsumer() {
 // ── Audit ─────────────────────────────────────────────────────────────────────
 
 async function startAuditConsumer() {
-  const consumer = kafka.consumer({ groupId: 'audit-service' });
+  const consumer = trackConsumer(kafka.consumer({ groupId: 'audit-service' }));
   await consumer.connect();
   await consumer.subscribe({ topics: [TOPICS.AUDIT_LOG] });
 
@@ -157,7 +169,7 @@ async function startAuditConsumer() {
 // ── Ride ← → Socket.IO bridge ────────────────────────────────────────────────
 
 async function startRideConsumer() {
-  const consumer = kafka.consumer({ groupId: 'ride-socket-bridge' });
+  const consumer = trackConsumer(kafka.consumer({ groupId: 'ride-socket-bridge' }));
   await consumer.connect();
   await consumer.subscribe({
     topics: [
@@ -295,7 +307,7 @@ async function startRideConsumer() {
 // ── Subscription ──────────────────────────────────────────────────────────────
 
 async function startSubscriptionConsumer() {
-  const consumer = kafka.consumer({ groupId: 'subscription-service' });
+  const consumer = trackConsumer(kafka.consumer({ groupId: 'subscription-service' }));
   await consumer.connect();
   await consumer.subscribe({
     topics: [TOPICS.SUBSCRIPTION_ACTIVATED, TOPICS.SUBSCRIPTION_EXPIRED],

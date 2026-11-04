@@ -16,7 +16,7 @@ import {
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { addDays } from '../../utils/time.js';
 import { paginate } from '../../utils/response.js';
-import { getGateway, gatewayForCurrency } from '../payment/payment.service.js';
+import { getGateway, gatewayForCurrency, verifyGatewayPayment } from '../payment/payment.service.js';
 import { chargeWithSavedMethod, isSavedMethodId, toActionRequiredResponse } from '../payment-method/saved-method-charge.service.js';
 import { gatewayRegistry } from '../payment/registry.js';
 import { getApplicableTaxRules } from '../fare/tax-rules.service.js';
@@ -489,6 +489,8 @@ export async function initiateSubscription(driverId, planId, idempotencyKey, pay
       amountMinor: totalMinor,
       status: 'created',
       gatewayOrderId: order.gatewayOrderId,
+      // Read back by verifyAndActivate — binds this order to this driver and this plan.
+      metadata: { payerId: driverId, driverId, planId, planVersionId: plan.currentVersionId },
     }).returning();
 
     return {
@@ -527,7 +529,7 @@ async function _initiateSubscriptionWithSavedMethod({
     amountMinor: totalMinor,
     status: 'created',
     gatewayOrderId: charge.gatewayOrderId,
-    metadata: { payerId: driverId, paymentMethodId: saved.method.id },
+    metadata: { payerId: driverId, driverId, planId, planVersionId: plan.currentVersionId, paymentMethodId: saved.method.id },
   }).returning();
 
   if (charge.status === 'succeeded') {
@@ -555,24 +557,38 @@ export async function verifyAndActivate(driverId, planId, orderRef, paymentRef, 
     if (c?.isoCode) countryIsoCode = c.isoCode;
   }
 
+  // The order must be one we created for this driver and this plan, for at least the price this
+  // driver is charged for it — so a cheap plan's (or another driver's) payment can't activate
+  // an expensive plan.
   const [attempt] = await db.select().from(payments)
     .where(eq(payments.gatewayOrderId, orderRef)).limit(1);
+  if (!attempt) throw { statusCode: 404, message: 'No payment was started with that order' };
+  const owner = attempt.metadata?.driverId || attempt.metadata?.payerId;
+  if (owner && owner !== driverId) throw { statusCode: 403, message: 'This payment belongs to a different account' };
+  if (attempt.metadata?.planId && attempt.metadata.planId !== planId) {
+    throw { statusCode: 409, message: 'This payment was made for a different plan' };
+  }
+  const pricedPlan = (await resolvePlanPricingForDriver(plan, driverId)) || plan;
+  const expectedMinor = await addSubscriptionTax(pricedPlan.countryId, pricedPlan.priceMinor);
+  if (Number(attempt.amountMinor) < expectedMinor) {
+    throw { statusCode: 409, message: 'Payment amount does not match the plan price' };
+  }
 
   // The attempt records which gateway the order was created on — a saved card can live on a
   // different (still region-eligible) gateway than the country default.
-  const gateway = attempt?.gateway
-    ? getGateway(attempt.gateway)
-    : (gatewayRegistry.getForCountry(countryIsoCode) || gatewayForCurrency(plan.currencyCode));
-  if (!gateway || !gateway.isConfigured) {
+  const gateway = getGateway(attempt.gateway);
+  if (!gateway.isConfigured) {
     throw { statusCode: 503, message: `Payment gateway for country ${countryIsoCode} (${plan.currencyCode}) is not configured.` };
   }
 
-  const verified = await gateway.verifyPayment({ orderRef, paymentRef, signature });
+  const verified = await verifyGatewayPayment(gateway, {
+    orderRef, paymentRef, signature,
+    expectedAmountMinor: attempt.amountMinor, expectedCurrency: attempt.currencyCode,
+  });
   if (!verified) throw { statusCode: 400, message: 'Payment verification failed' };
-  const totalMinor = attempt?.amountMinor ?? await addSubscriptionTax(plan.countryId, plan.priceMinor);
 
-  return _activateSubscriptionIdempotent(driverId, planId, plan, totalMinor, {
-    gateway: gateway.name, gatewayPaymentId: paymentRef, gatewayOrderId: orderRef, paymentAttemptId: attempt?.id,
+  return _activateSubscriptionIdempotent(driverId, planId, plan, attempt.amountMinor, {
+    gateway: gateway.name, gatewayPaymentId: paymentRef, gatewayOrderId: orderRef, paymentAttemptId: attempt.id,
   });
 }
 
@@ -963,10 +979,13 @@ export async function processWebhookEvent(event) {
 
   const [attempt] = await db.select().from(payments)
     .where(eq(payments.gatewayOrderId, event.orderRef)).limit(1);
-  const totalMinor = attempt?.amountMinor ?? await addSubscriptionTax(plan.countryId, plan.priceMinor);
-  await _activateSubscriptionIdempotent(driverId, planId, plan, totalMinor, {
+  if (!attempt) return; // not an order we created for a subscription
+  if (event.amountMinor != null && Number(event.amountMinor) !== Number(attempt.amountMinor)) return;
+  const pricedPlan = (await resolvePlanPricingForDriver(plan, driverId)) || plan;
+  if (Number(attempt.amountMinor) < await addSubscriptionTax(pricedPlan.countryId, pricedPlan.priceMinor)) return;
+  await _activateSubscriptionIdempotent(driverId, planId, plan, attempt.amountMinor, {
     gateway: event.gatewayName, gatewayPaymentId: event.paymentRef, gatewayOrderId: event.orderRef,
-    paymentAttemptId: attempt?.id,
+    paymentAttemptId: attempt.id,
   });
 }
 

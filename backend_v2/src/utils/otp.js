@@ -1,4 +1,6 @@
+import { randomInt, createHash, timingSafeEqual } from 'crypto';
 import { redis, REDIS_KEYS } from '../config/redis.js';
+import { otpDevCode, isTwilioConfigured } from '../config/env.js';
 import { sendSms } from './sms.js';
 
 const OTP_TTL_SECONDS = 300;   // 5 minutes
@@ -6,9 +8,24 @@ const RESEND_COOLDOWN_SECONDS = 30;   // min gap between sends
 const MAX_SENDS_PER_HOUR = 20;
 const MAX_VERIFY_ATTEMPTS = 20;
 const LOCKOUT_SECONDS = 900;   // 15 minutes
+
+// A fixed code is only ever used outside production with no SMS provider (see OTP_DEV_CODE
+// in config/env.js) — so emulator testing still works without a real phone.
 export function generateOtp() {
-  // return String(Math.floor(100000 + Math.random() * 900000));
-  return "123456";
+  if (otpDevCode && !isTwilioConfigured) return otpDevCode;
+  return String(randomInt(100000, 1000000));
+}
+
+// Codes are stored hashed so a Redis dump doesn't hand out live login codes.
+export function hashCode(code) {
+  return createHash('sha256').update(String(code)).digest('hex');
+}
+
+export function codesMatch(storedHash, code) {
+  if (!storedHash || code == null) return false;
+  const a = Buffer.from(storedHash, 'hex');
+  const b = Buffer.from(hashCode(code), 'hex');
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 /** Throws if the phone is resend-cooling-down, hourly-capped, or locked out from too many wrong attempts. */
@@ -36,7 +53,7 @@ export async function markOtpSent(phone) {
 }
 
 export async function storeOtp(phone, otp) {
-  await redis.setex(REDIS_KEYS.otpCode(phone), OTP_TTL_SECONDS, otp);
+  await redis.setex(REDIS_KEYS.otpCode(phone), OTP_TTL_SECONDS, hashCode(otp));
 }
 
 /**
@@ -48,7 +65,7 @@ export async function verifyOtp(phone, otp) {
   if (locked) throw { statusCode: 429, code: 'OTP_MAX_ATTEMPTS', message: 'Too many attempts. Try again later.' };
 
   const stored = await redis.get(REDIS_KEYS.otpCode(phone));
-  if (!stored || stored !== otp) {
+  if (!codesMatch(stored, otp)) {
     const attempts = await redis.incr(REDIS_KEYS.otpAttempts(phone));
     await redis.expire(REDIS_KEYS.otpAttempts(phone), LOCKOUT_SECONDS);
     if (attempts >= MAX_VERIFY_ATTEMPTS) {

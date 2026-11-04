@@ -1,5 +1,5 @@
 import { sendSuccess, sendList, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin } from '../../middleware/authenticate.js';
+import { authenticateAdmin, authenticateSuperAdmin } from '../../middleware/authenticate.js';
 import * as reconciliationService from './reconciliation.service.js';
 
 export async function reconciliationRoutes(app) {
@@ -21,7 +21,7 @@ export async function reconciliationRoutes(app) {
   });
 
   // PATCH /api/v1/reconciliation/mismatches/:id  { status: 'resolved'|'ignored', notes? }
-  app.patch('/mismatches/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/mismatches/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { status, notes } = request.body;
     const data = await reconciliationService.resolveMismatch(request.params.id, {
       status, notes, resolvedBy: request.user.id,

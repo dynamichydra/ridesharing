@@ -1,4 +1,5 @@
 import { Queue, Worker } from 'bullmq';
+import { scheduleRepeating } from './scheduler.js';
 import { redis } from '../config/redis.js';
 import { runReconciliation } from '../modules/reconciliation/reconciliation.service.js';
 import { getGateway } from '../modules/payment/payment.service.js';
@@ -8,8 +9,7 @@ const connection = redis;
 const reconciliationQueue = new Queue('reconciliation', { connection });
 
 export async function scheduleReconciliation() {
-  await reconciliationQueue.obliterate({ force: true }).catch(() => { });
-  await reconciliationQueue.add('run', {}, { repeat: { pattern: '0 2 * * *' } }); // daily 02:00
+  await scheduleRepeating(reconciliationQueue, 'run', { pattern: '0 2 * * *' }); // daily 02:00
   console.log('✅ Reconciliation job scheduled (daily 02:00)');
 }
 

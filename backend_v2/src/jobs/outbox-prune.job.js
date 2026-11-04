@@ -1,4 +1,5 @@
 import { Queue, Worker } from 'bullmq';
+import { scheduleRepeating } from './scheduler.js';
 import { and, eq, lt } from 'drizzle-orm';
 import { redis } from '../config/redis.js';
 import { db } from '../config/db.js';
@@ -13,8 +14,7 @@ const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const outboxPruneQueue = new Queue('outbox-prune', { connection });
 
 export async function scheduleOutboxPrune() {
-  await outboxPruneQueue.obliterate({ force: true }).catch(() => { });
-  await outboxPruneQueue.add('prune', {}, { repeat: { pattern: '0 * * * *' } }); // hourly
+  await scheduleRepeating(outboxPruneQueue, 'prune', { pattern: '0 * * * *' }); // hourly
   console.log('✅ Outbox prune job scheduled (hourly)');
 }
 

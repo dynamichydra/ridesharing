@@ -1,5 +1,5 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin, authenticateDriver } from '../../middleware/authenticate.js';
+import { authenticateAdmin, authenticateDriver, authenticateSuperAdmin } from '../../middleware/authenticate.js';
 import * as groupService from './driver-group.service.js';
 
 export async function driverGroupRoutes(app) {
@@ -29,7 +29,7 @@ export async function driverGroupRoutes(app) {
   });
 
   // POST /api/v1/driver-groups — Create new driver group
-  app.post('/', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { countryId, name, code, description, isActive } = request.body || {};
     if (!name || !code) {
       return sendError(reply, 'name and code are required', 400);
@@ -45,13 +45,13 @@ export async function driverGroupRoutes(app) {
   });
 
   // PATCH /api/v1/driver-groups/:id — Update group
-  app.patch('/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await groupService.updateGroup(request.params.id, request.body || {});
     return sendSuccess(reply, data);
   });
 
   // DELETE /api/v1/driver-groups/:id — Delete group
-  app.delete('/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.delete('/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await groupService.deleteGroup(request.params.id);
     return sendSuccess(reply, data);
   });
@@ -69,7 +69,7 @@ export async function driverGroupRoutes(app) {
   });
 
   // POST /api/v1/driver-groups/:id/members — Add drivers to group
-  app.post('/:id/members', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/:id/members', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { driverIds, expiresAt } = request.body || {};
     if (!Array.isArray(driverIds) || driverIds.length === 0) {
       return sendError(reply, 'driverIds must be a non-empty array', 400);
@@ -79,7 +79,7 @@ export async function driverGroupRoutes(app) {
   });
 
   // DELETE /api/v1/driver-groups/:id/members/:driverId — Remove a driver from group
-  app.delete('/:id/members/:driverId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.delete('/:id/members/:driverId', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await groupService.removeDriverFromGroup(request.params.id, request.params.driverId);
     return sendSuccess(reply, data);
   });

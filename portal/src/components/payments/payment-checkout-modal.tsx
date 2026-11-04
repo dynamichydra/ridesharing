@@ -23,9 +23,12 @@ export interface PaymentCheckoutModalProps {
   customerEmail?: string;
   customerPhone?: string;
   clientSecret?: string;
+  orderId?: string;         // backend gateway order id (required for Razorpay signature verification)
   onSuccess: (paymentDetails: {
     gateway: "stripe" | "razorpay";
     paymentId: string;
+    orderId?: string;
+    signature?: string;
     amount: number;
     currency: string;
   }) => void;
@@ -43,6 +46,7 @@ export function PaymentCheckoutModal({
   customerEmail = "customer@example.com",
   customerPhone,
   clientSecret,
+  orderId,
   onSuccess,
 }: PaymentCheckoutModalProps) {
   const amountNumeric = defaultAmount || 0;
@@ -73,6 +77,7 @@ export function PaymentCheckoutModal({
       await openRazorpayCheckout({
         amountMinor,
         currency: currencyCode,
+        orderId: orderId,        // pass backend order_id for signature verification
         name: "RideShare Platform",
         description: modalDescription,
         prefill: {
@@ -85,6 +90,8 @@ export function PaymentCheckoutModal({
           onSuccess({
             gateway: "razorpay",
             paymentId: res.razorpay_payment_id,
+            orderId: res.razorpay_order_id || orderId,
+            signature: res.razorpay_signature,
             amount: amountNumeric,
             currency: currencyCode,
           });

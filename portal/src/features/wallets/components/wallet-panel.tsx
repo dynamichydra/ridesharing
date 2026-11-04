@@ -17,6 +17,7 @@ import { useDriverWallet, useRiderWallet, useWalletTransactions, useAdjustWallet
 import type { WalletOwnerType, WalletTransactionType } from "../types";
 import { formatDateTime } from "@/lib/utils";
 import { PaymentCheckoutModal } from "@/components/payments/payment-checkout-modal";
+import toast from "react-hot-toast";
 
 function formatMinor(amountMinor: number, currencyCode: string): string {
   const amount = amountMinor / 100;
@@ -132,24 +133,53 @@ interface WalletPanelProps {
 export function WalletPanel({ ownerType, ownerId }: WalletPanelProps) {
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
   const [isGatewayPayOpen, setIsGatewayPayOpen] = useState(false);
+  const [topupAmount, setTopupAmount] = useState(50);
   const adjustMutation = useAdjustWallet(ownerType, ownerId);
 
   const driverWalletQuery = useDriverWallet(ownerType === "driver" ? ownerId : undefined);
   const riderWalletQuery = useRiderWallet(ownerType === "rider" ? ownerId : undefined);
-  const { data: walletData, isLoading } = ownerType === "driver" ? driverWalletQuery : riderWalletQuery;
+  const { data: walletData, isLoading, refetch: refetchWallet } = ownerType === "driver" ? driverWalletQuery : riderWalletQuery;
   const wallet = walletData?.MESSAGE ?? null;
 
-  const { data: txnData, isLoading: txnLoading } = useWalletTransactions(wallet?.id);
+  const { data: txnData, isLoading: txnLoading, refetch: refetchTxns } = useWalletTransactions(wallet?.id);
   const transactions = txnData?.MESSAGE ?? [];
 
-  const handleGatewaySuccess = (payment: { gateway: string; paymentId: string; amount: number; currency: string }) => {
+  // Admin opens gateway modal directly — /wallets/me/topup/initiate is self-service
+  // (rider/driver JWT only, returns 403 for admin). Admin flow:
+  //   gateway checkout → on success → adminAdjust to credit wallet (auto-creates if needed)
+  const handleOpenGatewayPay = () => {
+    if (topupAmount <= 0) {
+      toast.error("Enter a valid top-up amount (must be greater than 0).");
+      return;
+    }
+    setIsGatewayPayOpen(true);
+  };
+
+  // Gateway payment completed → credit wallet via admin adjust
+  const handleGatewaySuccess = (payment: {
+    gateway: "stripe" | "razorpay";
+    paymentId: string;
+    orderId?: string;
+    signature?: string;
+    amount: number;
+    currency: string;
+  }) => {
     const amountMinor = Math.round(payment.amount * 100);
-    adjustMutation.mutate({
-      type: "credit",
-      amountMinor,
-      reason: "gateway_topup",
-      description: `Direct top-up via ${payment.gateway.toUpperCase()} (Ref: ${payment.paymentId})`,
-    });
+    adjustMutation.mutate(
+      {
+        type: "credit",
+        amountMinor,
+        reason: "gateway_topup",
+        description: `Top-up via ${payment.gateway.toUpperCase()} — Ref: ${payment.paymentId}`,
+      },
+      {
+        onSuccess: () => {
+          setIsGatewayPayOpen(false);
+          refetchWallet();
+          refetchTxns();
+        },
+      },
+    );
   };
 
   return (
@@ -164,14 +194,33 @@ export function WalletPanel({ ownerType, ownerId }: WalletPanelProps) {
           </CardDescription>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Button size="sm" variant="outline" onClick={() => setIsGatewayPayOpen(true)} className="cursor-pointer gap-1.5">
-            <CreditCard className="h-3.5 w-3.5 text-primary" /> Pay via Gateway
+          {/* Top-up amount input */}
+          <Input
+            type="number"
+            min="1"
+            step="1"
+            className="w-24 h-8 text-sm"
+            placeholder="Amount"
+            value={topupAmount}
+            onChange={(e) => setTopupAmount(Number(e.target.value))}
+            title="Top-up amount in whole currency units (e.g. 100 = ₹100)"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleOpenGatewayPay}
+            disabled={adjustMutation.isPending}
+            className="cursor-pointer gap-1.5"
+          >
+            <CreditCard className="h-3.5 w-3.5 text-primary" />
+            Top-up via Gateway
           </Button>
           <Button size="sm" onClick={() => setIsAdjustOpen(true)} className="cursor-pointer">
             <Plus className="h-3.5 w-3.5 mr-1" /> Adjust Balance
           </Button>
         </div>
       </CardHeader>
+
       <CardContent className="space-y-4">
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading wallet…</p>
@@ -246,9 +295,10 @@ export function WalletPanel({ ownerType, ownerId }: WalletPanelProps) {
         open={isGatewayPayOpen}
         onOpenChange={setIsGatewayPayOpen}
         title={`Top-up ${ownerType === "driver" ? "Driver" : "Rider"} Wallet`}
-        description="Process live or dummy card / UPI top-up via integrated Stripe & Razorpay gateways."
+        description="Process a gateway top-up via Stripe or Razorpay. Wallet will be credited on success."
         currencyCode={wallet?.currencyCode || "INR"}
-        defaultAmount={50}
+        defaultAmount={topupAmount}
+        gateway="auto"
         onSuccess={handleGatewaySuccess}
       />
     </Card>

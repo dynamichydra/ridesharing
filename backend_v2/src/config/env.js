@@ -62,11 +62,43 @@ export const env = {
   APP_BASE_URL: process.env.APP_BASE_URL || undefined,
   DRIVER_APP_ONBOARDING_RETURN_URL: process.env.DRIVER_APP_ONBOARDING_RETURN_URL || undefined,
   DRIVER_APP_ONBOARDING_REFRESH_URL: process.env.DRIVER_APP_ONBOARDING_REFRESH_URL || undefined,
+
+  // Comma-separated browser origins allowed by CORS and Socket.IO (e.g. the admin portal).
+  // Unset outside production = allow all; unset in production = allow none.
+  CORS_ORIGINS: process.env.CORS_ORIGINS || undefined,
+  DB_POOL_MAX: process.env.DB_POOL_MAX || '20',
+  DB_SSL_CA: process.env.DB_SSL_CA || undefined, // PEM contents of the provider's CA bundle
+  // Bearer token required for GET /metrics in production (unset = /metrics disabled there).
+  METRICS_TOKEN: process.env.METRICS_TOKEN || undefined,
+  ENABLE_API_DOCS: process.env.ENABLE_API_DOCS || undefined,
+
+  // ── Development-only switches — assertRequiredEnv() refuses all of these in production ──
+  // Socket test UIs, /socket-test/quick-auth token minting, the public / and /test namespaces.
+  ENABLE_DEV_TOOLS: process.env.ENABLE_DEV_TOOLS || undefined,
+  // Credits rides/top-ups/subscriptions without a real charge when a gateway has no keys.
+  PAYMENTS_DEV_BYPASS: process.env.PAYMENTS_DEV_BYPASS || undefined,
+  // Fixed OTP (e.g. 123456) for emulator testing when no SMS provider is configured.
+  OTP_DEV_CODE: process.env.OTP_DEV_CODE || undefined,
+  // Local-disk stand-in for S3 (modules/dev-storage). On by default outside production only.
+  ALLOW_LOCAL_STORAGE: process.env.ALLOW_LOCAL_STORAGE || undefined,
 };
+
+export const isProduction = env.NODE_ENV === 'production';
+const flag = (v) => String(v || '').toLowerCase() === 'true';
+
+export const devToolsEnabled = !isProduction && flag(env.ENABLE_DEV_TOOLS);
+export const paymentDevBypassEnabled = !isProduction && flag(env.PAYMENTS_DEV_BYPASS);
+export const otpDevCode = !isProduction && /^\d{4,8}$/.test(env.OTP_DEV_CODE || '') ? env.OTP_DEV_CODE : null;
+export const apiDocsEnabled = !isProduction || flag(env.ENABLE_API_DOCS);
+export const corsOrigins = (env.CORS_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean);
 
 // Each of these flips a dependency service from its local/dummy dev fallback to the
 // real integration the moment its keys are present — no other flag to flip.
 export const isS3Configured = !!(env.S3_ENDPOINT && env.S3_ACCESS_KEY && env.S3_SECRET_KEY && env.S3_BUCKET);
+// Production must use S3; ALLOW_LOCAL_STORAGE=true is only for a deliberate single-server setup.
+export const localStorageEnabled = !isS3Configured
+  && (!isProduction || flag(env.ALLOW_LOCAL_STORAGE))
+  && String(env.ALLOW_LOCAL_STORAGE || '').toLowerCase() !== 'false';
 export const isTwilioConfigured = !!(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_PHONE_NUMBER);
 export const isRazorpayConfigured = !!(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET);
 export const isRazorpayXConfigured = !!(isRazorpayConfigured && (env.RAZORPAYX_ACCOUNT_NUMBER || env.NODE_ENV === 'development'));
@@ -108,6 +140,23 @@ export function assertRequiredEnv() {
   }
   if (isProd && String(env.RIDER_REGION_ENFORCEMENT).toLowerCase() === 'off') {
     problems.push('RIDER_REGION_ENFORCEMENT=off is not allowed in production');
+  }
+  if (isProd) {
+    for (const k of ['ENABLE_DEV_TOOLS', 'PAYMENTS_DEV_BYPASS']) {
+      if (flag(env[k])) problems.push(`${k}=true is not allowed in production`);
+    }
+    if (env.OTP_DEV_CODE) problems.push('OTP_DEV_CODE must not be set in production');
+    if (!isTwilioConfigured) problems.push('Twilio is not configured — OTP SMS cannot be delivered');
+    if (isRazorpayConfigured && !env.RAZORPAY_WEBHOOK_SECRET) {
+      problems.push('RAZORPAY_WEBHOOK_SECRET is required when Razorpay keys are set');
+    }
+    if (isStripeConfigured && !env.STRIPE_WEBHOOK_SECRET) {
+      problems.push('STRIPE_WEBHOOK_SECRET is required when Stripe keys are set');
+    }
+    if (!corsOrigins.length) problems.push('CORS_ORIGINS is empty — browsers (admin portal) will be refused');
+  }
+  if (env.BANK_DETAILS_ENC_KEY && Buffer.from(env.BANK_DETAILS_ENC_KEY, 'base64').length !== 32) {
+    problems.push('BANK_DETAILS_ENC_KEY must be 32 bytes, base64-encoded (openssl rand -base64 32)');
   }
   if (problems.length) {
     const msg = `Unsafe configuration:\n  - ${problems.join('\n  - ')}`;

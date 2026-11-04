@@ -3,7 +3,7 @@ import { db } from '../../config/db.js';
 import { rides, payments, users, drivers, cashCollections, subscriptions, subscriptionPlans, countries, driverEarnings, paymentMethods } from '../../../drizzle/schema/index.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 import { paginate } from '../../utils/response.js';
-import { getGateway } from '../payment/payment.service.js';
+import { getGateway, assertPaymentDevBypassAllowed, verifyGatewayPayment } from '../payment/payment.service.js';
 import { getRiderPaymentProfile, assertRiderCurrency } from '../rider/rider-payment-profile.js';
 import { chargeWithSavedMethod, isSavedMethodId, toActionRequiredResponse } from '../payment-method/saved-method-charge.service.js';
 import { formatMoney } from '../../utils/money.js';
@@ -97,9 +97,10 @@ export async function initiateRidePayment(riderId, rideId, idempotencyKey, payme
     }
 
     const accountGateway = getGateway(profile.gateway);
-    const gateway = accountGateway.isConfigured ? accountGateway : null; // null → dev-mode direct credit
+    const gateway = accountGateway.isConfigured ? accountGateway : null;
 
     if (!gateway) {
+      assertPaymentDevBypassAllowed('ride fare');
       return _markRidePaid(ride, {
         method: 'online', gateway: 'none', gatewayPaymentId: 'dev_payment_' + Date.now(), gatewayOrderId: null,
         amountMinor: payAmountMinor, payerId: riderId,
@@ -141,27 +142,41 @@ export async function verifyRidePayment(riderId, rideId, orderRef, paymentRef, s
 
   const ride = await _loadPayableRideForUser(rideId, riderId);
 
-  const profile = await getRiderPaymentProfile(riderId);
-  const accountGateway = getGateway(profile.gateway);
-  const gateway = accountGateway.isConfigured ? accountGateway : null;
-  if (!gateway) {
-    return _markRidePaid(ride, {
-      method: 'online', gateway: 'none', gatewayPaymentId: paymentRef, gatewayOrderId: orderRef,
-      amountMinor: ride.finalFareMinor, payerId: riderId,
-    });
-  }
-
-  const verified = await gateway.verifyPayment({ orderRef, paymentRef, signature });
-  if (!verified) throw { statusCode: 400, message: 'Payment verification failed' };
-
+  // The proof must belong to an order *we* created for this ride and this rider — otherwise a
+  // genuine but unrelated payment (e.g. a ₹1 top-up) could be replayed to settle this fare.
   const [attempt] = await db.select().from(payments)
     .where(and(eq(payments.gatewayOrderId, orderRef), eq(payments.rideId, rideId))).limit(1);
+  if (!attempt) throw { statusCode: 404, message: 'No payment was started for this ride with that order' };
+  if (attempt.metadata?.payerId && attempt.metadata.payerId !== riderId) {
+    throw { statusCode: 403, message: 'This payment belongs to a different rider' };
+  }
+  if (attempt.status === 'captured') return _loadRide(rideId);
+  if (Number(attempt.amountMinor) < Number(ride.finalFareMinor || 0)) {
+    throw { statusCode: 409, message: 'The fare changed after this payment was started — please pay again' };
+  }
+
+  const gateway = getGateway(attempt.gateway);
+  if (!gateway.isConfigured) {
+    assertPaymentDevBypassAllowed('ride fare');
+  } else {
+    const verified = await verifyGatewayPayment(gateway, {
+      orderRef, paymentRef, signature,
+      expectedAmountMinor: attempt.amountMinor,
+      expectedCurrency: attempt.currencyCode,
+    });
+    if (!verified) throw { statusCode: 400, message: 'Payment verification failed' };
+  }
 
   return _markRidePaid(ride, {
     method: 'online', gateway: gateway.name, gatewayPaymentId: paymentRef, gatewayOrderId: orderRef,
-    paymentAttemptId: attempt?.id,
-    amountMinor: attempt?.amountMinor, payerId: riderId,
+    paymentAttemptId: attempt.id,
+    amountMinor: attempt.amountMinor, payerId: riderId,
   });
+}
+
+async function _loadRide(rideId) {
+  const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
+  return ride;
 }
 
 // ── Driver — record cash collection ────────────────────────────────────────────
@@ -179,6 +194,11 @@ export async function recordCashCollection(driverId, rideId, collectedAmountMino
   }
   if (ride.paymentMethod === 'wallet') {
     throw { statusCode: 400, message: 'This ride is paid via Ryva Wallet and cannot be collected as cash' };
+  }
+  // A ride the rider chose to pay by card/online can't be switched to cash by the driver
+  // (that would skip the charge) — unless the online charge already failed.
+  if (ride.paymentMethod && ride.paymentMethod !== 'cash' && ride.paymentStatus !== 'failed') {
+    throw { statusCode: 400, code: 'NOT_A_CASH_RIDE', message: 'The rider is paying online for this ride — do not collect cash' };
   }
 
   const expectedFareMinor = ride.finalFareMinor ?? ride.estimatedFareMinor ?? 0;
@@ -319,14 +339,24 @@ export async function processWebhookEvent(event) {
   if (!rideId) return;
 
   const [ride] = await db.select().from(rides).where(eq(rides.id, rideId)).limit(1);
-  if (ride && ride.paymentStatus !== 'paid') {
-    const [attempt] = await db.select().from(payments)
-      .where(and(eq(payments.gatewayOrderId, event.orderRef), eq(payments.rideId, rideId))).limit(1);
-    await _markRidePaid(ride, {
-      method: 'online', gateway: event.gatewayName, gatewayPaymentId: event.paymentRef, gatewayOrderId: event.orderRef,
-      paymentAttemptId: attempt?.id,
-    });
+  if (!ride || ride.paymentStatus === 'paid') return;
+
+  // Only settle orders we created for this ride, for the amount we asked for — the gateway
+  // metadata (notes) alone isn't proof of which bill was paid.
+  const [attempt] = await db.select().from(payments)
+    .where(and(eq(payments.gatewayOrderId, event.orderRef), eq(payments.rideId, rideId))).limit(1);
+  if (!attempt) {
+    console.warn(`[RidePayment] webhook for ride ${rideId} has no matching payment attempt — ignored`);
+    return;
   }
+  if (event.amountMinor != null && Number(event.amountMinor) !== Number(attempt.amountMinor)) {
+    console.warn(`[RidePayment] webhook amount ${event.amountMinor} != attempt ${attempt.amountMinor} for ride ${rideId} — ignored`);
+    return;
+  }
+  await _markRidePaid(ride, {
+    method: 'online', gateway: event.gatewayName, gatewayPaymentId: event.paymentRef, gatewayOrderId: event.orderRef,
+    paymentAttemptId: attempt.id, amountMinor: attempt.amountMinor,
+  });
 }
 
 // ── Reads ─────────────────────────────────────────────────────────────────────

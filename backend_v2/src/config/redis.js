@@ -73,3 +73,18 @@ export const REDIS_KEYS = {
     rideProgress: (rideId) => `chan:ride:progress:${rideId}`,
   },
 };
+
+/**
+ * Non-blocking replacement for `redis.keys(pattern)` — KEYS walks the whole keyspace in one
+ * blocking call and stalls every other Redis client (matching, sockets, BullMQ) while it runs.
+ */
+export async function scanKeys(pattern, count = 500) {
+  const keys = [];
+  let cursor = '0';
+  do {
+    const [next, batch] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', count);
+    cursor = next;
+    keys.push(...batch);
+  } while (cursor !== '0');
+  return keys;
+}

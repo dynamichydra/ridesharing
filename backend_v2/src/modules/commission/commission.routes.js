@@ -1,5 +1,5 @@
 import { sendSuccess, sendError, sendList, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin } from '../../middleware/authenticate.js';
+import { authenticateAdmin, authenticateSuperAdmin } from '../../middleware/authenticate.js';
 import * as commissionService from './commission.service.js';
 
 export async function commissionRoutes(app) {
@@ -22,7 +22,7 @@ export async function commissionRoutes(app) {
     return sendSuccess(reply, data);
   });
 
-  app.post('/', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { name, subscriberRate, nonSubscriberRate } = request.body;
     if (!name || subscriberRate == null || nonSubscriberRate == null) {
       return sendError(reply, 'name, subscriberRate and nonSubscriberRate are required');
@@ -31,17 +31,17 @@ export async function commissionRoutes(app) {
     return sendSuccess(reply, data, 201);
   });
 
-  app.patch('/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await commissionService.update(request.params.id, request.body);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/:id/enable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await commissionService.setActive(request.params.id, true, request.user.id);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/:id/disable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await commissionService.setActive(request.params.id, false, request.user.id);
     return sendSuccess(reply, data);
   });

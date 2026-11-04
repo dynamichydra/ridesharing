@@ -1,5 +1,5 @@
 import Stripe from 'stripe';
-import { env, isStripeConfigured } from '../../../config/env.js';
+import { env, isStripeConfigured, paymentDevBypassEnabled } from '../../../config/env.js';
 import { fromMinor } from '../../../utils/money.js';
 
 const client = isStripeConfigured ? new Stripe(env.STRIPE_SECRET_KEY) : null;
@@ -236,21 +236,33 @@ export const stripeGateway = {
   // Stripe has no separate order/payment/signature triad — the client confirms the
   // PaymentIntent directly with Stripe, so verification is just re-checking its status.
   async verifyPayment({ orderRef, paymentRef }) {
-    if (env.NODE_ENV !== 'production' && (paymentRef?.startsWith('pi_mock_') || orderRef?.startsWith('order_mock_') || orderRef?.startsWith('mock_') || paymentRef?.startsWith('mock_'))) {
+    return this.verifyCapturedPayment({ orderRef, paymentRef });
+  },
+
+  // The PaymentIntent must have succeeded for exactly the amount/currency we expected, so a
+  // cheap intent's id can't be replayed to settle a bigger bill.
+  async verifyCapturedPayment({ orderRef, paymentRef, expectedAmountMinor, expectedCurrency }) {
+    if (paymentDevBypassEnabled && (paymentRef?.startsWith('pi_mock_') || orderRef?.startsWith('order_mock_') || orderRef?.startsWith('mock_') || paymentRef?.startsWith('mock_'))) {
       return true;
     }
-    if (!client) return false;
+    if (!client || !orderRef) return false;
     try {
       const intent = await client.paymentIntents.retrieve(orderRef);
-      return intent.status === 'succeeded';
+      if (intent.status !== 'succeeded') return false;
+      const paidMinor = intent.amount_received ?? intent.amount;
+      if (expectedAmountMinor != null && Number(paidMinor) !== Number(expectedAmountMinor)) return false;
+      if (expectedCurrency && String(intent.currency).toUpperCase() !== String(expectedCurrency).toUpperCase()) return false;
+      return true;
     } catch {
       return false;
     }
   },
 
   verifyWebhookSignature(rawBody, signature) {
+    // No secret configured = nothing can be verified; never fall back to an empty key.
+    if (!client || !env.STRIPE_WEBHOOK_SECRET || !signature) return false;
     try {
-      client.webhooks.constructEvent(rawBody, signature, env.STRIPE_WEBHOOK_SECRET || '');
+      client.webhooks.constructEvent(rawBody, signature, env.STRIPE_WEBHOOK_SECRET);
       return true;
     } catch {
       return false;
@@ -262,7 +274,7 @@ export const stripeGateway = {
   // `funds_withdrawn`/`funds_reinstated` aren't handled — ingestion + hold + review queue
   // doesn't need them.
   parseWebhookEvent(rawBody, signature) {
-    const event = client.webhooks.constructEvent(rawBody, signature, env.STRIPE_WEBHOOK_SECRET || '');
+    const event = client.webhooks.constructEvent(rawBody, signature, env.STRIPE_WEBHOOK_SECRET);
 
     if (event.type === 'charge.dispute.created' || event.type === 'charge.dispute.closed') {
       const dispute = event.data.object;
@@ -302,6 +314,8 @@ export const stripeGateway = {
       kind: 'payment_captured',
       paymentRef: intent.id,
       orderRef: intent.id,
+      amountMinor: intent.amount_received ?? intent.amount,
+      currencyCode: intent.currency?.toUpperCase(),
       metadata: intent.metadata,
       eventId: event.id, // Stripe webhook events carry a native unique id ("evt_...")
     };
@@ -389,8 +403,9 @@ export const stripeGateway = {
   // Connect events (account.updated etc.) arrive at a separate webhook endpoint from payment
   // events in Stripe's dashboard, signed with their own secret.
   verifyConnectWebhookSignature(rawBody, signature) {
+    if (!client || !env.STRIPE_CONNECT_WEBHOOK_SECRET || !signature) return false;
     try {
-      client.webhooks.constructEvent(rawBody, signature, env.STRIPE_CONNECT_WEBHOOK_SECRET || '');
+      client.webhooks.constructEvent(rawBody, signature, env.STRIPE_CONNECT_WEBHOOK_SECRET);
       return true;
     } catch {
       return false;
@@ -398,7 +413,7 @@ export const stripeGateway = {
   },
 
   parseConnectWebhookEvent(rawBody, signature) {
-    const event = client.webhooks.constructEvent(rawBody, signature, env.STRIPE_CONNECT_WEBHOOK_SECRET || '');
+    const event = client.webhooks.constructEvent(rawBody, signature, env.STRIPE_CONNECT_WEBHOOK_SECRET);
     if (event.type !== 'account.updated') return null;
     const account = event.data.object;
     return {

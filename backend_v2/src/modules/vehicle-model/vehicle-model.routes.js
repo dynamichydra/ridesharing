@@ -1,5 +1,5 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin } from '../../middleware/authenticate.js';
+import { authenticateAdmin, authenticateSuperAdmin } from '../../middleware/authenticate.js';
 import * as vmService from './vehicle-model.service.js';
 
 export async function vehicleModelRoutes(app) {
@@ -23,24 +23,24 @@ export async function vehicleModelRoutes(app) {
   });
 
   // Admin only — master data (no delete: models stay as history for vehicles already using them)
-  app.post('/', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { vehicleTypeId, brand, name } = request.body;
     if (!vehicleTypeId || !brand || !name) return sendError(reply, 'vehicleTypeId, brand, name are required');
     const data = await vmService.create(request.body, request.user.id);
     return sendSuccess(reply, data, 201);
   });
 
-  app.patch('/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await vmService.update(request.params.id, request.body);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/:id/enable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await vmService.setActive(request.params.id, true, request.user.id);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/:id/disable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await vmService.setActive(request.params.id, false, request.user.id);
     return sendSuccess(reply, data);
   });

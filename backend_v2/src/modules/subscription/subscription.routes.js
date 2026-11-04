@@ -1,5 +1,5 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
-import { authenticateDriver, authenticateAdmin } from '../../middleware/authenticate.js';
+import { authenticateDriver, authenticateAdmin, authenticateSuperAdmin } from '../../middleware/authenticate.js';
 import * as subService from './subscription.service.js';
 import { receiveWebhookEvent } from '../../jobs/webhook-processing.job.js';
 import { normalizePlanPayload } from './plan-validation.js';
@@ -104,7 +104,7 @@ export async function subscriptionRoutes(app) {
     return sendList(reply, rows, pagination);
   });
 
-  app.post('/plans', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/plans', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { name, type, countryId, currencyCode, priceMinor } = request.body;
     if (!name || !type || !countryId || !currencyCode || !priceMinor) {
       return sendError(reply, 'name, type, countryId, currencyCode and priceMinor are required');
@@ -114,18 +114,18 @@ export async function subscriptionRoutes(app) {
     return sendSuccess(reply, data, 201);
   });
 
-  app.patch('/plans/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/plans/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const payload = await normalizePlanPayload(request.body);
     const data = await subService.updatePlan(request.params.id, payload);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/plans/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/plans/:id/enable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await subService.setPlanActive(request.params.id, true, request.user.id);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/plans/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/plans/:id/disable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await subService.setPlanActive(request.params.id, false, request.user.id);
     return sendSuccess(reply, data);
   });
@@ -238,13 +238,13 @@ export async function subscriptionRoutes(app) {
   });
 
   // POST /api/v1/subscriptions/plans/:id/group-pricing
-  app.post('/plans/:id/group-pricing', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/plans/:id/group-pricing', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await subService.setPlanGroupPricing(request.params.id, request.body || {});
     return sendSuccess(reply, data, 201);
   });
 
   // DELETE /api/v1/subscriptions/plans/:id/group-pricing/:pricingId
-  app.delete('/plans/:id/group-pricing/:pricingId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.delete('/plans/:id/group-pricing/:pricingId', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await subService.deletePlanGroupPricing(request.params.pricingId);
     return sendSuccess(reply, data);
   });

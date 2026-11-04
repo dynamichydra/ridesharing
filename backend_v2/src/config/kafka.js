@@ -41,42 +41,76 @@ export const TOPICS = {
 
 
 let _producer = null;
-let _producerFailed = false;
+// A failed connect is retried after a cooldown rather than disabling Kafka for the life of the
+// process — one broker blip at boot used to drop every event until the next restart.
+const PRODUCER_RETRY_COOLDOWN_MS = 15_000;
+let _producerConnecting = null;
+let _nextConnectAttemptAt = 0;
 
 export async function getProducer() {
-  if (_producerFailed) return null;
   if (_producer) return _producer;
-  try {
-    _producer = kafka.producer({
+  if (Date.now() < _nextConnectAttemptAt) return null;
+  if (_producerConnecting) return _producerConnecting;
+  _producerConnecting = (async () => {
+    const producer = kafka.producer({
       allowAutoTopicCreation: false,
       createPartitioner: Partitioners.DefaultPartitioner,
     });
-    await _producer.connect();
-    console.log('✅ Kafka producer connected');
-    return _producer;
-  } catch (err) {
-    _producerFailed = true;
-    _producer = null;
-    console.warn(`[Kafka] Producer connection failed (non-fatal): ${err.message}`);
-    return null;
-  }
+    try {
+      await producer.connect();
+      producer.on(producer.events.DISCONNECT, () => { if (_producer === producer) _producer = null; });
+      _producer = producer;
+      console.log('✅ Kafka producer connected');
+      return producer;
+    } catch (err) {
+      _nextConnectAttemptAt = Date.now() + PRODUCER_RETRY_COOLDOWN_MS;
+      console.warn(`[Kafka] Producer connection failed, retrying in ${PRODUCER_RETRY_COOLDOWN_MS / 1000}s: ${err.message}`);
+      return null;
+    } finally {
+      _producerConnecting = null;
+    }
+  })();
+  return _producerConnecting;
 }
 
+export function isProducerConnected() {
+  return !!_producer;
+}
+
+/**
+ * Throws when the event could not be handed to Kafka. Use this where the caller must know —
+ * the outbox relay (jobs/outbox-relay.job.js) retries the row instead of marking it published.
+ */
+export async function publishEventStrict(topic, payload, key) {
+  const producer = await getProducer();
+  if (!producer) throw new Error('Kafka producer is not connected');
+  await producer.send({
+    topic,
+    messages: [{
+      key: key ? String(key) : String(payload.id || Date.now()),
+      value: JSON.stringify({
+        ...payload,
+        _meta: { ts: Date.now(), topic, v: 1 },
+      }),
+    }],
+  });
+}
+
+/**
+ * Best-effort publish for non-critical, fire-and-forget events: never throws, so a Kafka
+ * outage can't fail the request that triggered it. Anything that must not be lost should be
+ * written to the outbox (utils/outbox.js) inside the domain transaction instead.
+ */
 export async function publishEvent(topic, payload, key) {
   try {
-    const producer = await getProducer();
-    if (!producer) return;
-    await producer.send({
-      topic,
-      messages: [{
-        key: key ? String(key) : String(payload.id || Date.now()),
-        value: JSON.stringify({
-          ...payload,
-          _meta: { ts: Date.now(), topic, v: 1 },
-        }),
-      }],
-    });
+    await publishEventStrict(topic, payload, key);
   } catch (err) {
     console.warn(`[Kafka] Failed to publish event to topic ${topic}: ${err.message}`);
   }
+}
+
+export async function disconnectProducer() {
+  const producer = _producer;
+  _producer = null;
+  if (producer) await producer.disconnect().catch(() => {});
 }

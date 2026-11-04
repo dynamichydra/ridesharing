@@ -1,7 +1,7 @@
 import { and, eq, sql, lt } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { rides, rideOffers, dispatchJobs, drivers } from '../../../drizzle/schema/index.js';
-import { redis, REDIS_KEYS } from '../../config/redis.js';
+import { redis, REDIS_KEYS, scanKeys } from '../../config/redis.js';
 import { publishEvent, TOPICS } from '../../config/kafka.js';
 
 /**
@@ -29,7 +29,10 @@ export async function runMatchingReconciliation() {
       .where(
         and(
           eq(rides.status, 'searching'),
-          sql`${rides.requestedAt} < NOW() - INTERVAL '4 minutes'`
+          sql`${rides.requestedAt} < NOW() - INTERVAL '4 minutes'`,
+          // A re-dispatched ride (driver cancelled) keeps its original requestedAt — only
+          // expire it once its latest dispatch run has also gone quiet.
+          sql`NOT EXISTS (SELECT 1 FROM ${dispatchJobs} dj WHERE dj.ride_id = ${rides.id} AND dj.started_at > NOW() - INTERVAL '4 minutes')`
         )
       );
 
@@ -78,7 +81,7 @@ export async function runMatchingReconciliation() {
     report.staleJobsCleaned = stuckJobs.length;
 
     // 3. Scan and release orphaned driver locks
-    const lockKeys = await redis.keys('driver:lock:*');
+    const lockKeys = await scanKeys('driver:lock:*');
     for (const key of lockKeys) {
       const driverId = key.replace('driver:lock:', '');
       const rideId = await redis.get(key);

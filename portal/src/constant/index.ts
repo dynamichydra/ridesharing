@@ -20,11 +20,12 @@ const DM_CORE_CONFIG = {
   PLATFORM_NAME: 'RideShare Admin',
   PLATFORM_TEMPLATE: 1,
   VERSION: '1.0.0',
-  PRIVATE_KEY: 'rideshare-admin-secret-key',
   PAGESIZE: 10,
-  // Payment Gateway Keys - change these in .env / .env.production or here for live deployment
-  STRIPE_PUBLISHABLE_KEY: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_TYooMQauvdEDq54NiTphI7jx',
-  RAZORPAY_KEY_ID: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_1DP5mmOlF5G5ag',
+  // Publishable payment keys come from the build env (.env / .env.production) only. The backend
+  // normally returns the key with each order, so these are just a fallback — never a hard-coded
+  // test key, which would silently send a live portal to a sandbox account.
+  STRIPE_PUBLISHABLE_KEY: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '',
+  RAZORPAY_KEY_ID: import.meta.env.VITE_RAZORPAY_KEY_ID || '',
 };
 
 export default DM_CORE_CONFIG;

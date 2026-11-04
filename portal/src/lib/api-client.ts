@@ -8,10 +8,11 @@ export interface BackendResponse<T> {
   SUCCESS: boolean;
   MESSAGE: T;
   COUNT?: number;
+  // Matches backend utils/response.js paginate().
   PAGINATION?: {
-    total: number;
-    page: number;
-    limit: number;
+    currentPage: number;
+    itemsPerPage: number;
+    totalItems: number;
     totalPages: number;
   };
 }

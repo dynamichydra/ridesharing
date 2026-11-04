@@ -1,9 +1,9 @@
 import { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHmac, timingSafeEqual } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
-import { env, isS3Configured } from '../config/env.js';
+import { env, isS3Configured, localStorageEnabled } from '../config/env.js';
 
 const UPLOAD_URL_TTL_SECONDS = 300;   // 5 minutes to complete the PUT
 const VIEW_URL_TTL_SECONDS = 600;   // 10 minutes for admin document review
@@ -36,12 +36,37 @@ const ALLOWED_CONTENT_TYPES = {
 
 const EXT_TO_MIME = Object.fromEntries(Object.entries(ALLOWED_CONTENT_TYPES).map(([mime, ext]) => [ext, mime]));
 
+// Production without S3 must fail loudly instead of handing out URLs to a route that
+// isn't registered (see localStorageEnabled in config/env.js).
+function assertLocalStorageAvailable() {
+  if (!localStorageEnabled) throw { statusCode: 503, message: 'File storage is not configured' };
+}
+
 function localBaseUrl() {
   return (env.APP_BASE_URL || `http://localhost:${env.PORT}`).replace(/\/$/, '');
 }
 
 function localDevStorageUrl(key) {
   return `${localBaseUrl()}/api/${env.API_VERSION}/dev-storage/${key}`;
+}
+
+// Local upload URLs are signed like S3 presigned PUTs, so the dev-storage route only accepts
+// writes the server itself handed out (or from an authenticated user).
+function signLocalUpload(key, expiresAt) {
+  return createHmac('sha256', env.JWT_SECRET || 'local-dev-storage').update(`${key}|${expiresAt}`).digest('hex');
+}
+
+function localSignedUploadUrl(key) {
+  const expiresAt = Math.floor(Date.now() / 1000) + UPLOAD_URL_TTL_SECONDS;
+  return `${localDevStorageUrl(key)}?expires=${expiresAt}&signature=${signLocalUpload(key, expiresAt)}`;
+}
+
+export function isValidLocalUploadSignature(key, expires, signature) {
+  const expiresAt = parseInt(expires, 10);
+  if (!expiresAt || !signature || expiresAt < Math.floor(Date.now() / 1000)) return false;
+  const expected = Buffer.from(signLocalUpload(key, expiresAt), 'hex');
+  const given = Buffer.from(String(signature), 'hex');
+  return expected.length === given.length && timingSafeEqual(expected, given);
 }
 
 /** Resolves `key` inside UPLOAD_DIR, throwing if it would escape it (path traversal). */
@@ -87,14 +112,16 @@ export async function createUploadUrl(folder, contentType, maxFileSizeMb = 10) {
   const key = `${folder}/${randomUUID()}.${ext}`;
 
   if (!isS3Configured) {
-    return { uploadUrl: localDevStorageUrl(key), key, expiresIn: UPLOAD_URL_TTL_SECONDS };
+    assertLocalStorageAvailable();
+    return { uploadUrl: localSignedUploadUrl(key), key, expiresIn: UPLOAD_URL_TTL_SECONDS };
   }
 
   const command = new PutObjectCommand({
     Bucket: env.S3_BUCKET,
     Key: key,
     ContentType: contentType,
-    ContentLength: maxFileSizeMb * 1024 * 1024, // presigned exact-length constraint; client must match
+    // No ContentLength here: signing it would force every upload to be exactly the max size.
+    // The size limit is enforced after upload by verifyObjectExists().
   });
   const uploadUrl = await getSignedUrl(s3(), command, { expiresIn: UPLOAD_URL_TTL_SECONDS });
   return { uploadUrl, key, expiresIn: UPLOAD_URL_TTL_SECONDS };
@@ -147,6 +174,7 @@ export async function uploadBuffer(folder, contentType, buffer) {
   const key = `${folder}/${randomUUID()}.${ext}`;
 
   if (!isS3Configured) {
+    assertLocalStorageAvailable();
     await saveLocalObject(key, buffer);
     return {
       key,

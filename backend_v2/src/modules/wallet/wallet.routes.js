@@ -1,5 +1,5 @@
 import { sendSuccess, sendError, sendList, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin, authenticateAny, authenticateRider, authenticateDriver } from '../../middleware/authenticate.js';
+import { authenticateAdmin, authenticateAny, authenticateRider, authenticateDriver, authenticateSuperAdmin } from '../../middleware/authenticate.js';
 import * as walletService from './wallet.service.js';
 
 export async function walletRoutes(app) {
@@ -122,13 +122,13 @@ export async function walletRoutes(app) {
   });
 
   // POST /api/v1/wallets/driver/:driverId/adjust  { type, amountMinor, reason, description? }
-  app.post('/driver/:driverId/adjust', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/driver/:driverId/adjust', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await walletService.adminAdjustWallet('driver', request.params.driverId, request.body, request.user.id);
     return sendSuccess(reply, data);
   });
 
   // POST /api/v1/wallets/rider/:riderId/adjust  { type, amountMinor, reason, description? }
-  app.post('/rider/:riderId/adjust', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/rider/:riderId/adjust', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await walletService.adminAdjustWallet('rider', request.params.riderId, request.body, request.user.id);
     return sendSuccess(reply, data);
   });
@@ -144,13 +144,13 @@ export async function walletRoutes(app) {
   });
 
   // PATCH /api/v1/wallets/withdrawals/:id/approve
-  app.patch('/withdrawals/:id/approve', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/withdrawals/:id/approve', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await walletService.approveWalletWithdrawal(request.params.id, request.user.id);
     return sendSuccess(reply, data);
   });
 
   // PATCH /api/v1/wallets/withdrawals/:id/reject  { rejectionReason }
-  app.patch('/withdrawals/:id/reject', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/withdrawals/:id/reject', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await walletService.rejectWalletWithdrawal(request.params.id, request.user.id, request.body.rejectionReason);
     return sendSuccess(reply, data);
   });

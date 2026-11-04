@@ -6,7 +6,7 @@ import multipart from '@fastify/multipart';
 
 import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
-import { env } from '../config/env.js';
+import { env, isProduction, corsOrigins, apiDocsEnabled } from '../config/env.js';
 import { redis } from '../config/redis.js';
 import fastifyRawBody from 'fastify-raw-body';
 import { registerMetrics } from './metrics.js';
@@ -23,13 +23,12 @@ export async function registerPlugins(app) {
   await app.register(helmet, { contentSecurityPolicy: false });
 
   await app.register(cors, {
+    // No Origin header = native mobile app / server-to-server: always allowed (CORS is a
+    // browser control). Browsers: CORS_ORIGINS allow-list; outside production, anything.
     origin: (origin, cb) => {
-      // In development or if no origin (server-to-server / curl), allow all
-      if (!origin || env.NODE_ENV !== 'production' || origin.includes('localhost') || origin.includes('127.0.0.1')) {
-        cb(null, true);
-        return;
-      }
-      cb(null, true);
+      if (!origin) return cb(null, true);
+      if (corsOrigins.length) return cb(null, corsOrigins.includes(origin));
+      return cb(null, !isProduction);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
@@ -60,7 +59,10 @@ export async function registerPlugins(app) {
   await app.register(rateLimit, {
     max: 100,
     timeWindow: '1 minute',
+    // Shared across instances when Redis is up (server.js connects Redis before plugins);
+    // skipOnError keeps the API serving if Redis briefly drops instead of failing every call.
     redis: redis && redis.status === 'ready' ? redis : undefined,
+    skipOnError: true,
     keyGenerator: (request) => request.ip,
     errorResponseBuilder: () => ({
       SUCCESS: false,
@@ -75,20 +77,29 @@ export async function registerPlugins(app) {
 
   await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } });
 
-  await app.register(swagger, {
-    openapi: {
-      info: { title: 'RideShare API', version: '1.0.0', description: 'Industrial Rideshare Platform' },
-      servers: [{ url: `http://localhost:${env.PORT}` }],
-      components: {
-        securitySchemes: {
-          bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+  // API docs advertise every route — off in production unless ENABLE_API_DOCS=true.
+  if (apiDocsEnabled) {
+    await app.register(swagger, {
+      openapi: {
+        info: { title: 'RideShare API', version: '1.0.0', description: 'Industrial Rideshare Platform' },
+        servers: [{ url: env.APP_BASE_URL || `http://localhost:${env.PORT}` }],
+        components: {
+          securitySchemes: {
+            bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+          },
         },
       },
-    },
-  });
-  await app.register(swaggerUI, { routePrefix: '/docs' });
+    });
+    await app.register(swaggerUI, { routePrefix: '/docs' });
+  }
 
   await registerMetrics(app);
+
+  // A POST/PUT/PATCH without a JSON body leaves request.body undefined, and handlers that
+  // destructure it would crash with a 500. Normalise to {} so they return their own 400s.
+  app.addHook('preHandler', async (request) => {
+    if (request.body == null && ['POST', 'PUT', 'PATCH'].includes(request.method)) request.body = {};
+  });
 
   app.setErrorHandler((error, request, reply) => {
     app.log.error(error);

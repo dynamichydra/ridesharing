@@ -6,10 +6,12 @@
 
 const ALLOWED_TRANSITIONS = {
   requested: ['searching', 'cancelled', 'expired'],
+  scheduled: ['searching', 'cancelled', 'expired'],
   searching: ['accepted', 'cancelled', 'expired', 'no_driver_found'],
-  accepted: ['arriving', 'cancelled'],
-  arriving: ['arrived', 'started', 'cancelled'],
-  arrived: ['started', 'cancelled'],
+  // -> searching: the assigned driver dropped the ride and it is re-dispatched.
+  accepted: ['arriving', 'arrived', 'started', 'searching', 'cancelled'],
+  arriving: ['arrived', 'started', 'searching', 'cancelled'],
+  arrived: ['started', 'searching', 'cancelled'],
   started: ['completed'],
   completed: [],
   cancelled: [],

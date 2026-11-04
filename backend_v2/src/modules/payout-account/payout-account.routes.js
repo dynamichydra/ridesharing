@@ -1,6 +1,7 @@
 import { sendSuccess, sendError, sendList, parsePagination } from '../../utils/response.js';
 import { authenticateDriver, authenticateAdmin } from '../../middleware/authenticate.js';
 import * as payoutAccountService from './payout-account.service.js';
+import { devToolsEnabled } from '../../config/env.js';
 
 export async function payoutAccountRoutes(app) {
 
@@ -41,15 +42,18 @@ export async function payoutAccountRoutes(app) {
   app.get('/stripe/onboarding-refresh', async (request, reply) => {
     return sendSuccess(reply, { message: 'Onboarding link expired — request a new one from the app.' });
   });
+  // Informational only. A payout account becomes approved solely through Stripe's
+  // `account.updated` Connect webhook (or an admin) — this URL is public, so it must never
+  // change account state. The mock auto-approval is kept for local testing behind dev tools.
   app.get('/stripe/onboarding-return', async (request, reply) => {
-    const { driverId } = request.query;
-    if (driverId) {
+    const { driverId, mock } = request.query || {};
+    if (devToolsEnabled && mock === 'true' && driverId) {
       await payoutAccountService.approveMockStripeAccount(driverId);
+      return sendSuccess(reply, { message: '[DEV] Mock payout account approved.', driverId, status: 'approved' });
     }
     return sendSuccess(reply, {
-      message: 'Onboarding step complete — payout account has been verified and approved.',
-      driverId,
-      status: 'approved',
+      message: 'Onboarding step submitted. Your payout account will be activated once Stripe verifies your details.',
+      status: 'submitted',
     });
   });
 

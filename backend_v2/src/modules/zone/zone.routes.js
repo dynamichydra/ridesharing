@@ -1,5 +1,5 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin } from '../../middleware/authenticate.js';
+import { authenticateAdmin, authenticateSuperAdmin } from '../../middleware/authenticate.js';
 import * as zoneService from './zone.service.js';
 import { generateHexCells, resolveHexZones } from './hex-zone.service.js';
 
@@ -38,7 +38,7 @@ export async function zoneRoutes(app) {
   });
 
   // Admin only
-  app.post('/', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { name, type, polygon, countryId, cityId, resolution } = request.body;
     if (!name || !type || !polygon || !countryId || !cityId) {
       return sendError(reply, 'name, type, polygon, countryId and cityId are required');
@@ -48,7 +48,7 @@ export async function zoneRoutes(app) {
     return sendSuccess(reply, data, 201);
   });
 
-  app.patch('/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     let data = await zoneService.update(request.params.id, request.body);
     if (request.body.polygon || request.body.resolution) {
       data = await generateHexCells(data.id, request.body.resolution ?? data.resolution);
@@ -58,17 +58,17 @@ export async function zoneRoutes(app) {
 
   // POST /:id/generate-hex-cells — (re)derive hexCells from the stored polygon, e.g. after
   // changing resolution
-  app.post('/:id/generate-hex-cells', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/:id/generate-hex-cells', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await generateHexCells(request.params.id, request.body?.resolution);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/:id/enable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await zoneService.setActive(request.params.id, true, request.user.id);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/:id/disable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await zoneService.setActive(request.params.id, false, request.user.id);
     return sendSuccess(reply, data);
   });

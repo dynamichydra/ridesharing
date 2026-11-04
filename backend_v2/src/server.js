@@ -1,14 +1,16 @@
 import 'dotenv/config';
+import { pathToFileURL } from 'url';
 import Fastify from 'fastify';
-import { env, assertRequiredEnv } from './config/env.js';
+import { env, assertRequiredEnv, devToolsEnabled, localStorageEnabled, isProduction } from './config/env.js';
+import { isProducerConnected, disconnectProducer } from './config/kafka.js';
 import {
   redis, redisPub,
   redisSub
 } from './config/redis.js';
 import { pool } from './config/db.js';
 import { registerPlugins } from './plugins/index.js';
-import { initSocketIO } from './sockets/index.js';
-import { startAllConsumers } from './kafka/consumers/index.js';
+import { initSocketIO, attachRedisAdapter } from './sockets/index.js';
+import { startAllConsumers, stopAllConsumers } from './kafka/consumers/index.js';
 import { startJobs } from './jobs/index.js';
 
 import { authRoutes } from './modules/auth/auth.routes.js';
@@ -61,10 +63,12 @@ import { paymentMethodRoutes } from './modules/payment-method/payment-method.rou
 const PREFIX = `/api/${env.API_VERSION}`;
 
 
-async function build() {
+export async function build() {
   const app = Fastify({
     logger: {
-      level: env.NODE_ENV === 'production' ? 'warn' : 'info',
+      level: process.env.LOG_LEVEL || 'info',
+      // Never write credentials or OTP-bearing bodies to logs.
+      redact: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-region-token"]'],
       transport: env.NODE_ENV !== 'production'
         ? { target: 'pino-pretty', options: { colorize: true } }
         : undefined,
@@ -115,14 +119,17 @@ async function build() {
   await app.register(documentsRoutes, { prefix: `${PREFIX}/documents` });
   await app.register(vehicleRoutes, { prefix: `${PREFIX}/vehicles` });
   await app.register(onboardingRoutes, { prefix: `${PREFIX}/onboarding` });
-  await app.register(devStorageRoutes, { prefix: `${PREFIX}/dev-storage` });
+  if (localStorageEnabled) await app.register(devStorageRoutes, { prefix: `${PREFIX}/dev-storage` });
   await app.register(flaggedTripRoutes, { prefix: `${PREFIX}/flagged-trips` });
   await app.register(promoRoutes, { prefix: `${PREFIX}/promos` });
   await app.register(emergencyRoutes, { prefix: `${PREFIX}` });
   await app.register(savedPlaceRoutes, { prefix: `${PREFIX}/saved-places` });
   await app.register(moderationRoutes, { prefix: `${PREFIX}/admin/moderation` });
-  await app.register(socketTestRoutes, { prefix: `${PREFIX}` });
-  await app.register(socketTestRoutes); // also accessible at /socket-test and /socket-test/ui
+  // Socket test UIs + /socket-test/quick-auth (mints tokens for real accounts) — dev only.
+  if (devToolsEnabled) {
+    await app.register(socketTestRoutes, { prefix: `${PREFIX}` });
+    await app.register(socketTestRoutes); // also accessible at /socket-test and /socket-test/ui
+  }
   await app.register(cashRoutes, { prefix: `${PREFIX}/cash` });
   await app.register(financialAuditRoutes, { prefix: `${PREFIX}/financial-audit` });
   await app.register(publicTripRoutes, { prefix: `${PREFIX}/public` });
@@ -137,10 +144,30 @@ async function build() {
 
 
 
+  // Liveness: the process is up. Use /ready for load-balancer / orchestrator readiness.
   app.get('/health', async () => ({
     SUCCESS: true,
     MESSAGE: { status: 'ok', ts: new Date().toISOString(), version: env.API_VERSION, env: env.NODE_ENV },
   }));
+
+  // Readiness: only route traffic here when the database and Redis answer.
+  // Each check is time-boxed: with Redis down, ioredis queues commands indefinitely.
+  const withTimeout = (promise, ms = 2000) => Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
+  app.get('/ready', async (request, reply) => {
+    const checks = {};
+    try { await withTimeout(pool.query('SELECT 1')); checks.database = 'ok'; } catch { checks.database = 'down'; }
+    try {
+      if (redis.status !== 'ready') throw new Error('not connected');
+      await withTimeout(redis.ping());
+      checks.redis = 'ok';
+    } catch { checks.redis = 'down'; }
+    checks.kafka = isProducerConnected() ? 'ok' : 'degraded'; // events are queued in the outbox meanwhile
+    const ready = checks.database === 'ok' && checks.redis === 'ok';
+    return reply.status(ready ? 200 : 503).send({ SUCCESS: ready, MESSAGE: { status: ready ? 'ready' : 'not_ready', checks } });
+  });
 
   app.setNotFoundHandler((request, reply) => {
     reply.status(404).send({
@@ -157,37 +184,50 @@ async function build() {
 
 async function start() {
   assertRequiredEnv(); // refuse to boot without required/safe secrets
-  const app = await build();
-  await app.ready();
 
-  // Connect all Redis clients safely
+  // Redis first: the rate limiter (plugins/index.js) only shares its counters across
+  // instances if Redis is already connected when it registers.
   try {
     if (redis.status === 'wait') await redis.connect();
     if (redisPub.status === 'wait') await redisPub.connect();
     if (redisSub.status === 'wait') await redisSub.connect();
   } catch (err) {
-    app.log.warn(`Redis connection warning: ${err.message}`);
+    if (isProduction) throw new Error(`Redis is required in production: ${err.message}`);
+    console.warn(`Redis connection warning: ${err.message}`);
   }
+
+  const app = await build();
+  await app.ready();
+
+  try { await attachRedisAdapter(); }
+  catch (err) { app.log.warn(`Socket.IO Redis adapter not attached (single-instance only): ${err.message}`); }
 
   // Kafka consumers
   try { await startAllConsumers(); }
-  catch (err) { app.log.warn('Kafka consumers failed (non-fatal in dev):', err.message); }
+  catch (err) { app.log.warn(`Kafka consumers failed (non-fatal in dev): ${err.message}`); }
 
   // BullMQ jobs
   try { await startJobs(); }
-  catch (err) { app.log.warn('BullMQ failed (non-fatal in dev):', err.message); }
+  catch (err) { app.log.warn(`BullMQ failed (non-fatal in dev): ${err.message}`); }
 
   await app.listen({ port: parseInt(env.PORT, 10), host: '0.0.0.0' });
   console.log(`🚀 Server listening on port ${env.PORT}`);
 
-  const shutdown = async (sig) => {
+  let shuttingDown = false;
+  const shutdown = async (sig, exitCode = 0) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.log(`\n[Server] ${sig} — shutting down gracefully...`);
-    await app.close();
+    // Hard stop if something hangs, so the orchestrator can replace the instance.
+    setTimeout(() => process.exit(exitCode || 1), 15_000).unref();
+    await app.close().catch(() => { });
+    await stopAllConsumers().catch(() => { });
+    await disconnectProducer().catch(() => { });
     await redis.quit().catch(() => { });
     await redisPub.quit().catch(() => { });
     await redisSub.quit().catch(() => { });
     await pool.end().catch(() => { });
-    process.exit(0);
+    process.exit(exitCode);
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
@@ -195,9 +235,15 @@ async function start() {
   process.on('unhandledRejection', (err) => {
     console.error('❌ Unhandled Rejection:', err);
   });
+  // State after an uncaught exception is unknown — exit and let the orchestrator restart.
   process.on('uncaughtException', (err) => {
-    console.error('❌ Uncaught Exception:', err);
+    console.error('❌ Uncaught Exception — exiting:', err);
+    shutdown('uncaughtException', 1);
   });
 }
 
-start().catch((err) => { console.error('Fatal startup error:', err); process.exit(1); });
+// Only boot when run directly (node src/server.js) — importing build() for tests/smoke checks
+// must not start listeners, consumers or workers.
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  start().catch((err) => { console.error('Fatal startup error:', err); process.exit(1); });
+}

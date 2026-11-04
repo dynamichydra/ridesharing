@@ -63,6 +63,22 @@ export interface AdjustWalletResult {
   transaction: WalletTransaction;
 }
 
+/** Returned by POST /wallets/me/topup/initiate */
+export interface WalletTopupInitiateResult {
+  gatewayOrderId: string;   // Razorpay order_id or Stripe PaymentIntent id
+  clientSecret?: string;    // Stripe PaymentIntent client_secret (undefined for Razorpay)
+  amountMinor: number;
+  currencyCode: string;
+  gateway: string;
+  paymentAttemptId: string; // internal payments.id for tracking
+}
+
+/** Returned by POST /wallets/me/topup/verify */
+export interface WalletTopupVerifyResult {
+  wallet: Wallet;
+  transaction: WalletTransaction | null;
+}
+
 export interface Pagination {
   currentPage: number;
   itemsPerPage: number;

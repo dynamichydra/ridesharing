@@ -1,5 +1,5 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin, authenticateAny } from '../../middleware/authenticate.js';
+import { authenticateAdmin, authenticateAny, authenticateSuperAdmin } from '../../middleware/authenticate.js';
 import { getFxRate, setFxRate, listFxRates, deleteFxRate, convertMoneyWithRate, createFxQuote } from './fx.service.js';
 
 export async function fxRoutes(app) {
@@ -71,7 +71,7 @@ export async function fxRoutes(app) {
    * POST /api/v1/fx/admin/rates
    * Admin Portal: Add or Update FX Rate
    */
-  app.post('/admin/rates', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/admin/rates', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { baseCurrency, quoteCurrency, rate, provider = 'admin_portal' } = request.body || {};
     if (!baseCurrency || !quoteCurrency || rate == null) {
       return sendError(reply, 'baseCurrency, quoteCurrency, and positive rate are required', 400);
@@ -88,7 +88,7 @@ export async function fxRoutes(app) {
    * DELETE /api/v1/fx/admin/rates/:id
    * Admin Portal: Delete an FX Rate record
    */
-  app.delete('/admin/rates/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.delete('/admin/rates/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await deleteFxRate(request.params.id);
     return sendSuccess(reply, { deleted: true, rate: data });
   });

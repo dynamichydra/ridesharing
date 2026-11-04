@@ -9,6 +9,10 @@ let stripePromise: Promise<Stripe | null> | null = null;
  */
 export function getStripe(publishableKey?: string): Promise<Stripe | null> {
   const key = publishableKey || DM_CORE_CONFIG.STRIPE_PUBLISHABLE_KEY;
+  if (!key) {
+    console.error("Stripe is not configured: no publishable key from the backend or VITE_STRIPE_PUBLISHABLE_KEY");
+    return Promise.resolve(null);
+  }
   if (!stripePromise) {
     stripePromise = loadStripe(key);
   }

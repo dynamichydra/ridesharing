@@ -225,9 +225,10 @@ export function BankDetailsPanel({ ownerType, ownerId }: BankDetailsPanelProps) 
               </div>
             )}
 
-            {!payoutSetup.isReady && (
+            {/* Stripe accounts are approved only by Stripe's account.updated webhook. This mock
+                approval needs the backend's ENABLE_DEV_TOOLS and is never shown in production builds. */}
+            {!payoutSetup.isReady && import.meta.env.DEV && (
               <div className="pt-1">
-                {/* TODO: In production, Stripe accounts are verified automatically via Stripe Connect webhooks (account.updated) */}
                 <Button
                   size="sm"
                   variant="secondary"
@@ -236,9 +237,14 @@ export function BankDetailsPanel({ ownerType, ownerId }: BankDetailsPanelProps) 
                   onClick={handleSimulateStripeApprove}
                 >
                   {isSimulatingStripe ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5 text-primary" />}
-                  Verify & Approve Payout Account
+                  [Dev] Simulate Stripe Approval
                 </Button>
               </div>
+            )}
+            {!payoutSetup.isReady && !import.meta.env.DEV && (
+              <p className="pt-1 text-xs text-muted-foreground">
+                Waiting for the driver to finish Stripe onboarding — the account activates automatically once Stripe verifies it.
+              </p>
             )}
 
             {bankDetails && (

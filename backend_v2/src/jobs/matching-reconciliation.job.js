@@ -1,4 +1,5 @@
 import { Queue, Worker } from 'bullmq';
+import { scheduleRepeating } from './scheduler.js';
 import { redis } from '../config/redis.js';
 import { runMatchingReconciliation } from '../modules/matching/matching-reconciliation.service.js';
 
@@ -6,12 +7,7 @@ const connection = redis;
 export const matchingReconciliationQueue = new Queue('matching-reconciliation', { connection });
 
 export async function scheduleMatchingReconciliation() {
-  await matchingReconciliationQueue.obliterate({ force: true }).catch(() => {});
-  await matchingReconciliationQueue.add(
-    'reconcile-matching',
-    {},
-    { repeat: { every: 60_000 } } // runs every 60s
-  );
+  await scheduleRepeating(matchingReconciliationQueue, 'reconcile-matching', { every: 60_000 }); // every 60s
   console.log('✅ Matching reconciliation job scheduled (every 60s)');
 }
 

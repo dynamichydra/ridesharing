@@ -83,7 +83,9 @@ export async function initiateInstantPayout(driverId, adminId, idempotencyKey) {
     const check = selectEligiblePayout(wallet, payoutAccount, gateway?.supportsPayouts ?? false);
     if (!check.eligible) throw { statusCode: 422, message: check.reason };
 
-    return _executePayout({ driverId, payoutAccount, wallet, gateway, batchId: null });
+    const result = await _executePayout({ driverId, payoutAccount, wallet, gateway, batchId: null });
+    if (result.status === 'skipped') throw { statusCode: 409, message: result.reason };
+    return result;
   });
 }
 
@@ -91,9 +93,22 @@ export async function initiateInstantPayout(driverId, adminId, idempotencyKey) {
 // the snapshot+insert step — released before the external gateway call, same reasoning as
 // refund.service.js's _reserveRefund.
 async function _executePayout({ driverId, payoutAccount, wallet, gateway, batchId }) {
+  const [clearingAccount, walletAccount] = await Promise.all([
+    getOrCreateSystemAccount(`payout_clearing:${payoutAccount.gateway}`, wallet.currencyCode),
+    getOrCreateWalletAccount(wallet.id, wallet.currencyCode),
+  ]);
+
+  // The wallet is debited *inside* the same transaction that holds its row lock and creates the
+  // payout row — before any money leaves. A concurrent payout (double-tap, batch overlapping an
+  // instant payout, two instances) then either waits on the lock and sees a zero balance, or
+  // sees this in-flight payout, so the same balance can never be paid twice.
   const reserved = await db.transaction(async (tx) => {
     const [lockedWallet] = await tx.select().from(wallets).where(eq(wallets.id, wallet.id)).for('update').limit(1);
-    if (!lockedWallet || lockedWallet.balanceMinor <= 0) return null;
+    if (!lockedWallet || lockedWallet.balanceMinor <= 0) return { skipped: 'No positive wallet balance to pay out' };
+
+    const [inFlight] = await tx.select({ id: payouts.id }).from(payouts)
+      .where(and(eq(payouts.driverId, driverId), eq(payouts.status, 'pending'))).limit(1);
+    if (inFlight) return { skipped: 'A payout for this driver is already in progress' };
 
     const [payoutRow] = await tx.insert(payouts).values({
       driverId, batchId, payoutAccountId: payoutAccount.id,
@@ -101,9 +116,23 @@ async function _executePayout({ driverId, payoutAccount, wallet, gateway, batchI
       gateway: payoutAccount.gateway, status: 'pending',
     }).returning();
 
+    await postTransaction({
+      tx,
+      businessType: 'driver_payout',
+      idempotencyKey: `payout_ledger:${payoutRow.id}`,
+      referenceType: 'payout', referenceId: payoutRow.id,
+      entries: [
+        {
+          accountId: walletAccount.id, direction: 'debit', amountMinor: payoutRow.amountMinor, currencyCode: payoutRow.currencyCode,
+          reason: 'driver_payout', description: `Payout ${payoutRow.id}`,
+        },
+        { accountId: clearingAccount.id, direction: 'credit', amountMinor: payoutRow.amountMinor, currencyCode: payoutRow.currencyCode },
+      ],
+    });
+
     return { payoutRow, wallet: lockedWallet };
   });
-  if (!reserved) return { status: 'skipped' };
+  if (reserved.skipped) return { status: 'skipped', reason: reserved.skipped };
 
   const { payoutRow } = reserved;
 
@@ -119,9 +148,23 @@ async function _executePayout({ driverId, payoutAccount, wallet, gateway, batchI
     });
     gatewayPayoutId = result.gatewayPayoutId;
   } catch (err) {
-    // Failure holds the funds, never drops them — the wallet is untouched, so the balance
-    // stays owed and visible for manual review/retry. Never silently swallowed.
+    // Failure never drops funds: the reserved amount goes straight back to the wallet (a
+    // reversing ledger entry, never an edit), so the balance stays owed and visible for
+    // manual review/retry. Never silently swallowed.
     await db.transaction(async (tx) => {
+      await postTransaction({
+        tx,
+        businessType: 'driver_payout_release',
+        idempotencyKey: `payout_release:${payoutRow.id}`,
+        referenceType: 'payout', referenceId: payoutRow.id,
+        entries: [
+          { accountId: clearingAccount.id, direction: 'debit', amountMinor: payoutRow.amountMinor, currencyCode: payoutRow.currencyCode },
+          {
+            accountId: walletAccount.id, direction: 'credit', amountMinor: payoutRow.amountMinor, currencyCode: payoutRow.currencyCode,
+            reason: 'driver_payout_failed', description: `Payout ${payoutRow.id} failed — funds returned`,
+          },
+        ],
+      });
       await tx.update(payouts)
         .set({ status: 'failed', failureReason: err.message || 'Unknown gateway error', updatedAt: new Date() })
         .where(eq(payouts.id, payoutRow.id));
@@ -137,8 +180,8 @@ async function _executePayout({ driverId, payoutAccount, wallet, gateway, batchI
     return { status: 'failed', payoutId: payoutRow.id, amountMinor: payoutRow.amountMinor };
   }
 
-  // The NOTIF_PUSH enqueue is bundled with this status update (rather than after the ledger
-  // post below) because the update is the write it needs to be atomic with — the outbox only
+  // The wallet was already debited at reservation; this only records the gateway's acceptance.
+  // The NOTIF_PUSH enqueue is bundled with this status update because the outbox only
   // guarantees the enqueue commits together with whatever write sits in the same tx.
   await db.transaction(async (tx) => {
     await tx.update(payouts)
@@ -153,23 +196,6 @@ async function _executePayout({ driverId, payoutAccount, wallet, gateway, batchI
         type: 'PAYOUT_COMPLETED',
       },
     });
-  });
-
-  const [clearingAccount, walletAccount] = await Promise.all([
-    getOrCreateSystemAccount(`payout_clearing:${payoutRow.gateway}`, payoutRow.currencyCode),
-    getOrCreateWalletAccount(reserved.wallet.id, payoutRow.currencyCode),
-  ]);
-  await postTransaction({
-    businessType: 'driver_payout',
-    idempotencyKey: `payout_ledger:${payoutRow.id}`,
-    referenceType: 'payout', referenceId: payoutRow.id,
-    entries: [
-      {
-        accountId: walletAccount.id, direction: 'debit', amountMinor: payoutRow.amountMinor, currencyCode: payoutRow.currencyCode,
-        reason: 'driver_payout', description: `Payout ${payoutRow.id}`,
-      },
-      { accountId: clearingAccount.id, direction: 'credit', amountMinor: payoutRow.amountMinor, currencyCode: payoutRow.currencyCode },
-    ],
   });
 
   return { status: 'completed', payoutId: payoutRow.id, amountMinor: payoutRow.amountMinor };

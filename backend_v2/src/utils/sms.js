@@ -1,4 +1,4 @@
-import { env, isTwilioConfigured } from '../config/env.js';
+import { env, isTwilioConfigured, isProduction } from '../config/env.js';
 
 let _client = null;
 async function getClient() {
@@ -13,6 +13,8 @@ async function getClient() {
 // "Message" (SMS) channel to call instead of just the OTP-specific one-off.
 export async function sendSms(phone, body) {
   if (!isTwilioConfigured) {
+    // Never print message bodies in production — they carry login codes.
+    if (isProduction) throw { statusCode: 503, message: 'SMS provider is not configured' };
     console.log(`[SMS DEV] → ${phone}: ${body}`);
     return;
   }

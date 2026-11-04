@@ -1,5 +1,5 @@
 import { sendSuccess, sendList, sendError, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin, authenticateRider } from '../../middleware/authenticate.js';
+import { authenticateAdmin, authenticateRider, authenticateSuperAdmin } from '../../middleware/authenticate.js';
 import * as refundService from './refund.service.js';
 
 export async function refundRoutes(app) {
@@ -25,13 +25,13 @@ export async function refundRoutes(app) {
   // ── Admin ─────────────────────────────────────────────────────────────────────
 
   // PATCH /api/v1/refunds/:id/approve — reviews + executes a rider's refund request
-  app.patch('/:id/approve', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/:id/approve', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await refundService.approveRefundRequest(request.params.id, request.user.id);
     return sendSuccess(reply, data);
   });
 
   // PATCH /api/v1/refunds/:id/reject  { rejectionReason }
-  app.patch('/:id/reject', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/:id/reject', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await refundService.rejectRefundRequest(request.params.id, request.user.id, request.body.rejectionReason);
     return sendSuccess(reply, data);
   });
@@ -40,7 +40,7 @@ export async function refundRoutes(app) {
   // Admin-initiated, instant — bypasses the rider request/approval flow above (e.g. a
   // goodwill refund an admin decides on unprompted). Requires an Idempotency-Key header so a
   // retried/double-submitted request returns the original result instead of refunding twice.
-  app.post('/', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { paymentId, amountMinor, reason } = request.body;
     if (!paymentId || !amountMinor) return sendError(reply, 'paymentId and amountMinor are required');
     const idempotencyKey = request.headers['idempotency-key'];

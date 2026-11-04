@@ -1,5 +1,5 @@
 import { sendSuccess, sendError, sendList, parsePagination } from '../../utils/response.js';
-import { authenticateAdmin } from '../../middleware/authenticate.js';
+import { authenticateAdmin, authenticateSuperAdmin } from '../../middleware/authenticate.js';
 import * as geoService from './geo.service.js';
 import * as cityTypeService from './city-type.service.js';
 import * as serviceAreaService from './service-area.service.js';
@@ -57,29 +57,29 @@ export async function geoRoutes(app) {
     return sendSuccess(reply, data);
   });
 
-  app.post('/admin/city-types', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/admin/city-types', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { code, name } = request.body;
     if (!code || !name) return sendError(reply, 'code and name are required');
     const data = await cityTypeService.createCityType(request.body);
     return sendSuccess(reply, data, 201);
   });
 
-  app.post('/admin/city-types/seed-defaults', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/admin/city-types/seed-defaults', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await cityTypeService.seedDefaultCityTypesIfEmpty();
     return sendSuccess(reply, data);
   });
 
-  app.patch('/admin/city-types/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/city-types/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await cityTypeService.updateCityType(request.params.id, request.body);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/admin/city-types/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/city-types/:id/enable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await cityTypeService.setCityTypeActive(request.params.id, true);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/admin/city-types/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/city-types/:id/disable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await cityTypeService.setCityTypeActive(request.params.id, false);
     return sendSuccess(reply, data);
   });
@@ -91,23 +91,23 @@ export async function geoRoutes(app) {
     return sendSuccess(reply, data);
   });
 
-  app.post('/admin/city-types/:id/fares', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/admin/city-types/:id/fares', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await cityTypeService.createCityTypeFare(request.params.id, request.body);
     return sendSuccess(reply, data, 201);
   });
 
-  app.put('/admin/city-types/:id/fares/:vehicleTypeId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.put('/admin/city-types/:id/fares/:vehicleTypeId', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { id: cityTypeId, vehicleTypeId } = request.params;
     const data = await cityTypeService.upsertCityTypeFare(cityTypeId, vehicleTypeId, request.body);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/admin/city-types/fares/:fareId/activate', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/city-types/fares/:fareId/activate', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await cityTypeService.activateCityTypeFare(request.params.fareId);
     return sendSuccess(reply, data);
   });
 
-  app.delete('/admin/city-types/fares/:fareId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.delete('/admin/city-types/fares/:fareId', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await cityTypeService.deleteCityTypeFare(request.params.fareId);
     return sendSuccess(reply, data);
   });
@@ -120,7 +120,7 @@ export async function geoRoutes(app) {
     return sendList(reply, rows, pagination);
   });
 
-  app.post('/admin/countries', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/admin/countries', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { name, isoCode, dialCode, currencyCode } = request.body;
     if (!name || !isoCode || !dialCode || !currencyCode) {
       return sendError(reply, 'name, isoCode, dialCode and currencyCode are required');
@@ -129,17 +129,17 @@ export async function geoRoutes(app) {
     return sendSuccess(reply, data, 201);
   });
 
-  app.patch('/admin/countries/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/countries/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await geoService.updateCountry(request.params.id, request.body);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/admin/countries/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/countries/:id/enable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await geoService.setCountryActive(request.params.id, true);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/admin/countries/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/countries/:id/disable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await geoService.setCountryActive(request.params.id, false);
     return sendSuccess(reply, data);
   });
@@ -152,24 +152,24 @@ export async function geoRoutes(app) {
     return sendList(reply, rows, pagination);
   });
 
-  app.post('/admin/states', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/admin/states', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { countryId, name } = request.body;
     if (!countryId || !name) return sendError(reply, 'countryId and name are required');
     const data = await geoService.createState(request.body);
     return sendSuccess(reply, data, 201);
   });
 
-  app.patch('/admin/states/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/states/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await geoService.updateState(request.params.id, request.body);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/admin/states/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/states/:id/enable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await geoService.setStateActive(request.params.id, true);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/admin/states/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/states/:id/disable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await geoService.setStateActive(request.params.id, false);
     return sendSuccess(reply, data);
   });
@@ -195,29 +195,29 @@ export async function geoRoutes(app) {
     return sendSuccess(reply, data);
   });
 
-  app.post('/admin/cities', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/admin/cities', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { stateId, countryId, name } = request.body;
     if (!stateId || !countryId || !name) return sendError(reply, 'stateId, countryId and name are required');
     const data = await geoService.createCity(request.body, request.user.id);
     return sendSuccess(reply, data, 201);
   });
 
-  app.patch('/admin/cities/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/cities/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await geoService.updateCity(request.params.id, request.body);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/admin/cities/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/cities/:id/enable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await geoService.setCityActive(request.params.id, true);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/admin/cities/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/cities/:id/disable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await geoService.setCityActive(request.params.id, false);
     return sendSuccess(reply, data);
   });
 
-  app.delete('/admin/cities/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.delete('/admin/cities/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await geoService.deleteCity(request.params.id);
     return sendSuccess(reply, data);
   });
@@ -239,29 +239,29 @@ export async function geoRoutes(app) {
     return sendSuccess(reply, data);
   });
 
-  app.post('/admin/currencies', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/admin/currencies', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const { code, name, symbol } = request.body;
     if (!code || !name || !symbol) return sendError(reply, 'code, name and symbol are required');
     const data = await currencyService.createCurrency(request.body);
     return sendSuccess(reply, data, 201);
   });
 
-  app.patch('/admin/currencies/:id', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/currencies/:id', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await currencyService.updateCurrency(request.params.id, request.body);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/admin/currencies/:id/enable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/currencies/:id/enable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await currencyService.setCurrencyActive(request.params.id, true);
     return sendSuccess(reply, data);
   });
 
-  app.patch('/admin/currencies/:id/disable', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.patch('/admin/currencies/:id/disable', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await currencyService.setCurrencyActive(request.params.id, false);
     return sendSuccess(reply, data);
   });
 
-  app.post('/admin/currencies/seed-defaults', { preHandler: [authenticateAdmin] }, async (request, reply) => {
+  app.post('/admin/currencies/seed-defaults', { preHandler: [authenticateSuperAdmin] }, async (request, reply) => {
     const data = await currencyService.seedDefaultCurrencies();
     return sendSuccess(reply, data);
   });
