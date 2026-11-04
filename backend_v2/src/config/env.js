@@ -1,50 +1,59 @@
+// Secrets and credentials come ONLY from the environment (.env locally, the host's secret
+// store in production) — never add a literal fallback here: this file is committed to git.
+// Non-secret defaults point at the local docker-compose services. assertRequiredEnv() (run at
+// server start) refuses to boot without the secrets the app can't safely run without.
 export const env = {
   PORT: process.env.PORT || '3000',
   NODE_ENV: process.env.NODE_ENV || 'production',
   API_VERSION: process.env.API_VERSION || 'v1',
 
   // Database Configuration
-  DB_HOST: process.env.DB_HOST || 'pg-eca863e-courier-app.j.aivencloud.com',
-  DB_PORT: process.env.DB_PORT || '18641',
-  DB_NAME: process.env.DB_NAME || 'defaultdb',
-  DB_USER: process.env.DB_USER || 'avnadmin',
-  DB_PASSWORD: process.env.DB_PASSWORD || 'AVNS_6vmELQHLWotgsatBTt8',
-  DB_SSL: process.env.DB_SSL || 'true',
+  DB_HOST: process.env.DB_HOST || undefined,
+  DB_PORT: process.env.DB_PORT || '5432',
+  DB_NAME: process.env.DB_NAME || undefined,
+  DB_USER: process.env.DB_USER || undefined,
+  DB_PASSWORD: process.env.DB_PASSWORD || undefined,
+  DB_SSL: process.env.DB_SSL || 'false',
 
-  // Redis & Kafka Configuration
-  REDIS_URL: process.env.REDIS_URL || 'redis://193.203.163.97:6379',
-  KAFKA_BROKERS: process.env.KAFKA_BROKERS || '193.203.163.97:9092',
+  // Redis & Kafka Configuration (defaults = local docker-compose)
+  REDIS_URL: process.env.REDIS_URL || 'redis://localhost:6379',
+  KAFKA_BROKERS: process.env.KAFKA_BROKERS || 'localhost:9092',
   KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID || 'rideshare-api',
   KAFKA_GROUP_ID: process.env.KAFKA_GROUP_ID || 'rideshare-group',
 
-  // JWT Configuration
-  JWT_SECRET: process.env.JWT_SECRET || 'ce017f96b5713a0e37dec3c476883bae09a2e0bf422683a39e6876e663103f296c5209c0afec18e28074fe1dc598a0867173564e94111f30beb337da4add3e1d',
-  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'ce017f96b5713a0e37dec3c476883bae09a2e0bf422683a39e6876e663103f296c5209c0afec18e28074fe1dc598a0867173564e94111f30beb337da4add3e1d',
+  // JWT Configuration — the two secrets must differ, or a refresh token verifies as an
+  // access token (see assertRequiredEnv).
+  JWT_SECRET: process.env.JWT_SECRET || undefined,
+  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || undefined,
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
 
-  // Integrations & API Keys
+  // Integrations & API Keys — unset means the integration runs in its dev/mock mode
+  // (see the is*Configured flags below).
   TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || undefined,
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || undefined,
   TWILIO_PHONE_NUMBER: process.env.TWILIO_PHONE_NUMBER || undefined,
-  GOOGLE_MAPS_KEY: process.env.GOOGLE_MAPS_KEY || 'AIzaSyCa9c3EMWliRd2AUcZA-LpJF7VwhEjsd7g',
-  RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || 'rzp_test_TJFQ9bAdEGvc8K',
-  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || '7izpBh3Ax4jfCqxFdWQfhexE',
+  // 'off' disables the rider India/Canada region lock (GPS + IP + phone-country checks) —
+  // for simulators/emulators whose default location is outside both countries. Never in prod.
+  RIDER_REGION_ENFORCEMENT: process.env.RIDER_REGION_ENFORCEMENT || 'on',
+  GOOGLE_MAPS_KEY: process.env.GOOGLE_MAPS_KEY || undefined,
+  RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || undefined,
+  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || undefined,
   RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || undefined,
-  RAZORPAYX_ACCOUNT_NUMBER: process.env.RAZORPAYX_ACCOUNT_NUMBER || '233434343434',
-  BANK_DETAILS_ENC_KEY: process.env.BANK_DETAILS_ENC_KEY || '0123456789abcdef0123456789abcdef',
+  RAZORPAYX_ACCOUNT_NUMBER: process.env.RAZORPAYX_ACCOUNT_NUMBER || undefined,
+  BANK_DETAILS_ENC_KEY: process.env.BANK_DETAILS_ENC_KEY || undefined,
   SMTP_HOST: process.env.SMTP_HOST || undefined,
   SMTP_PORT: process.env.SMTP_PORT || undefined,
   SMTP_USER: process.env.SMTP_USER || undefined,
   SMTP_PASSWORD: process.env.SMTP_PASSWORD || undefined,
   EMAIL_FROM: process.env.EMAIL_FROM || undefined,
-  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || 'sk_test_51RbecsR1ylYVNeuXxpvAjesQJ0XMharciNLwKpqS45GdOxPYk401z8Qo6ONK5aRTSvCwrAQn2XeF6lvozkQjWQai00DpVJV1ZS',
-  STRIPE_PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY || 'pk_test_51RbecsR1ylYVNeuXLVleTgOqCCYrBDFxv3qxOSUaGXNrESLbUuZgzmE7SKy63vPSgBEEeIJuFVFQNIFkPmIwe99X00LDoRXsSf',
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || undefined,
+  STRIPE_PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY || undefined,
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || undefined,
   STRIPE_CONNECT_WEBHOOK_SECRET: process.env.STRIPE_CONNECT_WEBHOOK_SECRET || undefined,
-  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'ryva-ride',
-  FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '-----BEGIN PRIVATE KEY-----\nMIIEugIBADANBgkqhkiG9w0BAQEFAASCBKQwggSgAgEAAoIBAQDTVOfL8f4NZNZb\nnhfTTZKSs94sMAlFjvAMwCV/ZVuzAodM6fnU8Q3wqBl55Ta+KoefEmPV5ieEms3V\nfs4k12kITLSCTIee8pgk4bwvP1qnG6UPxuxGfXwY7qfPtosIEryWd+s3oJ+DOQ4j\nFPylgN7d3YCQLTVWVUQOrCsvwSkJuYiHRXDWXO/suBk6OfqyuVHOVOEmey6shOk1\ntJlpG0BK9ysdmrJMeB0pihm30/TxQjvEIrfrHWabb8tgeHge8kQKTJjDfwPA5diT\nsZANc9rM4IWb8qDVKnUDXz1PevW2UlmCH2RM2KzgM6RLtrrJDNZ0ZVMj+lj5pvoz\nOPyWkh1BAgMBAAECgf9GKurLzI2N5O1HfjZq8la4XwBlq41oiw0pLqNEqWLJDQ3f\ne9B345G9VhMfZfvHKFffeTusyb5VSREO0gugL+Wv28gTe1WMcQATPuA8z8xJr+Qe\nWO4aeY+6t4MAdJu1EoOLckWnMq3D5C3NeCpqyV82S1VkiZ4sDCOMu52bPYdispyC\n77lWJbXiDJD6kTVIn3YvSUYl5FH5CioErkk4se24JWSz6Xy11YK3Cnpq+BMfB0Y+\n6IuEw4fs/kX5YJGap4imH+Yb6hK7Ov+Z7qyi6GVwaWiyegCcnTgSCeN1rEObnUq0\nR43ayIcQJ1jHUBX/Bm49qgQFLJtKVe/ACutRPWUCgYEA/zDJAiGcX0gFp0fy/888\nQayEWESuHEitNLOFRHr8i64xcXyzrXO71hh9sHshCFjNKBc61vqrbVrZxhKn8f3R\n17CecGsnNC2AGT6DkaWUVSoXivdUwsKN2r1F4g5y19fayOJ3/BGFSZW1Obgvvzzt\nqNzEWjd3wGeTuNXYSgqOhiMCgYEA1ACBvzOiTksRd+LQ9VBrwmfYMDunhT6eEbLX\nEvc2WQLyj+tG0si1lrsO10ppKI8ci1IAmmH2V41QJogXK9UpCw9qP7xLNwr0HTRC\nPvOsOUwFrAJTemsbmzlGqA8nEPnwVnDBvCg9J4StXru0kTRyONaXKhAUSN2LCuT4\nSA0Ke0sCgYA9pLQ5npLedVBgS0IIxy+gEaNaiySf0nJ8k4zysN7GgwqQhnYExTsv\niXT7J5MgKAtOzuW4vo6geNy4OxN0okKJXrG3KDstIHycHHy9twiw1d0gBYTlEwgf\nOa9i3uig+RRxiDtBmZ3f25kOW061XGtwafvIazOzN5H4iTeZExnAjwKBgDT6H3Ih\nPAjml2nnAyKaQyNkgdCjx5vzZtqzXy19G1ao9uZh++PGhiIxgmboUFjzUkW6ay4p\nFr8QMBxA29F3RfdelcVxjzYlBZWaroc+qyXySmSOfD/WLiLe8Dok9zU10Ao5yR/0\nyjtq20wWCexTN8veTA4V0IvY2NsTFrwijiD7AoGABj309HFOWQbCBvpLrREKvWue\nbC5spI4RkWONauFWYrtYpQPiNCU5Hl62USwC+dhWxjNo3fybExhPFaiMTo5557kc\nuMh0cATXXFFjm7lwi4HBz8Y9FsZUQoYGkxkZx0TGhNXAPEVvVYrhcnY6hb9CqW0+\notKa4OJsslAA0mYuRiU=\n-----END PRIVATE KEY-----\n',
-  FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || 'firebase-adminsdk-fbsvc@ryva-ride.iam.gserviceaccount.com',
+  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || undefined,
+  FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || undefined,
+  FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || undefined,
   S3_ENDPOINT: process.env.S3_ENDPOINT || undefined,
   S3_ACCESS_KEY: process.env.S3_ACCESS_KEY || undefined,
   S3_SECRET_KEY: process.env.S3_SECRET_KEY || undefined,
@@ -71,4 +80,39 @@ export const isFirebaseConfigured = !!(
   env.FIREBASE_CLIENT_EMAIL &&
   env.FIREBASE_CLIENT_EMAIL !== 'your_client_email'
 );
+
+/**
+ * Fails fast at server start instead of running with missing or unsafe secrets. Not run on
+ * import, so unit tests can load modules without a full environment.
+ */
+export function assertRequiredEnv() {
+  const isProd = env.NODE_ENV === 'production';
+  const missing = ['DB_HOST', 'DB_NAME', 'DB_USER', 'JWT_SECRET', 'JWT_REFRESH_SECRET']
+    .filter((k) => !env[k]);
+  if (isProd) {
+    for (const k of ['DB_PASSWORD', 'BANK_DETAILS_ENC_KEY']) if (!env[k]) missing.push(k);
+  }
+  if (missing.length) {
+    throw new Error(`Missing required environment variables: ${missing.join(', ')} (see .env.example)`);
+  }
+
+  const problems = [];
+  if (env.JWT_SECRET === env.JWT_REFRESH_SECRET) {
+    problems.push('JWT_SECRET and JWT_REFRESH_SECRET are identical — refresh tokens would be accepted as access tokens');
+  }
+  if (env.JWT_SECRET.length < 32 || env.JWT_REFRESH_SECRET.length < 32) {
+    problems.push('JWT secrets must be at least 32 characters');
+  }
+  if (env.BANK_DETAILS_ENC_KEY && /^0123456789abcdef/i.test(env.BANK_DETAILS_ENC_KEY)) {
+    problems.push('BANK_DETAILS_ENC_KEY is the documented placeholder');
+  }
+  if (isProd && String(env.RIDER_REGION_ENFORCEMENT).toLowerCase() === 'off') {
+    problems.push('RIDER_REGION_ENFORCEMENT=off is not allowed in production');
+  }
+  if (problems.length) {
+    const msg = `Unsafe configuration:\n  - ${problems.join('\n  - ')}`;
+    if (isProd) throw new Error(msg);
+    console.warn(`[env] ${msg}\n  (allowed outside production — fix before deploying)`);
+  }
+}
 

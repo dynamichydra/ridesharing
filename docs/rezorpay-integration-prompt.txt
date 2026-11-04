@@ -2,8 +2,8 @@ Integrate Razorpay Standard Web Checkout into this codebase.
 
 === CREDENTIALS ===
 
-RAZORPAY_KEY_ID: rzp_test_TJFQ9bAdEGvc8K
-RAZORPAY_KEY_SECRET: 7izpBh3Ax4jfCqxFdWQfhexE
+RAZORPAY_KEY_ID: rzp_test_xxxxxxxxxxxxxx
+RAZORPAY_KEY_SECRET: <your_razorpay_key_secret>
 
 === TASK ===
 
@@ -36,8 +36,8 @@ STEP 3: BACKEND - Verify Signature
 === ENVIRONMENT SETUP ===
 
 Create .env file:
-RAZORPAY_KEY_ID=rzp_test_TJFQ9bAdEGvc8K
-RAZORPAY_KEY_SECRET=7izpBh3Ax4jfCqxFdWQfhexE
+RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxxxx
+RAZORPAY_KEY_SECRET=<your_razorpay_key_secret>
 
 Frontend framework prefixes (KEY_ID only, never KEY_SECRET):
 - Next.js: NEXT_PUBLIC_RAZORPAY_KEY_ID
