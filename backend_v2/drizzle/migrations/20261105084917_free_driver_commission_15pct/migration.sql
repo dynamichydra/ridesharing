@@ -1,0 +1,1 @@
+ALTER TABLE "city_type_fares" ALTER COLUMN "non_subscriber_commission_rate" SET DEFAULT '0.1500';

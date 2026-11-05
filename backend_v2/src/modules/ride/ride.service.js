@@ -44,6 +44,7 @@ import { resolveRideCommission } from '../ride-payment/ride-payment.service.js';
 
 import { toPublicDriver } from '../../utils/public-dto.js';
 import { finalizeTripDistance } from '../trip-gps/finalize-trip.job.js';
+import { DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE, DEFAULT_SUBSCRIBER_COMMISSION_RATE, defaultCommissionRate } from '../commission/commission-defaults.js';
 
 // Minimum time a driver must wait at pickup before declaring a rider no-show.
 const NO_SHOW_MIN_WAIT_SEC = parseInt(process.env.NO_SHOW_MIN_WAIT_SEC || '300', 10);
@@ -144,6 +145,14 @@ export async function requestRide({
   if (dropZone?.type === 'restricted') {
     throw { statusCode: 400, message: 'Drop-off is in a restricted geofenced area' };
   }
+
+  // Riders book only inside their account's country (pickup and drop-off).
+  const { assertRideWithinAccountCountry } = await import('../rider/rider-ride-country.js');
+  await assertRideWithinAccountCountry(riderId, {
+    pickupLat, pickupLng, dropLat, dropLng,
+    pickupCountryId: pickupCheck.city?.countryId ?? null,
+    dropCountryId: dropCheck.city?.countryId ?? null,
+  });
 
   // Fare snapshot / Quote resolution
   let fareData;
@@ -1096,7 +1105,7 @@ export async function completeRide(rideId, driverId) {
       console.error('[Ride] resolveRideCommission failed:', err.message);
     }
 
-    platformCommissionMinor = commission?.commissionMinor ?? Math.round(grossFareMinor * (commission?.isSubscriber ? 0.05 : 0.2));
+    platformCommissionMinor = commission?.commissionMinor ?? Math.round(grossFareMinor * defaultCommissionRate(commission?.isSubscriber));
     driverEarningsMinor = commission?.driverEarningsMinor ?? commission?.driverEarningMinor ?? Math.max(0, grossFareMinor - platformCommissionMinor);
 
     await tx.insert(driverEarnings).values({

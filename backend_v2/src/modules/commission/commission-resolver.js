@@ -5,6 +5,7 @@ import {
   cityTypeFares,
   cities,
 } from '../../../drizzle/schema/index.js';
+import { DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE, DEFAULT_SUBSCRIBER_COMMISSION_RATE, defaultCommissionRate } from './commission-defaults.js';
 
 /**
  * Deterministic Commission Rule Resolver.
@@ -143,8 +144,8 @@ export async function resolveDeterministicCommissionRule({
         commissionBase: 'fare_after_booking_fee',
         bookingFeeMinor: Number(cityTypeFare.bookingFeeMinor || 0),
         platformFeeMinor: Number(cityTypeFare.platformFeeMinor || 0),
-        subscriberRate: String(cityTypeFare.subscriberCommissionRate || '0.0500'),
-        nonSubscriberRate: String(cityTypeFare.nonSubscriberCommissionRate || '0.2000'),
+        subscriberRate: String(cityTypeFare.subscriberCommissionRate || DEFAULT_SUBSCRIBER_COMMISSION_RATE),
+        nonSubscriberRate: String(cityTypeFare.nonSubscriberCommissionRate || DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE),
         minCommissionMinor: Number(cityTypeFare.minCommissionMinor || 0),
         maxCommissionMinor: cityTypeFare.maxCommissionMinor != null ? Number(cityTypeFare.maxCommissionMinor) : null,
         priority: 10,
@@ -269,8 +270,8 @@ export async function resolveDeterministicCommissionRule({
     commissionBase: 'fare_after_booking_fee',
     bookingFeeMinor: 0,
     platformFeeMinor: 0,
-    subscriberRate: '0.0500',
-    nonSubscriberRate: '0.2000',
+    subscriberRate: DEFAULT_SUBSCRIBER_COMMISSION_RATE,
+    nonSubscriberRate: DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE,
     minCommissionMinor: 0,
     maxCommissionMinor: null,
     priority: 1,
@@ -290,8 +291,8 @@ function formatResolvedRule(rule, resolutionTier) {
     commissionBase: rule.commissionBase || 'fare_after_booking_fee',
     bookingFeeMinor: Number(rule.bookingFeeMinor || 0),
     platformFeeMinor: Number(rule.platformFeeMinor || 0),
-    subscriberRate: String(rule.subscriberRate || '0.0500'),
-    nonSubscriberRate: String(rule.nonSubscriberRate || '0.2000'),
+    subscriberRate: String(rule.subscriberRate || DEFAULT_SUBSCRIBER_COMMISSION_RATE),
+    nonSubscriberRate: String(rule.nonSubscriberRate || DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE),
     minCommissionMinor: Number(rule.minCommissionMinor || 0),
     maxCommissionMinor: rule.maxCommissionMinor != null ? Number(rule.maxCommissionMinor) : null,
     priority: Number(rule.priority || 1),

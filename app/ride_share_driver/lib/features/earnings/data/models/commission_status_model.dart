@@ -42,6 +42,11 @@ class CommissionStatusModel {
   final double standardCommissionRate;
   final String standardCommissionPercentage;
   final String commissionSavingsPercentage;
+
+  /// Rate this driver's city charges with an active plan (the subscription is optional —
+  /// free drivers pay [standardCommissionRate]).
+  final double subscriberCommissionRate;
+  final String subscriberCommissionPercentage;
   final int bookingFeeMinor;
   final bool bookingFeeWaived;
   final int priorityMatchingBonus;
@@ -59,6 +64,8 @@ class CommissionStatusModel {
     required this.standardCommissionRate,
     required this.standardCommissionPercentage,
     required this.commissionSavingsPercentage,
+    this.subscriberCommissionRate = 0.05,
+    this.subscriberCommissionPercentage = '5%',
     required this.bookingFeeMinor,
     required this.bookingFeeWaived,
     required this.priorityMatchingBonus,
@@ -87,11 +94,14 @@ class CommissionStatusModel {
       activePlan: json['activePlan'] != null && json['activePlan'] is Map<String, dynamic>
           ? ActivePlanSummary.fromJson(json['activePlan'] as Map<String, dynamic>)
           : null,
-      effectiveCommissionRate: _parseDouble(json['effectiveCommissionRate'], 0.20),
-      effectiveCommissionPercentage: json['effectiveCommissionPercentage']?.toString() ?? '20%',
-      standardCommissionRate: _parseDouble(json['standardCommissionRate'], 0.20),
-      standardCommissionPercentage: json['standardCommissionPercentage']?.toString() ?? '20%',
+      // Fallbacks mirror the backend defaults (commission-defaults.js): 15% free, 5% with a plan.
+      effectiveCommissionRate: _parseDouble(json['effectiveCommissionRate'], 0.15),
+      effectiveCommissionPercentage: json['effectiveCommissionPercentage']?.toString() ?? '15%',
+      standardCommissionRate: _parseDouble(json['standardCommissionRate'], 0.15),
+      standardCommissionPercentage: json['standardCommissionPercentage']?.toString() ?? '15%',
       commissionSavingsPercentage: json['commissionSavingsPercentage']?.toString() ?? '0%',
+      subscriberCommissionRate: _parseDouble(json['subscriberCommissionRate'], 0.05),
+      subscriberCommissionPercentage: json['subscriberCommissionPercentage']?.toString() ?? '5%',
       bookingFeeMinor: _parseInt(json['bookingFeeMinor']),
       bookingFeeWaived: json['bookingFeeWaived'] == true,
       priorityMatchingBonus: _parseInt(json['priorityMatchingBonus']),
@@ -107,10 +117,10 @@ class CommissionStatusModel {
       subscriptionStatus: 'inactive',
       isSubscriber: false,
       activePlan: null,
-      effectiveCommissionRate: 0.20,
-      effectiveCommissionPercentage: '20%',
-      standardCommissionRate: 0.20,
-      standardCommissionPercentage: '20%',
+      effectiveCommissionRate: 0.15,
+      effectiveCommissionPercentage: '15%',
+      standardCommissionRate: 0.15,
+      standardCommissionPercentage: '15%',
       commissionSavingsPercentage: '0%',
       bookingFeeMinor: 0,
       bookingFeeWaived: false,

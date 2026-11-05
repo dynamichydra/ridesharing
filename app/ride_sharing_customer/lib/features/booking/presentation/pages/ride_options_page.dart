@@ -127,6 +127,83 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
     }
   }
 
+  void _showErrorSnackBar(String message, {bool isLocation = false}) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        backgroundColor: const Color(0xFFDC2626),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 4),
+        content: Row(
+          children: [
+            Icon(isLocation ? Icons.wrong_location_rounded : Icons.error_outline_rounded, color: Colors.white),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOutsideCountryView(String message) {
+    final countryName =
+        sl<RiderSessionService>().cached?.countryName ?? (_profile.countryCode == 'CA' ? 'Canada' : 'India');
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: const Color(0xFFDC2626).withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.wrong_location_rounded, color: Color(0xFFDC2626), size: 40),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Rides only within $countryName',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF021B47)),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: Color(0xFF8A94A6), height: 1.4),
+            ),
+            const SizedBox(height: 28),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: () {
+                  context.read<BookingBloc>().add(ClearBooking());
+                  context.pop();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF009048),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                ),
+                child: const Text('Change location', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _removeSavedCard(String id) async {
     try {
       await sl<SavedPaymentMethodsService>().remove(id);
@@ -850,7 +927,7 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
               setState(() {
                 _isBooking = false;
               });
-              CustomToast.show(context, state.message);
+              _showErrorSnackBar(state.message, isLocation: state.isOutsideAccountCountry);
             }
           },
           builder: (context, state) {
@@ -862,7 +939,14 @@ class _RideOptionsPageState extends State<RideOptionsPage> {
               return const LoadingView();
             }
 
-            if (state is BookingError ||
+            // Pickup/drop-off outside the rider's account country — refused by the server.
+            if (state is BookingError && state.isOutsideAccountCountry) {
+              return _buildOutsideCountryView(state.message);
+            }
+
+            // Other errors keep already-loaded options on screen (the snackbar explains);
+            // only a failure with nothing to show replaces the page.
+            if ((state is BookingError && effectiveState == null) ||
                 (effectiveState == null && state is! BookingLoading)) {
               final errorMsg = state is BookingError
                   ? state.message

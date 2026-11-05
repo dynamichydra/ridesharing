@@ -716,34 +716,40 @@ class _WalletPageState extends State<WalletPage> {
                         ],
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                isNegative ? 'Commission Due (Negative)' : 'Available Balance',
-                                style: const TextStyle(fontSize: 13, color: Colors.white70, fontWeight: FontWeight.w500),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                '${isNegative ? "-$currencySymbol" : currencySymbol}${balance.abs().toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  letterSpacing: -0.5,
+                          // Expanded: long text wraps instead of pushing the wallet icon off the
+                          // card (was a ~6px RenderFlex overflow).
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isNegative ? 'Commission due' : 'Available Balance',
+                                  style: const TextStyle(fontSize: 13, color: Colors.white70, fontWeight: FontWeight.w500),
                                 ),
-                              ),
-                              if (isNegative) ...[
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'Pay now with a saved card, or settle via ride earnings',
-                                  style: TextStyle(fontSize: 11, color: Colors.white70),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '${isNegative ? "-$currencySymbol" : currencySymbol}${balance.abs().toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    letterSpacing: -0.5,
+                                  ),
                                 ),
+                                if (isNegative) ...[
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'Pay now, or it\'s settled from your next ride earnings',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 11, color: Colors.white70, height: 1.3),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
+                          const SizedBox(width: 12),
                           Container(
                             width: 54,
                             height: 54,

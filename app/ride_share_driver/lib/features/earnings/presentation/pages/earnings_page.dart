@@ -836,8 +836,8 @@ class _EarningsPageState extends State<EarningsPage> with SingleTickerProviderSt
   // ── Commission Structure & Savings Breakdown Card ──────────────────────────
   Widget _buildCommissionBreakdownCard(CommissionStatusModel? status) {
     final isSubscriber = status?.isSubscriber ?? false;
-    final effectiveRate = status?.effectiveCommissionPercentage ?? '20%';
-    final standardRate = status?.standardCommissionPercentage ?? '20%';
+    final effectiveRate = status?.effectiveCommissionPercentage ?? '15%';
+    final standardRate = status?.standardCommissionPercentage ?? '15%';
     final savingsPct = status?.commissionSavingsPercentage ?? '0%';
     final hasSavings = status?.hasSavings ?? false;
     final ruleName = status?.ruleName ?? 'Default Platform Commission';

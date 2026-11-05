@@ -7,6 +7,7 @@ import { getAvailableVehicleTypeIds } from '../matching/matching.service.js';
 import * as fareRulesService from './fare-rules.service.js';
 import * as taxRulesService from './tax-rules.service.js';
 import { isLocationInServiceArea, detectZone } from '../zone/zone.service.js';
+import { assertRideWithinAccountCountry } from '../rider/rider-ride-country.js';
 
 export async function fareRoutes(app) {
 
@@ -100,6 +101,18 @@ export async function fareRoutes(app) {
     const dropZone = dropCheck.zone;
     if (dropZone?.type === 'restricted') {
       return sendError(reply, 'Drop-off is in a restricted geofenced area', 400, 'RESTRICTED_ZONE');
+    }
+
+    // Riders only see options for rides inside their account's country (same rule as booking).
+    try {
+      await assertRideWithinAccountCountry(request.user.id, {
+        pickupLat: lat, pickupLng: lng, dropLat, dropLng,
+        pickupCountryId: pickupCheck.city?.countryId ?? null,
+        dropCountryId: dropCheck.city?.countryId ?? null,
+      });
+    } catch (err) {
+      if (!err?.code) throw err;
+      return reply.status(err.statusCode || 400).send({ SUCCESS: false, MESSAGE: err.message, CODE: err.code });
     }
 
     const [activeTypes, availableIds] = await Promise.all([

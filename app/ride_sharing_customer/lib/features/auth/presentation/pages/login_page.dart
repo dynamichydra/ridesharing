@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/region/region_guard.dart';
+import '../../../../core/services/storage_service.dart';
 import '../../../../core/widgets/custom_toast.dart';
 import '../../../../injection_container.dart';
 import '../bloc/auth_bloc.dart';
@@ -23,6 +24,10 @@ class _LoginPageState extends State<LoginPage> {
   RegionResult? _region;
   bool _isCheckingLocation = true;
 
+  /// Set when the location couldn't be verified: the rider can still try to log in with the
+  /// last known country's code, and the server decides at OTP time (region token + phone).
+  String? _locationWarning;
+
   @override
   void initState() {
     super.initState();
@@ -36,11 +41,23 @@ class _LoginPageState extends State<LoginPage> {
     final result = (current != null && current.allowed) ? current : await guard.verify();
     if (!mounted) return;
     if (!result.allowed) {
-      context.go('/region-unavailable', extra: result);
+      // Don't bounce back to the block screen — let the rider reach login. The backend still
+      // refuses OTP for a number that doesn't match a verified location.
+      final iso = sl<StorageService>().getCountryCode().toUpperCase() == 'CA' ? 'CA' : 'IN';
+      setState(() {
+        _region = RegionResult.allowed(
+          countryCode: iso,
+          countryName: iso == 'CA' ? 'Canada' : 'India',
+          dialCode: iso == 'CA' ? '+1' : '+91',
+        );
+        _locationWarning = result.message ?? "We couldn't verify your location.";
+        _isCheckingLocation = false;
+      });
       return;
     }
     setState(() {
       _region = result;
+      _locationWarning = null;
       _isCheckingLocation = false;
     });
   }
@@ -243,6 +260,37 @@ class _LoginPageState extends State<LoginPage> {
                                 ],
                               ),
                             ),
+                            if (_locationWarning != null) ...[
+                              const SizedBox(height: 10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF3C7),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.location_searching_rounded, size: 16, color: Color(0xFFB45309)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _locationWarning!,
+                                        style: const TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: _isCheckingLocation ? null : _resolveRegion,
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        minimumSize: const Size(0, 30),
+                                      ),
+                                      child: const Text('Verify again',
+                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                             if (_region != null) ...[
                               // const SizedBox(height: 8),
                               // Padding(

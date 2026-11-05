@@ -14,6 +14,7 @@ import { handleDisputeEvent } from '../dispute/dispute.service.js';
 import { resolveCommissionRule, computeCommission } from '../commission/commission.service.js';
 import { getOrCalculateRideFinancials } from '../ride-financial/ride-financial.service.js';
 import { publishNotification } from '../notification/notification-events.js';
+import { DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE, DEFAULT_SUBSCRIBER_COMMISSION_RATE, defaultCommissionRate } from '../commission/commission-defaults.js';
 
 
 // ── Rider — pay online ─────────────────────────────────────────────────────────
@@ -222,9 +223,9 @@ export async function recordCashCollection(driverId, rideId, collectedAmountMino
         let commissionMinor = 0;
         try {
           const commission = await resolveRideCommission(ride);
-          commissionMinor = commission?.commissionMinor ?? Math.round(expectedFareMinor * 0.2);
+          commissionMinor = commission?.commissionMinor ?? Math.round(expectedFareMinor * defaultCommissionRate(false));
         } catch {
-          commissionMinor = Math.round(expectedFareMinor * 0.2);
+          commissionMinor = Math.round(expectedFareMinor * defaultCommissionRate(false));
         }
         await db.insert(cashCollections).values({
           rideId,
@@ -268,9 +269,9 @@ export async function recordCashCollection(driverId, rideId, collectedAmountMino
   let commissionMinor = 0;
   try {
     const commission = await resolveRideCommission(ride);
-    commissionMinor = commission?.commissionMinor ?? Math.round(ride.finalFareMinor * 0.2);
+    commissionMinor = commission?.commissionMinor ?? Math.round(ride.finalFareMinor * defaultCommissionRate(false));
   } catch {
-    commissionMinor = Math.round(ride.finalFareMinor * 0.2);
+    commissionMinor = Math.round(ride.finalFareMinor * defaultCommissionRate(false));
   }
 
   // Insert or update cash collection record for admin cash management & reconciliation
@@ -385,7 +386,7 @@ export async function getRidePaymentStatus(rideId, requester) {
     const platformSubsidyMinor = comm?.platformSubsidyMinor ?? promoDiscountMinor;
     const commissionMinor = comm?.commissionMinor ?? 0;
     const bookingFeeMinor = comm?.bookingFeeMinor ?? 0;
-    const commissionRate = comm?.rate ?? (comm?.isSubscriber ? 0 : 0.2);
+    const commissionRate = comm?.rate ?? defaultCommissionRate(comm?.isSubscriber);
     const driverEarningsMinor = comm?.driverEarningsMinor ?? Math.max(0, grossFareMinor - commissionMinor);
     const isCash = ride.paymentMethod === 'cash';
 
@@ -453,7 +454,7 @@ export async function getRideInvoice(rideId, requester) {
   const platformSubsidyMinor = comm?.platformSubsidyMinor ?? promoDiscountMinor;
   const commissionMinor = comm?.commissionMinor ?? 0;
   const bookingFeeMinor = comm?.bookingFeeMinor ?? 0;
-  const commissionRate = comm?.rate ?? (comm?.isSubscriber ? 0 : 0.2);
+  const commissionRate = comm?.rate ?? defaultCommissionRate(comm?.isSubscriber);
   const driverEarningsMinor = comm?.driverEarningsMinor ?? Math.max(0, grossFareMinor - commissionMinor);
   const isCash = ride.paymentMethod === 'cash';
 
@@ -590,7 +591,7 @@ export async function resolveRideCommission(ride, { skipDbUpdate = false, tx = n
   });
   const rawBreakdown = financials.breakdown || financials;
   const grossFare = resolvedGrossMinor || rawBreakdown.grossFareMinor || (ride.finalFareMinor || 0);
-  const commCut = rawBreakdown.commissionMinor ?? Math.round(grossFare * (rawBreakdown.isSubscriber ? 0.05 : 0.2));
+  const commCut = rawBreakdown.commissionMinor ?? Math.round(grossFare * defaultCommissionRate(rawBreakdown.isSubscriber));
   const driverEarnings = Math.max(0, grossFare - commCut);
 
   const breakdown = {
@@ -647,7 +648,7 @@ async function _postRideFareLedger(ride, paymentInfo) {
 
   let rawCommission = commission?.commissionMinor;
   if (rawCommission == null) {
-    rawCommission = Math.round(payableTotalMinor * 0.2);
+    rawCommission = Math.round(payableTotalMinor * defaultCommissionRate(false));
   }
   const commissionMinor = Math.min(Number(rawCommission), payableTotalMinor);
   const driverEarningsMinor = Math.max(0, payableTotalMinor - commissionMinor);
@@ -905,7 +906,7 @@ async function _markRidePaid(ride, paymentInfo) {
           comm = await resolveRideCommission(ride, { skipDbUpdate: true });
         } catch {}
         const grossFareMinor = Number(comm?.grossFareMinor || ride.fareSnapshot?.grossFareMinor || ride.finalFareMinor || 0);
-        const commissionMinor = Number(comm?.commissionMinor ?? Math.round(grossFareMinor * 0.2));
+        const commissionMinor = Number(comm?.commissionMinor ?? Math.round(grossFareMinor * defaultCommissionRate(false)));
         const netFareMinor = Number(comm?.driverEarningsMinor ?? Math.max(0, grossFareMinor - commissionMinor));
 
         const [existingEarning] = await db.select().from(driverEarnings).where(eq(driverEarnings.rideId, ride.id)).limit(1);

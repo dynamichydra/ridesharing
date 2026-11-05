@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../../core/region/region_guard.dart';
+import '../../../../core/services/storage_service.dart';
 import '../../../../injection_container.dart';
 import '../bloc/auth_bloc.dart';
 
@@ -19,7 +20,26 @@ class RegionUnavailablePage extends StatefulWidget {
 
 class _RegionUnavailablePageState extends State<RegionUnavailablePage> {
   bool _checking = false;
+  bool _isLoggedIn = false; // Log out is only offered to a signed-in rider
   late RegionResult? _result = widget.result ?? sl<RegionGuard>().current;
+
+  @override
+  void initState() {
+    super.initState();
+    sl<StorageService>().getToken().then((token) {
+      if (mounted) setState(() => _isLoggedIn = token != null && token.isNotEmpty);
+    });
+  }
+
+  /// Always reachable: signed-in riders are logged out first; either way the login page opens
+  /// (it no longer bounces back here) and the server checks the number against the location.
+  void _goToLogin() {
+    if (_isLoggedIn) {
+      context.read<AuthBloc>().add(LoggedOut());
+      setState(() => _isLoggedIn = false);
+    }
+    context.go('/login');
+  }
 
   /// Travelling with an account from the other country: log out and sign in with an account
   /// from the country the rider is in now (the login page locks to that dial code).
@@ -197,6 +217,26 @@ class _RegionUnavailablePageState extends State<RegionUnavailablePage> {
                           ),
                   ),
                 ),
+                if (!isWrongCountryAccount) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: OutlinedButton.icon(
+                      onPressed: _checking ? null : _goToLogin,
+                      icon: Icon(_isLoggedIn ? Icons.logout_rounded : Icons.login_rounded, size: 20),
+                      label: Text(
+                        _isLoggedIn ? 'Log out' : 'Go to login',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFDC2626),
+                        side: const BorderSide(color: Color(0xFFFCA5A5), width: 1.2),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 32),
               ],
             ),

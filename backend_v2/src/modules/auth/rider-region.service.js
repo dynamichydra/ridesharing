@@ -65,11 +65,13 @@ export function isRegionEnforcementEnabled() {
 }
 
 /** E.164 phone → 'IN' | 'CA' | null (anything else, incl. US numbers). */
-export function riderPhoneCountry(phone) {
+// strictCanadianAreaCodes: false (region lock off, i.e. local development) accepts any valid
+// +1 number as Canadian, so test numbers work; production keeps the CNA area-code list.
+export function riderPhoneCountry(phone, { strictCanadianAreaCodes = true } = {}) {
   const p = String(phone || '').replace(/[\s\-()]/g, '');
   if (/^\+91[6-9]\d{9}$/.test(p)) return 'IN';
   const nanp = p.match(/^\+1([2-9]\d{2})[2-9]\d{6}$/);
-  if (nanp && CANADIAN_AREA_CODES.has(nanp[1])) return 'CA';
+  if (nanp && (!strictCanadianAreaCodes || CANADIAN_AREA_CODES.has(nanp[1]))) return 'CA';
   return null;
 }
 
@@ -245,7 +247,7 @@ export function verifyRegionToken(app, token, ip) {
 
 /** The phone must belong to the country the rider was verified in. */
 export function assertPhoneMatchesRegion(phone, regionCountry) {
-  const phoneCountry = riderPhoneCountry(phone);
+  const phoneCountry = riderPhoneCountry(phone, { strictCanadianAreaCodes: isRegionEnforcementEnabled() });
   if (!phoneCountry) {
     throw new RegionError(
       'PHONE_NOT_SUPPORTED',

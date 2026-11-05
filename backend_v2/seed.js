@@ -506,8 +506,8 @@ async function seed() {
       name: 'Global default',
       countryId: null, vehicleTypeId: null,
       bookingFeeMinor: 0,
-      subscriberRate: '0.1500',    // 15% for drivers with an active subscription
-      nonSubscriberRate: '0.2500', // 25% for drivers without one
+      subscriberRate: '0.0500',    // 5% for drivers with an active subscription (optional)
+      nonSubscriberRate: '0.1500', // 15% for drivers riding free, without a plan
       priority: 1,
       isActive: true,
     },

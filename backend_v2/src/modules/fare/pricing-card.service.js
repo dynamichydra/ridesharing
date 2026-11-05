@@ -1,6 +1,7 @@
 import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { cityTypeFares, vehicleTypes, cityTypes } from '../../../drizzle/schema/index.js';
+import { DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE, DEFAULT_SUBSCRIBER_COMMISSION_RATE, defaultCommissionRate } from '../commission/commission-defaults.js';
 
 // Baseline CAD rates when operating in Canada (minor units = cents)
 const CAD_BASELINE_RATES = {
@@ -79,8 +80,8 @@ export async function resolvePricingVersion({ vehicleTypeId, cityTypeId = null, 
           noShowFeeMinor: tierFare.fare.noShowFeeMinor || minFareMinor,
           surgeFloorMultiplier: tierFare.fare.surgeFloorMultiplier || '1.00',
           surgeCapMultiplier: tierFare.fare.surgeCapMultiplier || '3.00',
-          nonSubscriberCommissionRate: tierFare.fare.nonSubscriberCommissionRate || '0.2000',
-          subscriberCommissionRate: tierFare.fare.subscriberCommissionRate || '0.0500',
+          nonSubscriberCommissionRate: tierFare.fare.nonSubscriberCommissionRate || DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE,
+          subscriberCommissionRate: tierFare.fare.subscriberCommissionRate || DEFAULT_SUBSCRIBER_COMMISSION_RATE,
           platformFeeMinor: tierFare.fare.platformFeeMinor || 0,
           minCommissionMinor: tierFare.fare.minCommissionMinor || 0,
           maxCommissionMinor: tierFare.fare.maxCommissionMinor || null,
@@ -109,8 +110,8 @@ export async function resolvePricingVersion({ vehicleTypeId, cityTypeId = null, 
     noShowFeeMinor: fallbackMinFareMinor,
     surgeFloorMultiplier: '1.00',
     surgeCapMultiplier: '3.00',
-    nonSubscriberCommissionRate: '0.2000',
-    subscriberCommissionRate: '0.0500',
+    nonSubscriberCommissionRate: DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE,
+    subscriberCommissionRate: DEFAULT_SUBSCRIBER_COMMISSION_RATE,
     platformFeeMinor: 0,
     minCommissionMinor: 0,
     maxCommissionMinor: null,

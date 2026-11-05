@@ -29,8 +29,8 @@ export const cityTypeFares = pgTable('city_type_fares', {
   surgeCapMultiplier:      decimal('surge_cap_multiplier', { precision: 4, scale: 2 }).default('3.00'),
 
   // ── Commission Rate Structure (for this city-type + vehicle type) ──
-  nonSubscriberCommissionRate: decimal('non_subscriber_commission_rate', { precision: 5, scale: 4 }).default('0.2000'), // e.g. 0.2000 = 20%
-  subscriberCommissionRate:    decimal('subscriber_commission_rate', { precision: 5, scale: 4 }).default('0.0500'),    // e.g. 0.0500 = 5%
+  nonSubscriberCommissionRate: decimal('non_subscriber_commission_rate', { precision: 5, scale: 4 }).default('0.1500'), // free drivers — 15% (see commission-defaults.js)
+  subscriberCommissionRate:    decimal('subscriber_commission_rate', { precision: 5, scale: 4 }).default('0.0500'),    // with a plan — 5%
   platformFeeMinor:            integer('platform_fee_minor').default(0),
   minCommissionMinor:          integer('min_commission_minor').default(0),
   maxCommissionMinor:          integer('max_commission_minor'),

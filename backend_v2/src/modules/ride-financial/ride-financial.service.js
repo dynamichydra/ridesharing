@@ -12,6 +12,7 @@ import {
 import { resolveDeterministicCommissionRule } from '../commission/commission-resolver.js';
 import { resolveDriverEntitlements } from '../subscription/subscription-entitlement.service.js';
 import { multiplyRate, ROUNDING_POLICIES } from '../../utils/money-math.js';
+import { DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE, DEFAULT_SUBSCRIBER_COMMISSION_RATE, defaultCommissionRate } from '../commission/commission-defaults.js';
 
 /**
  * Pure Calculation Engine: Computes complete financial breakdown for a ride.
@@ -85,10 +86,10 @@ export function calculateRideFinancialBreakdown({
     commissionRate = Number(driverEntitlements.commissionDiscountRate);
     rateSource = 'plan_entitlement';
   } else if (isSubscriber) {
-    commissionRate = parseFloat(rule?.subscriberRate ?? '0.0500');
+    commissionRate = parseFloat(rule?.subscriberRate ?? DEFAULT_SUBSCRIBER_COMMISSION_RATE);
     rateSource = 'rule_subscriber';
   } else {
-    commissionRate = parseFloat(rule?.nonSubscriberRate ?? '0.2000');
+    commissionRate = parseFloat(rule?.nonSubscriberRate ?? DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE);
     rateSource = 'rule_non_subscriber';
   }
 

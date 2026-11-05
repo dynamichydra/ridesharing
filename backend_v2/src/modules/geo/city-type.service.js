@@ -2,6 +2,7 @@ import { eq, asc, desc, count, ilike, and } from 'drizzle-orm';
 import { db } from '../../config/db.js';
 import { cityTypes, cityTypeFares, vehicleTypes } from '../../../drizzle/schema/index.js';
 import { paginate } from '../../utils/response.js';
+import { DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE, DEFAULT_SUBSCRIBER_COMMISSION_RATE, defaultCommissionRate } from '../commission/commission-defaults.js';
 
 /**
  * Standard default tiers to seed if table is empty
@@ -204,8 +205,8 @@ export async function createCityTypeFare(cityTypeId, data) {
       noShowFeeMinor: data.noShowFeeMinor ?? 0,
       surgeFloorMultiplier: data.surgeFloorMultiplier ? String(data.surgeFloorMultiplier) : '1.00',
       surgeCapMultiplier: data.surgeCapMultiplier ? String(data.surgeCapMultiplier) : '3.00',
-      nonSubscriberCommissionRate: nonSubscriberCommissionRate ? String(nonSubscriberCommissionRate) : '0.2000',
-      subscriberCommissionRate: data.subscriberCommissionRate ? String(data.subscriberCommissionRate) : '0.0500',
+      nonSubscriberCommissionRate: nonSubscriberCommissionRate ? String(nonSubscriberCommissionRate) : DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE,
+      subscriberCommissionRate: data.subscriberCommissionRate ? String(data.subscriberCommissionRate) : DEFAULT_SUBSCRIBER_COMMISSION_RATE,
       platformFeeMinor,
       minCommissionMinor: data.minCommissionMinor ?? 0,
       maxCommissionMinor: data.maxCommissionMinor ?? null,

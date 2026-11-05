@@ -38,7 +38,6 @@ class AppRouter {
     redirect: (context, state) {
       final authState = authBloc.state;
       final isOnboarding = state.matchedLocation == '/onboarding';
-      final isSubscriptionPage = state.matchedLocation == '/subscription';
 
       if (authState is Authenticated) {
         final isFullyApproved = authState.driver.isApproved;
@@ -48,14 +47,8 @@ class AppRouter {
           return null;
         }
 
-        final isNeverSubscribed = authState.driver.isNeverSubscribed;
-        final isExpiredSubscription = authState.driver.isExpiredSubscription;
-
-        // Never subscribed → force to subscription screen first
-        if (isNeverSubscribed) {
-          if (!isSubscriptionPage) return '/subscription';
-          return null;
-        }
+        // The subscription is optional: drivers without a plan ride free and pay the standard
+        // commission (15% by default); a plan lowers it (5%). No forced redirect to /subscription.
 
         if (isOnboarding || state.matchedLocation == '/') {
           return '/dashboard';

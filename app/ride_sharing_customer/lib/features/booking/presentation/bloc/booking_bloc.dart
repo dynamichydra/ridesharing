@@ -7,6 +7,7 @@ import '../../../../core/utils/location_helper.dart';
 import '../../../../core/constants/constants.dart';
 import '../../domain/entities/vehicle.dart';
 import '../../domain/entities/passenger_info.dart';
+import '../../data/datasources/booking_datasource.dart' show BookingException;
 import '../../domain/repositories/booking_repository.dart';
 
 // ==========================================
@@ -247,11 +248,21 @@ class BookingConfirmed extends BookingState {
 
 class BookingError extends BookingState {
   final String message;
+  final String? code;
 
-  const BookingError(this.message);
+  const BookingError(this.message, {this.code});
+
+  /// Pickup or drop-off is outside the rider's account country.
+  bool get isOutsideAccountCountry =>
+      code == 'PICKUP_OUTSIDE_ACCOUNT_COUNTRY' || code == 'DROP_OUTSIDE_ACCOUNT_COUNTRY';
+
+  factory BookingError.from(Object e) => BookingError(
+        e.toString().replaceAll('Exception: ', ''),
+        code: e is BookingException ? e.code : null,
+      );
 
   @override
-  List<Object?> get props => [message];
+  List<Object?> get props => [message, code];
 }
 
 // ==========================================
@@ -422,7 +433,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
 
     } catch (e) {
       print('[BookingBloc] SetRideLocations failed with error: $e');
-      emit(BookingError(e.toString().replaceAll('Exception: ', '')));
+      emit(BookingError.from(e));
     }
 
   }
@@ -511,7 +522,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
 
       } catch (e) {
         print('[BookingBloc] ConfirmRideBooking failed: $e');
-        emit(BookingError(e.toString().replaceAll('Exception: ', '')));
+        emit(BookingError.from(e));
         // Restore loaded options so user can retry or change vehicle/payment
         emit(currentState);
       }

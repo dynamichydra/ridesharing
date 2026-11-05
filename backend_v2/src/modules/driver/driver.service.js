@@ -16,6 +16,7 @@ import { getOrCreateWallet } from '../wallet/wallet.service.js';
 import { invalidateAccountStatus } from '../../middleware/authenticate.js';
 import { listPaymentMethods } from '../payment-method/payment-method.service.js';
 import { annotateSavedMethodsForProfile } from '../payment/payment-region.service.js';
+import { DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE, DEFAULT_SUBSCRIBER_COMMISSION_RATE, defaultCommissionRate } from '../commission/commission-defaults.js';
 
 function getStartOfTodayInTimezone(timeZone = 'UTC') {
   const now = new Date();
@@ -269,7 +270,7 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
   for (const r of currentRides) {
     const gross = r.grossFareMinor ?? r.fareSnapshot?.commission?.grossFareMinor ?? r.fareSnapshot?.grossFareMinor ?? r.finalFareMinor ?? r.estimatedFareMinor ?? 0;
     const fare = r.finalFareMinor || r.estimatedFareMinor || gross;
-    const comm = r.platformCommissionMinor ?? r.fareSnapshot?.commission?.commissionMinor ?? Math.round(gross * (r.fareSnapshot?.commission?.isSubscriber ? 0.05 : 0.2));
+    const comm = r.platformCommissionMinor ?? r.fareSnapshot?.commission?.commissionMinor ?? Math.round(gross * defaultCommissionRate(r.fareSnapshot?.commission?.isSubscriber));
 
     fareAmountMinor += gross;
     deductionsMinor += comm;
@@ -333,7 +334,7 @@ export async function getDriverEarnings(driverId, { period = 'daily', weekOffset
 
   const calculateRideNetMinor = (r) => {
     const gross = r.grossFareMinor ?? r.fareSnapshot?.commission?.grossFareMinor ?? r.fareSnapshot?.grossFareMinor ?? r.finalFareMinor ?? r.estimatedFareMinor ?? 0;
-    const comm = r.platformCommissionMinor ?? r.fareSnapshot?.commission?.commissionMinor ?? Math.round(gross * 0.2);
+    const comm = r.platformCommissionMinor ?? r.fareSnapshot?.commission?.commissionMinor ?? Math.round(gross * defaultCommissionRate(false));
     if (r.netFareMinor != null && Math.abs(r.netFareMinor - (gross - comm)) <= 1) {
       return r.netFareMinor;
     }
@@ -1193,8 +1194,8 @@ export async function getDriverCommissionStatus(driverId) {
     });
   } catch { }
 
-  const standardRate = parseFloat(rule?.nonSubscriberRate || '0.20');
-  const subscriberRuleRate = parseFloat(rule?.subscriberRate || '0.05');
+  const standardRate = parseFloat(rule?.nonSubscriberRate || DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE);
+  const subscriberRuleRate = parseFloat(rule?.subscriberRate || DEFAULT_SUBSCRIBER_COMMISSION_RATE);
   const effectiveRate = customRate !== null ? customRate : (isSubscriber ? subscriberRuleRate : standardRate);
   const bookingFeeMinor = waiveBookingFee ? 0 : (rule?.bookingFeeMinor || 0);
 
@@ -1208,6 +1209,10 @@ export async function getDriverCommissionStatus(driverId) {
     standardCommissionRate: standardRate,
     standardCommissionPercentage: `${(standardRate * 100).toFixed(0)}%`,
     commissionSavingsPercentage: `${((standardRate - effectiveRate) * 100).toFixed(0)}%`,
+    // Subscription is optional — what this driver's city charges with a plan, for the
+    // "free vs plan" comparison in the driver app.
+    subscriberCommissionRate: subscriberRuleRate,
+    subscriberCommissionPercentage: `${(subscriberRuleRate * 100).toFixed(0)}%`,
     bookingFeeMinor,
     bookingFeeWaived: waiveBookingFee,
     priorityMatchingBonus: priorityScoreBonus,

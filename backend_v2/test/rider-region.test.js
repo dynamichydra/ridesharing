@@ -22,7 +22,12 @@ test('phone country: Indian mobiles and Canadian area codes only', () => {
   assert.equal(riderPhoneCountry('9876543210'), null, 'must be E.164');
 });
 
-test('phone must match the verified region', () => {
+test('phone must match the verified region (region lock on, as in production)', async (t) => {
+  const { env } = await import('../src/config/env.js');
+  const previous = env.RIDER_REGION_ENFORCEMENT;
+  env.RIDER_REGION_ENFORCEMENT = 'on';
+  t.after(() => { env.RIDER_REGION_ENFORCEMENT = previous; });
+
   assert.doesNotThrow(() => assertPhoneMatchesRegion('+919876543210', 'IN'));
   assert.throws(() => assertPhoneMatchesRegion('+14165550123', 'IN'), (e) => e.code === 'PHONE_COUNTRY_MISMATCH');
   assert.throws(() => assertPhoneMatchesRegion('+919876543210', 'CA'), (e) => e.code === 'PHONE_COUNTRY_MISMATCH');
@@ -70,4 +75,24 @@ test('travelling: account country mismatch tells the rider which account to use'
   const { accountCountryMismatchMessage } = await import('../src/modules/auth/rider-region.service.js');
   assert.match(accountCountryMismatchMessage('IN', 'CA'), /registered in India.*in Canada now.*Canadian account/);
   assert.match(accountCountryMismatchMessage('CA', 'IN'), /registered in Canada.*in India now.*Indian account/);
+});
+
+test('driver commission defaults: 15% free, 5% with a subscription', async () => {
+  const { defaultCommissionRate } = await import('../src/modules/commission/commission-defaults.js');
+  const { calculateRideFinancialBreakdown } = await import('../src/modules/ride-financial/ride-financial.service.js');
+  assert.equal(defaultCommissionRate(false), 0.15);
+  assert.equal(defaultCommissionRate(true), 0.05);
+  // No configured rule → defaults apply on a ₹500 fare
+  const free = calculateRideFinancialBreakdown({ grossFareMinor: 50000, rule: null, driverEntitlements: { isSubscriber: false } });
+  const plan = calculateRideFinancialBreakdown({ grossFareMinor: 50000, rule: null, driverEntitlements: { isSubscriber: true } });
+  assert.equal(free.commissionMinor, 7500);
+  assert.equal(free.driverEarningMinor, 42500);
+  assert.equal(plan.commissionMinor, 2500);
+  assert.equal(plan.driverEarningMinor, 47500);
+});
+
+test('local dev (lock off) accepts any +1 number as Canadian; production keeps the area-code list', () => {
+  assert.equal(riderPhoneCountry('+18746546545'), null, '874 is not a Canadian area code');
+  assert.equal(riderPhoneCountry('+18746546545', { strictCanadianAreaCodes: false }), 'CA');
+  assert.equal(riderPhoneCountry('+919876543210', { strictCanadianAreaCodes: false }), 'IN');
 });

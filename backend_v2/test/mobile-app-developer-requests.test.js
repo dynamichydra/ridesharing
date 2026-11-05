@@ -43,35 +43,35 @@ test('Driver cash promo vs wallet breakdown calculation', () => {
   assert.equal(walletCreditOnline, 50000); // ₹500 credited to driver wallet
 });
 
-test('Driver non-subscriber 20% commission with cash promo breakdown', () => {
+test('Driver without a subscription pays the 15% default commission, cash promo breakdown', () => {
   const grossFareMinor = 50000;
   const promoDiscountMinor = 10000;
   const platformSubsidyMinor = 10000;
   const riderPaysMinor = grossFareMinor - promoDiscountMinor; // 40000
 
+  // No configured non-subscriber rate → commission-defaults.js: 15% free / 5% with a plan.
   const commNonSubscribed = computeCommission({
     finalFareMinor: grossFareMinor,
     isSubscriber: false,
     rule: {
-      rate: 0.20,
       minCommissionMinor: null,
       maxCommissionMinor: null,
       bookingFeeMinor: 0,
-      name: 'Standard 20%',
+      name: 'Platform default',
     },
   });
 
-  assert.equal(commNonSubscribed.commissionMinor, 10000); // 20% of 50,000 = 10,000
-  assert.equal(commNonSubscribed.driverEarningsMinor, 40000); // 50,000 - 10,000 = 40,000
+  assert.equal(commNonSubscribed.commissionMinor, 7500); // 15% of 50,000 = 7,500
+  assert.equal(commNonSubscribed.driverEarningsMinor, 42500); // 50,000 - 7,500 = 42,500
 
   // Cash Ride:
   const collectFromCustomerMinor = riderPaysMinor; // 40,000 in cash
-  const netDueToPlatform = commNonSubscribed.commissionMinor - platformSubsidyMinor; // 10,000 - 10,000 = 0
-  const walletCreditMinor = Math.max(0, -netDueToPlatform); // 0
+  const netDueToPlatform = commNonSubscribed.commissionMinor - platformSubsidyMinor; // 7,500 - 10,000 = -2,500
+  const walletCreditMinor = Math.max(0, -netDueToPlatform); // 2,500 — platform owes the driver the rest of the promo
   const walletDebitMinor = Math.max(0, netDueToPlatform); // 0
 
   assert.equal(collectFromCustomerMinor, 40000); // Collect ₹400 in cash
-  assert.equal(walletCreditMinor, 0);
+  assert.equal(walletCreditMinor, 2500);
   assert.equal(walletDebitMinor, 0);
-  // Total driver take-home: 40000 cash - 0 wallet debit = 40000, exactly matching driver earnings
+  // Total driver take-home: 40,000 cash + 2,500 wallet credit = 42,500, exactly matching driver earnings
 });

@@ -1632,11 +1632,12 @@ class _DriverDashboardState extends State<DriverDashboard>
     BuildContext context,
     CommissionStatusModel? status,
   ) {
-    final effectiveRate = status?.effectiveCommissionPercentage ?? '20%';
+    final effectiveRate = status?.effectiveCommissionPercentage ?? '15%';
     final isSubscriber = status?.isSubscriber ?? false;
     final hasSavings = status?.hasSavings ?? false;
     final savingsPct = status?.commissionSavingsPercentage ?? '0%';
-    final planName = status?.activePlan?.name ?? (isSubscriber ? 'Subscriber Plan' : 'Standard Plan');
+    final planName = status?.activePlan?.name ?? (isSubscriber ? 'Subscriber Plan' : 'Free');
+    final planRate = status?.subscriberCommissionPercentage ?? '5%';
 
     return Container(
       width: double.infinity,
@@ -1715,7 +1716,7 @@ class _DriverDashboardState extends State<DriverDashboard>
                         ? 'Saving $savingsPct with $planName'
                         : (isSubscriber
                             ? 'Waived booking fee on all rides'
-                            : 'Tap to view subscription plans & save'),
+                            : 'Riding free · get a plan to pay only $planRate'),
                     style: TextStyle(
                       fontSize: 11,
                       color: isSubscriber ? const Color(0xFF15803D) : const Color(0xFF64748B),

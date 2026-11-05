@@ -2,6 +2,23 @@ import 'package:dio/dio.dart';
 import '../../../../core/network/dio_client.dart';
 import '../models/vehicle_model.dart';
 
+/// A booking API failure with the server's machine-readable CODE (e.g.
+/// PICKUP_OUTSIDE_ACCOUNT_COUNTRY), so screens can react to specific cases.
+class BookingException implements Exception {
+  final String message;
+  final String? code;
+  const BookingException(this.message, {this.code});
+
+  /// Pickup/drop-off outside the rider's account country (backend rider-ride-country.js).
+  bool get isOutsideAccountCountry =>
+      code == 'PICKUP_OUTSIDE_ACCOUNT_COUNTRY' || code == 'DROP_OUTSIDE_ACCOUNT_COUNTRY';
+
+  @override
+  String toString() => message;
+}
+
+String? _errorCode(dynamic data) => data is Map ? data['CODE']?.toString() : null;
+
 abstract class BookingDataSource {
   Future<List<VehicleModel>> getVehicles();
   Future<Map<String, dynamic>?> detectZone(double lat, double lng);
@@ -136,7 +153,7 @@ class BookingDataSourceImpl implements BookingDataSource {
       final errorMsg =
           response.data?['MESSAGE']?.toString() ??
           'No rides available in your area';
-      throw Exception(errorMsg);
+      throw BookingException(errorMsg, code: _errorCode(response.data));
     } on DioException catch (e) {
       print('[BookingDataSource] POST /api/v1/fare/available ERROR: $e');
       final errorMsg = e.response?.data?['MESSAGE']?.toString() ??
@@ -146,7 +163,7 @@ class BookingDataSourceImpl implements BookingDataSource {
               : e.type == DioExceptionType.connectionError
                   ? 'Unable to connect to server. Please check your network.'
                   : 'No rides available in your area');
-      throw Exception(errorMsg);
+      throw BookingException(errorMsg, code: _errorCode(e.response?.data));
     } catch (e) {
       print('[BookingDataSource] POST /api/v1/fare/available ERROR: $e');
       if (e is Exception) rethrow;
@@ -205,10 +222,11 @@ class BookingDataSourceImpl implements BookingDataSource {
       final msg = e.response?.data is Map
           ? (e.response?.data['MESSAGE'] ?? e.response?.data['message'] ?? e.message)
           : (e.message ?? 'Failed to request ride');
-      throw Exception(msg);
+      throw BookingException(msg.toString(), code: _errorCode(e.response?.data));
     } catch (e) {
       print('[BookingDataSource] POST /api/v1/rides ERROR: $e');
-      throw Exception('Failed to request ride: $e');
+      if (e is BookingException) rethrow;
+      throw BookingException('Failed to request ride: $e');
     }
   }
 

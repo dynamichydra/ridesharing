@@ -21,10 +21,17 @@ function sendRegionError(reply, err) {
 
 // Rider OTP calls must carry the region token from /rider/region-check; returns its country.
 function riderRegionFromRequest(app, request) {
+  const token = request.body?.regionToken || request.headers['x-region-token'];
   if (!isRegionEnforcementEnabled()) {
-    return riderPhoneCountry(request.body?.phone) || 'IN';
+    // Lock off (local dev): still honour the app's location check — a simulator set to Canada
+    // logs in as Canada — falling back to the phone's country, then India.
+    try {
+      const p = token ? app.jwt.verify(token) : null;
+      if (p?.purpose === 'rider_region' && RIDER_COUNTRIES.includes(p.country)) return p.country;
+    } catch { /* expired/invalid token — fall through */ }
+    return riderPhoneCountry(request.body?.phone, { strictCanadianAreaCodes: false }) || 'IN';
   }
-  return verifyRegionToken(app, request.body?.regionToken || request.headers['x-region-token'], request.ip);
+  return verifyRegionToken(app, token, request.ip);
 }
 
 // Per-IP limits on top of the per-phone/email OTP caps (utils/otp.js) — stops SMS pumping across

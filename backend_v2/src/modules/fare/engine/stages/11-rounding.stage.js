@@ -1,4 +1,5 @@
 import { roundToIncrement, fromMinor } from '../../../../utils/money.js';
+import { DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE, DEFAULT_SUBSCRIBER_COMMISSION_RATE, defaultCommissionRate } from '../../../commission/commission-defaults.js';
 
 /**
  * Stage 11: Currency Rounding & Final Payload Construction.
@@ -83,17 +84,17 @@ export async function executeRoundingStage(context) {
       appliedRules: rules.appliedRules,
     },
     commission: {
-      commissionRate: rateCard.nonSubscriberCommissionRate || '0.2000',
-      commissionPercentage: ((parseFloat(rateCard.nonSubscriberCommissionRate || '0.2000')) * 100).toFixed(1),
+      commissionRate: rateCard.nonSubscriberCommissionRate || DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE,
+      commissionPercentage: ((parseFloat(rateCard.nonSubscriberCommissionRate || DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE)) * 100).toFixed(1),
       platformFeeMinor: rateCard.platformFeeMinor || 0,
       platformCommissionMinor: Math.round(
         (metered.meteredSubtotalMinor + (surge.surgeAmountMinor || 0)) *
-        parseFloat(rateCard.nonSubscriberCommissionRate || '0.2000')
+        parseFloat(rateCard.nonSubscriberCommissionRate || DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE)
       ) + (rateCard.platformFeeMinor || 0),
       driverEarningMinor: Math.max(
         0,
         roundedPreDiscountMinor -
-        (Math.round((metered.meteredSubtotalMinor + (surge.surgeAmountMinor || 0)) * parseFloat(rateCard.nonSubscriberCommissionRate || '0.2000')) + (rateCard.platformFeeMinor || 0)) -
+        (Math.round((metered.meteredSubtotalMinor + (surge.surgeAmountMinor || 0)) * parseFloat(rateCard.nonSubscriberCommissionRate || DEFAULT_NON_SUBSCRIBER_COMMISSION_RATE)) + (rateCard.platformFeeMinor || 0)) -
         (taxes.totalTaxMinor || 0)
       ),
     },

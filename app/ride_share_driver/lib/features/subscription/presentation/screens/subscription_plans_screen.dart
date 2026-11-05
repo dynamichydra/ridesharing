@@ -11,6 +11,8 @@ import '../bloc/subscription_bloc.dart';
 import '../checkout/razorpay_checkout_launcher.dart';
 import '../checkout/stripe_checkout_launcher.dart';
 import '../../../../core/payments/saved_payment_method_picker.dart';
+import '../../../earnings/data/datasources/earnings_remote_datasource.dart';
+import '../../../earnings/data/models/commission_status_model.dart';
 
 class SubscriptionPlansScreen extends StatefulWidget {
   final String countryId;
@@ -40,10 +42,86 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
   bool _selectionInitialised = false;
 
 
+  // Free vs plan commission for this driver's city (the subscription is optional).
+  late final Future<CommissionStatusModel> _commission =
+      di.sl<EarningsRemoteDataSource>().getCommissionStatus();
+
   @override
   void initState() {
     super.initState();
     _bloc.add(LoadSubscriptionOverview(countryId: widget.countryId));
+  }
+
+  bool get _hasActivePlan => _activeSubscription != null && _activeSubscription!.isActive;
+
+  void _continueFree() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      context.go('/dashboard');
+    }
+  }
+
+  Widget _buildFreeVsPlanCard() {
+    return FutureBuilder<CommissionStatusModel>(
+      future: _commission,
+      builder: (context, snap) {
+        final status = snap.data;
+        final freeRate = status?.standardCommissionPercentage ?? '15%';
+        final planRate = status?.subscriberCommissionPercentage ?? '5%';
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('A plan is optional',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(child: _rateTile('Free', freeRate, 'commission per ride', const Color(0xFF64748B), !_hasActivePlan)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _rateTile('With a plan', planRate, 'commission per ride', const Color(0xFF008744), _hasActivePlan)),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _rateTile(String label, String rate, String caption, Color color, bool isCurrent) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isCurrent ? color : Colors.transparent, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+              if (isCurrent) ...[
+                const SizedBox(width: 6),
+                Text('· You', style: TextStyle(fontSize: 11, color: color)),
+              ],
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(rate, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: color)),
+          Text(caption, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+        ],
+      ),
+    );
   }
 
   Future<void> _launchCheckout(SubscriptionState state) async {
@@ -462,8 +540,8 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = context.read<AuthBloc>().state;
-    final isMandatory = authState is Authenticated && authState.driver.isNeverSubscribed;
+    // Plans are optional — never a forced gate (see app_router.dart).
+    const isMandatory = false;
     final canPop = Navigator.of(context).canPop();
 
     return Scaffold(
@@ -522,6 +600,8 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                       // 1. Clean Custom Header matching mockup
                       _buildHeader(canPop: canPop, isMandatory: isMandatory),
                       const SizedBox(height: 12),
+                      _buildFreeVsPlanCard(),
+                      const SizedBox(height: 16),
 
                       // Optional Active Subscription status banner if driver already has an active sub
                       if (_activeSubscription != null && _activeSubscription!.isActive) ...[
@@ -544,6 +624,26 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                             child: _buildPlanCard(plan, index, isCurrentActive: isCurrentActive),
                           );
                         }),
+
+                      // 3. Ride free instead
+                      if (!_hasActivePlan) ...[
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: OutlinedButton(
+                            onPressed: _continueFree,
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFFCBD5E1)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                            child: const Text(
+                              'Continue free for now',
+                              style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
