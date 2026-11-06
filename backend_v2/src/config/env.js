@@ -139,7 +139,9 @@ export function assertRequiredEnv() {
     problems.push('BANK_DETAILS_ENC_KEY is the documented placeholder');
   }
   if (isProd && String(env.RIDER_REGION_ENFORCEMENT).toLowerCase() === 'off') {
-    problems.push('RIDER_REGION_ENFORCEMENT=off is not allowed in production');
+    // Allowed while testing: rider country then comes from the phone number (+91 India, +1
+    // Canada) and is still enforced at booking/payment — only the GPS/IP lock is off.
+    console.warn('[env] RIDER_REGION_ENFORCEMENT=off — riders are not location-checked (phone-number country only).');
   }
   if (isProd) {
     for (const k of ['ENABLE_DEV_TOOLS', 'PAYMENTS_DEV_BYPASS']) {

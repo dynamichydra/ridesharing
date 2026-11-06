@@ -14,7 +14,7 @@ import { users, countries } from '../../../drizzle/schema/index.js';
  */
 export const RIDER_PAYMENT_PROFILES = Object.freeze({
   IN: Object.freeze({ countryCode: 'IN', currencyCode: 'INR', currencySymbol: '₹', gateway: 'razorpay' }),
-  CA: Object.freeze({ countryCode: 'CA', currencyCode: 'CAD', currencySymbol: '$', gateway: 'stripe' }),
+  CA: Object.freeze({ countryCode: 'CA', currencyCode: 'CAD', currencySymbol: 'CA$', gateway: 'stripe' }),
 });
 
 export function paymentProfileForCountry(isoCode) {

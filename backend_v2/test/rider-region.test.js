@@ -62,7 +62,7 @@ test('rider payment profile: India → INR/Razorpay, Canada → CAD/Stripe, noth
   );
   assert.deepEqual(
     { ...paymentProfileForCountry('CA') },
-    { countryCode: 'CA', currencyCode: 'CAD', currencySymbol: '$', gateway: 'stripe' },
+    { countryCode: 'CA', currencyCode: 'CAD', currencySymbol: 'CA$', gateway: 'stripe' },
   );
   assert.equal(paymentProfileForCountry('US'), null);
   const india = paymentProfileForCountry('IN');

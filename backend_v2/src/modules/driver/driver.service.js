@@ -1,4 +1,5 @@
 import { eq, desc, count, and, or, ilike, ne, sql, gte } from 'drizzle-orm';
+import { assertDriverInHomeCountry } from './driver-country.js';
 import { db } from '../../config/db.js';
 import { drivers, subscriptions, subscriptionPlans, cities, states, driverPayoutAccounts, vehicleModels, vehicleTypes, rides, countries, wallets, walletTransactions, driverDocuments, driverEarnings } from '../../../drizzle/schema/index.js';
 import { redis, REDIS_KEYS } from '../../config/redis.js';
@@ -732,6 +733,9 @@ export async function goOnline(driverId, lat, lng) {
       message: locationCheck.message || 'You cannot go online outside the operational service area',
     };
   }
+
+  // Country lock: Indian drivers go online only in India, Canadian drivers only in Canada.
+  await assertDriverInHomeCountry(driverId, { lat, lng, serviceCity: locationCheck.city });
 
   // Auto-provision driver in-app wallet so they can immediately accumulate trip earnings,
   // tips, and incentives. Payout bank details are only required when withdrawing funds to a personal bank account.
