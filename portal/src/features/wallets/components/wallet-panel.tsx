@@ -126,11 +126,14 @@ function AdjustWalletDialog({ open, onOpenChange, ownerType, ownerId }: AdjustDi
 interface WalletPanelProps {
   ownerType: WalletOwnerType;
   ownerId: string;
+  // Currency of the owner's country — used for gateway top-ups when the owner has no wallet
+  // yet (otherwise the wallet's own currency wins). Drives Stripe vs Razorpay selection.
+  ownerCurrencyCode?: string;
 }
 
 // Shared driver/rider wallet panel — balance summary + recent ledger + an Adjust Balance
 // action. Drivers always resolve to a wallet (auto-created server-side); riders may have none.
-export function WalletPanel({ ownerType, ownerId }: WalletPanelProps) {
+export function WalletPanel({ ownerType, ownerId, ownerCurrencyCode }: WalletPanelProps) {
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
   const [isGatewayPayOpen, setIsGatewayPayOpen] = useState(false);
   const [topupAmount, setTopupAmount] = useState(50);
@@ -147,9 +150,15 @@ export function WalletPanel({ ownerType, ownerId }: WalletPanelProps) {
   // Admin opens gateway modal directly — /wallets/me/topup/initiate is self-service
   // (rider/driver JWT only, returns 403 for admin). Admin flow:
   //   gateway checkout → on success → adminAdjust to credit wallet (auto-creates if needed)
+  const topupCurrency = wallet?.currencyCode || ownerCurrencyCode;
+
   const handleOpenGatewayPay = () => {
     if (topupAmount <= 0) {
       toast.error("Enter a valid top-up amount (must be greater than 0).");
+      return;
+    }
+    if (!topupCurrency) {
+      toast.error("Set this account's country first — the top-up currency comes from it.");
       return;
     }
     setIsGatewayPayOpen(true);
@@ -296,7 +305,7 @@ export function WalletPanel({ ownerType, ownerId }: WalletPanelProps) {
         onOpenChange={setIsGatewayPayOpen}
         title={`Top-up ${ownerType === "driver" ? "Driver" : "Rider"} Wallet`}
         description="Process a gateway top-up via Stripe or Razorpay. Wallet will be credited on success."
-        currencyCode={wallet?.currencyCode || "INR"}
+        currencyCode={topupCurrency || "USD"}
         defaultAmount={topupAmount}
         gateway="auto"
         onSuccess={handleGatewaySuccess}

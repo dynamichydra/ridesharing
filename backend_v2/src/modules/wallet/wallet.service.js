@@ -55,6 +55,20 @@ export async function getOrCreateWallet(ownerType, ownerId) {
   return wallet;
 }
 
+// A wallet created before its owner had a country carries the platform default currency
+// (e.g. INR for a rider later set to Canada). While the wallet is still empty, realign it to
+// the owner's country currency so admin views/top-ups use the right currency and gateway.
+// A funded wallet is left untouched — that needs a deliberate admin fix, never a silent conversion.
+export async function alignEmptyWalletCurrency(ownerType, wallet) {
+  if (!wallet || wallet.balanceMinor !== 0) return wallet;
+  const country = await resolveOwnerCountry(ownerType, ownerType === 'driver' ? wallet.driverId : wallet.riderId);
+  if (!country?.currencyCode || country.currencyCode === wallet.currencyCode) return wallet;
+  const [fixed] = await db.update(wallets)
+    .set({ currencyCode: country.currencyCode, updatedAt: new Date() })
+    .where(eq(wallets.id, wallet.id)).returning();
+  return fixed;
+}
+
 // ── Self-service — rider/driver own wallet ───────────────────────────────────────
 
 // Resolves which owner type a JWT role maps to for the "my wallet" endpoints. Admins have no
@@ -552,7 +566,7 @@ export async function adminAdjustWallet(ownerType, ownerId, { type, amountMinor,
   if (!Number.isInteger(amountMinor) || amountMinor <= 0) throw { statusCode: 400, message: 'amountMinor must be a positive integer' };
   if (!reason) throw { statusCode: 400, message: 'reason is required' };
 
-  const wallet = await getOrCreateWallet(ownerType, ownerId);
+  const wallet = await alignEmptyWalletCurrency(ownerType, await getOrCreateWallet(ownerType, ownerId));
   const currencyCode = wallet.currencyCode;
 
   const [walletAccount, expenseAccount] = await Promise.all([

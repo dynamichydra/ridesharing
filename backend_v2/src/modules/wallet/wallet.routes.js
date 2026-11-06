@@ -104,13 +104,15 @@ export async function walletRoutes(app) {
 
   // GET /api/v1/wallets/driver/:driverId — auto-creates a zero-balance wallet if none exists
   app.get('/driver/:driverId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await walletService.getOrCreateWallet('driver', request.params.driverId);
+    const wallet = await walletService.getOrCreateWallet('driver', request.params.driverId);
+    const data = await walletService.alignEmptyWalletCurrency('driver', wallet);
     return sendSuccess(reply, data);
   });
 
   // GET /api/v1/wallets/rider/:riderId — returns null if the rider has no wallet yet
   app.get('/rider/:riderId', { preHandler: [authenticateAdmin] }, async (request, reply) => {
-    const data = await walletService.getWallet('rider', request.params.riderId);
+    const wallet = await walletService.getWallet('rider', request.params.riderId);
+    const data = await walletService.alignEmptyWalletCurrency('rider', wallet);
     return sendSuccess(reply, data);
   });
 

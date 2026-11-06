@@ -92,7 +92,8 @@ export default function DriverDetail() {
   const { data: countriesData } = useCountryOptions();
   const { data: statesData } = useStateOptions(driver?.countryId || undefined);
   const { data: citiesData } = useCityOptions(driver?.stateId || undefined);
-  const countryName = countriesData?.MESSAGE?.find((c) => c.id === driver?.countryId)?.name || driver?.countryName;
+  const driverCountry = countriesData?.MESSAGE?.find((c) => c.id === driver?.countryId);
+  const countryName = driverCountry?.name || driver?.countryName;
   const stateName = statesData?.MESSAGE?.find((s) => s.id === driver?.stateId)?.name || driver?.stateName;
   const cityName = citiesData?.MESSAGE?.find((c) => c.id === driver?.cityId)?.name || driver?.cityName;
 
@@ -928,7 +929,7 @@ export default function DriverDetail() {
         {/* Tab 5: Subscriptions & Wallets */}
         <TabsContent value="subscriptions" className="mt-4 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {driverId && <WalletPanel ownerType="driver" ownerId={driverId} />}
+            {driverId && <WalletPanel ownerType="driver" ownerId={driverId} ownerCurrencyCode={driverCountry?.currencyCode} />}
             {driverId && (
               <DriverSubscriptionPanel
                 driverId={driverId}

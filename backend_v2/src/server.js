@@ -244,6 +244,10 @@ async function start() {
 
 // Only boot when run directly (node src/server.js) — importing build() for tests/smoke checks
 // must not start listeners, consumers or workers.
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+// Under Phusion Passenger (Plesk), argv[1] is Passenger's own loader script, not this file,
+// so the direct-run check alone never fires and the app never calls listen() → spawn timeout.
+const runDirectly = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+const underPassenger = typeof globalThis.PhusionPassenger !== 'undefined' || !!process.env.PASSENGER_APP_ENV;
+if (runDirectly || underPassenger) {
   start().catch((err) => { console.error('Fatal startup error:', err); process.exit(1); });
 }

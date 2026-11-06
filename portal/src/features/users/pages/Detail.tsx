@@ -62,7 +62,8 @@ export default function RiderDetail() {
   const { data: countriesData } = useCountryOptions();
   const { data: statesData } = useStateOptions(rider?.countryId || undefined);
   const { data: citiesData } = useCityOptions(rider?.stateId || undefined);
-  const countryName = countriesData?.MESSAGE?.find((c) => c.id === rider?.countryId)?.name;
+  const riderCountry = countriesData?.MESSAGE?.find((c) => c.id === rider?.countryId);
+  const countryName = riderCountry?.name;
   const stateName = statesData?.MESSAGE?.find((s) => s.id === rider?.stateId)?.name;
   const cityName = citiesData?.MESSAGE?.find((c) => c.id === rider?.cityId)?.name;
 
@@ -205,7 +206,7 @@ export default function RiderDetail() {
           </CardContent>
         </Card>
 
-        <WalletPanel ownerType="rider" ownerId={riderId} />
+        <WalletPanel ownerType="rider" ownerId={riderId} ownerCurrencyCode={riderCountry?.currencyCode} />
 
         <BankDetailsPanel ownerType="rider" ownerId={riderId} />
 
