@@ -6,7 +6,6 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../../injection_container.dart';
 import '../../../../core/services/storage_service.dart';
 import '../../../../core/network/dio_client.dart';
-import '../../../../core/region/region_guard.dart';
 import '../../../../core/session/rider_session_service.dart';
 import '../../../ride_tracking/presentation/bloc/ride_tracking_bloc.dart';
 import '../bloc/auth_bloc.dart';
@@ -74,19 +73,8 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
     }
 
     if ((permission == LocationPermission.always || permission == LocationPermission.whileInUse) && serviceEnabled) {
-      // India/Canada lock: a fresh GPS fix + server check gates everyone, logged in or not.
-      final region = await sl<RegionGuard>().verify();
-      if (!mounted) return;
-      if (!region.allowed && !region.needsLocationPermission) {
-        context.go('/region-unavailable', extra: region);
-        return;
-      }
-      if (!region.allowed) {
-        context.go('/location-permission', extra: () {
-          if (mounted) _requestLocationPermission();
-        });
-        return;
-      }
+      // Testing mode: no location/region check on launch — the account's country comes from the
+      // phone number at signup and is enforced by the server when booking.
       setState(() {
         _isPermissionGranted = true;
       });
@@ -109,24 +97,25 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
       Future.delayed(const Duration(milliseconds: 1000), () async {
         if (!mounted) return;
 
-        // Re-verify the locally stored name/email/country/currency with the API on every
-        // launch; the server's copy replaces the local one.
-        final check = await sl<RiderSessionService>().verify();
-        if (!mounted) return;
-        switch (check.status) {
-          case SessionCheckStatus.loggedOut:
+        // Country, currency and gateway come from the account saved on the phone at login —
+        // no API call on launch. Only a phone with nothing saved yet (e.g. after an app update)
+        // fetches it once.
+        final sessionService = sl<RiderSessionService>();
+        var session = await sessionService.current();
+        if (session == null) {
+          final check = await sessionService.verify();
+          if (!mounted) return;
+          if (check.status == SessionCheckStatus.loggedOut) {
             context.read<AuthBloc>().add(LoggedOut());
             context.go('/login');
             return;
-          case SessionCheckStatus.blocked:
-          case SessionCheckStatus.unverified:
-            context.go('/region-unavailable', extra: RegionResult.blocked(check.code, check.message));
-            return;
-          case SessionCheckStatus.verified:
-            if (!check.profileComplete) {
-              context.go('/signup'); // name/email never completed
-              return;
-            }
+          }
+          session = check.session;
+        }
+        if (!mounted) return;
+        if (session != null && (session.name.trim().isEmpty || session.email.trim().isEmpty)) {
+          context.go('/signup'); // name/email never completed
+          return;
         }
 
         final storage = sl<StorageService>();

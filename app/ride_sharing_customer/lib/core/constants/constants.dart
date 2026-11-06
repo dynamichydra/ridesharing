@@ -121,6 +121,8 @@ class AppConstants {
   static String getCurrencySymbol(String? currencyCode) {
     if (currencyCode == null || currencyCode.isEmpty) return currencySymbol;
     final code = currencyCode.toUpperCase();
+    // Canadian dollars are shown as CA$ so they're never mistaken for US dollars.
+    if (code == 'CAD') return 'CA\$';
     for (final country in CountryConfig.supportedCountries) {
       if (country.currencyCode.toUpperCase() == code) {
         return country.currencySymbol;

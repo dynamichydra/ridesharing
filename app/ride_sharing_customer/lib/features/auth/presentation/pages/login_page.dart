@@ -18,6 +18,36 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
+  final _phoneFocusNode = FocusNode();
+
+  /// Used to measure where the phone card sits in the page content, so the content can be
+  /// shifted up just enough to keep the card right above the keyboard.
+  final _phoneCardKey = GlobalKey();
+  final _contentKey = GlobalKey();
+
+  /// Gap between the bottom of the phone card and the top of the keyboard.
+  static const double _keyboardGap = 16;
+
+  /// How far to slide the page content up so the phone card ends right above the keyboard.
+  /// 0 when the keyboard is closed or the card already clears it. Uses the last laid-out
+  /// position of the card inside the (untransformed) content column.
+  double _keyboardShift(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final keyboardHeight = media.viewInsets.bottom;
+    if (keyboardHeight <= 0) return 0;
+    final card = _phoneCardKey.currentContext?.findRenderObject() as RenderBox?;
+    final content =
+        _contentKey.currentContext?.findRenderObject() as RenderBox?;
+    if (card == null || content == null || !card.hasSize || !card.attached)
+      return 0;
+    final cardBottomInContent = card
+        .localToGlobal(Offset(0, card.size.height), ancestor: content)
+        .dy;
+    final cardBottomOnScreen = media.padding.top + cardBottomInContent;
+    final visibleBottom = media.size.height - keyboardHeight;
+    final shift = cardBottomOnScreen + _keyboardGap - visibleBottom;
+    return shift > 0 ? shift : 0;
+  }
 
   // The country comes from the server-verified location (RegionGuard), never from the rider:
   // there is no picker, and the backend rejects numbers from any other country.
@@ -38,19 +68,24 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isCheckingLocation = true);
     final guard = sl<RegionGuard>();
     final current = guard.current;
-    final result = (current != null && current.allowed) ? current : await guard.verify();
+    final result = (current != null && current.allowed)
+        ? current
+        : await guard.verify();
     if (!mounted) return;
     if (!result.allowed) {
       // Don't bounce back to the block screen — let the rider reach login. The backend still
       // refuses OTP for a number that doesn't match a verified location.
-      final iso = sl<StorageService>().getCountryCode().toUpperCase() == 'CA' ? 'CA' : 'IN';
+      final iso = sl<StorageService>().getCountryCode().toUpperCase() == 'CA'
+          ? 'CA'
+          : 'IN';
       setState(() {
         _region = RegionResult.allowed(
           countryCode: iso,
           countryName: iso == 'CA' ? 'Canada' : 'India',
           dialCode: iso == 'CA' ? '+1' : '+91',
         );
-        _locationWarning = result.message ?? "We couldn't verify your location.";
+        _locationWarning =
+            result.message ?? "We couldn't verify your location.";
         _isCheckingLocation = false;
       });
       return;
@@ -65,9 +100,9 @@ class _LoginPageState extends State<LoginPage> {
   bool get _isCanada => _region?.countryCode == 'CA';
 
   String get _flag => (_region?.countryCode ?? 'IN').replaceAllMapped(
-        RegExp(r'[A-Z]'),
-        (m) => String.fromCharCode(m.group(0)!.codeUnitAt(0) + 127397),
-      );
+    RegExp(r'[A-Z]'),
+    (m) => String.fromCharCode(m.group(0)!.codeUnitAt(0) + 127397),
+  );
 
   String? _validatePhone(String? value) {
     final digits = (value ?? '').trim();
@@ -83,6 +118,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void dispose() {
     _phoneController.dispose();
+    _phoneFocusNode.dispose();
     super.dispose();
   }
 
@@ -90,6 +126,75 @@ class _LoginPageState extends State<LoginPage> {
     if (_region == null || !_formKey.currentState!.validate()) return;
     final phone = '${_region!.dialCode}${_phoneController.text.trim()}';
     context.read<AuthBloc>().add(LoginSubmitted(phone));
+  }
+
+  /// The phone input card.
+  Widget _buildPhoneCard() {
+    return Container(
+      key: _phoneCardKey,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          // Locked dial code — from the verified location, not selectable
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 14.0,
+              vertical: 14.0,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_flag, style: const TextStyle(fontSize: 18)),
+                const SizedBox(width: 6),
+                Text(
+                  _region?.dialCode ?? '',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0A2540),
+                  ),
+                ),
+                // const SizedBox(width: 4),
+                // const Icon(Icons.lock_outline_rounded, color: Color(0xFF94A3B8), size: 14),
+              ],
+            ),
+          ),
+          // Vertical Divider
+          Container(height: 24, width: 1, color: const Color(0xFFE2E8F0)),
+          // Text Input Field
+          Expanded(
+            child: TextFormField(
+              controller: _phoneController,
+              focusNode: _phoneFocusNode,
+              // Tap anywhere else to close the keyboard (the iOS number pad has no dismiss key).
+              onTapOutside: (_) => _phoneFocusNode.unfocus(),
+              enabled: _region != null && !_isCheckingLocation,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(10),
+              ],
+              style: const TextStyle(fontSize: 16, color: Color(0xFF0A2540)),
+              decoration: const InputDecoration(
+                hintText: 'Enter mobile number',
+                hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 16),
+                contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                border: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+              ),
+              validator: _validatePhone,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -109,286 +214,253 @@ class _LoginPageState extends State<LoginPage> {
         },
         builder: (context, state) {
           final isLoading = state is AuthLoading;
+          final keyboardShift = _keyboardShift(context);
 
-          return Stack(
-            children: [
-              // Bottom decorative waves illustration
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Image.asset(
-                  'assets/images/bottom-section-num-page.png',
-                  fit: BoxFit.fitWidth,
+          return Form(
+            key: _formKey,
+            child: Stack(
+              children: [
+                // Bottom decorative waves illustration
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Image.asset(
+                    'assets/images/bottom-section-num-page.png',
+                    fit: BoxFit.fitWidth,
+                  ),
                 ),
-              ),
-              // Main content
-              SafeArea(
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 24),
-                            // "Welcome to Ryva Ride" Header Section
-                            const Text(
-                              'Welcome to',
-                              style: TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0A2540),
-                                height: 1.2,
-                              ),
-                            ),
-                            const SizedBox(height: 7),
-                            Image.asset(
-                              'assets/images/ride-share-text-icon.png',
-                              width: MediaQuery.of(context).size.width * 0.5,
-                              fit: BoxFit.fitWidth,
-                            ),
-                            const SizedBox(height: 8),
-                            // Small green line indicator
-                            Container(
-                              width: 36,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF009048),
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Enter your mobile number\nto continue',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Color(0xFF4A5568),
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // const SizedBox(height: 32),
-                      // City Car Illustration (Full Width, fixed spacing)
-                      Image.asset(
-                        'assets/images/car-section-main.png',
-                        width: MediaQuery.of(context).size.width,
-                        fit: BoxFit.fitWidth,
-                      ),
-                      const SizedBox(height: 32),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Phone Input Card
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: const Color(0xFFE2E8F0),
-                                  width: 1.5,
+                // Main content — slides up as one block while the keyboard is open so the
+                // phone card sits just above it (0 offset when closed: layout unchanged).
+                Transform.translate(
+                  offset: Offset(0, -keyboardShift),
+                  child: SafeArea(
+                    child: Column(
+                      key: _contentKey,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 24),
+                              // "Welcome to Ryva Ride" Header Section
+                              const Text(
+                                'Welcome to',
+                                style: TextStyle(
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0A2540),
+                                  height: 1.2,
                                 ),
                               ),
-                              child: Row(
-                                children: [
-                                  // Locked dial code — from the verified location, not selectable
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 14.0),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(_flag, style: const TextStyle(fontSize: 18)),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          _region?.dialCode ?? '',
+                              const SizedBox(height: 7),
+                              Image.asset(
+                                'assets/images/ride-share-text-icon.png',
+                                width: MediaQuery.of(context).size.width * 0.5,
+                                fit: BoxFit.fitWidth,
+                              ),
+                              const SizedBox(height: 8),
+                              // Small green line indicator
+                              Container(
+                                width: 36,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF009048),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'Enter your mobile number\nto continue',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Color(0xFF4A5568),
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // const SizedBox(height: 32),
+                        // City Car Illustration (Full Width, fixed spacing)
+                        Image.asset(
+                          'assets/images/car-section-main.png',
+                          width: MediaQuery.of(context).size.width,
+                          fit: BoxFit.fitWidth,
+                        ),
+                        const SizedBox(height: 32),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Phone Input Card
+                              _buildPhoneCard(),
+                              if (_locationWarning != null) ...[
+                                const SizedBox(height: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEF3C7),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.location_searching_rounded,
+                                        size: 16,
+                                        color: Color(0xFFB45309),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _locationWarning!,
                                           style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF0A2540),
+                                            fontSize: 12,
+                                            color: Color(0xFF92400E),
                                           ),
                                         ),
-                                        // const SizedBox(width: 4),
-                                        // const Icon(Icons.lock_outline_rounded, color: Color(0xFF94A3B8), size: 14),
-                                      ],
+                                      ),
+                                      TextButton(
+                                        onPressed: _isCheckingLocation
+                                            ? null
+                                            : _resolveRegion,
+                                        style: TextButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                          ),
+                                          minimumSize: const Size(0, 30),
+                                        ),
+                                        child: const Text(
+                                          'Verify again',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFFB45309),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              if (_region != null) ...[
+                                // const SizedBox(height: 8),
+                                // Padding(
+                                //   padding: const EdgeInsets.only(left: 4),
+                                //   child: Text(
+                                //     'You are in ${_region!.countryName} — only ${_region!.countryName} (${_region!.dialCode}) numbers can be used here.',
+                                //     style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                //   ),
+                                // ),
+                              ],
+                              const SizedBox(height: 20),
+                              // Send OTP Button
+                              SizedBox(
+                                width: double.infinity,
+                                height: 56,
+                                child: ElevatedButton(
+                                  onPressed:
+                                      (isLoading ||
+                                          _isCheckingLocation ||
+                                          _region == null)
+                                      ? null
+                                      : _submit,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF009048),
+                                    disabledBackgroundColor: const Color(
+                                      0xFF94A3B8,
                                     ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    elevation: 0,
                                   ),
-                                  // Vertical Divider
-                                  Container(
-                                    height: 24,
-                                    width: 1,
-                                    color: const Color(0xFFE2E8F0),
+                                  child: _isCheckingLocation
+                                      ? const SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Colors.white,
+                                                ),
+                                          ),
+                                        )
+                                      : isLoading
+                                      ? const SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Colors.white,
+                                                ),
+                                          ),
+                                        )
+                                      : Stack(
+                                          alignment: Alignment.center,
+                                          children: const [
+                                            Align(
+                                              alignment: Alignment.center,
+                                              child: Text(
+                                                'Send OTP',
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                            Align(
+                                              alignment: Alignment.centerRight,
+                                              child: Icon(
+                                                Icons.arrow_forward_rounded,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              // Security note
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(
+                                    Icons.verified_user_rounded,
+                                    color: Color(0xFF009048),
+                                    size: 16,
                                   ),
-                                  // Text Input Field
-                                  Expanded(
-                                    child: TextFormField(
-                                      controller: _phoneController,
-                                      enabled: _region != null && !_isCheckingLocation,
-                                      keyboardType: TextInputType.number,
-                                      inputFormatters: [
-                                        FilteringTextInputFormatter.digitsOnly,
-                                        LengthLimitingTextInputFormatter(10),
-                                      ],
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        color: Color(0xFF0A2540),
-                                      ),
-                                      decoration: const InputDecoration(
-                                        hintText: 'Enter mobile number',
-                                        hintStyle: TextStyle(
-                                          color: Color(0xFF94A3B8),
-                                          fontSize: 16,
-                                        ),
-                                        contentPadding: EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                        ),
-                                        border: InputBorder.none,
-                                        focusedBorder: InputBorder.none,
-                                        enabledBorder: InputBorder.none,
-                                        errorBorder: InputBorder.none,
-                                        disabledBorder: InputBorder.none,
-                                      ),
-                                      validator: _validatePhone,
+                                  SizedBox(width: 8),
+                                  Text(
+                                    "We'll never share your number with anyone.",
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Color(0xFF4A5568),
+                                      height: 1.3,
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
-                            if (_locationWarning != null) ...[
-                              const SizedBox(height: 10),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFEF3C7),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.location_searching_rounded, size: 16, color: Color(0xFFB45309)),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        _locationWarning!,
-                                        style: const TextStyle(fontSize: 12, color: Color(0xFF92400E)),
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: _isCheckingLocation ? null : _resolveRegion,
-                                      style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                                        minimumSize: const Size(0, 30),
-                                      ),
-                                      child: const Text('Verify again',
-                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
-                                    ),
-                                  ],
-                                ),
-                              ),
                             ],
-                            if (_region != null) ...[
-                              // const SizedBox(height: 8),
-                              // Padding(
-                              //   padding: const EdgeInsets.only(left: 4),
-                              //   child: Text(
-                              //     'You are in ${_region!.countryName} — only ${_region!.countryName} (${_region!.dialCode}) numbers can be used here.',
-                              //     style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                              //   ),
-                              // ),
-                            ],
-                            const SizedBox(height: 20),
-                            // Send OTP Button
-                            SizedBox(
-                              width: double.infinity,
-                              height: 56,
-                              child: ElevatedButton(
-                                onPressed: (isLoading || _isCheckingLocation || _region == null) ? null : _submit,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF009048),
-                                  disabledBackgroundColor: const Color(0xFF94A3B8),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  elevation: 0,
-                                ),
-                                child: _isCheckingLocation
-                                    ? const SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.5,
-                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                        ),
-                                      )
-                                    : isLoading
-                                            ? const SizedBox(
-                                                width: 24,
-                                                height: 24,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2.5,
-                                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                                ),
-                                              )
-                                            : Stack(
-                                                alignment: Alignment.center,
-                                                children: const [
-                                                  Align(
-                                                    alignment: Alignment.center,
-                                                    child: Text(
-                                                      'Send OTP',
-                                                      style: TextStyle(
-                                                        fontSize: 16,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: Colors.white,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  Align(
-                                                    alignment: Alignment.centerRight,
-                                                    child: Icon(
-                                                      Icons.arrow_forward_rounded,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            // Security note
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(
-                                  Icons.verified_user_rounded,
-                                  color: Color(0xFF009048),
-                                  size: 16,
-                                ),
-                                SizedBox(width: 8),
-                                Text(
-                                  "We'll never share your number with anyone.",
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Color(0xFF4A5568),
-                                    height: 1.3,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           );
         },
       ),

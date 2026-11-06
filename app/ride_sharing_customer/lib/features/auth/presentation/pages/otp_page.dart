@@ -24,6 +24,32 @@ class _OtpPageState extends State<OtpPage> {
   Timer? _timer;
   int _secondsRemaining = 28;
 
+  /// Used to measure where the OTP boxes sit in the page content, so the content can be
+  /// shifted up just enough to keep them right above the keyboard.
+  final _otpBoxesKey = GlobalKey();
+  final _contentKey = GlobalKey();
+
+  /// Gap between the bottom of the OTP boxes and the top of the keyboard.
+  static const double _keyboardGap = 16;
+
+  /// How far to slide the page content up so the OTP boxes end right above the keyboard.
+  /// 0 when the keyboard is closed or the boxes already clear it. Uses the last laid-out
+  /// position of the boxes inside the (untransformed) content column.
+  double _keyboardShift(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final keyboardHeight = media.viewInsets.bottom;
+    if (keyboardHeight <= 0) return 0;
+    final boxes = _otpBoxesKey.currentContext?.findRenderObject() as RenderBox?;
+    final content = _contentKey.currentContext?.findRenderObject() as RenderBox?;
+    if (boxes == null || content == null || !boxes.hasSize || !boxes.attached) return 0;
+    final boxesBottomInContent =
+        boxes.localToGlobal(Offset(0, boxes.size.height), ancestor: content).dy;
+    final boxesBottomOnScreen = media.padding.top + boxesBottomInContent;
+    final visibleBottom = media.size.height - keyboardHeight;
+    final shift = boxesBottomOnScreen + _keyboardGap - visibleBottom;
+    return shift > 0 ? shift : 0;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -102,6 +128,7 @@ class _OtpPageState extends State<OtpPage> {
         },
         builder: (context, state) {
           final isLoading = state is AuthLoading;
+          final keyboardShift = _keyboardShift(context);
 
           return Stack(
             children: [
@@ -115,10 +142,15 @@ class _OtpPageState extends State<OtpPage> {
                   fit: BoxFit.fitWidth,
                 ),
               ),
-              SafeArea(
+              // Main content — slides up as one block while the keyboard is open so the OTP
+              // boxes sit just above it (0 offset when closed: layout unchanged).
+              Transform.translate(
+                offset: Offset(0, -keyboardShift),
+                child: SafeArea(
                 child: Form(
                   key: _formKey,
                   child: Column(
+                    key: _contentKey,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Back Arrow Button
@@ -192,7 +224,11 @@ class _OtpPageState extends State<OtpPage> {
                       const SizedBox(height: 32),
                       // PIN Input Code Blocks
                       Padding(
+                        key: _otpBoxesKey,
                         padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                        // Taps on the boxes count as "inside" the hidden field, so onTapOutside
+                        // below doesn't close the keyboard when the rider taps a box.
+                        child: TextFieldTapRegion(
                         child: Stack(
                           children: [
                             // Invisible Text Field taking focus input
@@ -203,6 +239,8 @@ class _OtpPageState extends State<OtpPage> {
                                 child: TextField(
                                   controller: _otpController,
                                   focusNode: _focusNode,
+                                  // Tap anywhere else to close the keyboard (the iOS number pad has no dismiss key).
+                                  onTapOutside: (_) => _focusNode.unfocus(),
                                   keyboardType: TextInputType.number,
                                   maxLength: 6,
                                   enabled: !isLoading,
@@ -295,6 +333,7 @@ class _OtpPageState extends State<OtpPage> {
                               ),
                             ),
                           ],
+                        ),
                         ),
                       ),
                       if (!_isValid) ...[
@@ -403,6 +442,7 @@ class _OtpPageState extends State<OtpPage> {
                     ],
                   ),
                 ),
+              ),
               ),
             ],
           );

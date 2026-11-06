@@ -639,7 +639,10 @@ class _RideHistoryPageState extends State<RideHistoryPage>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
+              // Takes the space the badge leaves; the vehicle name shrinks first (ellipsis)
+              // so the row never overflows on narrow screens.
+              Expanded(
+                child: Row(
                 children: [
                   const Icon(
                     Icons.calendar_today_outlined,
@@ -663,16 +666,22 @@ class _RideHistoryPageState extends State<RideHistoryPage>
                     color: const Color(0xFF0165B7), // Brand Secondary Blue
                   ),
                   const SizedBox(width: 5),
-                  Text(
+                  Flexible(
+                    child: Text(
                     vehicleDisplayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w300,
                       color: Color(0xFF0F172A),
                     ),
+                    ),
                   ),
                 ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,

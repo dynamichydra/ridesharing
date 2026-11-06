@@ -17,7 +17,7 @@ class RiderPaymentProfile {
   const RiderPaymentProfile._(this.countryCode, this.currencyCode, this.currencySymbol, this.gateway);
 
   static const india = RiderPaymentProfile._('IN', 'INR', '₹', 'razorpay');
-  static const canada = RiderPaymentProfile._('CA', 'CAD', '\$', 'stripe');
+  static const canada = RiderPaymentProfile._('CA', 'CAD', 'CA\$', 'stripe');
 
   static RiderPaymentProfile forCountry(String? isoCode) =>
       (isoCode ?? '').toUpperCase() == 'CA' ? canada : india;
@@ -152,7 +152,9 @@ class RiderSessionService {
   Future<void> save(RiderSession session) async {
     await _secure.write(key: _key, value: jsonEncode(session.toJson()));
     _cached = session;
+    // Plain key-value copies for quick reads anywhere in the app.
     if (session.countryCode != null) await _storage.setCountryCode(session.countryCode!);
+    await _storage.setCurrencyCode(session.paymentProfile.currencyCode);
     AppConstants.currencySymbol = session.paymentProfile.currencySymbol;
   }
 

@@ -24,34 +24,14 @@ class DioClient {
           if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';
           }
-          // India/Canada region lock: the server rejects rider calls (and OTP login) without a
-          // fresh region token. RegionGuard re-verifies when the cached one is near expiry.
-          final regionToken = await sl<RegionGuard>().validToken();
-          if (regionToken != null) {
-            options.headers['X-Region-Token'] = regionToken;
-          }
           return handler.next(options);
         },
         onError: (DioException error, handler) async {
           final body = error.response?.data;
           final code = body is Map ? body['CODE']?.toString() : null;
           if (error.response?.statusCode == 403 && code != null && RegionGuard.regionErrorCodes.contains(code)) {
-            final guard = sl<RegionGuard>();
-            // Expired/missing token: re-check once and replay the request.
-            if (code == 'REGION_CHECK_REQUIRED' && error.requestOptions.extra['regionRetried'] != true) {
-              final result = await guard.verify();
-              if (result.allowed) {
-                final opts = error.requestOptions..extra['regionRetried'] = true;
-                try {
-                  return handler.resolve(await dio.fetch(opts));
-                } on DioException catch (retryError) {
-                  return handler.next(retryError);
-                }
-              }
-              if (!result.needsLocationPermission) guard.reportBlocked(result);
-            } else {
-              guard.reportBlocked(RegionResult.blocked(code, body is Map ? body['MESSAGE']?.toString() : null));
-            }
+            sl<RegionGuard>().reportBlocked(
+                RegionResult.blocked(code, body is Map ? body['MESSAGE']?.toString() : null));
             return handler.next(error);
           }
 
@@ -88,8 +68,8 @@ class DioClient {
 
   /// Platform-aware local API URL (Android emulator vs iOS/web/desktop)
   static String get baseUrl =>
-         Platform.isAndroid ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
-      // Platform.isAndroid ? 'https://rideshareapi.dokume.in' : 'https://rideshareapi.dokume.in';
+         // Platform.isAndroid ? 'http://10.138.85.125:3000' : 'http://localhost:3000';
+      Platform.isAndroid ? 'https://rideshareapi.dokume.in' : 'https://rideshareapi.dokume.in';
       //    Platform.isAndroid ? 'https://ryva.duckdns.org' : 'https://ryva.duckdns.org';
       // Platform.isAndroid ? 'https://rideshareapi.dokume.in' : 'https://rideshareapi.dokume.in';
 

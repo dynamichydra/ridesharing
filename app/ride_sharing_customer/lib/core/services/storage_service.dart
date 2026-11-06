@@ -98,6 +98,17 @@ class StorageService {
     await box.put('selected_country_code', code);
   }
 
+  /// Account currency ('INR' for India, 'CAD' for Canada) — set at login with the country.
+  String getCurrencyCode() {
+    final box = Hive.box(_themeBox);
+    return box.get('account_currency_code', defaultValue: getCountryCode() == 'CA' ? 'CAD' : 'INR') as String;
+  }
+
+  Future<void> setCurrencyCode(String code) async {
+    final box = Hive.box(_themeBox);
+    await box.put('account_currency_code', code.toUpperCase());
+  }
+
   // Generic Cache helper (maps, strings, lists)
   Future<void> cacheData(String key, dynamic value) async {
     final box = Hive.box(_appCacheBox);
