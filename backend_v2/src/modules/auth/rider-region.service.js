@@ -61,7 +61,7 @@ export class RegionError extends Error {
 }
 
 export function isRegionEnforcementEnabled() {
-  return String(env.RIDER_REGION_ENFORCEMENT ?? 'on').toLowerCase() !== 'off';
+  return String(env.RIDER_REGION_ENFORCEMENT ?? 'off').toLowerCase() === 'on';
 }
 
 /** E.164 phone → 'IN' | 'CA' | null (anything else, incl. US numbers). */

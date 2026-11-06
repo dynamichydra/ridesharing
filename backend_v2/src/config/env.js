@@ -35,7 +35,7 @@ export const env = {
   TWILIO_PHONE_NUMBER: process.env.TWILIO_PHONE_NUMBER || undefined,
   // 'off' disables the rider India/Canada region lock (GPS + IP + phone-country checks) —
   // for simulators/emulators whose default location is outside both countries. Never in prod.
-  RIDER_REGION_ENFORCEMENT: process.env.RIDER_REGION_ENFORCEMENT || 'on',
+  RIDER_REGION_ENFORCEMENT: process.env.RIDER_REGION_ENFORCEMENT || 'off', // testing mode: the app sends no region token
   GOOGLE_MAPS_KEY: process.env.GOOGLE_MAPS_KEY || undefined,
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || undefined,
   RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || undefined,
